@@ -994,9 +994,7 @@ function enviarPedido() {
   renderCatalogo();
 
   const url1 = `https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`;
-  const url2 = `https://wa.me/${WA_NUM2}?text=${encodeURIComponent(msg)}`;
   window.open(url1, '_blank');
-  setTimeout(() => window.open(url2, '_blank'), 800);
   showToast('¡Pedido enviado! ✓');
 }
 
