@@ -729,12 +729,17 @@ function renderCatalogo() {
 }
 
 function renderImg(p) {
-  const url = `https://drive.google.com/thumbnail?id=${p.imagen}&sz=w400`;
-  // Usamos el nombre del archivo como query param para que Drive lo busque por nombre
-  // En realidad usamos una URL que genera thumbnail desde la carpeta
-  const driveUrl = `https://lh3.googleusercontent.com/d/${p.imagen}`;
-  return `<img class="producto-img" src="${driveUrl}" 
-    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+  const base = 'https://raw.githubusercontent.com/lgwtstore/shuk-mamtakim/main/';
+  const nombre = p.imagen;
+  const ext = nombre.split('.').pop().toLowerCase();
+  const sinExt = nombre.replace(/\.[^.]+$/, '');
+  // Intentar primero el nombre original, luego con extensión duplicada (JPG.jpg), luego variantes
+  const url1 = base + nombre;
+  const url2 = base + sinExt + '.' + ext.toUpperCase() + '.' + ext;
+  const url3 = base + sinExt + '.jpg';
+  const url4 = base + sinExt + '.jpeg';
+  return `<img class="producto-img" src="${url1}" 
+    onerror="this.src='${url2}';this.onerror=function(){this.src='${url3}';this.onerror=function(){this.src='${url4}';this.onerror=function(){this.style.display='none';this.nextElementSibling.style.display='flex'}}}"
     loading="lazy" alt="${p.nombre}">
   <div class="producto-img-placeholder" style="display:none">🍬</div>`;
 }
