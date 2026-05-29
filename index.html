@@ -1168,7 +1168,7 @@ function cambiarEstado(id, estado) {
   const params = new URLSearchParams({ accion: 'actualizarEstado', id, estado });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
-  setTimeout(renderPedidos, 6000);
+  setTimeout(refreshAdmin, 5000);
 }
 
 function renderStockAdmin() {
@@ -1292,7 +1292,7 @@ function cargarPedidoManual() {
   });
 
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
-    .then(() => { setTimeout(renderPedidos, 2000); })
+    .then(() => setTimeout(refreshAdmin, 2000))
     .catch(() => showToast('Error al guardar en planilla'));
 
   // Descontar stock local
@@ -1322,7 +1322,7 @@ function registrarGasto() {
       showToast('Gasto registrado ✓');
       document.getElementById('gasto-desc').value = '';
       document.getElementById('gasto-monto').value = '';
-      renderCaja();
+      refreshAdmin();
     })
     .catch(() => showToast('Error al registrar gasto'));
 }
@@ -1340,7 +1340,7 @@ function registrarRendicion() {
       showToast('Rendición registrada ✓');
       document.getElementById('rend-desc').value = '';
       document.getElementById('rend-monto').value = '';
-      renderCaja();
+      refreshAdmin();
     })
     .catch(() => showToast('Error al registrar'));
 }
@@ -1456,6 +1456,11 @@ function setModo(m) {
 }
 
 function filtrar() { renderCatalogo(); }
+
+function refreshAdmin() {
+  renderPedidos();
+  renderCaja();
+}
 
 function showToast(msg) {
   const t = document.getElementById('toast');
