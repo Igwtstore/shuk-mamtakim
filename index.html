@@ -694,7 +694,7 @@ const WA_NUM1 = '5491131754540';
 const WA_NUM2 = '972527596202';
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
 const ADMIN_PASS = 'shuk@admin';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyq3GazYn_a2FTkXyFRRRjCWjfMoK1hsvUcz0vVv6UQhMCsUv47d8BZ_QlZK8ClGpM0EA/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyvMjfpVkUBh8-XkiBq7RqzX1858LKgWbrVQ7XNicpkSjmI8jsji7kkwtM99ufdoMcW/exec';
 
 // STORAGE
 const DB_KEY = 'shuk_pedidos_v1';
@@ -987,10 +987,12 @@ function enviarPedido() {
 
 function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD) {
   const productos_str = items.map(i => `${i.qty}x ${i.nombre}`).join(', ');
+  const stockUpdates = items.map(i => `${i.id}:${i.qty}`).join(',');
   const params = new URLSearchParams({
     accion: 'venta', cliente: nombre, tipo,
     productos: productos_str, formaPago, notas: '',
-    totalARS: Math.round(totalARS || 0), totalUSD: (totalUSD || 0).toFixed(2)
+    totalARS: Math.round(totalARS || 0), totalUSD: (totalUSD || 0).toFixed(2),
+    stockUpdates
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
 }
