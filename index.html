@@ -709,6 +709,12 @@ let adminAuth = false;
 
 // PITZUJIM ids (precios en ARS para mayorista)
 const PITZUJIM_IDS = [43,44,45,46,47,48,49];
+const CATEGORIA_ORDEN = ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Varios'];
+function getCatIdx(p) {
+  if (PITZUJIM_IDS.includes(p.id)) return 0;
+  const i = CATEGORIA_ORDEN.indexOf(p.categoria || 'Varios');
+  return i === -1 ? CATEGORIA_ORDEN.length : i;
+}
 
 function imgUrl(filename) {
   // Google Drive direct image link
@@ -731,7 +737,8 @@ async function cargarProductos() {
       precioMin: parseFloat((r[4]||'0').replace(',','.')),
       stock: parseInt(r[5]||'0'),
       imagen: r[6],
-      activo: (r[7]||'SI').trim().toUpperCase() === 'SI'
+      activo: (r[7]||'SI').trim().toUpperCase() === 'SI',
+      categoria: (r[8]||'Varios').trim()
     })).filter(p => p.activo && p.id);
     renderCatalogo();
     renderStockAdmin();
@@ -782,7 +789,12 @@ function renderCatalogo() {
   const catalogo = document.getElementById('catalogo');
   const filtrados = productos.filter(p =>
     (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query))
-  );
+  ).sort((a, b) => {
+    const aOut = a.stock <= 0 ? 1 : 0;
+    const bOut = b.stock <= 0 ? 1 : 0;
+    if (aOut !== bOut) return aOut - bOut;
+    return getCatIdx(a) - getCatIdx(b);
+  });
   if (!filtrados.length) {
     catalogo.innerHTML = '<div class="loading">Sin resultados</div>';
     return;
@@ -796,7 +808,7 @@ function renderCatalogo() {
     const esPeso = esPesos(p);
     return `
     <div class="producto-card ${agotado ? 'agotado' : ''}" id="card-${p.id}">
-      ${agotado ? '<div class="badge-agotado">Agotado</div>' : `<div class="badge-stock">${p.stock} disp.</div>`}
+      ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
       ${renderImg(p)}
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
@@ -806,7 +818,7 @@ function renderCatalogo() {
       <div class="producto-controles">
         <button class="qty-btn" onclick="cambiarQty(${p.id},-1,${maxQty})" ${qty<=0?'disabled':''}>−</button>
         <span class="qty-num" id="qty-${p.id}">${qty}</span>
-        <button class="qty-btn" onclick="cambiarQty(${p.id},1,${maxQty})" ${agotado||qty>=maxQty?'disabled':''}>+</button>
+        <button class="qty-btn" onclick="cambiarQty(${p.id},1,${maxQty})" ${agotado?'disabled':''}>+</button>
         <button class="agregar-btn ${enCarrito?'en-carrito':''}" onclick="agregarAlCarrito(${p.id})" ${agotado?'disabled':''}>
           ${enCarrito ? '✓ En carrito' : agotado ? 'Sin stock' : 'Agregar'}
         </button>
@@ -833,12 +845,15 @@ function renderImg(p) {
 }
 
 function cambiarQty(id, delta, max) {
-  cantidades[id] = Math.max(0, Math.min(max, (cantidades[id]||0) + delta));
+  const actual = cantidades[id] || 0;
+  if (delta > 0 && actual >= max) {
+    showToast('No hay más unidades disponibles');
+    return;
+  }
+  cantidades[id] = Math.max(0, Math.min(max, actual + delta));
   document.getElementById('qty-' + id).textContent = cantidades[id];
   const minBtn = document.querySelector(`#card-${id} .qty-btn:first-child`);
-  const plusBtn = document.querySelector(`#card-${id} .qty-btn:nth-child(3)`);
   if (minBtn) minBtn.disabled = cantidades[id] <= 0;
-  if (plusBtn) plusBtn.disabled = cantidades[id] >= max;
 }
 
 function agregarAlCarrito(id) {
