@@ -591,19 +591,19 @@
   <div class="admin-card">
     <div class="admin-titulo">✏️ Cargar pedido manual</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
-      <div class="nombre-campo" style="margin:0">
-        <label>Cliente</label>
-        <input type="text" id="manual-cliente" placeholder="Nombre del cliente" />
-      </div>
-      <div style="display:flex;gap:0.75rem;">
-        <div class="nombre-campo" style="margin:0;flex:1">
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div class="nombre-campo" style="margin:0;flex:2;min-width:150px">
+          <label>Cliente</label>
+          <input type="text" id="manual-cliente" placeholder="Nombre del cliente" />
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Tipo</label>
-          <select id="manual-tipo" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <select id="manual-tipo" onchange="renderManualProductos()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="Mayorista">Mayorista</option>
             <option value="Minorista">Minorista</option>
           </select>
         </div>
-        <div class="nombre-campo" style="margin:0;flex:1">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:140px">
           <label>Forma de cobro</label>
           <select id="manual-pago" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="Efectivo">Efectivo</option>
@@ -613,10 +613,11 @@
           </select>
         </div>
       </div>
-      <div class="nombre-campo" style="margin:0">
-        <label>Productos</label>
-        <textarea id="manual-productos" placeholder="Ej: 2x Chocolate Elite, 1x Bon O Bon barrita" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;resize:vertical;min-height:70px;box-sizing:border-box;"></textarea>
+      <div>
+        <label style="font-size:0.85rem;font-weight:600;color:var(--azul)">Productos</label>
+        <div id="manual-productos-lista" style="margin-top:0.4rem;max-height:300px;overflow-y:auto;border:1.5px solid #e8e6e0;border-radius:8px;"></div>
       </div>
+      <div id="manual-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul)">Total: $ 0</div>
       <button class="guardar-stock-btn" onclick="cargarPedidoManual()" style="margin-top:0">Registrar pedido</button>
     </div>
   </div>
@@ -1035,7 +1036,11 @@ function enviarPedido() {
   const totalUSD = usdMyri;
 
   const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
-  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}\n\n_Pedido enviado desde el catálogo online_`;
+  const totalLine = totalARS > 0 && totalUSD > 0
+    ? `\n\n*Total:* $ ${Math.round(totalARS).toLocaleString('es-AR')} + U$S ${totalUSD.toFixed(2)}`
+    : totalARS > 0 ? `\n\n*Total:* $ ${Math.round(totalARS).toLocaleString('es-AR')}`
+    : totalUSD > 0 ? `\n\n*Total:* U$S ${totalUSD.toFixed(2)}` : '';
+  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}\n\n_Pedido enviado desde el catálogo online_`;
 
   registrarPedido(nombre, items, tipoCliente);
   enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas);
@@ -1189,22 +1194,116 @@ function guardarStock() {
   showToast('Stock guardado en planilla ✓');
 }
 
+function renderManualProductos() {
+  const lista = document.getElementById('manual-productos-lista');
+  if (!lista || !productos.length) return;
+  const tipo = document.getElementById('manual-tipo').value;
+  lista.innerHTML = productos.filter(p => p.stock > 0).map(p => {
+    const esPitz = PITZUJIM_IDS.includes(p.id);
+    let precioUnit, moneda;
+    if (tipo === 'Mayorista') {
+      if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; }
+      else { precioUnit = parseFloat((p.precioMay||'0').toString().replace(',','.')); moneda = 'U$S'; }
+    } else { precioUnit = Math.round(p.precioMin); moneda = '$'; }
+    const precioStr = moneda === 'U$S' ? `U$S ${precioUnit.toFixed(2)}` : `$ ${precioUnit.toLocaleString('es-AR')}`;
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--gris-medio)">
+      <input type="number" id="mq-${p.id}" min="0" max="${p.stock}" value="0"
+        style="width:55px;padding:0.3rem 0.4rem;border:1.5px solid #e8e6e0;border-radius:6px;text-align:center;font-size:0.85rem"
+        onchange="actualizarTotalManual()" oninput="actualizarTotalManual()" />
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.82rem;font-weight:600;color:var(--azul);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
+        <div style="font-size:0.7rem;color:var(--texto-suave)">${precioStr} · Stock: ${p.stock}</div>
+      </div>
+    </div>`;
+  }).join('');
+  actualizarTotalManual();
+}
+
+function actualizarTotalManual() {
+  const tipo = document.getElementById('manual-tipo').value;
+  let arsJ = 0, arsM = 0, usdM = 0;
+  productos.filter(p => p.stock > 0).forEach(p => {
+    const inp = document.getElementById('mq-' + p.id);
+    if (!inp) return;
+    const qty = parseInt(inp.value) || 0;
+    if (!qty) return;
+    const esPitz = PITZUJIM_IDS.includes(p.id);
+    if (tipo === 'Mayorista') {
+      if (esPitz) arsJ += Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))) * qty;
+      else usdM += parseFloat((p.precioMay||'0').toString().replace(',','.')) * qty;
+    } else {
+      if (esPitz) arsJ += Math.round(p.precioMin) * qty;
+      else arsM += Math.round(p.precioMin) * qty;
+    }
+  });
+  const parts = [];
+  if (arsJ + arsM > 0) parts.push(`$ ${Math.round(arsJ + arsM).toLocaleString('es-AR')}`);
+  if (usdM > 0) parts.push(`U$S ${usdM.toFixed(2)}`);
+  document.getElementById('manual-total').textContent = 'Total: ' + (parts.join(' + ') || '$ 0');
+}
+
 function cargarPedidoManual() {
   const cliente = document.getElementById('manual-cliente').value.trim();
   const tipo = document.getElementById('manual-tipo').value;
   const pago = document.getElementById('manual-pago').value;
-  const productos_txt = document.getElementById('manual-productos').value.trim();
   if (!cliente) { showToast('Ingresá el nombre del cliente'); return; }
-  if (!productos_txt) { showToast('Ingresá los productos'); return; }
-  const params = new URLSearchParams({ accion: 'venta', cliente, tipo, productos: productos_txt, formaPago: pago, notas: 'Manual', totalARS: 0, totalUSD: '0.00' });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString())
-    .then(() => {
-      showToast('Pedido registrado ✓');
-      document.getElementById('manual-cliente').value = '';
-      document.getElementById('manual-productos').value = '';
-      renderPedidos();
-    })
-    .catch(() => showToast('Error al registrar'));
+
+  let arsJ = 0, arsM = 0, usdM = 0;
+  const selectedItems = [];
+  const lineas = [];
+  const stockUpdates = [];
+
+  productos.filter(p => p.stock > 0).forEach(p => {
+    const inp = document.getElementById('mq-' + p.id);
+    if (!inp) return;
+    const qty = parseInt(inp.value) || 0;
+    if (!qty) return;
+    const esPitz = PITZUJIM_IDS.includes(p.id);
+    let precioUnit, moneda;
+    if (tipo === 'Mayorista') {
+      if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; arsJ += precioUnit * qty; }
+      else { precioUnit = parseFloat((p.precioMay||'0').toString().replace(',','.')); moneda = 'U$S'; usdM += precioUnit * qty; }
+    } else {
+      precioUnit = Math.round(p.precioMin); moneda = '$';
+      if (esPitz) arsJ += precioUnit * qty; else arsM += precioUnit * qty;
+    }
+    const subtotal = moneda === 'U$S' ? (precioUnit * qty).toFixed(2) : Math.round(precioUnit * qty).toLocaleString('es-AR');
+    const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
+    lineas.push(`• ${qty}x ${p.nombre} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`);
+    stockUpdates.push(`${p.id}:${qty}`);
+    selectedItems.push(p);
+  });
+
+  if (!lineas.length) { showToast('Seleccioná al menos un producto'); return; }
+
+  const comiARS = Math.round(arsM * 0.15);
+  const comiUSD = parseFloat((usdM * 0.15).toFixed(2));
+  const totalARS = arsJ + arsM;
+
+  const params = new URLSearchParams({
+    accion: 'venta', cliente, tipo, formaPago: pago, notas: 'Manual',
+    productos: lineas.join(' || '),
+    totalARS: Math.round(totalARS), totalUSD: usdM.toFixed(2),
+    arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM),
+    usdMyri: usdM.toFixed(2), comiARS, comiUSD,
+    stockUpdates: stockUpdates.join(',')
+  });
+
+  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
+
+  // Descontar stock local
+  selectedItems.forEach(p => {
+    const inp = document.getElementById('mq-' + p.id);
+    const qty = parseInt(inp?.value) || 0;
+    p.stock = Math.max(0, p.stock - qty);
+  });
+
+  showToast('Pedido registrado ✓');
+  document.getElementById('manual-cliente').value = '';
+  renderManualProductos();
+  renderCatalogo();
+  renderStockAdmin();
+  setTimeout(renderPedidos, 3000);
 }
 
 function registrarGasto() {
@@ -1349,7 +1448,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
   document.getElementById('buscador-wrap') && null;
-  if (m === 'admin') { renderPedidos(); renderCaja(); }
+  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); }
   if (m !== 'admin') renderCatalogo();
 }
 
