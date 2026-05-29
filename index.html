@@ -589,6 +589,38 @@
     <button class="guardar-stock-btn" onclick="guardarStock()">Guardar cambios</button>
   </div>
   <div class="admin-card">
+    <div class="admin-titulo">✏️ Cargar pedido manual</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div class="nombre-campo" style="margin:0">
+        <label>Cliente</label>
+        <input type="text" id="manual-cliente" placeholder="Nombre del cliente" />
+      </div>
+      <div style="display:flex;gap:0.75rem;">
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>Tipo</label>
+          <select id="manual-tipo" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="Mayorista">Mayorista</option>
+            <option value="Minorista">Minorista</option>
+          </select>
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>Forma de cobro</label>
+          <select id="manual-pago" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="Efectivo">Efectivo</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="Mercado Pago">Mercado Pago</option>
+            <option value="Cuenta corriente">Cuenta corriente</option>
+          </select>
+        </div>
+      </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>Productos</label>
+        <textarea id="manual-productos" placeholder="Ej: 2x Chocolate Elite, 1x Bon O Bon barrita" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;resize:vertical;min-height:70px;box-sizing:border-box;"></textarea>
+      </div>
+      <button class="guardar-stock-btn" onclick="cargarPedidoManual()" style="margin-top:0">Registrar pedido</button>
+    </div>
+  </div>
+  <div class="admin-card">
     <div class="admin-titulo">💸 Registrar gasto</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
       <div class="nombre-campo" style="margin:0">
@@ -610,12 +642,14 @@
       </div>
       <div class="nombre-campo" style="margin:0">
         <label>Categoría</label>
-        <select id="gasto-categoria" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
-          <option value="Flete">Flete</option>
-          <option value="Mercadería">Mercadería</option>
-          <option value="Impuestos">Impuestos</option>
-          <option value="Varios">Varios</option>
-        </select>
+        <input type="text" id="gasto-categoria" list="categorias-list" placeholder="Flete, Mercadería, o escribí una nueva..." />
+        <datalist id="categorias-list">
+          <option value="Flete">
+          <option value="Mercadería">
+          <option value="Impuestos">
+          <option value="Sueldos">
+          <option value="Varios">
+        </datalist>
       </div>
       <button class="guardar-stock-btn" onclick="registrarGasto()" style="margin-top:0">Registrar gasto</button>
     </div>
@@ -671,6 +705,7 @@ let productos = [];
 let carrito = {};
 let modo = 'mayorista';
 let cantidades = {};
+let adminAuth = false;
 
 // PITZUJIM ids (precios en ARS para mayorista)
 const PITZUJIM_IDS = [43,44,45,46,47,48,49];
@@ -971,50 +1006,51 @@ function registrarPedido(nombre, items, tipo) {
   savePedidos(pedidos);
 }
 
-function renderPedidos() {
+async function renderPedidos() {
   const lista = document.getElementById('pedidos-lista');
-  const pedidos = getPedidos();
-  const activos = pedidos.filter(p => p.estado !== 'entregado' && p.estado !== 'cancelado');
-  const hist = pedidos.filter(p => p.estado === 'entregado' || p.estado === 'cancelado').slice(0,5);
-  const todos = [...activos, ...hist];
-  if (!todos.length) { lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>'; return; }
-  lista.innerHTML = todos.map(p => {
-    const detalle = p.items.map(i => `${i.qty}x ${i.nombre}`).join(', ');
-    return `
-    <div class="pedido-item ${p.estado !== 'pendiente' ? p.estado : ''}">
-      <div class="pedido-item-header">
-        <div>
-          <div class="pedido-cliente">${p.cliente} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${p.tipo})</span></div>
-          <div class="pedido-fecha">${p.fecha}</div>
+  lista.innerHTML = '<div class="sinpedidos">Cargando pedidos...</div>';
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
+    const ventas = await res.json();
+    if (!Array.isArray(ventas) || !ventas.length) {
+      lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
+      return;
+    }
+    const mostrar = [...ventas].reverse().slice(0, 50);
+    lista.innerHTML = mostrar.map(v => {
+      const estado = v.estado || 'pendiente';
+      return `
+      <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}">
+        <div class="pedido-item-header">
+          <div>
+            <div class="pedido-cliente">${v.cliente} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${v.tipo})</span></div>
+            <div class="pedido-fecha">${v.fecha}</div>
+          </div>
+          <span class="estado-pill estado-${estado}">${estado}</span>
         </div>
-        <span class="estado-pill estado-${p.estado}">${p.estado}</span>
-      </div>
-      <div class="pedido-detalle">${detalle}</div>
-      ${p.estado === 'pendiente' ? `
-      <div class="pedido-acciones">
-        <button class="btn-accion btn-entregar" onclick="cambiarEstadoPedido(${p.id},'entregado')">✓ Entregado</button>
-        <button class="btn-accion btn-cancelar" onclick="cambiarEstadoPedido(${p.id},'cancelado')">✕ Cancelar</button>
-      </div>` : ''}
-    </div>`;
-  }).join('');
+        <div class="pedido-detalle">${v.productos}</div>
+        <div style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.2rem">${v.formaPago}</div>
+        ${estado === 'pendiente' ? `
+        <div class="pedido-acciones">
+          <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado')">✓ Entregado</button>
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado')">✕ Cancelar</button>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    lista.innerHTML = '<div class="sinpedidos">Error al cargar pedidos.</div>';
+  }
 }
 
-function cambiarEstadoPedido(id, estado) {
-  const pedidos = getPedidos();
-  const idx = pedidos.findIndex(p => p.id === id);
-  if (idx === -1) return;
-  if (estado === 'cancelado') {
-    // Devolver stock
-    pedidos[idx].items.forEach(item => {
-      const p = productos.find(x => x.id === item.id);
-      if (p) p.stock += item.qty;
-    });
-    renderCatalogo();
+async function cambiarEstado(id, estado) {
+  const params = new URLSearchParams({ accion: 'actualizarEstado', id, estado });
+  try {
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+    showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
+    renderPedidos();
+  } catch(e) {
+    showToast('Error al actualizar');
   }
-  pedidos[idx].estado = estado;
-  savePedidos(pedidos);
-  renderPedidos();
-  showToast(estado === 'entregado' ? 'Pedido marcado como entregado ✓' : 'Pedido cancelado — stock repuesto');
 }
 
 function renderStockAdmin() {
@@ -1035,6 +1071,24 @@ function guardarStock() {
   renderCatalogo();
   renderStockAdmin();
   showToast('Stock actualizado ✓');
+}
+
+function cargarPedidoManual() {
+  const cliente = document.getElementById('manual-cliente').value.trim();
+  const tipo = document.getElementById('manual-tipo').value;
+  const pago = document.getElementById('manual-pago').value;
+  const productos_txt = document.getElementById('manual-productos').value.trim();
+  if (!cliente) { showToast('Ingresá el nombre del cliente'); return; }
+  if (!productos_txt) { showToast('Ingresá los productos'); return; }
+  const params = new URLSearchParams({ accion: 'venta', cliente, tipo, productos: productos_txt, formaPago: pago, notas: 'Manual' });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(() => {
+      showToast('Pedido registrado ✓');
+      document.getElementById('manual-cliente').value = '';
+      document.getElementById('manual-productos').value = '';
+      renderPedidos();
+    })
+    .catch(() => showToast('Error al registrar'));
 }
 
 function registrarGasto() {
@@ -1145,6 +1199,8 @@ function showToast(msg) {
 function verificarAdmin() {
   const pass = document.getElementById('admin-pass-input').value;
   if (pass === ADMIN_PASS) {
+    adminAuth = true;
+    sessionStorage.setItem('adminAuth', '1');
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('modo-bar').style.display = '';
     setModo('admin');
@@ -1160,7 +1216,13 @@ function init() {
   const hash = window.location.hash.replace('#', '');
   document.getElementById('modo-bar').style.display = 'none';
   if (hash === TOKENS.admin) {
-    document.getElementById('admin-login').style.display = 'flex';
+    if (sessionStorage.getItem('adminAuth') === '1') {
+      adminAuth = true;
+      document.getElementById('modo-bar').style.display = '';
+      setModo('admin');
+    } else {
+      document.getElementById('admin-login').style.display = 'flex';
+    }
   } else if (hash === TOKENS.minorista) {
     setModo('minorista');
   } else {
