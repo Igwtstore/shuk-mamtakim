@@ -982,10 +982,11 @@ function init() {
   const path = window.location.pathname;
   const hash = window.location.hash;
   const esAdmin = path.includes('admin') || hash.includes('admin');
+  const esMinorista = path.includes('minorista') || hash.includes('minorista');
   if (!esAdmin) {
-    document.getElementById('btn-admin').style.display = 'none';
+    document.getElementById('modo-bar').style.display = 'none';
   }
-  if (path.includes('minorista') || hash.includes('minorista')) {
+  if (esMinorista) {
     setModo('minorista');
   } else if (esAdmin) {
     setModo('admin');
