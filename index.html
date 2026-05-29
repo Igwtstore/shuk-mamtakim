@@ -651,7 +651,54 @@
           <option value="Varios">
         </datalist>
       </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>Imputar a caja</label>
+        <select id="gasto-columna" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <option value="MP_JONY">MP JONY</option>
+          <option value="EFT_JONY">EFT $ JONY</option>
+          <option value="MP_GABY">MP GABY</option>
+          <option value="EFT_MYRI">EFT $ MYRI</option>
+          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+          <option value="COMI_ARS_JONY">Comi $ JONY</option>
+          <option value="COMI_USD_JONY">Comi U$S JONY</option>
+        </select>
+      </div>
       <button class="guardar-stock-btn" onclick="registrarGasto()" style="margin-top:0">Registrar gasto</button>
+    </div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-titulo">💳 Registrar rendición / retiro</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div class="nombre-campo" style="margin:0">
+        <label>Descripción</label>
+        <input type="text" id="rend-desc" placeholder="Ej: Pago comisión JONY, Retiro caja..." />
+      </div>
+      <div style="display:flex;gap:0.75rem;">
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>Monto</label>
+          <input type="number" id="rend-monto" placeholder="0" min="0" />
+        </div>
+        <div class="nombre-campo" style="margin:0;width:100px">
+          <label>Moneda</label>
+          <select id="rend-moneda" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="ARS">ARS $</option>
+            <option value="USD">USD U$S</option>
+          </select>
+        </div>
+      </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>Deducir de caja</label>
+        <select id="rend-columna" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <option value="MP_JONY">MP JONY</option>
+          <option value="EFT_JONY">EFT $ JONY</option>
+          <option value="MP_GABY">MP GABY</option>
+          <option value="EFT_MYRI">EFT $ MYRI</option>
+          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+          <option value="COMI_ARS_JONY">Comi $ JONY</option>
+          <option value="COMI_USD_JONY">Comi U$S JONY</option>
+        </select>
+      </div>
+      <button class="guardar-stock-btn" onclick="registrarRendicion()" style="margin-top:0">Registrar rendición</button>
     </div>
   </div>
   <div class="admin-card">
@@ -960,28 +1007,38 @@ function enviarPedido() {
   const items = Object.values(carrito);
   if (!items.length) return;
 
+  let arsJONY = 0, arsMyri = 0, usdMyri = 0;
   const lineas = items.map(item => {
-    const precio = modo === 'mayorista'
-      ? (PITZUJIM_IDS.includes(item.id) ? '$ ' + Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))).toLocaleString('es-AR') : 'U$S ' + parseFloat((item.precioMay||'0').toString().replace(',','.')).toFixed(2))
-      : '$ ' + Math.round(item.precioMin).toLocaleString('es-AR');
-    return `• ${item.qty}x ${item.nombre} (${item.desc.substring(0,40)}) — ${precio}`;
-  }).join('\n');
-
-  const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
-  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas}\n\n_Pedido enviado desde el catálogo online_`;
-
-  let totalARS = 0, totalUSD = 0;
-  items.forEach(item => {
+    const esPitz = PITZUJIM_IDS.includes(item.id);
+    let precioUnit, moneda;
     if (modo === 'mayorista') {
-      if (PITZUJIM_IDS.includes(item.id)) totalARS += Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))) * item.qty;
-      else totalUSD += parseFloat((item.precioMay||'0').toString().replace(',','.')) * item.qty;
+      if (esPitz) {
+        precioUnit = Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.')));
+        moneda = '$'; arsJONY += precioUnit * item.qty;
+      } else {
+        precioUnit = parseFloat((item.precioMay||'0').toString().replace(',','.'));
+        moneda = 'U$S'; usdMyri += precioUnit * item.qty;
+      }
     } else {
-      totalARS += Math.round(item.precioMin) * item.qty;
+      precioUnit = Math.round(item.precioMin); moneda = '$';
+      if (esPitz) arsJONY += precioUnit * item.qty;
+      else arsMyri += precioUnit * item.qty;
     }
+    const subtotal = moneda === 'U$S' ? (precioUnit * item.qty).toFixed(2) : Math.round(precioUnit * item.qty).toLocaleString('es-AR');
+    const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
+    return `• ${item.qty}x ${item.nombre} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`;
   });
 
+  const comiARS = Math.round(arsMyri * 0.15);
+  const comiUSD = parseFloat((usdMyri * 0.15).toFixed(2));
+  const totalARS = arsJONY + arsMyri;
+  const totalUSD = usdMyri;
+
+  const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}\n\n_Pedido enviado desde el catálogo online_`;
+
   registrarPedido(nombre, items, tipoCliente);
-  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD);
+  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas);
 
   items.forEach(item => {
     const p = productos.find(x => x.id === item.id);
@@ -998,20 +1055,23 @@ function enviarPedido() {
   showToast('¡Pedido enviado! ✓');
 }
 
-function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD) {
-  const productos_str = items.map(i => `${i.qty}x ${i.nombre}`).join(', ');
+function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas) {
+  const productos_str = (lineas || items.map(i => `${i.qty}x ${i.nombre}`)).join(' || ');
   const stockUpdates = items.map(i => `${i.id}:${i.qty}`).join(',');
   const params = new URLSearchParams({
     accion: 'venta', cliente: nombre, tipo,
     productos: productos_str, formaPago, notas: '',
     totalARS: Math.round(totalARS || 0), totalUSD: (totalUSD || 0).toFixed(2),
-    stockUpdates
+    stockUpdates,
+    arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
+    usdMyri: (usdMyri || 0).toFixed(2),
+    comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2)
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
 }
 
-function enviarGastoASheet(desc, monto, moneda, categoria) {
-  const params = new URLSearchParams({ accion: 'gasto', desc, monto, moneda, categoria });
+function enviarGastoASheet(desc, monto, moneda, categoria, columna) {
+  const params = new URLSearchParams({ accion: 'gasto', desc, monto, moneda, categoria, columna: columna || '' });
   return fetch(APPS_SCRIPT_URL + '?' + params.toString());
 }
 
@@ -1046,20 +1106,34 @@ async function renderPedidos() {
       const estado = v.estado || 'pendiente';
       const totalStr = v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` :
                        v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : '';
+      const productLines = v.productos
+        ? v.productos.split(' || ').map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
+        : '';
+      const arsJ = parseFloat(v.arsJONY || 0);
+      const arsM = parseFloat(v.arsMyri || 0);
+      const usdM = parseFloat(v.usdMyri || 0);
+      const comiA = parseFloat(v.comiARS || 0);
+      const comiU = parseFloat(v.comiUSD || 0);
+      const splitParts = [];
+      if (arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">Pitzujim JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
+      if (arsM > 0) splitParts.push(`<span>Golosinas MYRI: $ ${Math.round(arsM).toLocaleString('es-AR')}</span>`);
+      if (usdM > 0) splitParts.push(`<span>Golosinas MYRI: U$S ${usdM.toFixed(2)}</span>`);
+      if (comiA > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: $ ${Math.round(comiA).toLocaleString('es-AR')}</span>`);
+      if (comiU > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: U$S ${comiU.toFixed(2)}</span>`);
       return `
       <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}" id="pedido-${v.id}">
         <div class="pedido-item-header">
           <div>
             <div class="pedido-cliente">${v.cliente} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${v.tipo})</span></div>
-            <div class="pedido-fecha">${v.fecha}</div>
+            <div class="pedido-fecha">${v.fecha} · ${v.formaPago}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
             <span class="estado-pill estado-${estado}">${estado}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
           </div>
         </div>
-        <div class="pedido-detalle">${v.productos}</div>
-        <div style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.2rem">${v.formaPago}</div>
+        <div style="margin:0.4rem 0">${productLines || v.productos}</div>
+        ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
         ${conAcciones ? `
         <div class="pedido-acciones">
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado')">✓ Entregado</button>
@@ -1138,9 +1212,10 @@ function registrarGasto() {
   const monto = parseFloat(document.getElementById('gasto-monto').value);
   const moneda = document.getElementById('gasto-moneda').value;
   const categoria = document.getElementById('gasto-categoria').value;
+  const columna = document.getElementById('gasto-columna').value;
   if (!desc) { showToast('Ingresá una descripción'); return; }
   if (!monto || monto <= 0) { showToast('Ingresá un monto válido'); return; }
-  enviarGastoASheet(desc, monto, moneda, categoria)
+  enviarGastoASheet(desc, monto, moneda, categoria, columna)
     .then(() => {
       showToast('Gasto registrado ✓');
       document.getElementById('gasto-desc').value = '';
@@ -1150,78 +1225,116 @@ function registrarGasto() {
     .catch(() => showToast('Error al registrar gasto'));
 }
 
+function registrarRendicion() {
+  const desc = document.getElementById('rend-desc').value.trim();
+  const monto = parseFloat(document.getElementById('rend-monto').value);
+  const moneda = document.getElementById('rend-moneda').value;
+  const columna = document.getElementById('rend-columna').value;
+  if (!desc) { showToast('Ingresá una descripción'); return; }
+  if (!monto || monto <= 0) { showToast('Ingresá un monto válido'); return; }
+  const params = new URLSearchParams({ accion: 'rendicion', desc, monto, moneda, columna });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(() => {
+      showToast('Rendición registrada ✓');
+      document.getElementById('rend-desc').value = '';
+      document.getElementById('rend-monto').value = '';
+      renderCaja();
+    })
+    .catch(() => showToast('Error al registrar'));
+}
+
 async function renderCaja() {
   const cont = document.getElementById('caja-contenido');
   cont.innerHTML = '<div class="sinpedidos">Cargando...</div>';
+  const COLS = [
+    { key: 'MP_JONY',       label: 'MP JONY',       mon: 'ARS' },
+    { key: 'EFT_JONY',      label: 'EFT $ JONY',    mon: 'ARS' },
+    { key: 'MP_GABY',       label: 'MP GABY',        mon: 'ARS' },
+    { key: 'EFT_MYRI',      label: 'EFT $ MYRI',    mon: 'ARS' },
+    { key: 'ETF_USD_MYRI',  label: 'ETF U$S MYRI',  mon: 'USD' },
+    { key: 'COMI_ARS_JONY', label: 'Comi $ JONY',   mon: 'ARS' },
+    { key: 'COMI_USD_JONY', label: 'Comi U$S JONY', mon: 'USD' }
+  ];
+  const fmt = (v, mon) => mon === 'USD' ? `U$S ${Math.abs(v).toFixed(2)}` : `$ ${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;
   try {
-    const [ventasRes, gastosRes] = await Promise.all([
+    const [vR, gR, rR] = await Promise.all([
       fetch(APPS_SCRIPT_URL + '?accion=ventas'),
-      fetch(APPS_SCRIPT_URL + '?accion=gastos')
+      fetch(APPS_SCRIPT_URL + '?accion=gastos'),
+      fetch(APPS_SCRIPT_URL + '?accion=rendiciones').catch(() => ({ json: () => [] }))
     ]);
-    const ventas = await ventasRes.json();
-    const gastos = await gastosRes.json();
+    const ventas = await vR.json();
+    const gastos = await gR.json();
+    const rendiciones = rR.json ? await rR.json() : [];
 
-    if (!ventas.length && !gastos.length) {
-      cont.innerHTML = '<div class="sinpedidos">Sin movimientos aún.</div>';
-      return;
-    }
+    const movs = [];
+    ventas.forEach((v, idx) => {
+      const n = v.nVenta || (idx + 1);
+      const fp = v.formaPago || '';
+      const f = v.fecha || '';
+      const arsJ = parseFloat(v.arsJONY || 0);
+      const arsM = parseFloat(v.arsMyri || 0);
+      const usdM = parseFloat(v.usdMyri || 0);
+      const comiA = parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15);
+      const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
+      if (arsJ > 0) {
+        const col = fp === 'Mercado Pago' ? 'MP_JONY' : 'EFT_JONY';
+        movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col, val: arsJ, mon: 'ARS', tipo: 'venta' });
+      }
+      if (arsM > 0) {
+        const col = (fp === 'Mercado Pago' || fp === 'Transferencia') ? 'MP_GABY' : 'EFT_MYRI';
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col, val: arsM, mon: 'ARS', tipo: 'venta' });
+        if (comiA > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi' });
+      }
+      if (usdM > 0) {
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: 'ETF_USD_MYRI', val: usdM, mon: 'USD', tipo: 'venta' });
+        if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
+      }
+    });
+    gastos.forEach(g => {
+      if (g.columna) movs.push({ desc: `${g.desc} ${g.fecha}`, col: g.columna, val: -(parseFloat(g.monto)||0), mon: g.moneda, tipo: 'gasto' });
+    });
+    if (Array.isArray(rendiciones)) rendiciones.forEach(r => {
+      if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
+    });
 
-    const totalVentasARS = ventas.reduce((s,v) => s + (parseFloat(v.totalARS)||0), 0);
-    const totalVentasUSD = ventas.reduce((s,v) => s + (parseFloat(v.totalUSD)||0), 0);
-    const totalGastosARS = gastos.filter(g => g.moneda === 'ARS').reduce((s,g) => s + (parseFloat(g.monto)||0), 0);
-    const totalGastosUSD = gastos.filter(g => g.moneda === 'USD').reduce((s,g) => s + (parseFloat(g.monto)||0), 0);
-    const balanceARS = totalVentasARS - totalGastosARS;
+    const totals = {}; COLS.forEach(c => totals[c.key] = 0);
+    movs.forEach(m => { if (totals[m.col] !== undefined) totals[m.col] += m.val; });
 
-    const resumen = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem;">
-      <div style="background:var(--verde-claro);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.65rem;color:var(--verde);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Ventas ARS</div>
-        <div style="font-size:1rem;font-weight:700;color:var(--verde)">$ ${Math.round(totalVentasARS).toLocaleString('es-AR')}</div>
-      </div>
-      ${totalVentasUSD > 0 ? `<div style="background:var(--verde-claro);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.65rem;color:var(--verde);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Ventas USD</div>
-        <div style="font-size:1rem;font-weight:700;color:var(--verde)">U$S ${totalVentasUSD.toFixed(2)}</div>
-      </div>` : `<div style="background:var(--rojo-claro);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.65rem;color:var(--rojo);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Gastos ARS</div>
-        <div style="font-size:1rem;font-weight:700;color:var(--rojo)">$ ${Math.round(totalGastosARS).toLocaleString('es-AR')}</div>
-      </div>`}
-      <div style="background:${balanceARS >= 0 ? 'var(--verde-claro)' : 'var(--rojo-claro)'};border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.65rem;color:${balanceARS >= 0 ? 'var(--verde)' : 'var(--rojo)'};font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Balance ARS</div>
-        <div style="font-size:1rem;font-weight:700;color:${balanceARS >= 0 ? 'var(--verde)' : 'var(--rojo)'}">$ ${Math.round(balanceARS).toLocaleString('es-AR')}</div>
-      </div>
-      <div style="background:var(--gris);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.65rem;color:var(--texto-suave);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Pedidos</div>
-        <div style="font-size:1rem;font-weight:700;color:var(--azul)">${ventas.length}</div>
-      </div>
+    const colColor = { venta: 'var(--verde)', comi: 'var(--dorado)', gasto: 'var(--rojo)', rendicion: 'var(--texto-suave)' };
+
+    const tabla = `
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:0.5rem">
+    <table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:650px">
+      <thead>
+        <tr style="background:var(--azul);color:white">
+          <th style="text-align:left;padding:0.45rem 0.5rem;white-space:nowrap">Movimiento</th>
+          ${COLS.map(c => `<th style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">${c.label}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${movs.length ? movs.map(m => `
+        <tr style="border-bottom:1px solid var(--gris-medio)">
+          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'};white-space:nowrap">${m.desc}</td>
+          ${COLS.map(c => {
+            if (c.key !== m.col) return '<td></td>';
+            const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
+            return `<td style="text-align:right;padding:0.35rem 0.5rem;font-weight:600;color:${color};white-space:nowrap">${m.val < 0 ? '-' : ''}${fmt(m.val, c.mon)}</td>`;
+          }).join('')}
+        </tr>`).join('') : `<tr><td colspan="${COLS.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr style="background:var(--gris);font-weight:700;border-top:2px solid var(--azul)">
+          <td style="padding:0.5rem;color:var(--azul);font-weight:700">SALDO</td>
+          ${COLS.map(c => {
+            const v = totals[c.key];
+            const color = v >= 0 ? 'var(--verde)' : 'var(--rojo)';
+            return `<td style="text-align:right;padding:0.5rem;color:${color};white-space:nowrap">${v < 0 ? '-' : ''}${fmt(v, c.mon)}</td>`;
+          }).join('')}
+        </tr>
+      </tfoot>
+    </table>
     </div>`;
-
-    const movVentas = ventas.slice(-20).reverse().map(v => {
-      const importe = parseFloat(v.totalARS) > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` :
-                      parseFloat(v.totalUSD) > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : '—';
-      return `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;">
-      <div>
-        <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${v.cliente} <span style="color:var(--texto-suave);font-weight:400">(${v.tipo})</span></div>
-        <div style="font-size:0.72rem;color:var(--texto-suave)">${v.productos}</div>
-        <div style="font-size:0.68rem;color:var(--texto-suave)">${v.fecha} · ${v.formaPago}</div>
-      </div>
-      <span style="font-size:0.82rem;font-weight:700;color:var(--verde);white-space:nowrap">${importe}</span>
-    </div>`;}).join('');
-
-    const movGastos = gastos.slice(-10).reverse().map(g => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;">
-      <div>
-        <div style="font-size:0.82rem;font-weight:600;color:var(--rojo)">${g.desc}</div>
-        <div style="font-size:0.72rem;color:var(--texto-suave)">${g.categoria} · ${g.fecha}</div>
-      </div>
-      <span style="font-size:0.82rem;font-weight:700;color:var(--rojo);white-space:nowrap">${g.moneda === 'USD' ? 'U$S ' : '$ '}${g.moneda === 'USD' ? g.monto.toFixed(2) : Math.round(g.monto).toLocaleString('es-AR')}</span>
-    </div>`).join('');
-
-    cont.innerHTML = resumen +
-      `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem">Últimas ventas</div>` +
-      (movVentas || '<div class="sinpedidos" style="padding:0.5rem 0">Sin ventas</div>') +
-      `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Últimos gastos</div>` +
-      (movGastos || '<div class="sinpedidos" style="padding:0.5rem 0">Sin gastos</div>');
+    cont.innerHTML = tabla;
   } catch(e) {
     cont.innerHTML = '<div class="sinpedidos">Error al cargar movimientos.</div>';
   }
