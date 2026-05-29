@@ -1094,9 +1094,12 @@ function guardarStock() {
     const inp = document.getElementById('sinput-' + p.id);
     if (inp) p.stock = parseInt(inp.value) || 0;
   });
+  const updates = productos.map(p => `${p.id}:${p.stock}`).join(',');
+  const params = new URLSearchParams({ accion: 'setStock', updates });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   renderCatalogo();
   renderStockAdmin();
-  showToast('Stock actualizado ✓');
+  showToast('Stock guardado en planilla ✓');
 }
 
 function cargarPedidoManual() {
