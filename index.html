@@ -603,12 +603,27 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- ADMIN LOGIN -->
+<div id="admin-login" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:400;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;padding:2rem 1.75rem;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-family:'Fraunces',serif;font-size:1.3rem;font-weight:700;color:#1a1a2e;margin-bottom:0.4rem;">Shuk Mamtakim</div>
+    <div style="font-size:0.8rem;color:#6b6b7a;margin-bottom:1.25rem;text-transform:uppercase;letter-spacing:0.05em;">Panel de administración</div>
+    <input type="password" id="admin-pass-input" placeholder="Contraseña" onkeydown="if(event.key==='Enter')verificarAdmin()"
+      style="width:100%;padding:0.7rem 1rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:1rem;margin-bottom:0.75rem;outline:none;box-sizing:border-box;" />
+    <button onclick="verificarAdmin()"
+      style="width:100%;padding:0.75rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;">Ingresar</button>
+    <div id="admin-error" style="color:#c0392b;font-size:0.8rem;margin-top:0.6rem;display:none;">Contraseña incorrecta</div>
+  </div>
+</div>
+
 <script>
 const SHEET_ID = '17uCcaoZ5TDZbiL4R3L881JQ8_-J94sWUP4KjUDqaV1c';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Stock`;
 const DRIVE_FOLDER = '1Mgu_gDhvO1bs-YmFsXsOyxuiBV6yEyLe';
 const WA_NUM1 = '5491131754540';
 const WA_NUM2 = '972527596202';
+const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
+const ADMIN_PASS = 'shuk@admin';
 
 // STORAGE
 const DB_KEY = 'shuk_pedidos_v1';
@@ -978,19 +993,29 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('visible'), 2500);
 }
 
-// INIT — detectar modo por URL
-function init() {
-  const path = window.location.pathname;
-  const hash = window.location.hash;
-  const esAdmin = path.includes('admin') || hash.includes('admin');
-  const esMinorista = path.includes('minorista') || hash.includes('minorista');
-  if (!esAdmin) {
-    document.getElementById('modo-bar').style.display = 'none';
-  }
-  if (esMinorista) {
-    setModo('minorista');
-  } else if (esAdmin) {
+function verificarAdmin() {
+  const pass = document.getElementById('admin-pass-input').value;
+  if (pass === ADMIN_PASS) {
+    document.getElementById('admin-login').style.display = 'none';
+    document.getElementById('modo-bar').style.display = '';
     setModo('admin');
+  } else {
+    document.getElementById('admin-error').style.display = 'block';
+    document.getElementById('admin-pass-input').value = '';
+    document.getElementById('admin-pass-input').focus();
+  }
+}
+
+// INIT — detectar modo por token secreto en URL
+function init() {
+  const hash = window.location.hash.replace('#', '');
+  document.getElementById('modo-bar').style.display = 'none';
+  if (hash === TOKENS.admin) {
+    document.getElementById('admin-login').style.display = 'flex';
+  } else if (hash === TOKENS.minorista) {
+    setModo('minorista');
+  } else {
+    setModo('mayorista');
   }
   cargarProductos();
 }
