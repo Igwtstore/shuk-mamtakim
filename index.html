@@ -955,8 +955,18 @@ function enviarPedido() {
   const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
   const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas}\n\n_Pedido enviado desde el catálogo online_`;
 
+  let totalARS = 0, totalUSD = 0;
+  items.forEach(item => {
+    if (modo === 'mayorista') {
+      if (PITZUJIM_IDS.includes(item.id)) totalARS += Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))) * item.qty;
+      else totalUSD += parseFloat((item.precioMay||'0').toString().replace(',','.')) * item.qty;
+    } else {
+      totalARS += Math.round(item.precioMin) * item.qty;
+    }
+  });
+
   registrarPedido(nombre, items, tipoCliente);
-  enviarVentaASheet(nombre, items, tipoCliente, formaPago);
+  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD);
 
   items.forEach(item => {
     const p = productos.find(x => x.id === item.id);
@@ -975,17 +985,14 @@ function enviarPedido() {
   showToast('¡Pedido enviado! ✓');
 }
 
-function enviarVentaASheet(nombre, items, tipo, formaPago) {
+function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD) {
   const productos_str = items.map(i => `${i.qty}x ${i.nombre}`).join(', ');
   const params = new URLSearchParams({
-    accion: 'venta',
-    cliente: nombre,
-    tipo,
-    productos: productos_str,
-    formaPago,
-    notas: ''
+    accion: 'venta', cliente: nombre, tipo,
+    productos: productos_str, formaPago, notas: '',
+    totalARS: Math.round(totalARS || 0), totalUSD: (totalUSD || 0).toFixed(2)
   });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => {});
+  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
 }
 
 function enviarGastoASheet(desc, monto, moneda, categoria) {
@@ -1016,37 +1023,58 @@ async function renderPedidos() {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
     }
-    const mostrar = [...ventas].reverse().slice(0, 50);
-    lista.innerHTML = mostrar.map(v => {
+    const todos = [...ventas].reverse();
+    const pendientes = todos.filter(v => (v.estado || 'pendiente') === 'pendiente');
+    const historial = todos.filter(v => (v.estado || 'pendiente') !== 'pendiente');
+
+    const renderCard = (v, conAcciones) => {
       const estado = v.estado || 'pendiente';
+      const totalStr = v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` :
+                       v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : '';
       return `
-      <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}">
+      <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}" id="pedido-${v.id}">
         <div class="pedido-item-header">
           <div>
             <div class="pedido-cliente">${v.cliente} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${v.tipo})</span></div>
             <div class="pedido-fecha">${v.fecha}</div>
           </div>
-          <span class="estado-pill estado-${estado}">${estado}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
+            <span class="estado-pill estado-${estado}">${estado}</span>
+            ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
+          </div>
         </div>
         <div class="pedido-detalle">${v.productos}</div>
         <div style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.2rem">${v.formaPago}</div>
-        ${estado === 'pendiente' ? `
+        ${conAcciones ? `
         <div class="pedido-acciones">
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado')">✓ Entregado</button>
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado')">✕ Cancelar</button>
         </div>` : ''}
       </div>`;
-    }).join('');
+    };
+
+    const htmlPendientes = pendientes.length
+      ? pendientes.map(v => renderCard(v, true)).join('')
+      : '<div class="sinpedidos">No hay pedidos pendientes.</div>';
+
+    const htmlHistorial = historial.length
+      ? `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Historial (${historial.length})</div>` +
+        historial.slice(0,10).map(v => renderCard(v, false)).join('')
+      : '';
+
+    lista.innerHTML = htmlPendientes + htmlHistorial;
   } catch(e) {
     lista.innerHTML = '<div class="sinpedidos">Error al cargar pedidos.</div>';
   }
 }
 
 function cambiarEstado(id, estado) {
+  const card = document.getElementById('pedido-' + id);
+  if (card) card.remove();
   const params = new URLSearchParams({ accion: 'actualizarEstado', id, estado });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
-  setTimeout(renderPedidos, 2500);
+  setTimeout(renderPedidos, 6000);
 }
 
 function renderStockAdmin() {
@@ -1076,7 +1104,7 @@ function cargarPedidoManual() {
   const productos_txt = document.getElementById('manual-productos').value.trim();
   if (!cliente) { showToast('Ingresá el nombre del cliente'); return; }
   if (!productos_txt) { showToast('Ingresá los productos'); return; }
-  const params = new URLSearchParams({ accion: 'venta', cliente, tipo, productos: productos_txt, formaPago: pago, notas: 'Manual' });
+  const params = new URLSearchParams({ accion: 'venta', cliente, tipo, productos: productos_txt, formaPago: pago, notas: 'Manual', totalARS: 0, totalUSD: '0.00' });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(() => {
       showToast('Pedido registrado ✓');
@@ -1120,36 +1148,47 @@ async function renderCaja() {
       return;
     }
 
-    const ventasARS = ventas.filter(v => v.formaPago !== 'Cuenta corriente');
-    const totalVentasARS = 0;
-    const totalGastosARS = gastos.filter(g => g.moneda === 'ARS').reduce((s,g) => s + (g.monto||0), 0);
-    const totalGastosUSD = gastos.filter(g => g.moneda === 'USD').reduce((s,g) => s + (g.monto||0), 0);
+    const totalVentasARS = ventas.reduce((s,v) => s + (parseFloat(v.totalARS)||0), 0);
+    const totalVentasUSD = ventas.reduce((s,v) => s + (parseFloat(v.totalUSD)||0), 0);
+    const totalGastosARS = gastos.filter(g => g.moneda === 'ARS').reduce((s,g) => s + (parseFloat(g.monto)||0), 0);
+    const totalGastosUSD = gastos.filter(g => g.moneda === 'USD').reduce((s,g) => s + (parseFloat(g.monto)||0), 0);
+    const balanceARS = totalVentasARS - totalGastosARS;
 
     const resumen = `
-    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">
-      <div style="flex:1;min-width:120px;background:var(--verde-claro);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.7rem;color:var(--verde);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Ventas</div>
-        <div style="font-size:1.1rem;font-weight:700;color:var(--verde)">${ventas.length} pedidos</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem;">
+      <div style="background:var(--verde-claro);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.65rem;color:var(--verde);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Ventas ARS</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--verde)">$ ${Math.round(totalVentasARS).toLocaleString('es-AR')}</div>
       </div>
-      <div style="flex:1;min-width:120px;background:var(--rojo-claro);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.7rem;color:var(--rojo);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Gastos ARS</div>
-        <div style="font-size:1.1rem;font-weight:700;color:var(--rojo)">$ ${Math.round(totalGastosARS).toLocaleString('es-AR')}</div>
+      ${totalVentasUSD > 0 ? `<div style="background:var(--verde-claro);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.65rem;color:var(--verde);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Ventas USD</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--verde)">U$S ${totalVentasUSD.toFixed(2)}</div>
+      </div>` : `<div style="background:var(--rojo-claro);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.65rem;color:var(--rojo);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Gastos ARS</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--rojo)">$ ${Math.round(totalGastosARS).toLocaleString('es-AR')}</div>
+      </div>`}
+      <div style="background:${balanceARS >= 0 ? 'var(--verde-claro)' : 'var(--rojo-claro)'};border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.65rem;color:${balanceARS >= 0 ? 'var(--verde)' : 'var(--rojo)'};font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Balance ARS</div>
+        <div style="font-size:1rem;font-weight:700;color:${balanceARS >= 0 ? 'var(--verde)' : 'var(--rojo)'}">$ ${Math.round(balanceARS).toLocaleString('es-AR')}</div>
       </div>
-      ${totalGastosUSD ? `<div style="flex:1;min-width:120px;background:var(--dorado-claro);border-radius:10px;padding:0.75rem 1rem;">
-        <div style="font-size:0.7rem;color:var(--dorado);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Gastos USD</div>
-        <div style="font-size:1.1rem;font-weight:700;color:var(--dorado)">U$S ${totalGastosUSD.toFixed(2)}</div>
-      </div>` : ''}
+      <div style="background:var(--gris);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.65rem;color:var(--texto-suave);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Pedidos</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--azul)">${ventas.length}</div>
+      </div>
     </div>`;
 
-    const movVentas = ventas.slice(-20).reverse().map(v => `
+    const movVentas = ventas.slice(-20).reverse().map(v => {
+      const importe = parseFloat(v.totalARS) > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` :
+                      parseFloat(v.totalUSD) > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : '—';
+      return `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;">
       <div>
         <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${v.cliente} <span style="color:var(--texto-suave);font-weight:400">(${v.tipo})</span></div>
         <div style="font-size:0.72rem;color:var(--texto-suave)">${v.productos}</div>
-        <div style="font-size:0.68rem;color:var(--texto-suave)">${v.fecha}</div>
+        <div style="font-size:0.68rem;color:var(--texto-suave)">${v.fecha} · ${v.formaPago}</div>
       </div>
-      <span style="font-size:0.75rem;font-weight:600;background:var(--verde-claro);color:var(--verde);padding:3px 8px;border-radius:50px;white-space:nowrap">${v.formaPago}</span>
-    </div>`).join('');
+      <span style="font-size:0.82rem;font-weight:700;color:var(--verde);white-space:nowrap">${importe}</span>
+    </div>`;}).join('');
 
     const movGastos = gastos.slice(-10).reverse().map(g => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;">
