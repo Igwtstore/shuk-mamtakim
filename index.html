@@ -981,9 +981,13 @@ function showToast(msg) {
 function init() {
   const path = window.location.pathname;
   const hash = window.location.hash;
+  const esAdmin = path.includes('admin') || hash.includes('admin');
+  if (!esAdmin) {
+    document.getElementById('btn-admin').style.display = 'none';
+  }
   if (path.includes('minorista') || hash.includes('minorista')) {
     setModo('minorista');
-  } else if (path.includes('admin') || hash.includes('admin')) {
+  } else if (esAdmin) {
     setModo('admin');
   }
   cargarProductos();
