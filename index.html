@@ -588,6 +588,42 @@
     </table>
     <button class="guardar-stock-btn" onclick="guardarStock()">Guardar cambios</button>
   </div>
+  <div class="admin-card">
+    <div class="admin-titulo">💸 Registrar gasto</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div class="nombre-campo" style="margin:0">
+        <label>Descripción</label>
+        <input type="text" id="gasto-desc" placeholder="Ej: Flete, mercadería..." />
+      </div>
+      <div style="display:flex;gap:0.75rem;">
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>Monto</label>
+          <input type="number" id="gasto-monto" placeholder="0" min="0" />
+        </div>
+        <div class="nombre-campo" style="margin:0;width:100px">
+          <label>Moneda</label>
+          <select id="gasto-moneda" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="ARS">ARS $</option>
+            <option value="USD">USD U$S</option>
+          </select>
+        </div>
+      </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>Categoría</label>
+        <select id="gasto-categoria" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <option value="Flete">Flete</option>
+          <option value="Mercadería">Mercadería</option>
+          <option value="Impuestos">Impuestos</option>
+          <option value="Varios">Varios</option>
+        </select>
+      </div>
+      <button class="guardar-stock-btn" onclick="registrarGasto()" style="margin-top:0">Registrar gasto</button>
+    </div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-titulo">📊 Caja — movimientos recientes</div>
+    <div id="caja-contenido"><div class="sinpedidos">Cargando movimientos...</div></div>
+  </div>
 </div>
 
 <!-- CARRITO OVERLAY -->
@@ -624,6 +660,7 @@ const WA_NUM1 = '5491131754540';
 const WA_NUM2 = '972527596202';
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
 const ADMIN_PASS = 'shuk@admin';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxZ0eCxg0Plc0YRz_rZ4z_ZBhj8WhVHOB_k2xIYmlmoN64qUXQJbxgcSMHYrCse4q1csg/exec';
 
 // STORAGE
 const DB_KEY = 'shuk_pedidos_v1';
@@ -831,6 +868,16 @@ function renderCarrito() {
       <label>Tu nombre</label>
       <input type="text" id="nombre-cliente" placeholder="Ej: Carlos García" />
     </div>
+    <div class="nombre-campo">
+      <label>Forma de cobro</label>
+      <select id="forma-pago" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;color:#1a1a2e;">
+        <option value="">Seleccionar...</option>
+        <option value="Efectivo">Efectivo</option>
+        <option value="Transferencia">Transferencia</option>
+        <option value="Mercado Pago">Mercado Pago</option>
+        <option value="Cuenta corriente">Cuenta corriente</option>
+      </select>
+    </div>
     <button class="pedido-btn" onclick="enviarPedido()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
       Enviar pedido por WhatsApp
@@ -858,6 +905,8 @@ function eliminarDelCarrito(id) {
 function enviarPedido() {
   const nombre = document.getElementById('nombre-cliente').value.trim();
   if (!nombre) { showToast('Ingresá tu nombre'); document.getElementById('nombre-cliente').focus(); return; }
+  const formaPago = document.getElementById('forma-pago').value;
+  if (!formaPago) { showToast('Seleccioná la forma de cobro'); document.getElementById('forma-pago').focus(); return; }
   const items = Object.values(carrito);
   if (!items.length) return;
 
@@ -871,10 +920,9 @@ function enviarPedido() {
   const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
   const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas}\n\n_Pedido enviado desde el catálogo online_`;
 
-  // Registrar pedido
   registrarPedido(nombre, items, tipoCliente);
+  enviarVentaASheet(nombre, items, tipoCliente, formaPago);
 
-  // Descontar stock
   items.forEach(item => {
     const p = productos.find(x => x.id === item.id);
     if (p) p.stock = Math.max(0, p.stock - item.qty);
@@ -890,6 +938,24 @@ function enviarPedido() {
   window.open(url1, '_blank');
   setTimeout(() => window.open(url2, '_blank'), 800);
   showToast('¡Pedido enviado! ✓');
+}
+
+function enviarVentaASheet(nombre, items, tipo, formaPago) {
+  const productos_str = items.map(i => `${i.qty}x ${i.nombre}`).join(', ');
+  const params = new URLSearchParams({
+    accion: 'venta',
+    cliente: nombre,
+    tipo,
+    productos: productos_str,
+    formaPago,
+    notas: ''
+  });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => {});
+}
+
+function enviarGastoASheet(desc, monto, moneda, categoria) {
+  const params = new URLSearchParams({ accion: 'gasto', desc, monto, moneda, categoria });
+  return fetch(APPS_SCRIPT_URL + '?' + params.toString());
 }
 
 function registrarPedido(nombre, items, tipo) {
@@ -971,6 +1037,89 @@ function guardarStock() {
   showToast('Stock actualizado ✓');
 }
 
+function registrarGasto() {
+  const desc = document.getElementById('gasto-desc').value.trim();
+  const monto = parseFloat(document.getElementById('gasto-monto').value);
+  const moneda = document.getElementById('gasto-moneda').value;
+  const categoria = document.getElementById('gasto-categoria').value;
+  if (!desc) { showToast('Ingresá una descripción'); return; }
+  if (!monto || monto <= 0) { showToast('Ingresá un monto válido'); return; }
+  enviarGastoASheet(desc, monto, moneda, categoria)
+    .then(() => {
+      showToast('Gasto registrado ✓');
+      document.getElementById('gasto-desc').value = '';
+      document.getElementById('gasto-monto').value = '';
+      renderCaja();
+    })
+    .catch(() => showToast('Error al registrar gasto'));
+}
+
+async function renderCaja() {
+  const cont = document.getElementById('caja-contenido');
+  cont.innerHTML = '<div class="sinpedidos">Cargando...</div>';
+  try {
+    const [ventasRes, gastosRes] = await Promise.all([
+      fetch(APPS_SCRIPT_URL + '?accion=ventas'),
+      fetch(APPS_SCRIPT_URL + '?accion=gastos')
+    ]);
+    const ventas = await ventasRes.json();
+    const gastos = await gastosRes.json();
+
+    if (!ventas.length && !gastos.length) {
+      cont.innerHTML = '<div class="sinpedidos">Sin movimientos aún.</div>';
+      return;
+    }
+
+    const ventasARS = ventas.filter(v => v.formaPago !== 'Cuenta corriente');
+    const totalVentasARS = 0;
+    const totalGastosARS = gastos.filter(g => g.moneda === 'ARS').reduce((s,g) => s + (g.monto||0), 0);
+    const totalGastosUSD = gastos.filter(g => g.moneda === 'USD').reduce((s,g) => s + (g.monto||0), 0);
+
+    const resumen = `
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+      <div style="flex:1;min-width:120px;background:var(--verde-claro);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.7rem;color:var(--verde);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Ventas</div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--verde)">${ventas.length} pedidos</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:var(--rojo-claro);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.7rem;color:var(--rojo);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Gastos ARS</div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--rojo)">$ ${Math.round(totalGastosARS).toLocaleString('es-AR')}</div>
+      </div>
+      ${totalGastosUSD ? `<div style="flex:1;min-width:120px;background:var(--dorado-claro);border-radius:10px;padding:0.75rem 1rem;">
+        <div style="font-size:0.7rem;color:var(--dorado);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Gastos USD</div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--dorado)">U$S ${totalGastosUSD.toFixed(2)}</div>
+      </div>` : ''}
+    </div>`;
+
+    const movVentas = ventas.slice(-20).reverse().map(v => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;">
+      <div>
+        <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${v.cliente} <span style="color:var(--texto-suave);font-weight:400">(${v.tipo})</span></div>
+        <div style="font-size:0.72rem;color:var(--texto-suave)">${v.productos}</div>
+        <div style="font-size:0.68rem;color:var(--texto-suave)">${v.fecha}</div>
+      </div>
+      <span style="font-size:0.75rem;font-weight:600;background:var(--verde-claro);color:var(--verde);padding:3px 8px;border-radius:50px;white-space:nowrap">${v.formaPago}</span>
+    </div>`).join('');
+
+    const movGastos = gastos.slice(-10).reverse().map(g => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;">
+      <div>
+        <div style="font-size:0.82rem;font-weight:600;color:var(--rojo)">${g.desc}</div>
+        <div style="font-size:0.72rem;color:var(--texto-suave)">${g.categoria} · ${g.fecha}</div>
+      </div>
+      <span style="font-size:0.82rem;font-weight:700;color:var(--rojo);white-space:nowrap">${g.moneda === 'USD' ? 'U$S ' : '$ '}${g.moneda === 'USD' ? g.monto.toFixed(2) : Math.round(g.monto).toLocaleString('es-AR')}</span>
+    </div>`).join('');
+
+    cont.innerHTML = resumen +
+      `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem">Últimas ventas</div>` +
+      (movVentas || '<div class="sinpedidos" style="padding:0.5rem 0">Sin ventas</div>') +
+      `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Últimos gastos</div>` +
+      (movGastos || '<div class="sinpedidos" style="padding:0.5rem 0">Sin gastos</div>');
+  } catch(e) {
+    cont.innerHTML = '<div class="sinpedidos">Error al cargar movimientos.</div>';
+  }
+}
+
 function setModo(m) {
   modo = m;
   document.getElementById('btn-mayorista').classList.toggle('activo', m === 'mayorista');
@@ -980,7 +1129,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
   document.getElementById('buscador-wrap') && null;
-  if (m === 'admin') renderPedidos();
+  if (m === 'admin') { renderPedidos(); renderCaja(); }
   if (m !== 'admin') renderCatalogo();
 }
 
