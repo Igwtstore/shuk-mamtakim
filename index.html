@@ -1042,15 +1042,11 @@ async function renderPedidos() {
   }
 }
 
-async function cambiarEstado(id, estado) {
+function cambiarEstado(id, estado) {
   const params = new URLSearchParams({ accion: 'actualizarEstado', id, estado });
-  try {
-    await fetch(APPS_SCRIPT_URL + '?' + params.toString());
-    showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
-    renderPedidos();
-  } catch(e) {
-    showToast('Error al actualizar');
-  }
+  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
+  showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
+  setTimeout(renderPedidos, 2500);
 }
 
 function renderStockAdmin() {
