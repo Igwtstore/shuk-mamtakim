@@ -1386,11 +1386,17 @@ async function renderCaja() {
       if (arsM > 0) {
         const col = (fp === 'Mercado Pago' || fp === 'Transferencia') ? 'MP_GABY' : 'EFT_MYRI';
         movs.push({ desc: `Vta Golosinas #${n} ${f}`, col, val: arsM, mon: 'ARS', tipo: 'venta' });
-        if (comiA > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi' });
+        if (comiA > 0) {
+          movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi' });
+          movs.push({ desc: `Comi #${n} ${f}`, col, val: -comiA, mon: 'ARS', tipo: 'comi' });
+        }
       }
       if (usdM > 0) {
         movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: 'ETF_USD_MYRI', val: usdM, mon: 'USD', tipo: 'venta' });
-        if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
+        if (comiU > 0) {
+          movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
+          movs.push({ desc: `Comi USD #${n} ${f}`, col: 'ETF_USD_MYRI', val: -comiU, mon: 'USD', tipo: 'comi' });
+        }
       }
     });
     gastos.forEach(g => {
