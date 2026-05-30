@@ -790,6 +790,7 @@ async function cargarProductos() {
     })).filter(p => p.activo && p.id);
     renderCatalogo();
     renderStockAdmin();
+    renderManualProductos();
   } catch(e) {
     catalogo.innerHTML = '<div class="loading">Error al cargar productos. Verificá la conexión.</div>';
   }
