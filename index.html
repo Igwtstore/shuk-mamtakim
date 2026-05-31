@@ -626,6 +626,18 @@
   <div class="admin-subtabs">
     <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
     <button class="admin-subtab" id="subtab-dashboard" onclick="setAdminTab('dashboard')">📊 Dashboard</button>
+    <button class="admin-subtab" id="subtab-clientes" onclick="setAdminTab('clientes')">👥 Clientes</button>
+  </div>
+  <!-- CLIENTES TAB -->
+  <div id="admin-tab-clientes" style="display:none">
+    <div class="admin-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+        <div style="font-weight:700;color:var(--azul)">Historial de clientes</div>
+        <input type="text" id="clientes-buscar" placeholder="Buscar cliente..." oninput="filtrarClientes()"
+          style="padding:0.4rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:20px;font-size:0.85rem;outline:none;width:180px" />
+      </div>
+      <div id="clientes-lista"><div class="sinpedidos">Cargando...</div></div>
+    </div>
   </div>
   <!-- DASHBOARD TAB -->
   <div id="admin-tab-dashboard" style="display:none">
@@ -2009,13 +2021,78 @@ function setModo(m) {
 
 function filtrar() { renderCatalogo(); }
 
-let _dashCharts = {};
+let _dashCharts = {}, _clientesData = [];
 function setAdminTab(tab) {
-  document.getElementById('admin-tab-panel').style.display = tab === 'panel' ? '' : 'none';
-  document.getElementById('admin-tab-dashboard').style.display = tab === 'dashboard' ? '' : 'none';
-  document.getElementById('subtab-panel').classList.toggle('activo', tab === 'panel');
-  document.getElementById('subtab-dashboard').classList.toggle('activo', tab === 'dashboard');
+  ['panel','dashboard','clientes'].forEach(t => {
+    const el = document.getElementById('admin-tab-' + t);
+    if (el) el.style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('subtab-' + t);
+    if (btn) btn.classList.toggle('activo', t === tab);
+  });
   if (tab === 'dashboard') renderDashboard();
+  if (tab === 'clientes') renderClientes();
+}
+
+let _clientesRaw = [];
+async function renderClientes() {
+  const lista = document.getElementById('clientes-lista');
+  lista.innerHTML = '<div class="sinpedidos">Cargando...</div>';
+  const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
+  if (!res) { lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
+  const ventas = await res.json().catch(() => []);
+  // Agrupar por cliente
+  const mapa = {};
+  ventas.filter(v => v.estado !== 'cancelado').forEach(v => {
+    const key = v.cliente;
+    if (!mapa[key]) mapa[key] = { nombre: v.cliente, tipo: v.tipo, pedidos: 0, totalARS: 0, totalUSD: 0, ultima: v.fecha, historial: [] };
+    mapa[key].pedidos++;
+    mapa[key].totalARS += parseFloat(v.totalARS||0);
+    mapa[key].totalUSD += parseFloat(v.totalUSD||0);
+    if (v.fecha > mapa[key].ultima) mapa[key].ultima = v.fecha;
+    mapa[key].historial.push(v);
+  });
+  _clientesRaw = Object.values(mapa).sort((a,b) => b.totalARS - a.totalARS);
+  mostrarClientes(_clientesRaw);
+}
+
+function mostrarClientes(arr) {
+  const lista = document.getElementById('clientes-lista');
+  if (!arr.length) { lista.innerHTML = '<div class="sinpedidos">Sin clientes aún.</div>'; return; }
+  lista.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+    <thead><tr style="background:var(--gris)">
+      <th style="text-align:left;padding:0.5rem;color:var(--texto-suave);font-weight:600">Cliente</th>
+      <th style="text-align:center;padding:0.5rem;color:var(--texto-suave);font-weight:600">Tipo</th>
+      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Pedidos</th>
+      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Total $</th>
+      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Total U$S</th>
+      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Última compra</th>
+      <th style="padding:0.5rem"></th>
+    </tr></thead>
+    <tbody>${arr.map(c => `
+    <tr style="border-bottom:1px solid var(--gris-medio)">
+      <td style="padding:0.5rem;font-weight:600;color:var(--azul)">${c.nombre}</td>
+      <td style="padding:0.5rem;text-align:center"><span style="font-size:0.72rem;background:var(--gris);padding:2px 8px;border-radius:20px">${c.tipo}</span></td>
+      <td style="padding:0.5rem;text-align:right">${c.pedidos}</td>
+      <td style="padding:0.5rem;text-align:right;color:var(--verde);font-weight:600">${c.totalARS > 0 ? '$ ' + Math.round(c.totalARS).toLocaleString('es-AR') : '—'}</td>
+      <td style="padding:0.5rem;text-align:right;color:var(--verde);font-weight:600">${c.totalUSD > 0 ? 'U$S ' + c.totalUSD.toFixed(2) : '—'}</td>
+      <td style="padding:0.5rem;text-align:right;color:var(--texto-suave);font-size:0.78rem">${c.ultima}</td>
+      <td style="padding:0.5rem;text-align:right">
+        <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="contactarCliente('${c.nombre.replace(/'/g,'')}','${c.tipo}')">💬 WA</button>
+      </td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function filtrarClientes() {
+  const q = document.getElementById('clientes-buscar').value.toLowerCase();
+  mostrarClientes(_clientesRaw.filter(c => c.nombre.toLowerCase().includes(q)));
+}
+
+function contactarCliente(nombre, tipo) {
+  const link = tipo === 'Minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/';
+  const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 async function renderDashboard() {
