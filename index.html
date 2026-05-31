@@ -739,7 +739,7 @@
     </div>
     <div id="cobro-myri-wrap" style="display:none;margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Pago MYRI — Golosinas: <span id="cobro-myri-amt" style="color:var(--verde)"></span></label>
-      <select id="cobro-caja-myri" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
+      <select id="cobro-caja-myri" onchange="cobro_onSelectChange()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
         <optgroup label="Cajas MYRI">
           <option value="MP_GABY">MP GABY (transferencia)</option>
           <option value="EFT_MYRI">EFT $ MYRI (efectivo)</option>
@@ -754,6 +754,11 @@
           <option value="CTA_CTE_USD">Cta Cte U$S</option>
         </optgroup>
       </select>
+    </div>
+    <div id="cobro-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">Tipo de cambio — U$S 1 = $</label>
+      <input type="number" id="cobro-tc" placeholder="ej: 1200" min="1" oninput="cobro_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
+      <div id="cobro-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarModalCobro()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
@@ -1437,8 +1442,16 @@ async function renderCaja() {
       }
       if (usdM > 0) {
         const colUSD = v.cajaMyri || 'ETF_USD_MYRI';
-        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta' });
-        if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
+        const tc = parseFloat(v.tipoCambio || 0);
+        if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
+          const arsEquiv = Math.round(usdM * tc);
+          const comiARS_conv = Math.round(arsEquiv * 0.15);
+          movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}` });
+          if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi' });
+        } else {
+          movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta' });
+          if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
+        }
       }
     });
     gastos.forEach(g => {
@@ -1465,11 +1478,11 @@ async function renderCaja() {
       <tbody>
         ${movs.length ? movs.map(m => `
         <tr style="border-bottom:1px solid var(--gris-medio)">
-          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'};white-space:nowrap">${m.desc}</td>
+          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.desc}${m.sub ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${m.sub}</span>` : ''}</td>
           ${COLS.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
-            return `<td style="text-align:right;padding:0.35rem 0.5rem;font-weight:600;color:${color};white-space:nowrap">${m.val < 0 ? '-' : ''}${fmt(m.val, c.mon)}</td>`;
+            return `<td style="text-align:right;padding:0.35rem 0.5rem;font-weight:600;color:${color};white-space:nowrap">${m.val < 0 ? '-' : ''}${fmt(m.val, m.mon)}</td>`;
           }).join('')}
         </tr>`).join('') : `<tr><td colspan="${COLS.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
       </tbody>
@@ -1488,11 +1501,15 @@ async function renderCaja() {
             const MYRI_ARS = ['MP_GABY','EFT_MYRI'];
             const MYRI_USD = ['ETF_USD_MYRI'];
             let neto = null;
-            if (MYRI_ARS.includes(c.key)) neto = { v: (totals['MP_GABY']||0) + (totals['EFT_MYRI']||0) - (totals['COMI_ARS_JONY']||0), mon: 'ARS', show: c.key === 'MP_GABY' };
-            if (MYRI_USD.includes(c.key)) neto = { v: (totals['ETF_USD_MYRI']||0) - (totals['COMI_USD_JONY']||0), mon: 'USD', show: true };
-            if (!neto || !neto.show) return '<td></td>';
+            const myriARS = movs.filter(m => MYRI_ARS.includes(m.col) && m.mon === 'ARS').reduce((s,m) => s + m.val, 0);
+            const myriUSD = movs.filter(m => MYRI_USD.includes(m.col) && m.mon === 'USD').reduce((s,m) => s + m.val, 0);
+            if (c.key === 'MP_GABY') neto = { v: myriARS - (totals['COMI_ARS_JONY']||0), mon: 'ARS', show: true };
+            if (c.key === 'EFT_MYRI') neto = { v: null, show: false };
+            if (c.key === 'ETF_USD_MYRI') neto = { v: myriUSD - (totals['COMI_USD_JONY']||0), mon: 'USD', show: true };
+            if (!neto) return '<td></td>';
+            if (!neto.show || neto.v === null) return '<td></td>';
             const color = neto.v >= 0 ? 'var(--verde)' : 'var(--rojo)';
-            return `<td colspan="${MYRI_ARS.includes(c.key) ? 2 : 1}" style="text-align:right;padding:0.45rem 0.5rem;color:${color};font-weight:700;font-size:0.78rem;white-space:nowrap">${neto.v < 0 ? '-' : ''}${fmt(neto.v, neto.mon)}</td>`;
+            return `<td style="text-align:right;padding:0.45rem 0.5rem;color:${color};font-weight:700;font-size:0.78rem;white-space:nowrap">${neto.v < 0 ? '-' : ''}${fmt(neto.v, neto.mon)}</td>`;
           }).join('')}
         </tr>
       </tfoot>
@@ -1524,9 +1541,11 @@ function refreshAdmin() {
   renderCaja();
 }
 
-let _cobroId = null;
+let _cobroId = null, _cobroUsdM = 0;
+const COBRO_ARS_COLS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS'];
+
 function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
-  _cobroId = id;
+  _cobroId = id; _cobroUsdM = usdM;
   const jw = document.getElementById('cobro-jony-wrap');
   const mw = document.getElementById('cobro-myri-wrap');
   jw.style.display = arsJ > 0 ? 'block' : 'none';
@@ -1534,11 +1553,29 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
   if (arsJ > 0) document.getElementById('cobro-jony-amt').textContent = '$ ' + Math.round(arsJ).toLocaleString('es-AR');
   if (arsM > 0) document.getElementById('cobro-myri-amt').textContent = '$ ' + Math.round(arsM).toLocaleString('es-AR');
   if (usdM > 0) document.getElementById('cobro-myri-amt').textContent = 'U$S ' + parseFloat(usdM).toFixed(2);
+  document.getElementById('cobro-tc').value = '';
+  document.getElementById('cobro-tc-result').textContent = '';
+  cobro_onSelectChange();
   document.getElementById('cobro-modal').style.display = 'flex';
+}
+function cobro_onSelectChange() {
+  const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
+  const needsTC = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
+  document.getElementById('cobro-tc-wrap').style.display = needsTC ? 'block' : 'none';
+  if (needsTC) cobro_calcularTC();
+}
+function cobro_calcularTC() {
+  const tc = parseFloat(document.getElementById('cobro-tc').value) || 0;
+  const res = document.getElementById('cobro-tc-result');
+  if (tc > 0 && _cobroUsdM > 0) {
+    const arsEquiv = Math.round(_cobroUsdM * tc);
+    const comi = Math.round(arsEquiv * 0.15);
+    res.textContent = `= $ ${arsEquiv.toLocaleString('es-AR')} · Comi $: $ ${comi.toLocaleString('es-AR')}`;
+  } else { res.textContent = ''; }
 }
 function cerrarModalCobro() {
   document.getElementById('cobro-modal').style.display = 'none';
-  _cobroId = null;
+  _cobroId = null; _cobroUsdM = 0;
 }
 function confirmarCobroModal() {
   if (!_cobroId) return;
@@ -1546,7 +1583,8 @@ function confirmarCobroModal() {
   const mw = document.getElementById('cobro-myri-wrap');
   const cajaJony = jw.style.display !== 'none' ? document.getElementById('cobro-caja-jony').value : '';
   const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
-  const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri });
+  const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
+  const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   showToast('Cobro confirmado ✓');
   cerrarModalCobro();
