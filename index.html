@@ -1192,7 +1192,7 @@ async function renderPedidos() {
         <div class="pedido-acciones">
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado')">✓ Entregado</button>
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado')">✕ Cancelar</button>
-          ${!cobrado ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">💰 Confirmar cobro</button>` : ''}
+          <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar' : '💰 Confirmar cobro'}</button>
         </div>` : ''}
       </div>`;
     };
@@ -1461,8 +1461,14 @@ async function renderCaja() {
       if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
     });
 
-    const totals = {}; COLS.forEach(c => totals[c.key] = 0);
-    movs.forEach(m => { if (totals[m.col] !== undefined) totals[m.col] += m.val; });
+    const totalsARS = {}, totalsUSD = {};
+    COLS.forEach(c => { totalsARS[c.key] = 0; totalsUSD[c.key] = 0; });
+    movs.forEach(m => {
+      if (totalsARS[m.col] !== undefined) {
+        if (m.mon === 'ARS') totalsARS[m.col] += m.val;
+        else totalsUSD[m.col] += m.val;
+      }
+    });
 
     const colColor = { venta: 'var(--verde)', comi: 'var(--dorado)', gasto: 'var(--rojo)', rendicion: 'var(--texto-suave)' };
 
@@ -1490,9 +1496,13 @@ async function renderCaja() {
         <tr style="background:var(--gris);font-weight:700;border-top:2px solid var(--azul)">
           <td style="padding:0.5rem;color:var(--azul);font-weight:700">SALDO FÍSICO</td>
           ${COLS.map(c => {
-            const v = totals[c.key];
-            const color = v >= 0 ? 'var(--verde)' : 'var(--rojo)';
-            return `<td style="text-align:right;padding:0.5rem;color:${color};white-space:nowrap">${v < 0 ? '-' : ''}${fmt(v, c.mon)}</td>`;
+            const aVal = totalsARS[c.key] || 0;
+            const uVal = totalsUSD[c.key] || 0;
+            const parts = [];
+            if (aVal !== 0) { const col = aVal >= 0 ? 'var(--verde)' : 'var(--rojo)'; parts.push(`<span style="color:${col}">${aVal < 0 ? '-' : ''}${fmt(aVal,'ARS')}</span>`); }
+            if (uVal !== 0) { const col = uVal >= 0 ? 'var(--verde)' : 'var(--rojo)'; parts.push(`<span style="color:${col}">${uVal < 0 ? '-' : ''}${fmt(uVal,'USD')}</span>`); }
+            if (!parts.length) parts.push('<span style="color:var(--texto-suave)">$ 0</span>');
+            return `<td style="text-align:right;padding:0.5rem;white-space:nowrap">${parts.join('<br>')}</td>`;
           }).join('')}
         </tr>
         <tr style="background:var(--verde-claro);border-top:1px solid #b2d8c0">
@@ -1503,9 +1513,9 @@ async function renderCaja() {
             let neto = null;
             const myriARS = movs.filter(m => MYRI_ARS.includes(m.col) && m.mon === 'ARS').reduce((s,m) => s + m.val, 0);
             const myriUSD = movs.filter(m => MYRI_USD.includes(m.col) && m.mon === 'USD').reduce((s,m) => s + m.val, 0);
-            if (c.key === 'MP_GABY') neto = { v: myriARS - (totals['COMI_ARS_JONY']||0), mon: 'ARS', show: true };
+            if (c.key === 'MP_GABY') neto = { v: myriARS - (totalsARS['COMI_ARS_JONY']||0), mon: 'ARS', show: true };
             if (c.key === 'EFT_MYRI') neto = { v: null, show: false };
-            if (c.key === 'ETF_USD_MYRI') neto = { v: myriUSD - (totals['COMI_USD_JONY']||0), mon: 'USD', show: true };
+            if (c.key === 'ETF_USD_MYRI') neto = { v: myriUSD - (totalsUSD['COMI_USD_JONY']||0), mon: 'USD', show: true };
             if (!neto) return '<td></td>';
             if (!neto.show || neto.v === null) return '<td></td>';
             const color = neto.v >= 0 ? 'var(--verde)' : 'var(--rojo)';
