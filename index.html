@@ -880,11 +880,7 @@ function getCatIdx(p) {
   return i === -1 ? CATEGORIA_ORDEN.length : i;
 }
 
-function imgUrl(filename) {
-  // Google Drive direct image link
-  return `https://drive.google.com/thumbnail?id=${DRIVE_FOLDER}&sz=w400`;
-  // Nota: esto se reemplaza con búsqueda real por filename
-}
+
 
 async function cargarProductos() {
   const catalogo = document.getElementById('catalogo');
@@ -1052,7 +1048,9 @@ function goToSlideInternal(id, idx) {
   if (!img || !wrap) return;
   const urls = imgUrl(imagenes[idx]);
   img.style.display = 'block';
-  img.onerror = function(){ imgFallback(this, urls, 1); };
+  img.dataset.f1 = urls[1]; img.dataset.f2 = urls[2]; img.dataset.f3 = urls[3];
+  img.dataset.tried = '0';
+  img.onerror = function(){ imgFallbackNext(this); };
   img.src = urls[0];
   wrap.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('activo', i===idx));
 }
@@ -1703,7 +1701,6 @@ function setModo(m) {
   document.getElementById('modo-label').textContent = m === 'mayorista' ? 'Mayorista' : m === 'minorista' ? 'Minorista' : 'Admin';
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  document.getElementById('buscador-wrap') && null;
   if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
@@ -1729,11 +1726,11 @@ function stopAdminPolling() {
 // NOTIFICACIONES DE STOCK
 let _notifProductoId = null, _notifProductoNombre = '';
 function abrirNotifModal(id) {
-  const p = productos.find(x => x.id == id);
-  if (!p) return;
-  _notifProductoId = id;
+  const p = productos.find(x => String(x.id) === String(id));
+  if (!p) { showToast('Recargá la página e intentá de nuevo'); return; }
+  _notifProductoId = String(id);
   _notifProductoNombre = p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 50) : '');
-  document.getElementById('notif-producto-label').textContent = nombre;
+  document.getElementById('notif-producto-label').textContent = _notifProductoNombre;
   document.getElementById('notif-nombre').value = '';
   document.getElementById('notif-tel').value = '';
   document.getElementById('notif-modal').style.display = 'flex';
@@ -1747,7 +1744,8 @@ function confirmarNotificacion() {
   const tel = document.getElementById('notif-tel').value.trim().replace(/\D/g,'');
   if (!nombre) { showToast('Ingresá tu nombre'); return; }
   if (!tel || tel.length < 8) { showToast('Ingresá tu WhatsApp'); return; }
-  const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel, modoCliente: modo });
+  const modoActual = window.location.hash.includes('min-pL3q7') ? 'minorista' : 'mayorista';
+  const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel, modoCliente: modoActual });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(r => r.json())
     .then(data => {
@@ -1778,7 +1776,7 @@ async function renderNotificaciones() {
     lista.innerHTML = Object.entries(grupos).map(([pid, g]) => {
       const tieneStock = (productos.find(p => p.id == pid)?.stock || 0) > 0;
       const clientesHTML = g.clientes.map(c => `<span style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})</span>`).join(' · ');
-      const btns = g.clientes.map((c,i) => `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'')}','${c.nombre}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${c.nombre}</button>`).join('');
+      const btns = g.clientes.map((c,i) => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'').replace(/"/g,'')}','${nom}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${nom}</button>`; }).join('');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
         <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
         <div style="margin-bottom:0.4rem">${clientesHTML}</div>
@@ -1809,8 +1807,10 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
   jw.style.display = arsJ > 0 ? 'block' : 'none';
   mw.style.display = (arsM > 0 || usdM > 0) ? 'block' : 'none';
   if (arsJ > 0) document.getElementById('cobro-jony-amt').textContent = '$ ' + Math.round(arsJ).toLocaleString('es-AR');
-  if (arsM > 0) document.getElementById('cobro-myri-amt').textContent = '$ ' + Math.round(arsM).toLocaleString('es-AR');
-  if (usdM > 0) document.getElementById('cobro-myri-amt').textContent = 'U$S ' + parseFloat(usdM).toFixed(2);
+  const myriAmts = [];
+  if (arsM > 0) myriAmts.push('$ ' + Math.round(arsM).toLocaleString('es-AR'));
+  if (usdM > 0) myriAmts.push('U$S ' + parseFloat(usdM).toFixed(2));
+  document.getElementById('cobro-myri-amt').textContent = myriAmts.join(' + ');
   document.getElementById('cobro-tc').value = '';
   document.getElementById('cobro-tc-result').textContent = '';
   cobro_onSelectChange();
