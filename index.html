@@ -1190,11 +1190,12 @@ async function renderPedidos() {
         </div>
         <div style="margin:0.4rem 0">${productLines || v.productos}</div>
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
-        ${conAcciones ? `
         <div class="pedido-acciones">
+          ${conAcciones ? `
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>
-        </div>` : ''}
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : `
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`}
+        </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
           <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
         </div>
