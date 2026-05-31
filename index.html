@@ -1664,7 +1664,12 @@ async function renderCaja() {
       if (arsM > 0 && cajaM) {
         movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta' });
         if (comiA > 0) {
-          movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
+          // Solo mostrar en Comi $ JONY si el pago fue a una caja de MYRI (comisión pendiente)
+          // Si fue a caja de JONY, la comisión ya está en sus manos — no aparece en Comi
+          const pagoFueAMyri = ['MP_GABY','EFT_MYRI','CTA_CTE_ARS'].includes(cajaM);
+          if (pagoFueAMyri) {
+            movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
+          }
         }
       }
       if (usdM > 0) {
