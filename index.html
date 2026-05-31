@@ -983,7 +983,7 @@ function renderCatalogo() {
       ${agotado ? `
       <div class="producto-controles">
         <button class="agregar-btn" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600;border:1.5px solid var(--dorado)"
-          onclick="abrirNotifModal(${p.id},'${p.nombre.replace(/'/g,'').replace(/"/g,'')}')">
+          onclick="abrirNotifModal(${p.id})">
           🔔 Avisame cuando llegue
         </button>
       </div>` : `
@@ -1010,9 +1010,18 @@ function imgUrl(filename) {
   return [BASE_IMG+filename, BASE_IMG+sinExt+'.'+ext.toUpperCase()+'.'+ext, BASE_IMG+sinExt+'.jpg', BASE_IMG+sinExt+'.jpeg'];
 }
 
-function imgFallback(el, urls, i) {
-  if (i < urls.length) { el.src = urls[i]; el.onerror = () => imgFallback(el, urls, i+1); }
-  else { el.style.display='none'; el.nextElementSibling && (el.nextElementSibling.style.display='flex'); }
+function imgFallbackNext(el) {
+  const tried = parseInt(el.dataset.tried||'0');
+  const fallbacks = [el.dataset.f1, el.dataset.f2, el.dataset.f3].filter(Boolean);
+  if (tried < fallbacks.length) {
+    el.dataset.tried = tried + 1;
+    el.onerror = function(){ imgFallbackNext(this); };
+    el.src = fallbacks[tried];
+  } else {
+    el.onerror = null;
+    el.style.display = 'none';
+    if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+  }
 }
 
 function renderImg(p) {
@@ -1022,7 +1031,8 @@ function renderImg(p) {
   const multi = imagenes.length > 1;
   return `<div class="producto-img-wrap" id="carousel-${p.id}">
     <img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
-      onerror="imgFallback(this,${JSON.stringify(urls0)},1)"
+      data-f1="${urls0[1]}" data-f2="${urls0[2]}" data-f3="${urls0[3]}"
+      onerror="imgFallbackNext(this)"
       loading="lazy" alt="${p.nombre}">
     <div class="producto-img-placeholder" style="display:none">🍬</div>
     ${multi ? `
@@ -1382,6 +1392,7 @@ function guardarStock() {
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   renderCatalogo();
   renderStockAdmin();
+  renderNotificaciones();
   showToast('Stock guardado en planilla ✓');
 }
 
@@ -1717,8 +1728,11 @@ function stopAdminPolling() {
 
 // NOTIFICACIONES DE STOCK
 let _notifProductoId = null, _notifProductoNombre = '';
-function abrirNotifModal(id, nombre) {
-  _notifProductoId = id; _notifProductoNombre = nombre;
+function abrirNotifModal(id) {
+  const p = productos.find(x => x.id == id);
+  if (!p) return;
+  _notifProductoId = id;
+  _notifProductoNombre = p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 50) : '');
   document.getElementById('notif-producto-label').textContent = nombre;
   document.getElementById('notif-nombre').value = '';
   document.getElementById('notif-tel').value = '';
@@ -1733,7 +1747,7 @@ function confirmarNotificacion() {
   const tel = document.getElementById('notif-tel').value.trim().replace(/\D/g,'');
   if (!nombre) { showToast('Ingresá tu nombre'); return; }
   if (!tel || tel.length < 8) { showToast('Ingresá tu WhatsApp'); return; }
-  const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel });
+  const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel, modoCliente: modo });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(r => r.json())
     .then(data => {
@@ -1764,7 +1778,7 @@ async function renderNotificaciones() {
     lista.innerHTML = Object.entries(grupos).map(([pid, g]) => {
       const tieneStock = (productos.find(p => p.id == pid)?.stock || 0) > 0;
       const clientesHTML = g.clientes.map(c => `<span style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})</span>`).join(' · ');
-      const btns = g.clientes.map((c,i) => `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'')}','${c.nombre}','${pid}')">📱 ${c.nombre}</button>`).join('');
+      const btns = g.clientes.map((c,i) => `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'')}','${c.nombre}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${c.nombre}</button>`).join('');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
         <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
         <div style="margin-bottom:0.4rem">${clientesHTML}</div>
@@ -1776,8 +1790,9 @@ async function renderNotificaciones() {
   }
 }
 
-function notificarCliente(tel, producto, nombre, productoId) {
-  const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 https://shuk-mamtakim.vercel.app/`;
+function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
+  const link = modoCliente === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/';
+  const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
