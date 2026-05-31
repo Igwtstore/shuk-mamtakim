@@ -714,6 +714,54 @@
     </div>
   </div>
   <div class="admin-card">
+    <div class="admin-titulo">🔄 Transferir entre cajas</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div class="nombre-campo" style="margin:0">
+        <label>Descripción</label>
+        <input type="text" id="transf-desc" placeholder="Ej: Transferencia a MYRI por venta #11" />
+      </div>
+      <div style="display:flex;gap:0.75rem;">
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>Monto</label>
+          <input type="number" id="transf-monto" placeholder="0" min="0" />
+        </div>
+        <div class="nombre-campo" style="margin:0;width:100px">
+          <label>Moneda</label>
+          <select id="transf-moneda" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="ARS">ARS $</option>
+            <option value="USD">USD U$S</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;">
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>De (origen)</label>
+          <select id="transf-de" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="EFT_JONY">EFT $ JONY</option>
+            <option value="MP_JONY">MP JONY</option>
+            <option value="MP_GABY">MP GABY</option>
+            <option value="EFT_MYRI">EFT $ MYRI</option>
+            <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+            <option value="COMI_ARS_JONY">Comi $ JONY</option>
+            <option value="CTA_CTE_ARS">Cta Cte $</option>
+          </select>
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1">
+          <label>A (destino)</label>
+          <select id="transf-a" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="EFT_MYRI">EFT $ MYRI</option>
+            <option value="MP_GABY">MP GABY</option>
+            <option value="EFT_JONY">EFT $ JONY</option>
+            <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+            <option value="COMI_ARS_JONY">Comi $ JONY</option>
+            <option value="CTA_CTE_ARS">Cta Cte $</option>
+          </select>
+        </div>
+      </div>
+      <button class="guardar-stock-btn" onclick="registrarTransferencia()" style="margin-top:0">Registrar transferencia</button>
+    </div>
+  </div>
+  <div class="admin-card">
     <div class="admin-titulo">💳 Registrar rendición / retiro</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
       <div class="nombre-campo" style="margin:0">
@@ -1531,6 +1579,29 @@ function registrarGasto() {
     .catch(() => showToast('Error al registrar gasto'));
 }
 
+function registrarTransferencia() {
+  const desc = document.getElementById('transf-desc').value.trim();
+  const monto = parseFloat(document.getElementById('transf-monto').value);
+  const moneda = document.getElementById('transf-moneda').value;
+  const de = document.getElementById('transf-de').value;
+  const a = document.getElementById('transf-a').value;
+  if (!desc) { showToast('Ingresá una descripción'); return; }
+  if (!monto || monto <= 0) { showToast('Ingresá un monto válido'); return; }
+  if (de === a) { showToast('Las cajas de origen y destino deben ser diferentes'); return; }
+  // Débito en origen, crédito en destino (monto negativo = ingreso)
+  const p1 = new URLSearchParams({ accion: 'rendicion', desc: `${desc} (salida)`, monto, moneda, columna: de });
+  const p2 = new URLSearchParams({ accion: 'rendicion', desc: `${desc} (entrada)`, monto: -monto, moneda, columna: a });
+  Promise.all([
+    fetch(APPS_SCRIPT_URL + '?' + p1.toString()),
+    fetch(APPS_SCRIPT_URL + '?' + p2.toString())
+  ]).then(() => {
+    showToast('Transferencia registrada ✓');
+    document.getElementById('transf-desc').value = '';
+    document.getElementById('transf-monto').value = '';
+    refreshAdmin();
+  }).catch(() => showToast('Error al registrar'));
+}
+
 function registrarRendicion() {
   const desc = document.getElementById('rend-desc').value.trim();
   const monto = parseFloat(document.getElementById('rend-monto').value);
@@ -1676,11 +1747,15 @@ async function renderCaja() {
             const netoG = mpG - comiGaby;
             const netoE = eftM - comiEFT;
             const netoU = usdM - comiUSD;
+            // MYRI money held by JONY
+            const myriEnJonyARS = movs.filter(m => ['EFT_JONY','MP_JONY'].includes(m.col) && m.mon==='ARS' && m.tipo==='venta').reduce((s,m)=>s+m.val,0)
+              - movs.filter(m => m.col==='COMI_ARS_JONY' && m.tipo==='comi' && ['EFT_JONY','MP_JONY'].includes(m.srcCol)).reduce((s,m)=>s+m.val,0);
             return COLS.map(c => {
               let v, mon, label;
               if (c.key === 'MP_GABY')      { v = netoG; mon = 'ARS'; label = 'En GABY'; }
               else if (c.key === 'EFT_MYRI') { v = netoE; mon = 'ARS'; label = 'Físico'; }
               else if (c.key === 'ETF_USD_MYRI') { v = netoU; mon = 'USD'; label = 'Físico'; }
+              else if (c.key === 'EFT_JONY' && myriEnJonyARS > 0) { v = myriEnJonyARS; mon = 'ARS'; label = '⚠️ En JONY'; }
               else return '<td></td>';
               const color = v >= 0 ? 'var(--verde)' : 'var(--rojo)';
               return `<td style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">
