@@ -617,6 +617,22 @@
 <!-- ADMIN -->
 <div class="admin-section" id="admin-section">
   <div class="admin-card">
+    <div class="admin-titulo">📱 QR del catálogo</div>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
+      <div style="text-align:center">
+        <div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.5rem">MAYORISTA</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/" style="border-radius:8px;border:2px solid var(--gris-medio)" />
+        <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.5rem">MINORISTA</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/%23min-pL3q7" style="border-radius:8px;border:2px solid var(--gris-medio)" />
+        <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/#min-pL3q7</div>
+      </div>
+    </div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.75rem">Mantenelos presionados para guardar o compartir por WhatsApp.</div>
+  </div>
+  <div class="admin-card">
     <div class="admin-titulo">📦 Pedidos activos</div>
     <div class="pedidos-lista" id="pedidos-lista">
       <div class="sinpedidos">Cargando pedidos...</div>
@@ -663,6 +679,10 @@
       </div>
       <button class="guardar-stock-btn" onclick="guardarNuevoProducto()" style="margin-top:0">Agregar producto</button>
     </div>
+  </div>
+  <div class="admin-card" id="stock-alerta-card" style="display:none">
+    <div class="admin-titulo">⚠️ Stock bajo</div>
+    <div id="stock-alerta-lista"></div>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">🔢 Actualizar stock</div>
@@ -845,7 +865,10 @@
     <div id="notif-lista"><div class="sinpedidos">Cargando...</div></div>
   </div>
   <div class="admin-card">
-    <div class="admin-titulo">📊 Caja — movimientos recientes</div>
+    <div class="admin-titulo" style="display:flex;justify-content:space-between;align-items:center">
+      <span>📊 Caja — movimientos recientes</span>
+      <button onclick="exportarVentasCSV()" style="font-size:0.72rem;padding:0.3rem 0.8rem;background:var(--azul);color:white;border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⬇ Exportar CSV</button>
+    </div>
     <div id="caja-contenido"><div class="sinpedidos">Cargando movimientos...</div></div>
   </div>
 </div>
@@ -993,6 +1016,7 @@ async function cargarProductos() {
     renderCatalogo();
     renderStockAdmin();
     renderManualProductos();
+    verificarStockBajo();
   } catch(e) {
     catalogo.innerHTML = '<div class="loading">Error al cargar productos. Verificá la conexión.</div>';
   }
@@ -1947,11 +1971,49 @@ function setModo(m) {
   document.getElementById('modo-label').textContent = m === 'mayorista' ? 'Mayorista' : m === 'minorista' ? 'Minorista' : 'Admin';
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
 function filtrar() { renderCatalogo(); }
+
+const STOCK_MINIMO = 3;
+function verificarStockBajo() {
+  const bajos = productos.filter(p => p.activo && p.stock > 0 && p.stock <= STOCK_MINIMO);
+  const card = document.getElementById('stock-alerta-card');
+  const lista = document.getElementById('stock-alerta-lista');
+  if (!card || !lista) return;
+  if (!bajos.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  lista.innerHTML = bajos.map(p =>
+    `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--gris-medio)">
+      <span style="font-size:0.85rem;color:var(--azul);font-weight:600">${p.nombre} <span style="font-weight:400;color:var(--texto-suave)">${p.desc.substring(0,40)}</span></span>
+      <span style="font-size:0.85rem;font-weight:700;color:${p.stock <= 1 ? 'var(--rojo)' : 'var(--dorado)'}">⚠️ ${p.stock} ud.</span>
+    </div>`
+  ).join('');
+}
+
+async function exportarVentasCSV() {
+  showToast('Generando CSV...');
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
+    const ventas = await res.json();
+    const headers = ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','Total ARS','Total USD','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD'];
+    const rows = ventas.map(v => [
+      v.nVenta, v.fecha, v.cliente, v.tipo,
+      '"' + (v.productos||'').replace(/"/g,'""') + '"',
+      v.formaPago, v.estado,
+      v.totalARS, v.totalUSD, v.arsJONY, v.arsMyri, v.usdMyri, v.comiARS, v.comiUSD
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ventas_shuk_${new Date().toLocaleDateString('es-AR').replace(/\//g,'-')}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('CSV descargado ✓');
+  } catch(e) { showToast('Error al exportar'); }
+}
 
 let _adminInterval = null;
 
