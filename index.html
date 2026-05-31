@@ -1512,12 +1512,9 @@ async function renderCaja() {
             const eftM = movs.filter(m => m.col==='EFT_MYRI' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
             const usdM = movs.filter(m => m.col==='ETF_USD_MYRI' && m.mon==='USD').reduce((s,m)=>s+m.val,0);
             const comiARS = totalsARS['COMI_ARS_JONY']||0;
-            const total = mpG + eftM;
-            const comiG = total > 0 ? Math.round(comiARS * mpG / total) : 0;
-            const comiE = comiARS - comiG;
             const comiUSD = totalsUSD['COMI_USD_JONY']||0;
-            const netoG = mpG - comiG;
-            const netoE = eftM - comiE;
+            const netoG = mpG; // GABY muestra bruto, sin descontar comisión
+            const netoE = eftM - comiARS; // toda la comisión ARS sale de EFT MYRI
             const netoU = usdM - comiUSD;
             return COLS.map(c => {
               let v, mon, label;
