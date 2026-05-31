@@ -1094,29 +1094,39 @@ const CLOUDINARY_BASE = `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/up
 const carouselTimers = {}, carouselIdx = {};
 
 function isCloudinaryId(filename) {
-  // IDs directos de Cloudinary tienen carpeta/ pero no extensión de archivo vieja
   return filename && filename.includes('/') && !filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 }
 
 function imgUrl(filename) {
   if (!filename) return [`${CLOUDINARY_BASE}/w_400,f_auto,q_auto/shuk-mamtakim/placeholder`];
   if (isCloudinaryId(filename)) {
-    // ID directo de Cloudinary (subido desde el panel)
     const url = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/${filename}`;
-    return [url];
+    return [url, url, url, url];
   }
-  // Nombre de archivo clásico → Cloudinary auto-upload mapping desde GitHub
-  // Maneja tanto "IMG.jpg" como "IMG.JPG.jpg" transparentemente
-  const url = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/shuk-mamtakim/${filename}`;
-  return [url];
+  // Fallbacks via Cloudinary (auto-upload mapping → GitHub)
+  const ext = filename.split('.').pop().toLowerCase();
+  const sinExt = filename.replace(/\.[^.]+$/, '');
+  const cl = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/shuk-mamtakim/`;
+  return [
+    cl + filename,
+    cl + sinExt + '.' + ext.toUpperCase() + '.' + ext,
+    cl + sinExt + '.jpg',
+    cl + sinExt + '.jpeg'
+  ];
 }
 
 function imgFallbackNext(el) {
-  // Cloudinary maneja los fallbacks internamente
-  // Si falla, mostramos el placeholder
-  el.onerror = null;
-  el.style.display = 'none';
-  if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+  const tried = parseInt(el.dataset.tried||'0');
+  const fallbacks = [el.dataset.f1, el.dataset.f2, el.dataset.f3].filter(Boolean);
+  if (tried < fallbacks.length) {
+    el.dataset.tried = tried + 1;
+    el.onerror = function(){ imgFallbackNext(this); };
+    el.src = fallbacks[tried];
+  } else {
+    el.onerror = null;
+    el.style.display = 'none';
+    if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+  }
 }
 
 function renderImg(p) {
