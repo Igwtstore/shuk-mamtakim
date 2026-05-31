@@ -1074,7 +1074,8 @@ function enviarPedido() {
     }
     const subtotal = moneda === 'U$S' ? (precioUnit * item.qty).toFixed(2) : Math.round(precioUnit * item.qty).toLocaleString('es-AR');
     const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
-    return `• ${item.qty}x ${item.nombre} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`;
+    const descCorta = item.desc ? ` · ${item.desc.substring(0, 45)}` : '';
+    return `• ${item.qty}x ${item.nombre}${descCorta} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`;
   });
 
   const comiARS = Math.round(arsMyri * 0.15);
