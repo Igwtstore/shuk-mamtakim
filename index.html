@@ -1194,8 +1194,10 @@ async function renderPedidos() {
         <div class="pedido-acciones">
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>
-          <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar' : '💰 Confirmar cobro'}</button>
         </div>` : ''}
+        <div class="pedido-acciones" style="margin-top:0.3rem">
+          <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
+        </div>
       </div>`;
     };
 
