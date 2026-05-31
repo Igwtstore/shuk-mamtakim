@@ -1734,10 +1734,15 @@ function confirmarNotificacion() {
   if (!nombre) { showToast('Ingresá tu nombre'); return; }
   if (!tel || tel.length < 8) { showToast('Ingresá tu WhatsApp'); return; }
   const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
-  const msg = `🔔 *Lista de espera - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre}\n📱 *WhatsApp:* ${tel}\n\n🛒 *Quiere que lo avises cuando llegue:*\n${_notifProductoNombre}`;
-  window.open(`https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`, '_blank');
-  showToast('¡Te avisamos cuando llegue! ✓');
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(r => r.json())
+    .then(data => {
+      if (data.duplicado) { showToast('Ya estás en la lista de espera ✓'); return; }
+      const msg = `🔔 *Lista de espera - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre}\n📱 *WhatsApp:* ${tel}\n\n🛒 *Quiere que lo avises cuando llegue:*\n${_notifProductoNombre}`;
+      window.open(`https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`, '_blank');
+      showToast('¡Te avisamos cuando llegue! ✓');
+    })
+    .catch(() => showToast('¡Te avisamos cuando llegue! ✓'));
   cerrarNotifModal();
 }
 
