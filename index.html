@@ -1329,7 +1329,8 @@ function cargarPedidoManual() {
     }
     const subtotal = moneda === 'U$S' ? (precioUnit * qty).toFixed(2) : Math.round(precioUnit * qty).toLocaleString('es-AR');
     const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
-    lineas.push(`• ${qty}x ${p.nombre} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`);
+    const descCorta = p.desc ? ` · ${p.desc.substring(0, 45)}` : '';
+    lineas.push(`• ${qty}x ${p.nombre}${descCorta} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`);
     stockUpdates.push(`${p.id}:${qty}`);
     selectedItems.push(p);
   });
