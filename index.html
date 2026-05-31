@@ -1558,15 +1558,39 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
   document.getElementById('buscador-wrap') && null;
-  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); }
-  if (m !== 'admin') renderCatalogo();
+  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); startAdminPolling(); }
+  else { stopAdminPolling(); renderCatalogo(); }
 }
 
 function filtrar() { renderCatalogo(); }
 
+let _adminInterval = null;
+
 function refreshAdmin() {
   renderPedidos();
   renderCaja();
+}
+
+function startAdminPolling() {
+  if (_adminInterval) return;
+  _adminInterval = setInterval(async () => {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
+    if (!res) return;
+    const ventas = await res.json().catch(() => []);
+    const pendientes = ventas.filter(v => (v.estado || 'pendiente') === 'pendiente').length;
+    const prevCount = parseInt(document.getElementById('pedidos-lista')?.dataset.count || '0');
+    if (pendientes > prevCount) {
+      showToast(`📦 Nuevo pedido recibido`);
+      refreshAdmin();
+    }
+    if (document.getElementById('pedidos-lista')) {
+      document.getElementById('pedidos-lista').dataset.count = pendientes;
+    }
+  }, 60000);
+}
+
+function stopAdminPolling() {
+  if (_adminInterval) { clearInterval(_adminInterval); _adminInterval = null; }
 }
 
 let _cobroId = null, _cobroUsdM = 0;
