@@ -1226,7 +1226,7 @@ function cambiarEstado(id, estado, btnEl) {
     .then(r => r.json())
     .then(data => {
       if (data.error) { showToast('Error: ' + data.error); if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } }
-      else { if (card) card.remove(); showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado'); setTimeout(refreshAdmin, 2000); }
+      else { if (card) card.remove(); showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado'); setTimeout(() => { refreshAdmin(); if (estado === 'cancelado') cargarProductos(); }, 2000); }
     })
     .catch(err => { showToast('Error de conexión'); if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } });
 }
