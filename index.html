@@ -1430,7 +1430,7 @@ async function renderCaja() {
     const rendiciones = rR.json ? await rR.json() : [];
 
     const movs = [];
-    ventas.forEach((v, idx) => {
+    ventas.filter(v => v.estado !== 'cancelado').forEach((v, idx) => {
       const n = v.nVenta || (idx + 1);
       const fp = v.formaPago || '';
       const f = v.fecha || '';
