@@ -1772,7 +1772,29 @@ async function renderCaja() {
       </tfoot>
     </table>
     </div>`;
-    cont.innerHTML = tabla;
+    // Control personal JONY
+    const jonyARS = (totalsARS['EFT_JONY']||0) + (totalsARS['MP_JONY']||0) + (totalsARS['COMI_ARS_JONY']||0);
+    const jonyUSD = (totalsUSD['COMI_USD_JONY']||0);
+    const diezmoARS = Math.round(jonyARS * 0.10);
+    const diezmoUSD = parseFloat((jonyUSD * 0.10).toFixed(2));
+    const controlJony = `
+    <div style="margin-top:1.5rem;padding:1rem 1.25rem;background:#f0f0f8;border-radius:12px;border:1.5px solid #d0d0e8">
+      <div style="font-size:0.72rem;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem">🔒 Control personal JONY</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.75rem">
+        <div>
+          <div style="font-size:0.75rem;color:var(--texto-suave)">Ganancias acumuladas $</div>
+          <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">$ ${Math.round(jonyARS).toLocaleString('es-AR')}</div>
+          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
+        </div>
+        <div>
+          <div style="font-size:0.75rem;color:var(--texto-suave)">Ganancias acumuladas U$S</div>
+          <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">U$S ${jonyUSD.toFixed(2)}</div>
+          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: U$S ${diezmoUSD.toFixed(2)}</div>
+        </div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.5rem">Para registrar un retiro usá el formulario <strong>Rendición / retiro</strong> seleccionando la caja correspondiente.</div>
+    </div>`;
+    cont.innerHTML = tabla + controlJony;
   } catch(e) {
     cont.innerHTML = '<div class="sinpedidos">Error al cargar movimientos.</div>';
   }
