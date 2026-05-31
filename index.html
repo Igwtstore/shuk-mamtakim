@@ -1507,20 +1507,31 @@ async function renderCaja() {
         </tr>
         <tr style="background:var(--verde-claro);border-top:1px solid #b2d8c0">
           <td style="padding:0.45rem 0.5rem;color:var(--verde);font-weight:700;font-size:0.78rem">NETO MYRI</td>
-          ${COLS.map(c => {
-            const MYRI_ARS = ['MP_GABY','EFT_MYRI'];
-            const MYRI_USD = ['ETF_USD_MYRI'];
-            let neto = null;
-            const myriARS = movs.filter(m => MYRI_ARS.includes(m.col) && m.mon === 'ARS').reduce((s,m) => s + m.val, 0);
-            const myriUSD = movs.filter(m => MYRI_USD.includes(m.col) && m.mon === 'USD').reduce((s,m) => s + m.val, 0);
-            if (c.key === 'MP_GABY') neto = { v: myriARS - (totalsARS['COMI_ARS_JONY']||0), mon: 'ARS', show: true };
-            if (c.key === 'EFT_MYRI') neto = { v: null, show: false };
-            if (c.key === 'ETF_USD_MYRI') neto = { v: myriUSD - (totalsUSD['COMI_USD_JONY']||0), mon: 'USD', show: true };
-            if (!neto) return '<td></td>';
-            if (!neto.show || neto.v === null) return '<td></td>';
-            const color = neto.v >= 0 ? 'var(--verde)' : 'var(--rojo)';
-            return `<td style="text-align:right;padding:0.45rem 0.5rem;color:${color};font-weight:700;font-size:0.78rem;white-space:nowrap">${neto.v < 0 ? '-' : ''}${fmt(neto.v, neto.mon)}</td>`;
-          }).join('')}
+          ${(() => {
+            const mpG = movs.filter(m => m.col==='MP_GABY' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
+            const eftM = movs.filter(m => m.col==='EFT_MYRI' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
+            const usdM = movs.filter(m => m.col==='ETF_USD_MYRI' && m.mon==='USD').reduce((s,m)=>s+m.val,0);
+            const comiARS = totalsARS['COMI_ARS_JONY']||0;
+            const total = mpG + eftM;
+            const comiG = total > 0 ? Math.round(comiARS * mpG / total) : 0;
+            const comiE = comiARS - comiG;
+            const comiUSD = totalsUSD['COMI_USD_JONY']||0;
+            const netoG = mpG - comiG;
+            const netoE = eftM - comiE;
+            const netoU = usdM - comiUSD;
+            return COLS.map(c => {
+              let v, mon, label;
+              if (c.key === 'MP_GABY')      { v = netoG; mon = 'ARS'; label = 'En GABY'; }
+              else if (c.key === 'EFT_MYRI') { v = netoE; mon = 'ARS'; label = 'Físico'; }
+              else if (c.key === 'ETF_USD_MYRI') { v = netoU; mon = 'USD'; label = 'Físico'; }
+              else return '<td></td>';
+              const color = v >= 0 ? 'var(--verde)' : 'var(--rojo)';
+              return `<td style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">
+                <div style="font-size:0.62rem;color:var(--texto-suave);font-weight:400">${label}</div>
+                <div style="font-weight:700;font-size:0.78rem;color:${color}">${v < 0 ? '-' : ''}${fmt(v, mon)}</div>
+              </td>`;
+            }).join('');
+          })()}
         </tr>
       </tfoot>
     </table>
