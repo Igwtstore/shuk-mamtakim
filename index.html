@@ -1432,15 +1432,12 @@ async function renderCaja() {
         movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta' });
       }
       if (arsM > 0) {
-        const netoMyri = arsM - comiA;
-        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta',
-          nota: comiA > 0 ? `neto MYRI: $ ${Math.round(netoMyri).toLocaleString('es-AR')}` : '' });
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta' });
         if (comiA > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi' });
       }
       if (usdM > 0) {
-        const netoMyriUSD = usdM - comiU;
-        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: 'ETF_USD_MYRI', val: usdM, mon: 'USD', tipo: 'venta',
-          nota: comiU > 0 ? `neto MYRI: U$S ${netoMyriUSD.toFixed(2)}` : '' });
+        const colUSD = v.cajaMyri || 'ETF_USD_MYRI';
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta' });
         if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
       }
     });
@@ -1468,7 +1465,7 @@ async function renderCaja() {
       <tbody>
         ${movs.length ? movs.map(m => `
         <tr style="border-bottom:1px solid var(--gris-medio)">
-          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.desc}${m.nota ? ` <span style="color:var(--texto-suave);font-size:0.65rem;font-weight:400">(${m.nota})</span>` : ''}</td>
+          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'};white-space:nowrap">${m.desc}</td>
           ${COLS.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
@@ -1478,11 +1475,24 @@ async function renderCaja() {
       </tbody>
       <tfoot>
         <tr style="background:var(--gris);font-weight:700;border-top:2px solid var(--azul)">
-          <td style="padding:0.5rem;color:var(--azul);font-weight:700">SALDO</td>
+          <td style="padding:0.5rem;color:var(--azul);font-weight:700">SALDO FÍSICO</td>
           ${COLS.map(c => {
             const v = totals[c.key];
             const color = v >= 0 ? 'var(--verde)' : 'var(--rojo)';
             return `<td style="text-align:right;padding:0.5rem;color:${color};white-space:nowrap">${v < 0 ? '-' : ''}${fmt(v, c.mon)}</td>`;
+          }).join('')}
+        </tr>
+        <tr style="background:var(--verde-claro);border-top:1px solid #b2d8c0">
+          <td style="padding:0.45rem 0.5rem;color:var(--verde);font-weight:700;font-size:0.78rem">NETO MYRI</td>
+          ${COLS.map(c => {
+            const MYRI_ARS = ['MP_GABY','EFT_MYRI'];
+            const MYRI_USD = ['ETF_USD_MYRI'];
+            let neto = null;
+            if (MYRI_ARS.includes(c.key)) neto = { v: (totals['MP_GABY']||0) + (totals['EFT_MYRI']||0) - (totals['COMI_ARS_JONY']||0), mon: 'ARS', show: c.key === 'MP_GABY' };
+            if (MYRI_USD.includes(c.key)) neto = { v: (totals['ETF_USD_MYRI']||0) - (totals['COMI_USD_JONY']||0), mon: 'USD', show: true };
+            if (!neto || !neto.show) return '<td></td>';
+            const color = neto.v >= 0 ? 'var(--verde)' : 'var(--rojo)';
+            return `<td colspan="${MYRI_ARS.includes(c.key) ? 2 : 1}" style="text-align:right;padding:0.45rem 0.5rem;color:${color};font-weight:700;font-size:0.78rem;white-space:nowrap">${neto.v < 0 ? '-' : ''}${fmt(neto.v, neto.mon)}</td>`;
           }).join('')}
         </tr>
       </tfoot>
