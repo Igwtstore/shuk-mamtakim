@@ -740,11 +740,19 @@
     <div id="cobro-myri-wrap" style="display:none;margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Pago MYRI — Golosinas: <span id="cobro-myri-amt" style="color:var(--verde)"></span></label>
       <select id="cobro-caja-myri" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
-        <option value="MP_GABY">MP GABY (transferencia)</option>
-        <option value="EFT_MYRI">EFT $ MYRI (efectivo)</option>
-        <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
-        <option value="CTA_CTE_ARS">Cta Cte $</option>
-        <option value="CTA_CTE_USD">Cta Cte U$S</option>
+        <optgroup label="Cajas MYRI">
+          <option value="MP_GABY">MP GABY (transferencia)</option>
+          <option value="EFT_MYRI">EFT $ MYRI (efectivo)</option>
+          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+        </optgroup>
+        <optgroup label="Cobrado por JONY (a cuenta comisión)">
+          <option value="EFT_JONY">EFT $ JONY (efectivo/transf.)</option>
+          <option value="MP_JONY">MP JONY</option>
+        </optgroup>
+        <optgroup label="Cuenta corriente">
+          <option value="CTA_CTE_ARS">Cta Cte $</option>
+          <option value="CTA_CTE_USD">Cta Cte U$S</option>
+        </optgroup>
       </select>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
