@@ -25,6 +25,43 @@
     --radio: 12px;
   }
 
+  /* MODO OSCURO */
+  body.dark {
+    --gris: #111827;
+    --gris-medio: #1f2937;
+    --texto: #f0f0f0;
+    --texto-suave: #9ca3af;
+    --blanco: #1f2937;
+    --sombra: 0 2px 12px rgba(0,0,0,0.4);
+    --verde-claro: #052e16;
+    --dorado-claro: #292013;
+    --rojo-claro: #2d0a0a;
+  }
+  body.dark .header { background: #0d0d1a; }
+  body.dark .admin-card, body.dark .producto-card { background: #1f2937; border: 1px solid #374151; }
+  body.dark .producto-img { background: #111827; }
+  body.dark .buscador, body.dark input, body.dark select, body.dark textarea { background: #1f2937; color: var(--texto); border-color: #374151; }
+  body.dark table th { background: #111827; }
+
+  /* FILTROS CATEGORÍA */
+  .filtros-wrap { max-width:900px; margin:0.75rem auto 0; padding:0 1rem; display:flex; gap:0.4rem; flex-wrap:wrap; }
+  .filtro-btn { padding:0.3rem 0.9rem; border-radius:20px; border:1.5px solid var(--gris-medio); background:var(--blanco); color:var(--texto-suave); font-family:'DM Sans',sans-serif; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .filtro-btn.activo { background:var(--azul); color:white; border-color:var(--azul); }
+
+  /* COMPARTIR */
+  .share-btn { position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.9); border:none; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; z-index:4; box-shadow:0 1px 4px rgba(0,0,0,0.15); transition:transform 0.15s; }
+  .share-btn:hover { transform:scale(1.1); }
+
+  /* DARK MODE TOGGLE */
+  .dark-toggle { background:none; border:1.5px solid rgba(255,255,255,0.3); border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:1rem; color:white; transition:all 0.2s; }
+  .dark-toggle:hover { background:rgba(255,255,255,0.1); }
+
+  @media print {
+    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section { display:none !important; }
+    .catalogo { grid-template-columns: repeat(3,1fr) !important; }
+    .producto-card { break-inside:avoid; box-shadow:none !important; border:1px solid #ddd; }
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
@@ -599,6 +636,10 @@
       Shuk Mamtakim
       <span id="modo-label">Mayorista</span>
     </div>
+    <div style="display:flex;align-items:center;gap:0.5rem">
+      <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
+      <button class="dark-toggle" onclick="window.print()" title="Exportar PDF" style="font-size:0.85rem">🖨️</button>
+    </div>
     <button class="carrito-btn" onclick="abrirCarrito()" id="carrito-btn-header" style="display:none">
       🛒 Carrito
       <span class="carrito-badge" id="carrito-count">0</span>
@@ -618,6 +659,7 @@
   <div class="buscador-wrap">
     <input type="text" class="buscador" placeholder="Buscar producto..." id="buscador" oninput="filtrar()" />
   </div>
+  <div class="filtros-wrap" id="filtros-wrap"></div>
   <div class="catalogo" id="catalogo"></div>
 </div>
 
@@ -1058,6 +1100,7 @@ async function cargarProductos() {
       categoria: (r[8]||'Varios').trim()
     })).filter(p => p.activo && p.id);
     renderCatalogo();
+    renderFiltros();
     renderStockAdmin();
     renderManualProductos();
     verificarStockBajo();
@@ -1107,7 +1150,8 @@ function renderCatalogo() {
   const query = document.getElementById('buscador').value.toLowerCase();
   const catalogo = document.getElementById('catalogo');
   const filtrados = productos.filter(p =>
-    (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query))
+    (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
+    (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva || (PITZUJIM_IDS.includes(p.id) && _categoriaActiva === 'Pitzujim'))
   ).sort((a, b) => {
     const aOut = a.stock <= 0 ? 1 : 0;
     const bOut = b.stock <= 0 ? 1 : 0;
@@ -1128,6 +1172,7 @@ function renderCatalogo() {
     return `
     <div class="producto-card ${agotado ? 'agotado' : ''}" id="card-${p.id}">
       ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
+      <button class="share-btn" onclick="compartirProducto(${p.id})" title="Compartir">📤</button>
       ${renderImg(p)}
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
@@ -2042,7 +2087,38 @@ function setModo(m) {
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
+let _categoriaActiva = 'Todos';
+
+function renderFiltros() {
+  const wrap = document.getElementById('filtros-wrap');
+  if (!wrap || !productos.length) return;
+  const cats = ['Todos', ...CATEGORIA_ORDEN.filter(c => productos.some(p => getCatIdx(p) === CATEGORIA_ORDEN.indexOf(c)))];
+  wrap.innerHTML = cats.map(c => `<button class="filtro-btn${c===_categoriaActiva?' activo':''}" onclick="setCategoria('${c}')">${c}</button>`).join('');
+}
+
+function setCategoria(cat) {
+  _categoriaActiva = cat;
+  renderFiltros();
+  renderCatalogo();
+}
+
 function filtrar() { renderCatalogo(); }
+
+function toggleDarkMode() {
+  document.body.classList.toggle('dark');
+  const isDark = document.body.classList.contains('dark');
+  document.getElementById('dark-btn').textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('darkMode', isDark ? '1' : '0');
+}
+
+function compartirProducto(id) {
+  const p = productos.find(x => x.id == id);
+  if (!p) return;
+  const precio = formatPrecio(p);
+  const link = modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/';
+  const msg = `🛍️ *${p.nombre}*\n${p.desc}\n💰 *${precio}*\n\n📱 Ver catálogo completo: ${link}`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
 
 let _dashCharts = {}, _clientesData = [];
 function setAdminTab(tab) {
@@ -2451,6 +2527,10 @@ function verificarAdmin() {
 }
 
 // INIT — detectar modo por token secreto en URL
+if (localStorage.getItem('darkMode') === '1') {
+  document.body.classList.add('dark');
+  document.addEventListener('DOMContentLoaded', () => { const b = document.getElementById('dark-btn'); if(b) b.textContent='☀️'; });
+}
 function init() {
   const hash = window.location.hash.replace('#', '');
   document.getElementById('modo-bar').style.display = 'none';
