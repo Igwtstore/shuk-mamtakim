@@ -1908,7 +1908,7 @@ async function renderNotificaciones() {
     const htmlPend = Object.entries(gruposPend).map(([pid, g]) => {
       const tieneStock = (productos.find(p => p.id == pid)?.stock || 0) > 0;
       const clientesHTML = g.clientes.map(c => `<span style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})</span>`).join(' · ');
-      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'').replace(/"/g,'')}','${nom}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${nom}</button>`; }).join('');
+      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'').replace(/"/g,'')}','${nom}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${nom}</button><button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕</button>`; }).join(' ');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
         <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
         <div style="margin-bottom:0.4rem">${clientesHTML}</div>
@@ -1935,6 +1935,7 @@ async function renderNotificaciones() {
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
             ${esViejo ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-size:0.72rem" onclick="window.open('https://wa.me/${c.telefono}?text='+encodeURIComponent('${msgRecordatorio.replace(/'/g,"\\'")}'),'_blank')">🔔 Recordatorio</button>` : ''}
             <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="marcarComprado('${pid}','${c.telefono}')">✓ Compró</button>
+            <button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕ Eliminar</button>
           </div>
         </div>`;
       }).join('');
@@ -1951,7 +1952,14 @@ async function renderNotificaciones() {
 function marcarComprado(productoId, telefono) {
   const params = new URLSearchParams({ accion: 'marcarComprado', productoId, telefono });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
-    .then(() => { showToast('Marcado como comprado ✓'); renderNotificaciones(); })
+    .then(() => { showToast('Marcado como comprado ✓'); setTimeout(renderNotificaciones, 1500); })
+    .catch(() => showToast('Error'));
+}
+
+function eliminarNotificacion(productoId, telefono) {
+  const params = new URLSearchParams({ accion: 'eliminarNotificacion', productoId, telefono });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(() => { showToast('Eliminado ✓'); setTimeout(renderNotificaciones, 1500); })
     .catch(() => showToast('Error'));
 }
 
