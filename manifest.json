@@ -1,0 +1,31 @@
+{
+  "name": "Shuk Mamtakim",
+  "short_name": "Shuk",
+  "description": "Catálogo online de golosinas y productos israelíes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mayorista",
+      "url": "/",
+      "description": "Catálogo mayorista"
+    },
+    {
+      "name": "Minorista",
+      "url": "/#min-pL3q7",
+      "description": "Catálogo minorista"
+    }
+  ]
+}
