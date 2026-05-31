@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shuk Mamtakim</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -557,6 +558,12 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .sinpedidos { text-align: center; padding: 2rem; color: var(--texto-suave); font-size: 0.9rem; }
+  .admin-subtabs { display:flex; gap:0; border-bottom:2px solid var(--gris-medio); margin-bottom:1.25rem; }
+  .admin-subtab { padding:0.6rem 1.25rem; border:none; background:none; font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:600; color:var(--texto-suave); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color 0.2s; }
+  .admin-subtab.activo { color:var(--azul); border-bottom-color:var(--azul); }
+  .dash-card { background:var(--blanco); border-radius:var(--radio); padding:1rem 1.25rem; box-shadow:var(--sombra); }
+  .dash-num { font-size:1.6rem; font-weight:700; color:var(--azul); }
+  .dash-label { font-size:0.72rem; color:var(--texto-suave); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
 
   /* TOAST */
   .toast {
@@ -616,6 +623,30 @@
 
 <!-- ADMIN -->
 <div class="admin-section" id="admin-section">
+  <div class="admin-subtabs">
+    <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
+    <button class="admin-subtab" id="subtab-dashboard" onclick="setAdminTab('dashboard')">📊 Dashboard</button>
+  </div>
+  <!-- DASHBOARD TAB -->
+  <div id="admin-tab-dashboard" style="display:none">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.25rem" id="dash-resumen"></div>
+    <div class="admin-card" style="margin-bottom:1rem">
+      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem;font-size:0.9rem">Ventas últimos 30 días</div>
+      <canvas id="dash-chart-ventas" height="80"></canvas>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+      <div class="admin-card">
+        <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem;font-size:0.9rem">Top productos</div>
+        <canvas id="dash-chart-productos" height="180"></canvas>
+      </div>
+      <div class="admin-card">
+        <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem;font-size:0.9rem">Forma de cobro</div>
+        <canvas id="dash-chart-pago" height="180"></canvas>
+      </div>
+    </div>
+  </div>
+  <!-- PANEL TAB -->
+  <div id="admin-tab-panel">
   <div class="admin-card">
     <div class="admin-titulo">📱 QR del catálogo</div>
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
@@ -871,6 +902,7 @@
     </div>
     <div id="caja-contenido"><div class="sinpedidos">Cargando movimientos...</div></div>
   </div>
+  </div><!-- cierre admin-tab-panel -->
 </div>
 
 <!-- CARRITO OVERLAY -->
@@ -1976,6 +2008,79 @@ function setModo(m) {
 }
 
 function filtrar() { renderCatalogo(); }
+
+let _dashCharts = {};
+function setAdminTab(tab) {
+  document.getElementById('admin-tab-panel').style.display = tab === 'panel' ? '' : 'none';
+  document.getElementById('admin-tab-dashboard').style.display = tab === 'dashboard' ? '' : 'none';
+  document.getElementById('subtab-panel').classList.toggle('activo', tab === 'panel');
+  document.getElementById('subtab-dashboard').classList.toggle('activo', tab === 'dashboard');
+  if (tab === 'dashboard') renderDashboard();
+}
+
+async function renderDashboard() {
+  const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
+  if (!res) return;
+  const ventas = await res.json().catch(() => []);
+  const entregadas = ventas.filter(v => v.estado !== 'cancelado');
+
+  // Resumen
+  const totalARS = entregadas.reduce((s,v) => s + (parseFloat(v.totalARS)||0), 0);
+  const totalUSD = entregadas.reduce((s,v) => s + (parseFloat(v.totalUSD)||0), 0);
+  const clientes = new Set(entregadas.map(v => v.cliente)).size;
+  document.getElementById('dash-resumen').innerHTML = [
+    { label: 'Ventas $', val: '$ ' + Math.round(totalARS).toLocaleString('es-AR'), color: 'var(--verde)' },
+    { label: 'Ventas U$S', val: 'U$S ' + totalUSD.toFixed(2), color: 'var(--verde)' },
+    { label: 'Pedidos', val: entregadas.length, color: 'var(--azul)' },
+    { label: 'Clientes únicos', val: clientes, color: 'var(--azul)' }
+  ].map(d => `<div class="dash-card"><div class="dash-label">${d.label}</div><div class="dash-num" style="color:${d.color}">${d.val}</div></div>`).join('');
+
+  // Ventas por día (últimos 30 días)
+  const hoy = new Date();
+  const dias = Array.from({length:30}, (_,i) => { const d = new Date(hoy); d.setDate(d.getDate()-29+i); return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}); });
+  const ventasPorDia = Object.fromEntries(dias.map(d => [d, 0]));
+  entregadas.forEach(v => {
+    const f = (v.fecha||'').split(' ')[0];
+    const parts = f.split('/');
+    if (parts.length === 3) {
+      const label = parts[0] + '/' + parts[1];
+      if (ventasPorDia[label] !== undefined) ventasPorDia[label] += parseFloat(v.totalARS||0) + parseFloat(v.totalUSD||0) * 1000;
+    }
+  });
+  if (_dashCharts.ventas) _dashCharts.ventas.destroy();
+  _dashCharts.ventas = new Chart(document.getElementById('dash-chart-ventas'), {
+    type: 'line',
+    data: { labels: dias, datasets: [{ label: 'Ventas ($+U$S)', data: Object.values(ventasPorDia), borderColor: '#1a7a3c', backgroundColor: 'rgba(26,122,60,0.08)', tension: 0.3, fill: true, pointRadius: 3 }] },
+    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } } }
+  });
+
+  // Top productos
+  const prodCount = {};
+  entregadas.forEach(v => {
+    (v.productos||'').split('||').forEach(l => {
+      const m = l.match(/(\d+)x\s+([^—·]+)/);
+      if (m) { const nom = m[2].trim().substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]); }
+    });
+  });
+  const top5 = Object.entries(prodCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  if (_dashCharts.productos) _dashCharts.productos.destroy();
+  _dashCharts.productos = new Chart(document.getElementById('dash-chart-productos'), {
+    type: 'bar',
+    data: { labels: top5.map(x=>x[0]), datasets: [{ data: top5.map(x=>x[1]), backgroundColor: '#1a1a2e' }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } } }
+  });
+
+  // Forma de cobro
+  const pagos = {};
+  entregadas.forEach(v => { const fp = v.formaPago||'Otro'; pagos[fp] = (pagos[fp]||0) + 1; });
+  const colors = ['#1a1a2e','#1a7a3c','#c9954a','#c0392b','#4a90d9','#888'];
+  if (_dashCharts.pago) _dashCharts.pago.destroy();
+  _dashCharts.pago = new Chart(document.getElementById('dash-chart-pago'), {
+    type: 'doughnut',
+    data: { labels: Object.keys(pagos), datasets: [{ data: Object.values(pagos), backgroundColor: colors }] },
+    options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
+  });
+}
 
 const STOCK_MINIMO = 3;
 function verificarStockBajo() {
