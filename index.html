@@ -1156,8 +1156,10 @@ async function renderPedidos() {
 
     const renderCard = (v, conAcciones) => {
       const estado = v.estado || 'pendiente';
-      const totalStr = v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` :
-                       v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : '';
+      const totalStr = [
+        v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` : '',
+        v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : ''
+      ].filter(Boolean).join(' + ');
       const productLines = v.productos
         ? v.productos.split(' || ').map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
         : '';
