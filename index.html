@@ -1192,8 +1192,8 @@ async function renderPedidos() {
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
         ${conAcciones ? `
         <div class="pedido-acciones">
-          <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado')">✓ Entregado</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado')">✕ Cancelar</button>
+          <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>
           <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar' : '💰 Confirmar cobro'}</button>
         </div>` : ''}
       </div>`;
@@ -1214,8 +1214,8 @@ async function renderPedidos() {
   }
 }
 
-function cambiarEstado(id, estado) {
-  const card = document.getElementById('pedido-' + id);
+function cambiarEstado(id, estado, btnEl) {
+  const card = btnEl ? btnEl.closest('.pedido-item') : document.getElementById('pedido-' + id);
   if (card) card.remove();
   const params = new URLSearchParams({ accion: 'actualizarEstado', id, estado });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
