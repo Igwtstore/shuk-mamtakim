@@ -1708,20 +1708,7 @@ function refreshAdmin() {
 
 function startAdminPolling() {
   if (_adminInterval) return;
-  _adminInterval = setInterval(async () => {
-    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
-    if (!res) return;
-    const ventas = await res.json().catch(() => []);
-    const pendientes = ventas.filter(v => (v.estado || 'pendiente') === 'pendiente').length;
-    const prevCount = parseInt(document.getElementById('pedidos-lista')?.dataset.count || '0');
-    if (pendientes > prevCount) {
-      showToast(`📦 Nuevo pedido recibido`);
-      refreshAdmin();
-    }
-    if (document.getElementById('pedidos-lista')) {
-      document.getElementById('pedidos-lista').dataset.count = pendientes;
-    }
-  }, 60000);
+  _adminInterval = setInterval(() => { renderPedidos(); }, 60000);
 }
 
 function stopAdminPolling() {
