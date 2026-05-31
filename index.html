@@ -1439,8 +1439,8 @@ async function renderCaja() {
       const comiA = parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15);
       const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
       // Routing: usar cajas confirmadas si existen, si no fallback por formaPago
-      const cajaJ = v.cajaJony || (fp === 'Mercado Pago' ? 'MP_JONY' : 'EFT_JONY');
-      const cajaM = v.cajaMyri || ((fp === 'Mercado Pago' || fp === 'Transferencia') ? 'MP_GABY' : 'EFT_MYRI');
+      const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fp === 'Mercado Pago' ? 'MP_JONY' : 'EFT_JONY');
+      const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : (fp === 'Mercado Pago' || fp === 'Transferencia') ? 'MP_GABY' : 'EFT_MYRI');
       if (arsJ > 0) {
         movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta' });
       }
@@ -1449,7 +1449,7 @@ async function renderCaja() {
         if (comiA > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi' });
       }
       if (usdM > 0) {
-        const colUSD = v.cajaMyri || 'ETF_USD_MYRI';
+        const colUSD = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : 'ETF_USD_MYRI');
         const tc = parseFloat(v.tipoCambio || 0);
         if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
           const arsEquiv = Math.round(usdM * tc);
