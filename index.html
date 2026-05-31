@@ -1172,7 +1172,7 @@ function eliminarDelCarrito(id) {
   renderCatalogo();
 }
 
-let _enviando = false;
+let _enviando = false, _enviandoManual = false;
 function enviarPedido() {
   if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
@@ -1182,7 +1182,9 @@ function enviarPedido() {
   const items = Object.values(carrito);
   if (!items.length) return;
   _enviando = true;
-  setTimeout(() => { _enviando = false; }, 8000);
+  const btnPedido = document.querySelector('.pedido-btn');
+  if (btnPedido) { btnPedido.disabled = true; btnPedido.textContent = 'Enviando...'; }
+  setTimeout(() => { _enviando = false; if (btnPedido) { btnPedido.disabled = false; } }, 10000);
 
   let arsJONY = 0, arsMyri = 0, usdMyri = 0;
   const lineas = items.map(item => {
@@ -1433,10 +1435,13 @@ function actualizarTotalManual() {
 }
 
 function cargarPedidoManual() {
+  if (_enviandoManual) return;
   const cliente = document.getElementById('manual-cliente').value.trim();
   const tipo = document.getElementById('manual-tipo').value;
   const pago = document.getElementById('manual-pago').value;
   if (!cliente) { showToast('Ingresá el nombre del cliente'); return; }
+  _enviandoManual = true;
+  setTimeout(() => { _enviandoManual = false; }, 10000);
 
   let arsJ = 0, arsM = 0, usdM = 0;
   const selectedItems = [];
