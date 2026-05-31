@@ -186,6 +186,12 @@
     z-index: 2;
   }
 
+  .producto-img-wrap {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    overflow: hidden;
+  }
   .producto-img {
     width: 100%;
     height: 220px;
@@ -204,6 +210,44 @@
     color: var(--texto-suave);
     font-size: 2rem;
   }
+  .carousel-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(26,26,46,0.5);
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+  }
+  .carousel-prev { left: 6px; }
+  .carousel-next { right: 6px; }
+  .carousel-dots {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    z-index: 3;
+  }
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 1px solid rgba(0,0,0,0.2);
+  }
+  .dot.activo { background: white; }
 
   .producto-info {
     padding: 0.9rem 1rem;
@@ -535,7 +579,7 @@
 
   @media (max-width: 480px) {
     .catalogo { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; }
-    .producto-img, .producto-img-placeholder { height: 180px; }
+    .producto-img-wrap, .producto-img, .producto-img-placeholder { height: 180px; }
     .logo { font-size: 1.15rem; }
   }
 </style>
@@ -954,22 +998,70 @@ function renderCatalogo() {
     </div>`;
   }).join('');
   document.getElementById('carrito-btn-header').style.display = 'flex';
+  setTimeout(initCarousels, 100);
+}
+
+const BASE_IMG = 'https://raw.githubusercontent.com/Igwtstore/shuk-mamtakim/main/';
+const carouselTimers = {}, carouselIdx = {};
+
+function imgUrl(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const sinExt = filename.replace(/\.[^.]+$/, '');
+  return [BASE_IMG+filename, BASE_IMG+sinExt+'.'+ext.toUpperCase()+'.'+ext, BASE_IMG+sinExt+'.jpg', BASE_IMG+sinExt+'.jpeg'];
+}
+
+function imgFallback(el, urls, i) {
+  if (i < urls.length) { el.src = urls[i]; el.onerror = () => imgFallback(el, urls, i+1); }
+  else { el.style.display='none'; el.nextElementSibling && (el.nextElementSibling.style.display='flex'); }
 }
 
 function renderImg(p) {
-  const base = 'https://raw.githubusercontent.com/Igwtstore/shuk-mamtakim/main/';
-  const nombre = p.imagen;
-  const ext = nombre.split('.').pop().toLowerCase();
-  const sinExt = nombre.replace(/\.[^.]+$/, '');
-  // Intentar primero el nombre original, luego con extensión duplicada (JPG.jpg), luego variantes
-  const url1 = base + nombre;
-  const url2 = base + sinExt + '.' + ext.toUpperCase() + '.' + ext;
-  const url3 = base + sinExt + '.jpg';
-  const url4 = base + sinExt + '.jpeg';
-  return `<img class="producto-img" src="${url1}" 
-    onerror="this.src='${url2}';this.onerror=function(){this.src='${url3}';this.onerror=function(){this.src='${url4}';this.onerror=function(){this.style.display='none';this.nextElementSibling.style.display='flex'}}}"
-    loading="lazy" alt="${p.nombre}">
-  <div class="producto-img-placeholder" style="display:none">🍬</div>`;
+  const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if (!imagenes.length) return `<div class="producto-img-wrap"><div class="producto-img-placeholder">🍬</div></div>`;
+  const urls0 = imgUrl(imagenes[0]);
+  const multi = imagenes.length > 1;
+  return `<div class="producto-img-wrap" id="carousel-${p.id}">
+    <img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
+      onerror="imgFallback(this,${JSON.stringify(urls0)},1)"
+      loading="lazy" alt="${p.nombre}">
+    <div class="producto-img-placeholder" style="display:none">🍬</div>
+    ${multi ? `
+    <button class="carousel-btn carousel-prev" onclick="prevSlide(${p.id},event)">‹</button>
+    <button class="carousel-btn carousel-next" onclick="nextSlide(${p.id},event)">›</button>
+    <div class="carousel-dots">${imagenes.map((_,i)=>`<span class="dot${i===0?' activo':''}" onclick="goToSlide(${p.id},${i},event)"></span>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+function goToSlideInternal(id, idx) {
+  const p = productos.find(x=>x.id==id); if (!p) return;
+  const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if (idx >= imagenes.length) return;
+  carouselIdx[id] = idx;
+  const img = document.getElementById('cimg-'+id);
+  const wrap = document.getElementById('carousel-'+id);
+  if (!img || !wrap) return;
+  const urls = imgUrl(imagenes[idx]);
+  img.style.display = 'block';
+  img.onerror = function(){ imgFallback(this, urls, 1); };
+  img.src = urls[0];
+  wrap.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('activo', i===idx));
+}
+
+function nextSlide(id, e) { if(e)e.stopPropagation(); const p=productos.find(x=>x.id==id); if(!p)return; const n=(p.imagen||'').split(',').filter(s=>s.trim()).length; goToSlideInternal(id,((carouselIdx[id]||0)+1)%n); startTimer(id,n); }
+function prevSlide(id, e) { if(e)e.stopPropagation(); const p=productos.find(x=>x.id==id); if(!p)return; const n=(p.imagen||'').split(',').filter(s=>s.trim()).length; goToSlideInternal(id,((carouselIdx[id]||0)-1+n)%n); startTimer(id,n); }
+function goToSlide(id, idx, e) { if(e)e.stopPropagation(); const p=productos.find(x=>x.id==id); if(!p)return; const n=(p.imagen||'').split(',').filter(s=>s.trim()).length; goToSlideInternal(id,idx); startTimer(id,n); }
+
+function startTimer(id, n) {
+  if (carouselTimers[id]) clearInterval(carouselTimers[id]);
+  carouselTimers[id] = setInterval(() => { goToSlideInternal(id, ((carouselIdx[id]||0)+1)%n); }, 3000);
+}
+
+function initCarousels() {
+  Object.values(carouselTimers).forEach(t => clearInterval(t));
+  productos.forEach(p => {
+    const n = (p.imagen||'').split(',').filter(s=>s.trim()).length;
+    if (n > 1) { carouselIdx[p.id] = 0; startTimer(p.id, n); }
+  });
 }
 
 function cambiarQty(id, delta, max) {
@@ -1080,13 +1172,17 @@ function eliminarDelCarrito(id) {
   renderCatalogo();
 }
 
+let _enviando = false;
 function enviarPedido() {
+  if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
   if (!nombre) { showToast('Ingresá tu nombre'); document.getElementById('nombre-cliente').focus(); return; }
   const formaPago = document.getElementById('forma-pago').value;
   if (!formaPago) { showToast('Seleccioná la forma de cobro'); document.getElementById('forma-pago').focus(); return; }
   const items = Object.values(carrito);
   if (!items.length) return;
+  _enviando = true;
+  setTimeout(() => { _enviando = false; }, 8000);
 
   let arsJONY = 0, arsMyri = 0, usdMyri = 0;
   const lineas = items.map(item => {
