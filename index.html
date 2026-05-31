@@ -1584,27 +1584,31 @@ async function renderCaja() {
       const usdM = parseFloat(v.usdMyri || 0);
       const comiA = parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15);
       const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
-      // Routing: usar cajas confirmadas si existen, si no fallback por formaPago
-      const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fp === 'Mercado Pago' ? 'MP_JONY' : 'EFT_JONY');
-      const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : (fp === 'Mercado Pago' || fp === 'Transferencia') ? 'MP_GABY' : 'EFT_MYRI');
-      if (arsJ > 0) {
+      // Auto-routing solo para Efectivo y Cuenta Corriente; Transferencia/MP requieren confirmación
+      const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fp === 'Efectivo' ? 'EFT_JONY' : null);
+      const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fp === 'Efectivo' ? 'EFT_MYRI' : null);
+      if (arsJ > 0 && cajaJ) {
         movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta' });
       }
-      if (arsM > 0) {
+      if (arsM > 0 && cajaM) {
         movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta' });
-        if (comiA > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi' });
+        if (comiA > 0) {
+          movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
+        }
       }
       if (usdM > 0) {
-        const colUSD = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : 'ETF_USD_MYRI');
+        const colUSD = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : fp === 'Efectivo' ? 'ETF_USD_MYRI' : null);
         const tc = parseFloat(v.tipoCambio || 0);
-        if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
-          const arsEquiv = Math.round(usdM * tc);
-          const comiARS_conv = Math.round(arsEquiv * 0.15);
-          movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}` });
-          if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi' });
-        } else {
-          movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta' });
-          if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi' });
+        if (colUSD) {
+          if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
+            const arsEquiv = Math.round(usdM * tc);
+            const comiARS_conv = Math.round(arsEquiv * 0.15);
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}` });
+            if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi', srcCol: colUSD });
+          } else {
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta' });
+            if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi', srcCol: colUSD });
+          }
         }
       }
     });
@@ -1665,10 +1669,12 @@ async function renderCaja() {
             const mpG = movs.filter(m => m.col==='MP_GABY' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
             const eftM = movs.filter(m => m.col==='EFT_MYRI' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
             const usdM = movs.filter(m => m.col==='ETF_USD_MYRI' && m.mon==='USD').reduce((s,m)=>s+m.val,0);
-            const comiARS = totalsARS['COMI_ARS_JONY']||0;
-            const comiUSD = totalsUSD['COMI_USD_JONY']||0;
-            const netoG = mpG; // GABY muestra bruto, sin descontar comisión
-            const netoE = eftM - comiARS; // toda la comisión ARS sale de EFT MYRI
+            // Comisión solo de ventas que vinieron de cada columna MYRI
+            const comiGaby = movs.filter(m => m.col==='COMI_ARS_JONY' && m.tipo==='comi' && m.srcCol==='MP_GABY').reduce((s,m)=>s+m.val,0);
+            const comiEFT = movs.filter(m => m.col==='COMI_ARS_JONY' && m.tipo==='comi' && m.srcCol==='EFT_MYRI').reduce((s,m)=>s+m.val,0);
+            const comiUSD = movs.filter(m => m.col==='COMI_USD_JONY' && m.tipo==='comi' && m.srcCol==='ETF_USD_MYRI').reduce((s,m)=>s+m.val,0);
+            const netoG = mpG - comiGaby;
+            const netoE = eftM - comiEFT;
             const netoU = usdM - comiUSD;
             return COLS.map(c => {
               let v, mon, label;
