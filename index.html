@@ -623,6 +623,48 @@
     </div>
   </div>
   <div class="admin-card">
+    <div class="admin-titulo">➕ Agregar nuevo producto</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div class="nombre-campo" style="margin:0;flex:2;min-width:150px">
+          <label>Nombre</label>
+          <input type="text" id="np-nombre" placeholder="Ej: Chocolate Elite Blondi" />
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
+          <label>Categoría</label>
+          <input type="text" id="np-categoria" list="categorias-list" placeholder="Chocolate..." />
+        </div>
+      </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>Descripción</label>
+        <input type="text" id="np-desc" placeholder="Ej: Blanco caramel con galletitas sabor chocolate (100g)" />
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:100px">
+          <label>Precio Mayorista (U$S)</label>
+          <input type="number" id="np-pmay" placeholder="5.80" step="0.01" min="0" />
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:100px">
+          <label>Precio Minorista ($)</label>
+          <input type="number" id="np-pmin" placeholder="10000" min="0" />
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:80px">
+          <label>Stock inicial</label>
+          <input type="number" id="np-stock" placeholder="0" min="0" />
+        </div>
+      </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>Foto del producto</label>
+        <input type="file" id="np-foto" accept="image/*" onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
+        <div id="np-preview" style="margin-top:0.5rem;display:none">
+          <img id="np-preview-img" style="max-height:120px;border-radius:8px;object-fit:contain;background:var(--gris);padding:0.5rem;" />
+          <div id="np-upload-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
+        </div>
+      </div>
+      <button class="guardar-stock-btn" onclick="guardarNuevoProducto()" style="margin-top:0">Agregar producto</button>
+    </div>
+  </div>
+  <div class="admin-card">
     <div class="admin-titulo">🔢 Actualizar stock</div>
     <table class="stock-tabla">
       <thead>
@@ -1046,9 +1088,23 @@ function renderCatalogo() {
 }
 
 const BASE_IMG = 'https://raw.githubusercontent.com/Igwtstore/shuk-mamtakim/main/';
+const CLOUDINARY_CLOUD = 'dq2boloyp';
+const CLOUDINARY_PRESET = 'shuk_upload';
+const CLOUDINARY_BASE = `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload`;
 const carouselTimers = {}, carouselIdx = {};
 
+function isCloudinaryId(filename) {
+  // IDs de Cloudinary no tienen extensión típica o empiezan con carpeta/
+  return filename && (filename.includes('/') || !filename.includes('.'));
+}
+
 function imgUrl(filename) {
+  if (isCloudinaryId(filename)) {
+    // URL Cloudinary con optimización automática
+    const url = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/${filename}`;
+    return [url, url, url, url];
+  }
+  // Fallback GitHub para imágenes antiguas
   const ext = filename.split('.').pop().toLowerCase();
   const sinExt = filename.replace(/\.[^.]+$/, '');
   return [BASE_IMG+filename, BASE_IMG+sinExt+'.'+ext.toUpperCase()+'.'+ext, BASE_IMG+sinExt+'.jpg', BASE_IMG+sinExt+'.jpeg'];
@@ -1577,6 +1633,81 @@ function registrarGasto() {
       refreshAdmin();
     })
     .catch(() => showToast('Error al registrar gasto'));
+}
+
+// NUEVO PRODUCTO
+let _npCloudinaryId = '';
+
+function previewNuevoProducto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const preview = document.getElementById('np-preview');
+  const img = document.getElementById('np-preview-img');
+  preview.style.display = 'block';
+  img.src = URL.createObjectURL(file);
+  document.getElementById('np-upload-status').textContent = 'Foto seleccionada. Se subirá al guardar.';
+  _npCloudinaryId = '';
+}
+
+async function subirFotoCloudinary() {
+  const fileInput = document.getElementById('np-foto');
+  const file = fileInput.files[0];
+  if (!file) return '';
+  const status = document.getElementById('np-upload-status');
+  status.textContent = 'Subiendo foto...';
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_PRESET);
+  formData.append('folder', 'shuk-mamtakim');
+  try {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.public_id) {
+      status.textContent = '✓ Foto subida correctamente';
+      return data.public_id;
+    }
+    status.textContent = 'Error al subir la foto';
+    return '';
+  } catch(e) {
+    status.textContent = 'Error de conexión';
+    return '';
+  }
+}
+
+async function guardarNuevoProducto() {
+  const nombre = document.getElementById('np-nombre').value.trim();
+  const desc = document.getElementById('np-desc').value.trim();
+  const pMay = document.getElementById('np-pmay').value.trim();
+  const pMin = document.getElementById('np-pmin').value.trim();
+  const stock = parseInt(document.getElementById('np-stock').value) || 0;
+  const categoria = document.getElementById('np-categoria').value.trim() || 'Varios';
+  if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
+  // Subir foto si hay una seleccionada
+  let imagenId = '';
+  if (document.getElementById('np-foto').files[0]) {
+    imagenId = await subirFotoCloudinary();
+  }
+  // Guardar en Google Sheet via Apps Script
+  const params = new URLSearchParams({
+    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria
+  });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Producto agregado ✓');
+        document.getElementById('np-nombre').value = '';
+        document.getElementById('np-desc').value = '';
+        document.getElementById('np-pmay').value = '';
+        document.getElementById('np-pmin').value = '';
+        document.getElementById('np-stock').value = '';
+        document.getElementById('np-foto').value = '';
+        document.getElementById('np-preview').style.display = 'none';
+        _npCloudinaryId = '';
+        cargarProductos();
+      } else showToast('Error al guardar');
+    })
+    .catch(() => showToast('Error de conexión'));
 }
 
 function registrarTransferencia() {
