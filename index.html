@@ -1216,11 +1216,15 @@ async function renderPedidos() {
 
 function cambiarEstado(id, estado, btnEl) {
   const card = btnEl ? btnEl.closest('.pedido-item') : document.getElementById('pedido-' + id);
-  if (card) card.remove();
+  if (card) { card.style.opacity = '0.3'; card.style.pointerEvents = 'none'; }
   const params = new URLSearchParams({ accion: 'actualizarEstado', id, estado });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
-  showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
-  setTimeout(refreshAdmin, 5000);
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { showToast('Error: ' + data.error); if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } }
+      else { if (card) card.remove(); showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado'); setTimeout(refreshAdmin, 2000); }
+    })
+    .catch(err => { showToast('Error de conexión'); if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } });
 }
 
 function renderStockAdmin() {
