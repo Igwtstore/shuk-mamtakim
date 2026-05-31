@@ -1878,28 +1878,81 @@ async function renderNotificaciones() {
       lista.innerHTML = '<div class="sinpedidos">Sin clientes en lista de espera.</div>';
       return;
     }
-    const grupos = {};
-    notifs.forEach(n => {
-      if (!grupos[n.productoId]) {
-        const p = productos.find(x => String(x.id) === String(n.productoId));
-        const nombre = p ? (p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 50) : '')) : n.producto;
-        grupos[n.productoId] = { nombre, clientes: [] };
-      }
-      grupos[n.productoId].clientes.push(n);
-    });
-    lista.innerHTML = Object.entries(grupos).map(([pid, g]) => {
+    const pendientes = notifs.filter(n => n.estado === 'pendiente');
+    const notificados = notifs.filter(n => n.estado === 'notificado');
+
+    const buildGrupos = (arr) => {
+      const g = {};
+      arr.forEach(n => {
+        if (!g[n.productoId]) {
+          const p = productos.find(x => String(x.id) === String(n.productoId));
+          const nombre = p ? (p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 50) : '')) : n.producto;
+          g[n.productoId] = { nombre, clientes: [] };
+        }
+        g[n.productoId].clientes.push(n);
+      });
+      return g;
+    };
+
+    const diasDesde = (fechaStr) => {
+      try {
+        const parts = fechaStr.split(' ')[0].split('/');
+        if (parts.length < 3) return 0;
+        const d = new Date(parts[2], parts[1]-1, parts[0]);
+        return Math.floor((Date.now() - d.getTime()) / 86400000);
+      } catch(e) { return 0; }
+    };
+
+    // Pendientes de avisar
+    const gruposPend = buildGrupos(pendientes);
+    const htmlPend = Object.entries(gruposPend).map(([pid, g]) => {
       const tieneStock = (productos.find(p => p.id == pid)?.stock || 0) > 0;
       const clientesHTML = g.clientes.map(c => `<span style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})</span>`).join(' · ');
-      const btns = g.clientes.map((c,i) => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'').replace(/"/g,'')}','${nom}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${nom}</button>`; }).join('');
+      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'').replace(/"/g,'')}','${nom}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${nom}</button>`; }).join('');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
         <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
         <div style="margin-bottom:0.4rem">${clientesHTML}</div>
-        ${tieneStock ? `<div style="font-size:0.72rem;color:var(--verde);font-weight:600;margin-bottom:0.4rem">✓ Ya hay stock — notificá a los clientes:</div><div class="pedido-acciones" style="flex-wrap:wrap">${btns}</div>` : '<div style="font-size:0.72rem;color:var(--dorado)">⏳ Sin stock todavía</div>'}
+        ${tieneStock ? `<div style="font-size:0.72rem;color:var(--verde);font-weight:600;margin-bottom:0.4rem">✓ Ya hay stock — notificá:</div><div class="pedido-acciones" style="flex-wrap:wrap">${btns}</div>` : '<div style="font-size:0.72rem;color:var(--dorado)">⏳ Sin stock todavía</div>'}
       </div>`;
-    }).join('');
+    }).join('') || '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.5rem 0">Sin pendientes.</div>';
+
+    // Avisados — seguimiento
+    const gruposNot = buildGrupos(notificados);
+    const htmlNot = Object.entries(gruposNot).map(([pid, g]) => {
+      return g.clientes.map(c => {
+        const dias = diasDesde(c.fecha);
+        const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,'');
+        const prod = g.nombre.replace(/'/g,'').replace(/"/g,'');
+        const modo = c.modoCliente||'mayorista';
+        const esViejo = dias >= 3;
+        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/'}`;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span></div>
+            <div style="font-size:0.72rem;color:var(--texto-suave)">${g.nombre}</div>
+            <div style="font-size:0.68rem;color:${esViejo?'var(--rojo)':'var(--texto-suave)'}">Avisado hace ${dias} día${dias!==1?'s':''}</div>
+          </div>
+          <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+            ${esViejo ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-size:0.72rem" onclick="window.open('https://wa.me/${c.telefono}?text='+encodeURIComponent('${msgRecordatorio.replace(/'/g,"\\'")}'),'_blank')">🔔 Recordatorio</button>` : ''}
+            <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="marcarComprado('${pid}','${c.telefono}')">✓ Compró</button>
+          </div>
+        </div>`;
+      }).join('');
+    }).join('') || '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.5rem 0">Sin seguimientos.</div>';
+
+    lista.innerHTML =
+      `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.4rem">Pendientes de aviso</div>${htmlPend}` +
+      `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem">Seguimiento — ya avisados</div>${htmlNot}`;
   } catch(e) {
     lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>';
   }
+}
+
+function marcarComprado(productoId, telefono) {
+  const params = new URLSearchParams({ accion: 'marcarComprado', productoId, telefono });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(() => { showToast('Marcado como comprado ✓'); renderNotificaciones(); })
+    .catch(() => showToast('Error'));
 }
 
 function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
@@ -1907,8 +1960,9 @@ function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
   const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
-  setTimeout(renderNotificaciones, 2000);
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(() => setTimeout(renderNotificaciones, 1500))
+    .catch(() => setTimeout(renderNotificaciones, 1500));
 }
 
 let _cobroId = null, _cobroUsdM = 0;
