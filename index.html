@@ -1770,7 +1770,11 @@ async function renderNotificaciones() {
     }
     const grupos = {};
     notifs.forEach(n => {
-      if (!grupos[n.productoId]) grupos[n.productoId] = { nombre: n.producto, clientes: [] };
+      if (!grupos[n.productoId]) {
+        const p = productos.find(x => String(x.id) === String(n.productoId));
+        const nombre = p ? (p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 50) : '')) : n.producto;
+        grupos[n.productoId] = { nombre, clientes: [] };
+      }
       grupos[n.productoId].clientes.push(n);
     });
     lista.innerHTML = Object.entries(grupos).map(([pid, g]) => {
