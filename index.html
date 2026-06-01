@@ -2149,13 +2149,22 @@ function toggleDarkMode() {
 }
 
 function activarNotificaciones() {
-  if (window.OneSignal) {
-    OneSignalDeferred.push(async function(OneSignal) {
-      await OneSignal.Slidedown.promptPush();
-    });
-  } else {
-    showToast('Las notificaciones no están disponibles en este navegador');
+  if (typeof OneSignalDeferred === 'undefined') {
+    showToast('Notificaciones no disponibles en este navegador');
+    return;
   }
+  OneSignalDeferred.push(async function(OneSignal) {
+    try {
+      const permission = await OneSignal.Notifications.permission;
+      if (permission) {
+        showToast('Ya tenés las notificaciones activadas ✓');
+        return;
+      }
+      await OneSignal.Notifications.requestPermission();
+    } catch(e) {
+      showToast('Para activar notificaciones, permitilas desde la configuración del navegador');
+    }
+  });
 }
 
 function compartirProducto(id) {
