@@ -4,12 +4,22 @@
   "description": "Catálogo minorista de golosinas y productos israelíes",
   "start_url": "/#min-pL3q7",
   "display": "standalone",
-  "background_color": "#1a1a2e",
+  "background_color": "#fdf3e3",
   "theme_color": "#1a1a2e",
   "orientation": "portrait-primary",
   "lang": "es",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "https://res.cloudinary.com/dq2boloyp/image/upload/w_192,h_192,c_pad,b_rgb:fdf3e3/app_icon_rmbyhb.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:fdf3e3/app_icon_rmbyhb.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
