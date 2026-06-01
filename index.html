@@ -1681,7 +1681,7 @@ function guardarStock() {
   renderStockAdmin();
   renderNotificaciones();
   showToast('Stock guardado en planilla ✓');
-  if (_pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes programada en 2 min'), 2800);
+  if (_pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes en 45 seg'), 2800);
 }
 
 function renderManualProductos() {
@@ -2340,8 +2340,8 @@ function agregarAlPushBuffer(tipo, nombre) {
   if (tipo === 'stock' && !_pushBuffer.stock.includes(nombre)) _pushBuffer.stock.push(nombre);
   if (tipo === 'nuevo' && !_pushBuffer.nuevos.includes(nombre)) _pushBuffer.nuevos.push(nombre);
   if (_pushTimer) clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(enviarPushAcumulado, 120000);
-  showToast('Notificación programada en 2 min ✓');
+  _pushTimer = setTimeout(enviarPushAcumulado, 45000);
+  showToast('Notificación programada en 45 seg ✓');
 }
 
 function enviarPushAcumulado() {
