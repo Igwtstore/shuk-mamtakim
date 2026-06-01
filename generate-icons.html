@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+function makeIcon(size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#c9954a';
+  ctx.font = `bold ${size * 0.45}px Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SM', size / 2, size / 2);
+  const a = document.createElement('a');
+  a.download = `icon-${size}.png`;
+  a.href = c.toDataURL('image/png');
+  a.click();
+}
+makeIcon(192);
+setTimeout(() => makeIcon(512), 500);
+</script>
+<p>Descargando íconos... cerrá esta pestaña cuando termines.</p>
+</body>
+</html>

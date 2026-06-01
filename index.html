@@ -643,6 +643,7 @@
       <span id="modo-label">Mayorista</span>
     </div>
     <div style="display:flex;align-items:center;gap:0.5rem">
+      <button class="dark-toggle" id="install-btn" style="display:none;font-size:0.78rem;width:auto;padding:0 0.7rem;border-radius:20px" onclick="installPWA()" title="Instalar app">📲 Instalar</button>
       <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
       <button class="dark-toggle" onclick="window.print()" title="Exportar PDF" style="font-size:0.85rem">🖨️</button>
     </div>
@@ -2558,7 +2559,24 @@ function init() {
 
 init();
 
-// Registro del Service Worker (PWA)
+// PWA
+let _pwaPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaPrompt = e;
+  const btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = 'none';
+  _pwaPrompt = null;
+});
+function installPWA() {
+  if (!_pwaPrompt) { showToast('Usá el menú del navegador → Agregar a pantalla de inicio'); return; }
+  _pwaPrompt.prompt();
+  _pwaPrompt.userChoice.then(() => { _pwaPrompt = null; });
+}
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
