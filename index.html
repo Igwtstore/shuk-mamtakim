@@ -2163,23 +2163,24 @@ function activarNotificaciones() {
     return;
   }
   if (Notification.permission === 'denied') {
-    showToast('Notificaciones bloqueadas. Habilitálas en Configuración → Chrome → Notificaciones');
+    showToast('Notificaciones bloqueadas — habilitálas en Configuración del navegador');
     return;
   }
-  if (Notification.permission === 'granted') {
-    showToast('¡Ya tenés notificaciones activadas! ✓');
+  if (typeof OneSignalDeferred === 'undefined') {
+    showToast('Cargando... intentá en unos segundos');
     return;
   }
-  Notification.requestPermission().then(function(perm) {
-    if (perm === 'granted') {
-      showToast('¡Notificaciones activadas! ✓');
-      if (typeof OneSignalDeferred !== 'undefined') {
-        OneSignalDeferred.push(async function(OS) {
-          try { await OS.Notifications.requestPermission(); } catch(e) {}
-        });
-      }
-    } else {
-      showToast('Permiso no concedido');
+  OneSignalDeferred.push(async function(OS) {
+    try {
+      const suscripto = await OS.User.PushSubscription.optedIn;
+      if (suscripto) { showToast('¡Notificaciones ya activadas! ✓'); return; }
+      await OS.Slidedown.promptPush({ force: true });
+      setTimeout(async () => {
+        const ok = await OS.User.PushSubscription.optedIn;
+        if (ok) showToast('¡Notificaciones activadas! ✓');
+      }, 2000);
+    } catch(err) {
+      showToast('Intentá desde el menú del navegador → Notificaciones');
     }
   });
 }
