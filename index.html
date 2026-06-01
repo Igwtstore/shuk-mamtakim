@@ -1794,8 +1794,24 @@ function cargarPedidoManual() {
   });
 
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
-    .then(() => setTimeout(refreshAdmin, 2000))
-    .catch(() => showToast('Error al guardar en planilla'));
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Pedido registrado ✓');
+        document.getElementById('manual-cliente').value = '';
+        renderManualProductos();
+        renderCatalogo();
+        renderStockAdmin();
+        setTimeout(refreshAdmin, 3000);
+      } else {
+        showToast('Error al guardar: ' + (data.error || 'intentá de nuevo'));
+        _enviandoManual = false;
+      }
+    })
+    .catch(() => {
+      showToast('Error de conexión — intentá de nuevo');
+      _enviandoManual = false;
+    });
 
   // Descontar stock local
   selectedItems.forEach(p => {
