@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shuk Mamtakim</title>
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" id="pwa-manifest" href="/manifest.json">
+<script>
+  // Manifest dinámico según URL
+  if (window.location.hash.includes('min-pL3q7')) {
+    document.getElementById('pwa-manifest').href = '/manifest-minorista.json';
+  }
+</script>
 <meta name="theme-color" content="#1a1a2e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
