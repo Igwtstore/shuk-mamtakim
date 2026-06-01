@@ -2665,6 +2665,18 @@ function init() {
 
 init();
 
+// VERSION CHECK — fuerza reload si hay nueva versión
+const APP_VERSION = '20260601-1';
+(function() {
+  const stored = localStorage.getItem('shuk_version');
+  if (stored && stored !== APP_VERSION) {
+    localStorage.setItem('shuk_version', APP_VERSION);
+    window.location.reload(true);
+  } else {
+    localStorage.setItem('shuk_version', APP_VERSION);
+  }
+})();
+
 // PWA
 let _pwaPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
@@ -2685,7 +2697,17 @@ function installPWA() {
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            // Nueva versión disponible — recarga automática
+            window.location.reload(true);
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }
 </script>

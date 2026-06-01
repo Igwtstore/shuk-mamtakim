@@ -1,4 +1,4 @@
-const CACHE = 'shuk-v1';
+const CACHE = 'shuk-v2';
 const STATIC = ['/', '/index.html', '/icon.svg'];
 
 self.addEventListener('install', e => {
