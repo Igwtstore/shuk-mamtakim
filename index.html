@@ -1681,6 +1681,7 @@ function guardarStock() {
   renderStockAdmin();
   renderNotificaciones();
   showToast('Stock guardado en planilla ✓');
+  if (_pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes programada en 2 min'), 2800);
 }
 
 function renderManualProductos() {
@@ -2346,12 +2347,18 @@ function agregarAlPushBuffer(tipo, nombre) {
 function enviarPushAcumulado() {
   if (!_pushBuffer.stock.length && !_pushBuffer.nuevos.length) return;
   const lineas = [];
-  if (_pushBuffer.nuevos.length) {
-    lineas.push('🆕 Nuevo en catálogo:');
+  if (_pushBuffer.nuevos.length === 1) {
+    lineas.push('🆕 NUEVO PRODUCTO!');
+    lineas.push(_pushBuffer.nuevos[0]);
+  } else if (_pushBuffer.nuevos.length > 1) {
+    lineas.push('🆕 NUEVOS PRODUCTOS!');
     _pushBuffer.nuevos.forEach(n => lineas.push('• ' + n));
   }
-  if (_pushBuffer.stock.length) {
-    lineas.push('📦 Volvió a stock:');
+  if (_pushBuffer.stock.length === 1) {
+    lineas.push('📦 Volvió a stock!');
+    lineas.push(_pushBuffer.stock[0]);
+  } else if (_pushBuffer.stock.length > 1) {
+    lineas.push('📦 Volvieron a stock:');
     _pushBuffer.stock.forEach(n => lineas.push('• ' + n));
   }
   lineas.push('');
