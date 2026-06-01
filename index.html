@@ -2090,12 +2090,9 @@ async function renderCaja() {
       </tfoot>
     </table>
     </div>`;
-    // Control personal JONY — restar lo que le debe a MYRI
-    const myriEnJonyCalc = movs
-      .filter(m => ['EFT_JONY','MP_JONY'].includes(m.col) && m.mon==='ARS' && m.tipo==='venta' && m.myriNet !== undefined)
-      .reduce((s,m) => s + m.myriNet, 0);
-    const jonyARS = (totalsARS['EFT_JONY']||0) + (totalsARS['MP_JONY']||0) + (totalsARS['COMI_ARS_JONY']||0) - myriEnJonyCalc;
-    const jonyUSD = (totalsUSD['COMI_USD_JONY']||0);
+    // Control personal JONY — solo comisiones de ventas MYRI (15%)
+    const jonyARS = totalsARS['COMI_ARS_JONY'] || 0;
+    const jonyUSD = totalsUSD['COMI_USD_JONY'] || 0;
     const diezmoARS = Math.round(jonyARS * 0.10);
     const diezmoUSD = parseFloat((jonyUSD * 0.10).toFixed(2));
     const controlJony = `
@@ -2103,12 +2100,12 @@ async function renderCaja() {
       <div style="font-size:0.72rem;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem">🔒 Control personal JONY</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.75rem">
         <div>
-          <div style="font-size:0.75rem;color:var(--texto-suave)">Ganancias acumuladas $</div>
+          <div style="font-size:0.75rem;color:var(--texto-suave)">Comisiones acumuladas $</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">$ ${Math.round(jonyARS).toLocaleString('es-AR')}</div>
           <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
         </div>
         <div>
-          <div style="font-size:0.75rem;color:var(--texto-suave)">Ganancias acumuladas U$S</div>
+          <div style="font-size:0.75rem;color:var(--texto-suave)">Comisiones acumuladas U$S</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">U$S ${jonyUSD.toFixed(2)}</div>
           <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: U$S ${diezmoUSD.toFixed(2)}</div>
         </div>
