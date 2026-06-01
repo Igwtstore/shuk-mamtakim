@@ -801,6 +801,14 @@
         </div>
       </div>
       <div class="nombre-campo" style="margin:0">
+        <label>Visible para</label>
+        <select id="np-visible" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <option value="Ambos">Ambos (mayorista y minorista)</option>
+          <option value="Mayorista">Solo Mayorista</option>
+          <option value="Minorista">Solo Minorista</option>
+        </select>
+      </div>
+      <div class="nombre-campo" style="margin:0">
         <label>Foto del producto</label>
         <input type="file" id="np-foto" accept="image/*" onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
         <div id="np-preview" style="margin-top:0.5rem;display:none">
@@ -1143,7 +1151,8 @@ async function cargarProductos() {
       stock: parseInt(r[5]||'0'),
       imagen: r[6],
       activo: (r[7]||'SI').trim().toUpperCase() === 'SI',
-      categoria: (r[8]||'Varios').trim()
+      categoria: (r[8]||'Varios').trim(),
+      visible: (r[9]||'Ambos').trim()
     })).filter(p => p.activo && p.id);
     renderCatalogo();
     renderFiltros();
@@ -1195,10 +1204,13 @@ function esPesos(p) {
 function renderCatalogo() {
   const query = document.getElementById('buscador').value.toLowerCase();
   const catalogo = document.getElementById('catalogo');
-  const filtrados = productos.filter(p =>
-    (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
-    (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva || (PITZUJIM_IDS.includes(p.id) && _categoriaActiva === 'Pitzujim'))
-  ).sort((a, b) => {
+  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  const filtrados = productos.filter(p => {
+    const vis = (p.visible||'Ambos').trim();
+    if (vis !== 'Ambos' && vis !== tipoActual) return false;
+    return (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
+      (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva || (PITZUJIM_IDS.includes(p.id) && _categoriaActiva === 'Pitzujim'));
+  }).sort((a, b) => {
     const aOut = a.stock <= 0 ? 1 : 0;
     const bOut = b.stock <= 0 ? 1 : 0;
     if (aOut !== bOut) return aOut - bOut;
@@ -1696,7 +1708,12 @@ function renderManualProductos() {
   const lista = document.getElementById('manual-productos-lista');
   if (!lista || !productos.length) return;
   const tipo = document.getElementById('manual-tipo').value;
-  lista.innerHTML = productos.filter(p => p.stock > 0).map(p => {
+  const _tipoM = document.getElementById('manual-tipo')?.value || 'Mayorista';
+  lista.innerHTML = productos.filter(p => {
+    if (p.stock <= 0) return false;
+    const vis = (p.visible||'Ambos').trim();
+    return vis === 'Ambos' || vis === _tipoM;
+  }).map(p => {
     const esPitz = PITZUJIM_IDS.includes(p.id);
     let precioUnit, moneda;
     if (tipo === 'Mayorista') {
@@ -1721,7 +1738,10 @@ function renderManualProductos() {
 function actualizarTotalManual() {
   const tipo = document.getElementById('manual-tipo').value;
   let arsJ = 0, arsM = 0, usdM = 0;
-  productos.filter(p => p.stock > 0).forEach(p => {
+  productos.filter(p => {
+    const vis = (p.visible||'Ambos').trim();
+    return p.stock > 0 && (vis === 'Ambos' || vis === tipo);
+  }).forEach(p => {
     const inp = document.getElementById('mq-' + p.id);
     if (!inp) return;
     const qty = parseInt(inp.value) || 0;
@@ -1891,6 +1911,7 @@ async function guardarNuevoProducto() {
   const pMin = document.getElementById('np-pmin').value.trim();
   const stock = parseInt(document.getElementById('np-stock').value) || 0;
   const categoria = document.getElementById('np-categoria').value.trim() || 'Varios';
+  const visible = document.getElementById('np-visible').value || 'Ambos';
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
   // Subir foto si hay una seleccionada
   let imagenId = '';
@@ -1899,7 +1920,7 @@ async function guardarNuevoProducto() {
   }
   // Guardar en Google Sheet via Apps Script
   const params = new URLSearchParams({
-    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria
+    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(r => r.json())
