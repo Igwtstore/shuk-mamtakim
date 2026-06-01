@@ -1026,6 +1026,18 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- MODAL NOTAS -->
+<div id="nota-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;padding:1.5rem;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div id="nota-modal-titulo" style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.75rem">📝 Nota</div>
+    <textarea id="nota-modal-texto" style="width:100%;min-height:100px;padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;resize:vertical;box-sizing:border-box;" placeholder="Escribí la nota acá..."></textarea>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem">
+      <button onclick="cerrarNotaModal()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;cursor:pointer;">Cancelar</button>
+      <button onclick="guardarNota()" style="flex:2;padding:0.75rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOTIFICACION STOCK -->
 <div id="notif-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
@@ -1427,6 +1439,10 @@ function renderCarrito() {
       <input type="text" id="nombre-cliente" placeholder="Ej: Carlos García" />
     </div>
     <div class="nombre-campo">
+      <label>Nota / indicación especial <span style="color:var(--texto-suave);font-weight:400">(opcional)</span></label>
+      <textarea id="nota-pedido" placeholder="Ej: Entregar en Av. Corrientes 1234, después de las 18hs, timbre 3B..." style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;resize:vertical;min-height:60px;box-sizing:border-box;"></textarea>
+    </div>
+    <div class="nombre-campo">
       <label>Forma de cobro</label>
       <select id="forma-pago" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;color:#1a1a2e;">
         <option value="">Seleccionar...</option>
@@ -1469,6 +1485,7 @@ function enviarPedido() {
   if (!formaPago) { showToast('Seleccioná la forma de cobro'); document.getElementById('forma-pago').focus(); return; }
   const items = Object.values(carrito);
   if (!items.length) return;
+  const notaPedido = document.getElementById('nota-pedido')?.value.trim() || '';
   _enviando = true;
   const btnPedido = document.querySelector('.pedido-btn');
   if (btnPedido) { btnPedido.disabled = true; btnPedido.textContent = 'Enviando...'; }
@@ -1507,10 +1524,11 @@ function enviarPedido() {
     ? `\n\n*Total:* $ ${Math.round(totalARS).toLocaleString('es-AR')} + U$S ${totalUSD.toFixed(2)}`
     : totalARS > 0 ? `\n\n*Total:* $ ${Math.round(totalARS).toLocaleString('es-AR')}`
     : totalUSD > 0 ? `\n\n*Total:* U$S ${totalUSD.toFixed(2)}` : '';
-  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}\n\n_Pedido enviado desde el catálogo online_`;
+  const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
+  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n_Pedido enviado desde el catálogo online_`;
 
   registrarPedido(nombre, items, tipoCliente);
-  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas);
+  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido);
 
   items.forEach(item => {
     const p = productos.find(x => x.id === item.id);
@@ -1550,7 +1568,7 @@ function mostrarConfirmacionWA(msg) {
   document.body.appendChild(modal);
 }
 
-function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas) {
+function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido) {
   const productos_str = (lineas || items.map(i => `${i.qty}x ${i.nombre}`)).join(' || ');
   const stockUpdates = items.map(i => `${i.id}:${i.qty}`).join(',');
   const params = new URLSearchParams({
@@ -1560,7 +1578,8 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     stockUpdates,
     arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
     usdMyri: (usdMyri || 0).toFixed(2),
-    comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2)
+    comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
+    notas: notaPedido || ''
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
 }
@@ -1633,6 +1652,8 @@ async function renderPedidos() {
         </div>
         <div style="margin:0.4rem 0">${productLines || v.productos}</div>
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
+        ${_notasClientes[v.cliente] ? `<div style="font-size:0.75rem;background:#fdf3e3;border-left:3px solid var(--dorado);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.3rem;color:#7a5a1a">👤 ${_notasClientes[v.cliente]}</div>` : ''}
+        ${v.notas && v.notas !== 'Manual' ? `<div style="font-size:0.75rem;background:#e8f5ee;border-left:3px solid var(--verde);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.2rem;color:#1a5a2e">📝 ${v.notas}</div>` : ''}
         <div class="pedido-acciones">
           ${conAcciones ? `
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
@@ -1641,6 +1662,7 @@ async function renderPedidos() {
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
           <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
+          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaModal('pedido','${v.id}','${(v.notas&&v.notas!=='Manual'?v.notas:'').replace(/'/g,'')}','Nota del pedido')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
         </div>
       </div>`;
     };
@@ -2171,7 +2193,7 @@ function setModo(m) {
   document.getElementById('modo-label').textContent = m === 'mayorista' ? 'Mayorista' : m === 'minorista' ? 'Minorista' : 'Admin';
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
@@ -2250,6 +2272,7 @@ function setAdminTab(tab) {
 
 let _clientesRaw = [];
 async function renderClientes() {
+  await cargarNotasClientes();
   const lista = document.getElementById('clientes-lista');
   lista.innerHTML = '<div class="sinpedidos">Cargando...</div>';
   const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
@@ -2285,7 +2308,10 @@ function mostrarClientes(arr) {
     </tr></thead>
     <tbody>${arr.map(c => `
     <tr style="border-bottom:1px solid var(--gris-medio)">
-      <td style="padding:0.5rem;font-weight:600;color:var(--azul)">${c.nombre}</td>
+      <td style="padding:0.5rem">
+        <div style="font-weight:600;color:var(--azul)">${c.nombre}</div>
+        ${_notasClientes[c.nombre] ? `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.2rem">📝 ${_notasClientes[c.nombre].substring(0,60)}${_notasClientes[c.nombre].length>60?'…':''}</div>` : ''}
+      </td>
       <td style="padding:0.5rem;text-align:center"><span style="font-size:0.72rem;background:var(--gris);padding:2px 8px;border-radius:20px">${c.tipo}</span></td>
       <td style="padding:0.5rem;text-align:right">${c.pedidos}</td>
       <td style="padding:0.5rem;text-align:right;color:var(--verde);font-weight:600">${c.totalARS > 0 ? '$ ' + Math.round(c.totalARS).toLocaleString('es-AR') : '—'}</td>
@@ -2293,6 +2319,7 @@ function mostrarClientes(arr) {
       <td style="padding:0.5rem;text-align:right;color:var(--texto-suave);font-size:0.78rem">${c.ultima}</td>
       <td style="padding:0.5rem;text-align:right">
         <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="contactarCliente('${c.nombre.replace(/'/g,'')}','${c.tipo}')">💬 WA</button>
+        <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.72rem" onclick="abrirNotaModal('cliente','${c.nombre.replace(/'/g,'')}','${(_notasClientes[c.nombre]||'').replace(/'/g,'')}','Nota — ${c.nombre.replace(/'/g,'')}')">📝</button>
       </td>
     </tr>`).join('')}
     </tbody>
@@ -2468,6 +2495,42 @@ function startAdminPolling() {
 
 function stopAdminPolling() {
   if (_adminInterval) { clearInterval(_adminInterval); _adminInterval = null; }
+}
+
+// NOTAS
+let _notaModalTipo = null, _notaModalId = null, _notasClientes = {};
+
+async function cargarNotasClientes() {
+  const res = await fetch(APPS_SCRIPT_URL + '?accion=notasClientes').catch(() => null);
+  if (res) _notasClientes = await res.json().catch(() => {});
+}
+
+function abrirNotaModal(tipo, id, textoActual, tituloLabel) {
+  _notaModalTipo = tipo; _notaModalId = id;
+  document.getElementById('nota-modal-titulo').textContent = '📝 ' + tituloLabel;
+  document.getElementById('nota-modal-texto').value = textoActual || '';
+  document.getElementById('nota-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('nota-modal-texto').focus(), 100);
+}
+function cerrarNotaModal() { document.getElementById('nota-modal').style.display = 'none'; }
+function guardarNota() {
+  const texto = document.getElementById('nota-modal-texto').value.trim();
+  if (_notaModalTipo === 'pedido') {
+    const params = new URLSearchParams({ accion: 'editarNotaPedido', id: _notaModalId, nota: texto });
+    fetch(APPS_SCRIPT_URL + '?' + params.toString())
+      .then(() => { showToast('Nota guardada ✓'); cerrarNotaModal(); setTimeout(renderPedidos, 1500); })
+      .catch(() => showToast('Error al guardar'));
+  } else if (_notaModalTipo === 'cliente') {
+    const params = new URLSearchParams({ accion: 'guardarNotaCliente', cliente: _notaModalId, nota: texto });
+    fetch(APPS_SCRIPT_URL + '?' + params.toString())
+      .then(() => {
+        _notasClientes[_notaModalId] = texto;
+        showToast('Nota guardada ✓');
+        cerrarNotaModal();
+        mostrarClientes(_clientesRaw);
+      })
+      .catch(() => showToast('Error al guardar'));
+  }
 }
 
 // NOTIFICACIONES DE STOCK
