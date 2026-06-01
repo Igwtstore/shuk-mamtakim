@@ -1965,11 +1965,11 @@ async function renderCaja() {
     const [vR, gR, rR] = await Promise.all([
       fetch(APPS_SCRIPT_URL + '?accion=ventas'),
       fetch(APPS_SCRIPT_URL + '?accion=gastos'),
-      fetch(APPS_SCRIPT_URL + '?accion=rendiciones').catch(() => ({ json: () => [] }))
+      fetch(APPS_SCRIPT_URL + '?accion=rendiciones').catch(() => null)
     ]);
     const ventas = await vR.json();
     const gastos = await gR.json();
-    const rendiciones = rR.json ? await rR.json() : [];
+    const rendiciones = rR ? await rR.json().catch(() => []) : [];
 
     const movs = [];
     ventas.filter(v => v.estado !== 'cancelado').forEach((v, idx) => {
@@ -2650,7 +2650,10 @@ function verificarAdmin() {
 // INIT — detectar modo por token secreto en URL
 if (localStorage.getItem('darkMode') === '1') {
   document.body.classList.add('dark');
-  document.addEventListener('DOMContentLoaded', () => { const b = document.getElementById('dark-btn'); if(b) b.textContent='☀️'; });
+  // El botón se actualiza cuando el DOM está listo
+  const _updateDarkBtn = () => { const b = document.getElementById('dark-btn'); if(b) b.textContent='☀️'; };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _updateDarkBtn);
+  else _updateDarkBtn();
 }
 function init() {
   const hash = window.location.hash.replace('#', '');
