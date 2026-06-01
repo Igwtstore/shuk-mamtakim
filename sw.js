@@ -18,8 +18,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // API calls (Google Apps Script) → siempre network, sin cache
-  if (url.hostname.includes('script.google') || url.hostname.includes('googleapis')) {
+  // OneSignal y APIs → siempre network, sin cache
+  if (url.hostname.includes('onesignal') || url.pathname.includes('OneSignal') ||
+      url.hostname.includes('script.google') || url.hostname.includes('googleapis')) {
     return;
   }
 

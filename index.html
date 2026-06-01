@@ -1665,7 +1665,13 @@ function renderStockAdmin() {
 function guardarStock() {
   productos.forEach(p => {
     const inp = document.getElementById('sinput-' + p.id);
-    if (inp) p.stock = parseInt(inp.value) || 0;
+    if (inp) {
+      const nuevo = parseInt(inp.value) || 0;
+      if (p.stock <= 0 && nuevo > 0) {
+        agregarAlPushBuffer('stock', p.nombre + (p.desc ? ' · ' + p.desc.substring(0,35) : ''));
+      }
+      p.stock = nuevo;
+    }
   });
   const updates = productos.map(p => `${p.id}:${p.stock}`).join(',');
   const params = new URLSearchParams({ accion: 'setStock', updates });
@@ -1873,6 +1879,7 @@ async function guardarNuevoProducto() {
     .then(r => r.json())
     .then(data => {
       if (data.ok) {
+        agregarAlPushBuffer('nuevo', nombre + (desc ? ' · ' + desc.substring(0,35) : ''));
         showToast('Producto agregado ✓');
         document.getElementById('np-nombre').value = '';
         document.getElementById('np-desc').value = '';
@@ -2149,22 +2156,39 @@ function toggleDarkMode() {
 }
 
 function activarNotificaciones() {
-  if (typeof OneSignalDeferred === 'undefined') {
-    showToast('Notificaciones no disponibles en este navegador');
+  if (!('Notification' in window)) {
+    showToast('Tu navegador no soporta notificaciones');
     return;
   }
-  OneSignalDeferred.push(async function(OneSignal) {
-    try {
-      const permission = await OneSignal.Notifications.permission;
-      if (permission) {
-        showToast('Ya tenés las notificaciones activadas ✓');
-        return;
+  if (Notification.permission === 'denied') {
+    showToast('Notificaciones bloqueadas — habilitálas en la configuración del navegador');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    showToast('¡Notificaciones ya activadas! ✓');
+    document.getElementById('notif-toggle').textContent = '🔔';
+    return;
+  }
+  // Pedir permiso via OneSignal si está disponible, si no, nativo
+  if (typeof OneSignalDeferred !== 'undefined') {
+    OneSignalDeferred.push(async function(OneSignal) {
+      try {
+        await OneSignal.Notifications.requestPermission();
+        if (Notification.permission === 'granted') {
+          showToast('¡Notificaciones activadas! ✓');
+        }
+      } catch(err) {
+        Notification.requestPermission().then(p => {
+          if (p === 'granted') showToast('¡Notificaciones activadas! ✓');
+        });
       }
-      await OneSignal.Notifications.requestPermission();
-    } catch(e) {
-      showToast('Para activar notificaciones, permitilas desde la configuración del navegador');
-    }
-  });
+    });
+  } else {
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') showToast('¡Notificaciones activadas! ✓');
+      else showToast('Permiso denegado');
+    });
+  }
 }
 
 function compartirProducto(id) {
@@ -2315,6 +2339,42 @@ async function renderDashboard() {
 }
 
 const STOCK_MINIMO = 3;
+// PUSH NOTIFICATIONS — acumulación 120 segundos
+let _pushBuffer = { stock: [], nuevos: [] };
+let _pushTimer = null;
+
+function agregarAlPushBuffer(tipo, nombre) {
+  if (tipo === 'stock' && !_pushBuffer.stock.includes(nombre)) _pushBuffer.stock.push(nombre);
+  if (tipo === 'nuevo' && !_pushBuffer.nuevos.includes(nombre)) _pushBuffer.nuevos.push(nombre);
+  if (_pushTimer) clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(enviarPushAcumulado, 120000);
+  showToast('Notificación programada en 2 min ✓');
+}
+
+function enviarPushAcumulado() {
+  if (!_pushBuffer.stock.length && !_pushBuffer.nuevos.length) return;
+  const lineas = [];
+  if (_pushBuffer.nuevos.length) {
+    lineas.push('🆕 Nuevo en catálogo:');
+    _pushBuffer.nuevos.forEach(n => lineas.push('• ' + n));
+  }
+  if (_pushBuffer.stock.length) {
+    lineas.push('📦 Volvió a stock:');
+    _pushBuffer.stock.forEach(n => lineas.push('• ' + n));
+  }
+  lineas.push('');
+  lineas.push('¡Entrá al catálogo y hacé tu pedido! 🛍️');
+  const params = new URLSearchParams({
+    accion: 'enviarPush',
+    titulo: '🛍️ Shuk Mamtakim — Novedades',
+    mensaje: lineas.join('\n')
+  });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => {});
+  _pushBuffer = { stock: [], nuevos: [] };
+  _pushTimer = null;
+  showToast('Notificación enviada a los clientes ✓');
+}
+
 function verificarStockBajo() {
   const bajos = productos.filter(p => p.activo && p.stock > 0 && p.stock <= STOCK_MINIMO);
   const card = document.getElementById('stock-alerta-card');
