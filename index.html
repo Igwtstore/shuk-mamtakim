@@ -23,6 +23,7 @@
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
       appId: "0e4a5058-d7a1-405b-86c9-86ae42940ab4",
+      serviceWorkerPath: '/OneSignalSDKWorker.js',
       notifyButton: { enable: false },
       promptOptions: {
         slidedown: {
@@ -30,7 +31,7 @@
             type: "push",
             autoPrompt: false,
             text: {
-              actionMessage: "¿Querés recibir notificaciones cuando haya novedades o tu producto llegue?",
+              actionMessage: "¿Querés recibir novedades y avisos de stock de Shuk Mamtakim?",
               acceptButton: "Sí, avisarme",
               cancelButton: "Ahora no"
             }
@@ -2169,26 +2170,17 @@ function activarNotificaciones() {
     document.getElementById('notif-toggle').textContent = '🔔';
     return;
   }
-  // Pedir permiso via OneSignal si está disponible, si no, nativo
-  if (typeof OneSignalDeferred !== 'undefined') {
-    OneSignalDeferred.push(async function(OneSignal) {
+  OneSignalDeferred.push(async function(OneSignal) {
+    try {
+      await OneSignal.Slidedown.promptPush({ force: true });
+    } catch(err) {
       try {
         await OneSignal.Notifications.requestPermission();
-        if (Notification.permission === 'granted') {
-          showToast('¡Notificaciones activadas! ✓');
-        }
-      } catch(err) {
-        Notification.requestPermission().then(p => {
-          if (p === 'granted') showToast('¡Notificaciones activadas! ✓');
-        });
+      } catch(e2) {
+        showToast('Activá las notificaciones desde la configuración del navegador');
       }
-    });
-  } else {
-    Notification.requestPermission().then(p => {
-      if (p === 'granted') showToast('¡Notificaciones activadas! ✓');
-      else showToast('Permiso denegado');
-    });
-  }
+    }
+  });
 }
 
 function compartirProducto(id) {
