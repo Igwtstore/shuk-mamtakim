@@ -1783,10 +1783,10 @@ function cargarPedidoManual() {
   const comiUSD = parseFloat((usdM * 0.15).toFixed(2));
   const totalARS = arsJ + arsM;
 
-  const productosCorto = lineas.map(l => l.replace(/ — .*$/, '')).join(' | ');
+
   const params = new URLSearchParams({
     accion: 'venta', cliente, tipo, formaPago: pago, notas: 'Manual',
-    productos: productosCorto,
+    productos: lineas.join(' || '),
     totalARS: Math.round(totalARS), totalUSD: usdM.toFixed(2),
     arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM),
     usdMyri: usdM.toFixed(2), comiARS, comiUSD,
