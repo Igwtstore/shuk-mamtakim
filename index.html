@@ -599,6 +599,23 @@
   .edit-btn-cancel { padding:11px 16px; background:var(--gris); color:var(--texto-suave); border:none; border-radius:9px; font-weight:600; font-size:0.9rem; font-family:'DM Sans',sans-serif; cursor:pointer; }
   .edit-tipo-select { padding:6px 10px; border:1.5px solid var(--gris-medio); border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem; color:var(--texto); background:var(--blanco); }
 
+  /* ─── STOCK DRAWER ─── */
+  .stock-drawer-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:8000; }
+  .stock-drawer-overlay.open { display:block; }
+  .stock-drawer { position:fixed; top:0; right:-100%; width:min(420px,100vw); height:100vh; background:var(--blanco); box-shadow:-4px 0 24px rgba(0,0,0,0.15); z-index:8001; display:flex; flex-direction:column; transition:right 0.3s ease; }
+  .stock-drawer.open { right:0; }
+  .stock-drawer-header { padding:16px 18px; border-bottom:1px solid var(--gris-medio); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+  .stock-drawer-title { font-weight:700; font-size:1rem; color:var(--texto); }
+  .stock-search { padding:10px 14px; border:1.5px solid var(--gris-medio); border-radius:10px; font-family:'DM Sans',sans-serif; font-size:0.9rem; width:100%; outline:none; margin:0; }
+  .stock-search:focus { border-color:var(--azul); }
+  .stock-drawer-body { overflow-y:auto; flex:1; padding:0 0 8px; }
+  .stock-drawer-row { display:flex; align-items:center; gap:10px; padding:10px 18px; border-bottom:1px solid var(--gris); }
+  .stock-drawer-row:hover { background:var(--gris); }
+  .stock-drawer-nombre { flex:1; font-size:0.88rem; color:var(--texto); }
+  .stock-drawer-actual { font-size:0.8rem; color:var(--texto-suave); min-width:30px; text-align:center; }
+  .stock-drawer-input { width:80px; padding:6px 8px; border:1.5px solid var(--gris-medio); border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.88rem; text-align:center; }
+  .stock-drawer-footer { padding:14px 18px 20px; border-top:1px solid var(--gris-medio); flex-shrink:0; }
+
   .stock-tabla { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   .stock-tabla th { text-align: left; padding: 0.5rem 0.75rem; background: var(--gris); color: var(--texto-suave); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
   .stock-tabla td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--gris-medio); }
@@ -852,13 +869,7 @@
   </div>
   <div class="admin-card">
     <div class="admin-titulo">🔢 Actualizar stock</div>
-    <table class="stock-tabla">
-      <thead>
-        <tr><th>Producto</th><th>Stock actual</th><th>Nuevo stock</th></tr>
-      </thead>
-      <tbody id="stock-tbody"></tbody>
-    </table>
-    <button class="guardar-stock-btn" onclick="guardarStock()">Guardar cambios</button>
+    <button class="guardar-stock-btn" onclick="abrirStockDrawer()" style="margin-top:0">Abrir actualizador de stock</button>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">✏️ Cargar pedido manual</div>
@@ -1725,13 +1736,41 @@ function cambiarEstado(id, estado, btnEl) {
 }
 
 function renderStockAdmin() {
-  const tbody = document.getElementById('stock-tbody');
-  tbody.innerHTML = productos.map(p => `
-    <tr>
-      <td>${p.nombre} <span style="color:var(--texto-suave);font-size:0.75rem">${p.desc.substring(0,35)}…</span></td>
-      <td>${p.stock}</td>
-      <td><input type="number" class="stock-input" id="sinput-${p.id}" value="${p.stock}" min="0"></td>
-    </tr>`).join('');
+  // legacy — no se usa, el drawer reemplaza la tabla
+}
+
+function abrirStockDrawer() {
+  document.getElementById('stock-search').value = '';
+  renderStockDrawer(productos);
+  document.getElementById('stock-drawer-overlay').classList.add('open');
+  document.getElementById('stock-drawer').classList.add('open');
+  setTimeout(() => document.getElementById('stock-search').focus(), 300);
+}
+
+function cerrarStockDrawer() {
+  document.getElementById('stock-drawer-overlay').classList.remove('open');
+  document.getElementById('stock-drawer').classList.remove('open');
+}
+
+function renderStockDrawer(lista) {
+  const body = document.getElementById('stock-drawer-body');
+  if (!lista.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--texto-suave)">Sin resultados</div>'; return; }
+  body.innerHTML = lista.map(p => `
+    <div class="stock-drawer-row">
+      <div class="stock-drawer-nombre">
+        <div style="font-weight:600">${p.nombre}</div>
+        ${p.desc ? `<div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,40)}</div>` : ''}
+      </div>
+      <span class="stock-drawer-actual" title="Stock actual">${p.stock}</span>
+      <input type="number" class="stock-drawer-input" id="sinput-${p.id}" value="${p.stock}" min="0">
+    </div>`).join('');
+}
+
+function filtrarStockDrawer(q) {
+  const filtrados = q.trim()
+    ? productos.filter(p => p.nombre.toLowerCase().includes(q.toLowerCase()) || (p.desc||'').toLowerCase().includes(q.toLowerCase()))
+    : productos;
+  renderStockDrawer(filtrados);
 }
 
 function guardarStock() {
@@ -2912,13 +2951,20 @@ function parsearLineasPedido(productosStr) {
 function renderEditLineas() {
   const cont = document.getElementById('ep-lineas');
   cont.innerHTML = _editLineas.map((l, i) => `
-    <div class="edit-row">
-      <span class="edit-qty">${l.qty}x</span>
-      <span class="edit-prod-name" title="${l.nombre}">${l.nombre}</span>
-      <span class="edit-currency">${l.moneda}</span>
-      <input class="edit-price-input" type="number" value="${l.precio}" min="0" step="${l.moneda === 'U$S' ? '0.01' : '1'}"
-        oninput="_editLineas[${i}].precio = parseFloat(this.value)||0; recalcularEditTotal()">
-      <span class="edit-subtotal" id="ep-sub-${i}">${l.moneda} ${formatEditVal(l.precio * l.qty, l.moneda)}</span>
+    <div class="edit-row" style="flex-wrap:wrap;gap:6px">
+      <span class="edit-prod-name" title="${l.nombre}" style="width:100%;font-weight:600">${l.nombre}</span>
+      <div style="display:flex;align-items:center;gap:6px;width:100%">
+        <label style="font-size:0.7rem;color:var(--texto-suave);min-width:28px">Cant.</label>
+        <input class="edit-price-input" type="number" value="${l.qty}" min="1" step="1" style="width:60px;text-align:center"
+          oninput="_editLineas[${i}].qty = parseInt(this.value)||1; recalcularEditTotal()">
+        <label style="font-size:0.7rem;color:var(--texto-suave);min-width:28px">${l.moneda}</label>
+        <input class="edit-price-input" type="number" value="${l.precio}" min="0" step="${l.moneda === 'U$S' ? '0.01' : '1'}" placeholder="Precio"
+          oninput="_editLineas[${i}].precio = parseFloat(this.value)||0; recalcularEditTotal()">
+        <label style="font-size:0.7rem;color:var(--texto-suave)">Desc%</label>
+        <input class="edit-price-input" type="number" value="${l.desc||0}" min="0" max="100" step="1" style="width:60px"
+          oninput="_editLineas[${i}].desc = parseFloat(this.value)||0; recalcularEditTotal()">
+        <span class="edit-subtotal" id="ep-sub-${i}" style="flex:1;text-align:right">${l.moneda} ${formatEditVal(l.precio * l.qty, l.moneda)}</span>
+      </div>
     </div>`).join('');
 }
 
@@ -2929,16 +2975,17 @@ function formatEditVal(n, moneda) {
 function recalcularEditTotal() {
   let totalARS = 0, totalUSD = 0;
   _editLineas.forEach((l, i) => {
-    const sub = l.precio * l.qty;
+    const descProd = (l.desc || 0) / 100;
+    const sub = l.precio * l.qty * (1 - descProd);
     const el = document.getElementById(`ep-sub-${i}`);
     if (el) el.textContent = `${l.moneda} ${formatEditVal(sub, l.moneda)}`;
     if (l.moneda === 'U$S') totalUSD += sub;
     else totalARS += sub;
   });
-  const desc = parseFloat(document.getElementById('ep-descuento')?.value) || 0;
-  if (desc > 0 && desc <= 100) {
-    totalARS = totalARS * (1 - desc / 100);
-    totalUSD = totalUSD * (1 - desc / 100);
+  const descGlobal = parseFloat(document.getElementById('ep-descuento')?.value) || 0;
+  if (descGlobal > 0 && descGlobal <= 100) {
+    totalARS = totalARS * (1 - descGlobal / 100);
+    totalUSD = totalUSD * (1 - descGlobal / 100);
   }
   let txt = [];
   if (totalARS > 0) txt.push(`$ ${Math.round(totalARS).toLocaleString('es-AR')}`);
@@ -2958,12 +3005,15 @@ async function guardarEditPedido() {
 
   // Reconstruir string de productos con nuevos precios
   const nuevasLineas = _editLineas.map(l => {
-    const sub = l.precio * l.qty;
-    const unitStr = formatEditVal(l.precio, l.moneda);
+    const descProd = (l.desc || 0) / 100;
+    const precioEf = l.precio * (1 - descProd);
+    const sub = precioEf * l.qty;
+    const unitStr = formatEditVal(precioEf, l.moneda);
     const subStr = formatEditVal(sub, l.moneda);
-    return `• ${l.qty}x ${l.nombre} — ${l.moneda} ${unitStr} c/u = ${l.moneda} ${subStr}`;
+    const descTag = l.desc > 0 ? ` [-${l.desc}%]` : '';
+    return `• ${l.qty}x ${l.nombre}${descTag} — ${l.moneda} ${unitStr} c/u = ${l.moneda} ${subStr}`;
   });
-  if (desc > 0) nuevasLineas.push(`🏷️ Descuento aplicado: ${desc}%`);
+  if (desc > 0) nuevasLineas.push(`🏷️ Descuento global: ${desc}%`);
 
   const params = new URLSearchParams({
     accion: 'actualizarPedido',
@@ -2996,6 +3046,22 @@ function cerrarEditPedido() {
   document.getElementById('edit-pedido-overlay').classList.remove('open');
 }
 </script>
+
+<!-- STOCK DRAWER -->
+<div class="stock-drawer-overlay" id="stock-drawer-overlay" onclick="cerrarStockDrawer()"></div>
+<div class="stock-drawer" id="stock-drawer">
+  <div class="stock-drawer-header">
+    <span class="stock-drawer-title">🔢 Actualizar stock</span>
+    <button onclick="cerrarStockDrawer()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:0.9rem">✕</button>
+  </div>
+  <div style="padding:10px 18px 0">
+    <input class="stock-search" id="stock-search" type="text" placeholder="🔍 Buscar producto..." oninput="filtrarStockDrawer(this.value)">
+  </div>
+  <div class="stock-drawer-body" id="stock-drawer-body"></div>
+  <div class="stock-drawer-footer">
+    <button class="guardar-stock-btn" onclick="guardarStock()" style="width:100%;margin:0">Guardar cambios</button>
+  </div>
+</div>
 
 <!-- MODAL EDITAR PEDIDO -->
 <div class="edit-overlay" id="edit-pedido-overlay" onclick="if(event.target.id==='edit-pedido-overlay')cerrarEditPedido()">
