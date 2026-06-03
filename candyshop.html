@@ -89,9 +89,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .btn-add { width: 100%; padding: 14px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 12px; font-size: 0.95rem; font-weight: 700; cursor: pointer; margin-top: 4px; }
 
 /* ─── MODAL ─────────────────────────────────────────────────────── */
-.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: flex-end; justify-content: center; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; padding: 16px; }
 .modal-overlay.open { display: flex; }
-.modal { background: white; border-radius: 24px 24px 0 0; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal { background: white; border-radius: 20px; padding: 24px; width: 100%; max-width: 440px; max-height: 88vh; overflow-y: auto; }
 .modal-title { font-size: 1.1rem; font-weight: 800; color: #2d1a0a; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
 .modal-close { background: #f0ebe3; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 1rem; cursor: pointer; }
 .form-group { margin-bottom: 14px; }
@@ -102,8 +102,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .btn-save { width: 100%; padding: 14px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 12px; font-size: 0.95rem; font-weight: 700; cursor: pointer; margin-top: 8px; }
 .btn-del { width: 100%; padding: 12px; background: none; color: #e05c2a; border: 1.5px solid #f0ebe3; border-radius: 12px; font-size: 0.9rem; cursor: pointer; margin-top: 6px; }
 
-.foto-preview { width: 80px; height: 80px; border-radius: 12px; object-fit: cover; background: #f0ebe3; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 8px; overflow: hidden; }
-.foto-preview img { width: 100%; height: 100%; object-fit: cover; }
+.foto-upload-area { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 14px; }
+.foto-preview { width: 90px; height: 90px; border-radius: 14px; background: #f0ebe3; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; overflow: hidden; cursor: pointer; border: 2px dashed #d0c8bc; transition: border-color 0.2s; }
+.foto-preview:hover { border-color: #5c3d1e; }
+.foto-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.foto-btn { background: #f0ebe3; border: none; border-radius: 10px; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; color: #5c3d1e; cursor: pointer; }
+.foto-uploading { font-size: 0.8rem; color: #aaa; }
 </style>
 </head>
 <body>
@@ -194,13 +198,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="modal-close" onclick="cerrarModal()">✕</button>
     </div>
 
-    <div style="display:flex; justify-content:center; margin-bottom:12px;">
-      <div class="foto-preview" id="foto-preview">📦</div>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Foto (URL de imagen)</label>
-      <input class="form-input" id="f-foto" type="url" placeholder="https://..." oninput="previewFoto(this.value)">
+    <div class="foto-upload-area">
+      <div class="foto-preview" id="foto-preview" onclick="document.getElementById('foto-file').click()">📦</div>
+      <button class="foto-btn" onclick="document.getElementById('foto-file').click()">📷 Elegir foto</button>
+      <span class="foto-uploading" id="foto-status"></span>
+      <input type="file" id="foto-file" accept="image/*" style="display:none" onchange="subirFoto(this)">
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -383,14 +385,16 @@ function renderCatalogo(catalogo) {
 // ─── MODAL ────────────────────────────────────────────────────────
 function abrirModal() {
   editandoCodigo = null;
+  fotoUrl = '';
   document.getElementById('modal-titulo').textContent = 'Nuevo producto';
   document.getElementById('f-codigo').value = '';
   document.getElementById('f-codigo').readOnly = false;
   document.getElementById('f-nombre').value = '';
   document.getElementById('f-precio').value = '';
   document.getElementById('f-costo').value = '';
-  document.getElementById('f-foto').value = '';
+  document.getElementById('foto-file').value = '';
   document.getElementById('foto-preview').innerHTML = '📦';
+  document.getElementById('foto-status').textContent = '';
   document.getElementById('ganancia-preview').style.display = 'none';
   document.getElementById('btn-del').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
@@ -398,13 +402,15 @@ function abrirModal() {
 
 function editarProducto(p) {
   editandoCodigo = p.codigo;
+  fotoUrl = p.foto || '';
   document.getElementById('modal-titulo').textContent = 'Editar producto';
   document.getElementById('f-codigo').value = p.codigo;
   document.getElementById('f-codigo').readOnly = true;
   document.getElementById('f-nombre').value = p.nombre;
   document.getElementById('f-precio').value = p.precioVenta || '';
   document.getElementById('f-costo').value = p.costo || '';
-  document.getElementById('f-foto').value = p.foto || '';
+  document.getElementById('foto-file').value = '';
+  document.getElementById('foto-status').textContent = '';
   previewFoto(p.foto || '');
   actualizarGananciaPreview();
   document.getElementById('btn-del').style.display = 'block';
@@ -414,13 +420,37 @@ function editarProducto(p) {
 function cerrarModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 function cerrarModalSiAfuera(e) { if (e.target.id === 'modal-overlay') cerrarModal(); }
 
+let fotoUrl = '';
+
+async function subirFoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('foto-status').textContent = 'Subiendo...';
+  document.getElementById('foto-preview').innerHTML = '⏳';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', 'candyshop');
+    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.secure_url) {
+      fotoUrl = data.secure_url;
+      document.getElementById('foto-preview').innerHTML = `<img src="${fotoUrl}">`;
+      document.getElementById('foto-status').textContent = '✅ Foto subida';
+    } else {
+      document.getElementById('foto-preview').innerHTML = '📦';
+      document.getElementById('foto-status').textContent = '❌ Error al subir';
+    }
+  } catch {
+    document.getElementById('foto-preview').innerHTML = '📦';
+    document.getElementById('foto-status').textContent = '❌ Error al subir';
+  }
+}
+
 function previewFoto(url) {
   const prev = document.getElementById('foto-preview');
-  if (url) {
-    prev.innerHTML = `<img src="${url}" onerror="this.parentElement.innerHTML='📦'">`;
-  } else {
-    prev.innerHTML = '📦';
-  }
+  fotoUrl = url || '';
+  prev.innerHTML = url ? `<img src="${url}" onerror="this.parentElement.innerHTML='📦'">` : '📦';
 }
 
 function actualizarGananciaPreview() {
@@ -445,7 +475,7 @@ async function guardarProducto() {
   const nombre = document.getElementById('f-nombre').value.trim();
   const precio = parseFloat(document.getElementById('f-precio').value) || 0;
   const costo = parseFloat(document.getElementById('f-costo').value) || 0;
-  const foto = document.getElementById('f-foto').value.trim();
+  const foto = fotoUrl;
 
   if (!codigo || !nombre || !precio) { alert('Completá código, nombre y precio'); return; }
 
