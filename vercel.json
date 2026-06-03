@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/candyshop/meir", "destination": "/tienda.html?kid=meir" },
+    { "source": "/candyshop/iosi", "destination": "/tienda.html?kid=iosi" }
+  ]
+}

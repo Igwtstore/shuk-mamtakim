@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candy Shop 🍬</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f0e8; min-height: 100vh; }
+
+/* HEADER */
+.header { background: linear-gradient(135deg, #2d1a0a, #5c3d1e); color: white; padding: 20px 16px 16px; text-align: center; position: sticky; top: 0; z-index: 50; }
+.header-logo { font-size: 1.8rem; margin-bottom: 2px; }
+.header-title { font-size: 1.2rem; font-weight: 800; }
+.header-sub { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+
+/* CARRITO FLOTANTE */
+.cart-fab { position: fixed; bottom: 24px; right: 16px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 50px; padding: 14px 20px; font-size: 1rem; font-weight: 700; cursor: pointer; box-shadow: 0 6px 24px rgba(92,61,30,0.4); z-index: 40; display: none; align-items: center; gap: 8px; transition: transform 0.1s; }
+.cart-fab:active { transform: scale(0.95); }
+.cart-count { background: white; color: #5c3d1e; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800; }
+
+/* GRID */
+.productos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 16px; max-width: 600px; margin: 0 auto; }
+@media (min-width: 480px) { .productos { grid-template-columns: repeat(3, 1fr); } }
+
+.producto-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.07); display: flex; flex-direction: column; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.producto-card:active { transform: scale(0.97); }
+.producto-foto { width: 100%; aspect-ratio: 1; object-fit: cover; background: #f0ebe3; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; }
+.producto-foto img { width: 100%; height: 100%; object-fit: cover; }
+.producto-info { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.producto-nombre { font-size: 0.85rem; font-weight: 700; color: #2d1a0a; line-height: 1.2; }
+.producto-precio { font-size: 1rem; font-weight: 800; color: #5c3d1e; }
+.btn-agregar { margin: 0 10px 10px; padding: 10px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 10px; font-size: 0.85rem; font-weight: 700; cursor: pointer; width: calc(100% - 20px); }
+
+/* SPINNER */
+.loading { text-align: center; padding: 60px 20px; color: #bbb; font-size: 1rem; }
+.error { text-align: center; padding: 40px 20px; color: #e05c2a; }
+
+/* MODAL CARRITO */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: flex-end; justify-content: center; }
+.overlay.open { display: flex; }
+.drawer { background: white; border-radius: 24px 24px 0 0; width: 100%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; }
+.drawer-header { padding: 20px 20px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0ebe3; flex-shrink: 0; }
+.drawer-title { font-size: 1.1rem; font-weight: 800; color: #2d1a0a; }
+.drawer-close { background: #f0ebe3; border: none; border-radius: 50%; width: 32px; height: 32px; font-size: 1rem; cursor: pointer; }
+.drawer-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
+.cart-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f5f0e8; }
+.cart-item-info { flex: 1; }
+.cart-item-name { font-weight: 600; color: #2d1a0a; font-size: 0.9rem; }
+.cart-item-price { font-size: 0.8rem; color: #aaa; margin-top: 2px; }
+.qty-control { display: flex; align-items: center; gap: 8px; }
+.qty-btn { background: #f0ebe3; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 1.1rem; font-weight: 700; color: #5c3d1e; cursor: pointer; }
+.qty-num { font-weight: 700; color: #2d1a0a; min-width: 20px; text-align: center; }
+.cart-item-total { font-weight: 800; color: #5c3d1e; font-size: 0.9rem; min-width: 60px; text-align: right; }
+.cart-empty { text-align: center; padding: 32px; color: #bbb; }
+.drawer-footer { padding: 16px 20px 24px; border-top: 1px solid #f0ebe3; flex-shrink: 0; }
+.cart-total-row { display: flex; justify-content: space-between; font-weight: 800; font-size: 1.1rem; color: #2d1a0a; margin-bottom: 14px; }
+.btn-whatsapp { width: 100%; padding: 16px; background: linear-gradient(135deg, #25d366, #128c7e); color: white; border: none; border-radius: 14px; font-size: 1rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-whatsapp:active { transform: scale(0.98); }
+
+/* MODAL CANTIDAD */
+.qty-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 110; align-items: center; justify-content: center; padding: 24px; }
+.qty-overlay.open { display: flex; }
+.qty-modal { background: white; border-radius: 20px; padding: 24px; width: 100%; max-width: 320px; text-align: center; }
+.qty-modal h3 { font-size: 1rem; font-weight: 800; color: #2d1a0a; margin-bottom: 6px; }
+.qty-modal p { font-size: 0.85rem; color: #aaa; margin-bottom: 20px; }
+.qty-picker { display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 20px; }
+.qty-picker .qty-btn { width: 44px; height: 44px; font-size: 1.4rem; border-radius: 12px; }
+.qty-picker .qty-num { font-size: 1.8rem; font-weight: 800; min-width: 40px; }
+.btn-confirm { width: 100%; padding: 14px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 12px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🍬</div>
+  <div class="header-title" id="header-title">Candy Shop</div>
+  <div class="header-sub" id="header-sub">Elegí tus golosinas</div>
+</div>
+
+<div class="productos" id="productos">
+  <div class="loading" style="grid-column:1/-1">Cargando catálogo...</div>
+</div>
+
+<button class="cart-fab" id="cart-fab" onclick="abrirCarrito()">
+  🛒 Ver pedido
+  <span class="cart-count" id="cart-count">0</span>
+</button>
+
+<!-- CARRITO DRAWER -->
+<div class="overlay" id="cart-overlay" onclick="cerrarSiAfuera(event,'cart-overlay')">
+  <div class="drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">🛒 Tu pedido</div>
+      <button class="drawer-close" onclick="cerrarCarrito()">✕</button>
+    </div>
+    <div class="drawer-body" id="cart-body"></div>
+    <div class="drawer-footer">
+      <div class="cart-total-row">
+        <span>Total</span>
+        <span id="cart-total">$0</span>
+      </div>
+      <button class="btn-whatsapp" onclick="enviarPedido()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Pedir por WhatsApp
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CANTIDAD -->
+<div class="qty-overlay" id="qty-overlay" onclick="cerrarSiAfuera(event,'qty-overlay')">
+  <div class="qty-modal">
+    <h3 id="qty-nombre">Producto</h3>
+    <p id="qty-precio"></p>
+    <div class="qty-picker">
+      <button class="qty-btn" onclick="cambiarQty(-1)">−</button>
+      <span class="qty-num" id="qty-val">1</span>
+      <button class="qty-btn" onclick="cambiarQty(1)">+</button>
+    </div>
+    <button class="btn-confirm" onclick="confirmarAgregar()">Agregar al pedido</button>
+  </div>
+</div>
+
+<script>
+const APPS_URL = 'https://script.google.com/macros/s/AKfycbxdAaSjGfBQoMz_38kHvTvUNswM94BdQexq5IDAINgTbvgpNOcOdyu8TXIHsbAZWAJ-hA/exec';
+const PHONES = { meir: '5491171046383', iosi: '5491150987261' };
+const NOMBRES = { meir: 'Meir', iosi: 'Iosi' };
+
+const params = new URLSearchParams(window.location.search);
+const kid = params.get('kid') || 'meir';
+const phone = PHONES[kid];
+const nombreKid = NOMBRES[kid];
+
+document.getElementById('header-title').textContent = `Candy Shop — ${nombreKid}`;
+document.getElementById('header-sub').textContent = `Pedidos a ${nombreKid} 🍬`;
+document.title = `Candy Shop — ${nombreKid}`;
+
+const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
+
+let carrito = {};
+let catalogoData = [];
+let productoSeleccionado = null;
+let qtyTmp = 1;
+
+// ─── CARGAR CATÁLOGO ─────────────────────────────────────────────
+async function cargarCatalogo() {
+  try {
+    const res = await fetch(APPS_URL + '?accion=getCatalogoHijos');
+    const data = await res.json();
+    catalogoData = data || [];
+    renderCatalogo(catalogoData);
+  } catch {
+    document.getElementById('productos').innerHTML = '<div class="error" style="grid-column:1/-1">❌ Error al cargar el catálogo. Intentá de nuevo.</div>';
+  }
+}
+
+function renderCatalogo(productos) {
+  const el = document.getElementById('productos');
+  if (!productos.length) {
+    el.innerHTML = '<div class="loading" style="grid-column:1/-1">Sin productos disponibles</div>';
+    return;
+  }
+  el.innerHTML = productos.map(p => {
+    const fotoHtml = p.foto
+      ? `<div class="producto-foto"><img src="${p.foto}" loading="lazy" onerror="this.parentElement.innerHTML='🍬'"></div>`
+      : `<div class="producto-foto">🍬</div>`;
+    return `<div class="producto-card" onclick="seleccionarProducto('${p.codigo}')">
+      ${fotoHtml}
+      <div class="producto-info">
+        <div class="producto-nombre">${p.nombre}</div>
+        <div class="producto-precio">${fmt(p.precioVenta)}</div>
+      </div>
+      <button class="btn-agregar" onclick="event.stopPropagation(); seleccionarProducto('${p.codigo}')">+ Agregar</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── SELECCIONAR PRODUCTO ─────────────────────────────────────────
+function seleccionarProducto(codigo) {
+  productoSeleccionado = catalogoData.find(p => p.codigo === codigo);
+  if (!productoSeleccionado) return;
+  qtyTmp = carrito[codigo]?.cantidad || 1;
+  document.getElementById('qty-nombre').textContent = productoSeleccionado.nombre;
+  document.getElementById('qty-precio').textContent = fmt(productoSeleccionado.precioVenta) + ' c/u';
+  document.getElementById('qty-val').textContent = qtyTmp;
+  document.getElementById('qty-overlay').classList.add('open');
+}
+
+function cambiarQty(delta) {
+  qtyTmp = Math.max(1, qtyTmp + delta);
+  document.getElementById('qty-val').textContent = qtyTmp;
+}
+
+function confirmarAgregar() {
+  if (!productoSeleccionado) return;
+  const cod = productoSeleccionado.codigo;
+  carrito[cod] = { ...productoSeleccionado, cantidad: qtyTmp };
+  document.getElementById('qty-overlay').classList.remove('open');
+  actualizarFab();
+}
+
+// ─── CARRITO ──────────────────────────────────────────────────────
+function actualizarFab() {
+  const items = Object.values(carrito);
+  const total = items.reduce((s, i) => s + i.cantidad, 0);
+  const fab = document.getElementById('cart-fab');
+  const cnt = document.getElementById('cart-count');
+  cnt.textContent = total;
+  fab.style.display = total > 0 ? 'flex' : 'none';
+}
+
+function abrirCarrito() {
+  renderCarrito();
+  document.getElementById('cart-overlay').classList.add('open');
+}
+
+function cerrarCarrito() {
+  document.getElementById('cart-overlay').classList.remove('open');
+}
+
+function cerrarSiAfuera(e, id) {
+  if (e.target.id === id) document.getElementById(id).classList.remove('open');
+}
+
+function renderCarrito() {
+  const items = Object.values(carrito);
+  const body = document.getElementById('cart-body');
+  const totalEl = document.getElementById('cart-total');
+
+  if (!items.length) {
+    body.innerHTML = '<div class="cart-empty">El carrito está vacío 🛒</div>';
+    totalEl.textContent = '$0';
+    return;
+  }
+
+  let total = 0;
+  body.innerHTML = items.map(item => {
+    const subtotal = item.precioVenta * item.cantidad;
+    total += subtotal;
+    return `<div class="cart-item">
+      <div class="cart-item-info">
+        <div class="cart-item-name">${item.nombre}</div>
+        <div class="cart-item-price">${fmt(item.precioVenta)} c/u</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="cambiarCantidad('${item.codigo}', -1)">−</button>
+        <span class="qty-num">${item.cantidad}</span>
+        <button class="qty-btn" onclick="cambiarCantidad('${item.codigo}', 1)">+</button>
+      </div>
+      <div class="cart-item-total">${fmt(subtotal)}</div>
+    </div>`;
+  }).join('');
+
+  totalEl.textContent = fmt(total);
+}
+
+function cambiarCantidad(codigo, delta) {
+  if (!carrito[codigo]) return;
+  carrito[codigo].cantidad += delta;
+  if (carrito[codigo].cantidad <= 0) delete carrito[codigo];
+  actualizarFab();
+  renderCarrito();
+}
+
+// ─── WHATSAPP ─────────────────────────────────────────────────────
+function enviarPedido() {
+  const items = Object.values(carrito);
+  if (!items.length) return;
+
+  let total = 0;
+  let msg = `🍬 *Pedido Candy Shop — ${nombreKid}*\n\n`;
+  items.forEach(item => {
+    const subtotal = item.precioVenta * item.cantidad;
+    total += subtotal;
+    msg += `• ${item.cantidad}x ${item.nombre} — ${fmt(subtotal)}\n`;
+  });
+  msg += `\n💰 *Total: ${fmt(total)}*\n\nHola ${nombreKid}, quiero hacer este pedido!`;
+
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
+cargarCatalogo();
+</script>
+</body>
+</html>
