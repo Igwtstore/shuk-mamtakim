@@ -112,8 +112,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </head>
 <body>
 
+<!-- PANTALLA CLAVE -->
+<div id="pantalla-clave" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:32px 24px; gap:20px;">
+  <div style="font-size:3rem">🍬</div>
+  <h1 style="font-size:1.8rem; font-weight:800; color:#2d1a0a;">Candy Shop</h1>
+  <p style="color:#999; font-size:0.95rem;">Ingresá la clave para continuar</p>
+  <div style="width:100%; max-width:280px; display:flex; flex-direction:column; gap:10px;">
+    <input id="input-clave" type="password" placeholder="Clave" maxlength="20"
+      style="width:100%; padding:14px; border:1.5px solid #e5e0d8; border-radius:14px; font-size:1.1rem; text-align:center; outline:none; background:#faf8f5; color:#2d1a0a;"
+      onkeydown="if(event.key==='Enter') verificarClave()">
+    <button onclick="verificarClave()"
+      style="padding:14px; background:linear-gradient(135deg,#5c3d1e,#8b5e3c); color:white; border:none; border-radius:14px; font-size:1rem; font-weight:700; cursor:pointer;">
+      Entrar
+    </button>
+    <div id="clave-error" style="color:#e05c2a; font-size:0.85rem; text-align:center; display:none;">Clave incorrecta</div>
+  </div>
+</div>
+
 <!-- LOGIN -->
-<div id="login">
+<div id="login" style="display:none;">
   <div class="logo">🍬</div>
   <h1>Candy Shop</h1>
   <p>¿Quién sos?</p>
@@ -504,9 +521,30 @@ async function eliminarProducto() {
   if (res?.ok) { cerrarModal(); cargarDatos(); }
 }
 
+// ─── CLAVE ───────────────────────────────────────────────────────
+function verificarClave() {
+  const val = document.getElementById('input-clave').value;
+  if (val === 'shemeio26') {
+    sessionStorage.setItem('cs_auth', '1');
+    document.getElementById('pantalla-clave').style.display = 'none';
+    document.getElementById('login').style.display = 'flex';
+    document.getElementById('clave-error').style.display = 'none';
+  } else {
+    document.getElementById('clave-error').style.display = 'block';
+    document.getElementById('input-clave').value = '';
+    document.getElementById('input-clave').focus();
+  }
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────
 const saved = sessionStorage.getItem('cs_usuario');
-if (saved) login(saved);
+const authed = sessionStorage.getItem('cs_auth');
+if (saved && authed) {
+  login(saved);
+} else if (authed) {
+  document.getElementById('pantalla-clave').style.display = 'none';
+  document.getElementById('login').style.display = 'flex';
+}
 </script>
 </body>
 </html>
