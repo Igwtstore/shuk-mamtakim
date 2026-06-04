@@ -185,6 +185,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
     </div>
     <div class="card">
+      <div class="card-title">👁️ Visitas a tu tienda</div>
+      <div class="stats">
+        <div class="stat blue"><div class="stat-num" id="s-vis-hoy">—</div><div class="stat-label">Hoy</div></div>
+        <div class="stat"><div class="stat-num" id="s-vis-total">—</div><div class="stat-label">Total</div></div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">Ventas de hoy</div>
       <div id="ventas-list"><div class="spinner">Cargando...</div></div>
     </div>
@@ -300,16 +307,29 @@ async function cargarDatos() {
     document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
   });
 
-  const [ventas, deudores, catalogo] = await Promise.all([
+  const [ventas, deudores, catalogo, visitas] = await Promise.all([
     api('ventasHoy', { hijo: usuario }),
     api('consultarDeudores', { hijo: usuario }),
-    api('getCatalogoHijos')
+    api('getCatalogoHijos'),
+    api('visitas')
   ]);
 
   catalogoCache = catalogo || [];
   renderDashboard(ventas || [], catalogoCache);
   renderDeudores(deudores || []);
   renderCatalogo(catalogoCache);
+  renderVisitasKid(visitas || [], usuario);
+}
+
+// ─── VISITAS ──────────────────────────────────────────────────────
+function renderVisitasKid(visitas, hijo) {
+  const pagina = hijo.toLowerCase();
+  const hoy = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  const fechaHoy = hoy.split('/').reverse().join('/');
+  const total = visitas.filter(v => v.pagina === pagina).length;
+  const hoyCount = visitas.filter(v => v.pagina === pagina && v.fecha && v.fecha.startsWith(fechaHoy.substring(0,5))).length;
+  document.getElementById('s-vis-hoy').textContent = hoyCount;
+  document.getElementById('s-vis-total').textContent = total;
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
