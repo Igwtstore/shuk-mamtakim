@@ -3129,8 +3129,8 @@ function abrirEditarPedido(v) {
   _editLineas = parsearLineasPedido(v.productos);
 
   document.getElementById('ep-titulo').textContent = `Pedido #${v.nVenta} — ${v.cliente}`;
-  poblarSelectorProductos();
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
+  poblarSelectorProductos();
   document.getElementById('ep-descuento').value = '';
 
   renderEditLineas();
