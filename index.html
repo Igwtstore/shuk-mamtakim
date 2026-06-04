@@ -1333,6 +1333,7 @@ async function cargarProductos() {
     renderFiltros();
     renderStockAdmin();
     renderManualProductos();
+    renderOfertasAdmin();
     verificarStockBajo();
   } catch(e) {
     catalogo.innerHTML = '<div class="loading">Error al cargar productos. Verificá la conexión.</div>';
