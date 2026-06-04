@@ -948,6 +948,10 @@
     <button class="guardar-stock-btn" onclick="abrirStockDrawer()" style="margin-top:0">Abrir actualizador de stock</button>
   </div>
   <div class="admin-card">
+    <div class="admin-titulo">🎁 Ofertas y packs</div>
+    <div id="ofertas-lista" style="display:flex;flex-direction:column;gap:0.5rem;max-height:320px;overflow-y:auto"></div>
+  </div>
+  <div class="admin-card">
     <div class="admin-titulo">✏️ Cargar pedido manual</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
@@ -1147,6 +1151,41 @@
 <div class="toast" id="toast"></div>
 
 <!-- MODAL NOTAS -->
+<!-- MODAL OFERTA -->
+<div id="oferta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.25rem">🎁 Oferta / Pack</div>
+    <div id="oferta-modal-nombre" style="font-size:0.8rem;color:var(--texto-suave);margin-bottom:1rem"></div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem">
+      <div>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Precio oferta (0 = sin oferta)</label>
+        <input type="number" id="oferta-precio" placeholder="Ej: 8500" min="0" step="0.01"
+          style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
+      </div>
+      <div>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Fecha vencimiento oferta (dd/MM/yyyy, vacío = sin vencimiento)</label>
+        <input type="text" id="oferta-fecha" placeholder="Ej: 30/06/2026"
+          style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
+      </div>
+      <div style="border-top:1px solid var(--gris-medio);padding-top:0.75rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado)">Pack — cantidad mínima (0 = sin pack)</label>
+        <input type="number" id="oferta-cant-pack" placeholder="Ej: 5" min="0"
+          style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
+      </div>
+      <div>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado)">Precio pack por unidad</label>
+        <input type="number" id="oferta-precio-pack" placeholder="Ej: 9000" min="0" step="0.01"
+          style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
+      </div>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
+      <button onclick="cerrarOfertaModal()" style="flex:1;padding:0.65rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:white;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer">Cancelar</button>
+      <button onclick="guardarOferta()" style="flex:2;padding:0.65rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">Guardar oferta</button>
+    </div>
+    <button onclick="quitarOferta()" style="width:100%;margin-top:0.5rem;padding:0.5rem;background:#fde8e8;color:#c0392b;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:0.82rem;cursor:pointer">🗑️ Quitar oferta y pack</button>
+  </div>
+</div>
+
 <div id="nota-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div id="nota-modal-titulo" style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.75rem">📝 Nota</div>
@@ -1957,6 +1996,75 @@ function renderStockAdmin() {
   // legacy — no se usa, el drawer reemplaza la tabla
 }
 
+function renderOfertasAdmin() {
+  const lista = document.getElementById('ofertas-lista');
+  if (!lista) return;
+  if (!productos.length) { lista.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Cargando productos...</div>'; return; }
+  lista.innerHTML = productos.map(p => {
+    const tieneOferta = ofertaActiva(p);
+    const tienePack = packActivo(p);
+    const badge = tieneOferta ? `<span style="background:#fde8e8;color:#c0392b;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px">OFERTA</span>` : '';
+    const badgePack = tienePack ? `<span style="background:#fdf3e3;color:var(--dorado);font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px">PACK x${p.cantPack}</span>` : '';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:0.85rem;color:var(--azul);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
+        <div style="display:flex;gap:0.3rem;margin-top:2px;flex-wrap:wrap">${badge}${badgePack}</div>
+      </div>
+      <button onclick="abrirOfertaModal(${p.id})"
+        style="padding:0.35rem 0.8rem;background:${tieneOferta||tienePack?'#fdf3e3':'var(--gris)'};color:${tieneOferta||tienePack?'var(--dorado)':'var(--texto-suave)'};border:1.5px solid ${tieneOferta||tienePack?'#e8c97a':'var(--gris-medio)'};border-radius:7px;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap">
+        ${tieneOferta||tienePack ? '✏️ Editar' : '+ Agregar'}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+let _ofertaProductoId = null;
+
+function abrirOfertaModal(id) {
+  const p = productos.find(x => x.id === id);
+  if (!p) return;
+  _ofertaProductoId = id;
+  document.getElementById('oferta-modal-nombre').textContent = p.nombre + (p.desc ? ' · ' + p.desc : '');
+  document.getElementById('oferta-precio').value = p.precioOferta || '';
+  document.getElementById('oferta-fecha').value = p.fechaOferta || '';
+  document.getElementById('oferta-cant-pack').value = p.cantPack || '';
+  document.getElementById('oferta-precio-pack').value = p.precioPack || '';
+  document.getElementById('oferta-modal').style.display = 'flex';
+}
+
+function cerrarOfertaModal() {
+  document.getElementById('oferta-modal').style.display = 'none';
+  _ofertaProductoId = null;
+}
+
+async function guardarOferta() {
+  if (!_ofertaProductoId) return;
+  const params = new URLSearchParams({
+    accion: 'actualizarOferta',
+    id: _ofertaProductoId,
+    precioOferta: document.getElementById('oferta-precio').value || '0',
+    fechaOferta: document.getElementById('oferta-fecha').value || '',
+    cantPack: document.getElementById('oferta-cant-pack').value || '0',
+    precioPack: document.getElementById('oferta-precio-pack').value || '0'
+  });
+  cerrarOfertaModal();
+  showToast('Guardando oferta...');
+  await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+  await cargarProductos();
+  renderOfertasAdmin();
+  showToast('Oferta guardada ✓');
+}
+
+async function quitarOferta() {
+  if (!_ofertaProductoId) return;
+  const params = new URLSearchParams({ accion: 'actualizarOferta', id: _ofertaProductoId, precioOferta: '0', fechaOferta: '', cantPack: '0', precioPack: '0' });
+  cerrarOfertaModal();
+  await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+  await cargarProductos();
+  renderOfertasAdmin();
+  showToast('Oferta eliminada ✓');
+}
+
 function abrirStockDrawer() {
   document.getElementById('stock-search').value = '';
   renderStockDrawer(productos);
@@ -2487,7 +2595,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
