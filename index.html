@@ -3002,31 +3002,37 @@ function abrirRemitoPDF(v) {
 <title>Remito #${v.nVenta} — ${v.cliente}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:'Segoe UI',Arial,sans-serif; background:#f5f0e8; display:flex; justify-content:center; padding:24px 12px; }
-  .remito { background:white; width:100%; max-width:600px; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,0.12); overflow:hidden; }
-  .header { background:linear-gradient(135deg,#2d1a0a,#5c3d1e); color:white; padding:24px 28px; display:flex; align-items:center; justify-content:space-between; }
-  .logo { font-size:1.5rem; font-weight:800; letter-spacing:-0.5px; }
-  .logo small { display:block; font-size:0.7rem; font-weight:400; opacity:0.7; margin-top:2px; }
-  .nro { font-size:1rem; font-weight:600; opacity:0.85; }
-  .info { padding:20px 28px; display:grid; grid-template-columns:1fr 1fr; gap:10px; border-bottom:1px solid #eee; }
-  .info-item label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#aaa; display:block; margin-bottom:2px; }
-  .info-item span { font-size:0.9rem; font-weight:600; color:#333; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#f5f0e8; display:flex; justify-content:center; padding:28px 12px; }
+  .remito { background:white; width:100%; max-width:620px; border-radius:16px; box-shadow:0 6px 32px rgba(0,0,0,0.13); overflow:hidden; }
+  .banner { width:100%; display:block; }
+  .nro-bar { background:#2d1a0a; color:#fdf3e3; padding:10px 28px; display:flex; justify-content:space-between; align-items:center; }
+  .nro-bar span { font-size:0.82rem; font-weight:600; opacity:0.85; }
+  .nro-bar strong { font-size:0.95rem; font-weight:800; letter-spacing:0.03em; }
+  .info { padding:20px 28px; display:grid; grid-template-columns:1fr 1fr; gap:12px; border-bottom:2px solid #f5f0e8; }
+  .info-item label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#bbb; display:block; margin-bottom:3px; }
+  .info-item span { font-size:0.92rem; font-weight:700; color:#2d1a0a; }
+  .detalle-header { padding:10px 28px; background:#f5f0e8; font-size:0.68rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.06em; }
   .tabla { width:100%; border-collapse:collapse; }
-  .tabla thead tr { background:#f5f0e8; }
-  .tabla th { padding:8px 10px; font-size:0.72rem; font-weight:700; color:#888; text-transform:uppercase; text-align:left; }
-  .tabla td { font-size:0.85rem; color:#333; }
-  .total-box { margin:0 28px 24px; background:#f5f0e8; border-radius:10px; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; }
-  .total-label { font-size:0.85rem; font-weight:700; color:#5c3d1e; }
-  .total-val { font-size:1.2rem; font-weight:800; color:#2d1a0a; }
-  .footer { padding:16px 28px; border-top:1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
-  .footer small { font-size:0.72rem; color:#aaa; }
-  .btn-print { background:#5c3d1e; color:white; border:none; border-radius:8px; padding:10px 20px; font-size:0.9rem; font-weight:700; cursor:pointer; }
-  @media print { body { background:white; padding:0; } .btn-print { display:none; } .remito { box-shadow:none; border-radius:0; } }
+  .tabla tr:nth-child(even) { background:#faf8f5; }
+  .tabla td { font-size:0.83rem; color:#333; padding:9px 28px; border-bottom:1px solid #f0ebe3; line-height:1.4; }
+  .total-box { margin:20px 28px; background:linear-gradient(135deg,#2d1a0a,#5c3d1e); border-radius:12px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; }
+  .total-label { font-size:0.8rem; font-weight:700; color:#fdf3e3; opacity:0.8; text-transform:uppercase; letter-spacing:0.05em; }
+  .total-val { font-size:1.25rem; font-weight:800; color:#fdf3e3; }
+  .footer { padding:14px 28px 20px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #f0ebe3; }
+  .footer small { font-size:0.7rem; color:#ccc; }
+  .btn-print { background:#5c3d1e; color:white; border:none; border-radius:8px; padding:10px 22px; font-size:0.88rem; font-weight:700; cursor:pointer; letter-spacing:0.02em; }
+  .btn-print:hover { background:#2d1a0a; }
+  @media print {
+    body { background:white; padding:0; }
+    .btn-print { display:none; }
+    .remito { box-shadow:none; border-radius:0; max-width:100%; }
+  }
 </style></head><body>
 <div class="remito">
-  <div class="header">
-    <div class="logo">🍬 Shuk Mamtakim<small>shuk-mamtakim.vercel.app</small></div>
-    <div class="nro">Remito #${v.nVenta}</div>
+  <img class="banner" src="https://res.cloudinary.com/dq2boloyp/image/upload/w_1240,h_300,c_fill,g_center/website_banner_rhyfih.png" alt="Shuk Mamtakim">
+  <div class="nro-bar">
+    <span>shuk-mamtakim.vercel.app</span>
+    <strong>REMITO #${v.nVenta}</strong>
   </div>
   <div class="info">
     <div class="info-item"><label>Cliente</label><span>${v.cliente}</span></div>
@@ -3035,16 +3041,16 @@ function abrirRemitoPDF(v) {
     <div class="info-item"><label>Forma de pago</label><span>${v.formaPago}</span></div>
     ${v.notas && v.notas !== 'Manual' ? `<div class="info-item" style="grid-column:1/-1"><label>Nota</label><span>${v.notas}</span></div>` : ''}
   </div>
-  <table class="tabla" style="margin:16px 0">
-    <thead><tr><th style="padding-left:28px">Detalle</th></tr></thead>
+  <div class="detalle-header">Detalle del pedido</div>
+  <table class="tabla">
     <tbody>${lineas}</tbody>
   </table>
   <div class="total-box">
-    <span class="total-label">TOTAL</span>
+    <span class="total-label">Total</span>
     <span class="total-val">${totales.join(' + ')}</span>
   </div>
   <div class="footer">
-    <small>Documento generado el ${new Date().toLocaleDateString('es-AR')} · Shuk Mamtakim</small>
+    <small>Generado el ${new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'})} · Shuk Mamtakim</small>
     <button class="btn-print" onclick="window.print()">🖨️ Imprimir / PDF</button>
   </div>
 </div>
