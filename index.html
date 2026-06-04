@@ -2008,7 +2008,8 @@ function renderOfertasAdmin() {
     const badgePack = tienePack ? `<span style="background:#fdf3e3;color:var(--dorado);font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px">PACK x${p.cantPack}</span>` : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:10px">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:0.85rem;color:var(--azul);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
+        <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${p.nombre}</div>
+        ${p.desc ? `<div style="font-size:0.75rem;color:var(--texto-suave)">${p.desc}</div>` : ''}
         <div style="display:flex;gap:0.3rem;margin-top:2px;flex-wrap:wrap">${badge}${badgePack}</div>
       </div>
       <button onclick="abrirOfertaModal(${p.id})"
