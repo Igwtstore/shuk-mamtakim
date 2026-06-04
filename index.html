@@ -3129,10 +3129,7 @@ function abrirEditarPedido(v) {
   _editLineas = parsearLineasPedido(v.productos);
 
   document.getElementById('ep-titulo').textContent = `Pedido #${v.nVenta} — ${v.cliente}`;
-  // Poblar selector de productos
-  const sel = document.getElementById('ep-add-producto');
-  sel.innerHTML = '<option value="">— Elegir producto —</option>' +
-    productos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+  poblarSelectorProductos();
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
   document.getElementById('ep-descuento').value = '';
 
@@ -3180,6 +3177,31 @@ function renderEditLineas() {
         <span class="edit-subtotal" id="ep-sub-${i}" style="flex:1;text-align:right">${l.moneda} ${formatEditVal(l.precio * l.qty, l.moneda)}</span>
       </div>
     </div>`).join('');
+}
+
+function poblarSelectorProductos() {
+  const tipo = document.getElementById('ep-tipo')?.value || 'Mayorista';
+  const esMay = tipo === 'Mayorista';
+  const sel = document.getElementById('ep-add-producto');
+  if (!sel) return;
+  const disponibles = productos.filter(p => p.stock > 0);
+  sel.innerHTML = '<option value="">— Elegir producto —</option>' +
+    disponibles.map(p => {
+      const esPitz = PITZUJIM_IDS.includes(p.id);
+      let precio, moneda;
+      if (esMay) {
+        precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
+        moneda = esPitz ? '$' : 'U$S';
+      } else {
+        precio = Math.round(p.precioMin) || 0;
+        moneda = '$';
+      }
+      const precioStr = moneda === 'U$S'
+        ? `U$S ${precio.toFixed(2)}`
+        : `$ ${precio.toLocaleString('es-AR')}`;
+      const desc = p.desc ? ` · ${p.desc.substring(0,30)}` : '';
+      return `<option value="${p.id}">${p.nombre}${desc} — ${precioStr}</option>`;
+    }).join('');
 }
 
 function eliminarLineaEdit(i) {
@@ -3336,7 +3358,7 @@ function cerrarEditPedido() {
     </div>
     <div class="edit-modal-body">
       <div class="edit-section-label">Tipo de cliente</div>
-      <select class="edit-tipo-select" id="ep-tipo">
+      <select class="edit-tipo-select" id="ep-tipo" onchange="poblarSelectorProductos()">
         <option>Minorista</option>
         <option>Mayorista</option>
       </select>
