@@ -1286,7 +1286,7 @@ function formatPrecio(p) {
     let str = 'U$S ' + v.toFixed(2);
     if (_tc > 0) {
       const ars = Math.round(v * _tc);
-      str += `<span style="font-size:0.78em;color:var(--texto-suave);display:block;font-weight:400"> ≈ $ ${ars.toLocaleString('es-AR')}</span>`;
+      str += `<span style="font-size:0.75em;color:var(--texto-suave);display:block;font-weight:400">(= $${ars.toLocaleString('es-AR')} · TC $${Math.round(_tc).toLocaleString('es-AR')})</span>`;
     }
     return str;
   } else {
@@ -2948,8 +2948,10 @@ if ('serviceWorker' in navigator) {
 
 // ─── REMITO ──────────────────────────────────────────────────────────────────
 let _remitoTexto = '';
+let _remitoVenta = null;
 
 function abrirRemito(v) {
+  _remitoVenta = v;
   const lines = [];
   lines.push(`🧾 *REMITO — Shuk Mamtakim*`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
@@ -2987,6 +2989,70 @@ function enviarRemitoWA() {
 
 function copiarRemito() {
   navigator.clipboard.writeText(_remitoTexto).then(() => showToast('Remito copiado ✓'));
+}
+
+function abrirRemitoPDF(v) {
+  if (!v) return;
+  const totales = [];
+  if (parseFloat(v.totalARS) > 0) totales.push(`$ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
+  if (parseFloat(v.totalUSD) > 0) totales.push(`U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
+  const lineas = (v.productos||'').split(' || ').map(l => `<tr><td style="padding:7px 10px;border-bottom:1px solid #eee">${l}</td></tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Remito #${v.nVenta} — ${v.cliente}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#f5f0e8; display:flex; justify-content:center; padding:24px 12px; }
+  .remito { background:white; width:100%; max-width:600px; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,0.12); overflow:hidden; }
+  .header { background:linear-gradient(135deg,#2d1a0a,#5c3d1e); color:white; padding:24px 28px; display:flex; align-items:center; justify-content:space-between; }
+  .logo { font-size:1.5rem; font-weight:800; letter-spacing:-0.5px; }
+  .logo small { display:block; font-size:0.7rem; font-weight:400; opacity:0.7; margin-top:2px; }
+  .nro { font-size:1rem; font-weight:600; opacity:0.85; }
+  .info { padding:20px 28px; display:grid; grid-template-columns:1fr 1fr; gap:10px; border-bottom:1px solid #eee; }
+  .info-item label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#aaa; display:block; margin-bottom:2px; }
+  .info-item span { font-size:0.9rem; font-weight:600; color:#333; }
+  .tabla { width:100%; border-collapse:collapse; }
+  .tabla thead tr { background:#f5f0e8; }
+  .tabla th { padding:8px 10px; font-size:0.72rem; font-weight:700; color:#888; text-transform:uppercase; text-align:left; }
+  .tabla td { font-size:0.85rem; color:#333; }
+  .total-box { margin:0 28px 24px; background:#f5f0e8; border-radius:10px; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; }
+  .total-label { font-size:0.85rem; font-weight:700; color:#5c3d1e; }
+  .total-val { font-size:1.2rem; font-weight:800; color:#2d1a0a; }
+  .footer { padding:16px 28px; border-top:1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
+  .footer small { font-size:0.72rem; color:#aaa; }
+  .btn-print { background:#5c3d1e; color:white; border:none; border-radius:8px; padding:10px 20px; font-size:0.9rem; font-weight:700; cursor:pointer; }
+  @media print { body { background:white; padding:0; } .btn-print { display:none; } .remito { box-shadow:none; border-radius:0; } }
+</style></head><body>
+<div class="remito">
+  <div class="header">
+    <div class="logo">🍬 Shuk Mamtakim<small>shuk-mamtakim.vercel.app</small></div>
+    <div class="nro">Remito #${v.nVenta}</div>
+  </div>
+  <div class="info">
+    <div class="info-item"><label>Cliente</label><span>${v.cliente}</span></div>
+    <div class="info-item"><label>Tipo</label><span>${v.tipo}</span></div>
+    <div class="info-item"><label>Fecha</label><span>${v.fecha}</span></div>
+    <div class="info-item"><label>Forma de pago</label><span>${v.formaPago}</span></div>
+    ${v.notas && v.notas !== 'Manual' ? `<div class="info-item" style="grid-column:1/-1"><label>Nota</label><span>${v.notas}</span></div>` : ''}
+  </div>
+  <table class="tabla" style="margin:16px 0">
+    <thead><tr><th style="padding-left:28px">Detalle</th></tr></thead>
+    <tbody>${lineas}</tbody>
+  </table>
+  <div class="total-box">
+    <span class="total-label">TOTAL</span>
+    <span class="total-val">${totales.join(' + ')}</span>
+  </div>
+  <div class="footer">
+    <small>Documento generado el ${new Date().toLocaleDateString('es-AR')} · Shuk Mamtakim</small>
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir / PDF</button>
+  </div>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
 }
 
 // ─── EXPORTAR PEDIDO ─────────────────────────────────────────────────────────
@@ -3157,7 +3223,8 @@ function cerrarEditPedido() {
     </div>
     <div class="remito-footer">
       <button class="remito-btn-copy" onclick="copiarRemito()">📋 Copiar</button>
-      <button class="remito-btn-wa" onclick="enviarRemitoWA()">📲 Enviar por WhatsApp</button>
+      <button class="remito-btn-copy" onclick="abrirRemitoPDF(_remitoVenta)" style="background:#e8f0ff;color:#2c6fad">🖨️ PDF</button>
+      <button class="remito-btn-wa" onclick="enviarRemitoWA()">📲 WhatsApp</button>
     </div>
   </div>
 </div>
