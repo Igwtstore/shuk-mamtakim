@@ -1,0 +1,25 @@
+{
+  "name": "Candy Shop",
+  "short_name": "Candy Shop",
+  "description": "Panel de ventas Candy Shop - Meir & Iosi",
+  "start_url": "/candyshop.html",
+  "display": "standalone",
+  "background_color": "#f5f0e8",
+  "theme_color": "#5c3d1e",
+  "orientation": "portrait",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "https://res.cloudinary.com/dq2boloyp/image/upload/w_192,h_192,c_fill,r_20,b_rgb:f5f0e8/app_icon_rmbyhb.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_fill,r_40,b_rgb:f5f0e8/app_icon_rmbyhb.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

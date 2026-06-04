@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#5c3d1e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Candy Shop">
+<link rel="manifest" href="/candyshop-manifest.json">
 <title>Candy Shop</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -109,6 +115,91 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .foto-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
 .foto-btn { background: #f0ebe3; border: none; border-radius: 10px; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; color: #5c3d1e; cursor: pointer; }
 .foto-uploading { font-size: 0.8rem; color: #aaa; }
+
+/* ─── FAB NUEVA VENTA ──────────────────────────────────────────── */
+.fab { position: fixed; bottom: 24px; right: 20px; z-index: 50; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #2e8b57, #1a6b3c); color: white; border: none; font-size: 2rem; box-shadow: 0 6px 20px rgba(46,139,87,0.5); cursor: pointer; display: none; align-items: center; justify-content: center; transition: transform 0.15s; }
+.fab:active { transform: scale(0.9); }
+
+/* ─── WIZARD ───────────────────────────────────────────────────── */
+.wizard-overlay { display: none; position: fixed; inset: 0; background: #f5f0e8; z-index: 200; flex-direction: column; }
+.wizard-overlay.open { display: flex; }
+.wizard-header { padding: 16px 20px 12px; display: flex; align-items: center; gap: 12px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06); flex-shrink: 0; }
+.wizard-back { background: #f0ebe3; border: none; border-radius: 10px; width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.wizard-title { font-size: 1rem; font-weight: 700; color: #2d1a0a; flex: 1; }
+.wizard-steps { display: flex; gap: 6px; flex-shrink: 0; }
+.wizard-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5e0d8; transition: background 0.2s; }
+.wizard-dot.active { background: #5c3d1e; }
+.wizard-dot.done { background: #2e8b57; }
+.wizard-body { flex: 1; overflow-y: auto; padding: 20px; }
+.wizard-footer { padding: 16px 20px 32px; background: white; box-shadow: 0 -2px 8px rgba(0,0,0,0.06); flex-shrink: 0; }
+.wizard-step { display: none; }
+.wizard-step.active { display: block; }
+
+/* Cliente step */
+.wizard-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #bbb; margin-bottom: 8px; }
+.wizard-input { width: 100%; padding: 16px; border: 2px solid #e5e0d8; border-radius: 14px; font-size: 1.1rem; color: #2d1a0a; background: white; outline: none; transition: border-color 0.2s; }
+.wizard-input:focus { border-color: #5c3d1e; }
+.cliente-sugerencias { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.cliente-sug { padding: 12px 16px; background: white; border-radius: 12px; border: 1.5px solid #e5e0d8; font-size: 0.95rem; font-weight: 600; color: #2d1a0a; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: border-color 0.15s; }
+.cliente-sug:active { border-color: #5c3d1e; background: #faf8f5; }
+.cliente-sug-deuda { font-size: 0.78rem; color: #e05c2a; font-weight: 700; }
+
+/* Producto step */
+.productos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prod-card { background: white; border-radius: 14px; padding: 10px; border: 2px solid #e5e0d8; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; align-items: center; gap: 10px; }
+.prod-card.selected { border-color: #2e8b57; background: #f0fff4; box-shadow: 0 2px 10px rgba(46,139,87,0.15); }
+.prod-card:active { transform: scale(0.97); }
+.prod-foto { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #f0ebe3; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; overflow: hidden; }
+.prod-foto img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+.prod-info { flex: 1; min-width: 0; }
+.prod-nombre { font-size: 0.82rem; font-weight: 700; color: #2d1a0a; line-height: 1.2; }
+.prod-precio { font-size: 0.78rem; color: #5c3d1e; font-weight: 700; margin-top: 2px; }
+.prod-badge { position: absolute; top: -6px; right: -6px; background: #2e8b57; color: white; border-radius: 50%; width: 22px; height: 22px; font-size: 0.72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+
+/* Cantidad step */
+.qty-item { background: white; border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.qty-item-foto { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #f0ebe3; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; overflow: hidden; }
+.qty-item-foto img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+.qty-item-info { flex: 1; }
+.qty-item-nombre { font-weight: 700; font-size: 0.9rem; color: #2d1a0a; }
+.qty-item-precio { font-size: 0.78rem; color: #aaa; }
+.qty-control { display: flex; align-items: center; gap: 10px; }
+.qty-btn-big { width: 38px; height: 38px; border-radius: 10px; background: #f0ebe3; border: none; font-size: 1.3rem; font-weight: 700; color: #5c3d1e; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.qty-num-big { font-size: 1.2rem; font-weight: 800; color: #2d1a0a; min-width: 28px; text-align: center; }
+.qty-total { margin-top: 16px; background: white; border-radius: 14px; padding: 14px 16px; display: flex; justify-content: space-between; font-weight: 800; font-size: 1.1rem; color: #2d1a0a; }
+.qty-total-monto { color: #5c3d1e; }
+
+/* Pago step */
+.pago-btns { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.pago-btn { width: 100%; padding: 18px; border: none; border-radius: 16px; font-size: 1rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: opacity 0.15s, transform 0.1s; }
+.pago-btn:active { transform: scale(0.98); opacity: 0.85; }
+.pago-btn-icon { font-size: 1.5rem; }
+.pago-btn.pago-total { background: linear-gradient(135deg, #2e8b57, #1a6b3c); color: white; }
+.pago-btn.pago-cuenta { background: linear-gradient(135deg, #f59b5b, #c45e20); color: white; }
+.pago-btn.pago-no { background: linear-gradient(135deg, #e05c2a, #c0392b); color: white; }
+.pago-cuenta-input { display: none; background: white; border-radius: 14px; padding: 16px; }
+.pago-cuenta-input.open { display: block; }
+.pago-cuenta-label { font-size: 0.82rem; font-weight: 700; color: #888; margin-bottom: 8px; }
+.pago-monto-input { width: 100%; padding: 14px; border: 2px solid #e5e0d8; border-radius: 12px; font-size: 1.2rem; font-weight: 700; color: #2d1a0a; text-align: center; outline: none; }
+.pago-monto-input:focus { border-color: #f59b5b; }
+.pago-resumen { background: white; border-radius: 14px; padding: 14px; font-size: 0.88rem; color: #666; line-height: 1.8; }
+
+/* Botón wizard principal */
+.btn-wizard { width: 100%; padding: 16px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 14px; font-size: 1rem; font-weight: 800; cursor: pointer; }
+.btn-wizard.verde { background: linear-gradient(135deg, #2e8b57, #1a6b3c); }
+
+/* ─── DEUDORES MEJORADO ─────────────────────────────────────────── */
+.deudor-card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+.deudor-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.deudor-nombre { font-weight: 700; font-size: 0.95rem; color: #2d1a0a; }
+.deudor-monto { font-weight: 800; font-size: 1rem; color: #e05c2a; }
+.deudor-detail { display: none; margin-top: 12px; border-top: 1px solid #f0ebe3; padding-top: 12px; }
+.deudor-detail.open { display: block; }
+.deudor-cobrar { margin-top: 10px; display: flex; gap: 8px; }
+.cobrar-input { flex: 1; padding: 10px 12px; border: 1.5px solid #e5e0d8; border-radius: 10px; font-size: 0.95rem; outline: none; }
+.cobrar-input:focus { border-color: #2e8b57; }
+.btn-cobrar { padding: 10px 16px; background: linear-gradient(135deg, #2e8b57, #1a6b3c); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
+.btn-cobrar-todo { padding: 10px 12px; background: #e8f5ee; color: #2e8b57; border: 1.5px solid #b2d8c0; border-radius: 10px; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -199,10 +290,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
   <!-- DEUDORES -->
   <div class="tab-content" id="tab-deudores">
-    <div class="card">
-      <div class="card-title">Te deben</div>
-      <div id="deudores-list"><div class="spinner">Cargando...</div></div>
-    </div>
+    <div id="deudores-list"><div class="spinner">Cargando...</div></div>
   </div>
 
   <!-- CATÁLOGO -->
@@ -212,6 +300,70 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
     </div>
+  </div>
+</div>
+
+<!-- FAB NUEVA VENTA -->
+<button class="fab" id="fab-venta" onclick="abrirWizard()">＋</button>
+
+<!-- WIZARD NUEVA VENTA -->
+<div class="wizard-overlay" id="wizard-overlay">
+  <div class="wizard-header">
+    <button class="wizard-back" id="wizard-back" onclick="wizardBack()">←</button>
+    <div class="wizard-title" id="wizard-title">Nueva venta</div>
+    <div class="wizard-steps">
+      <div class="wizard-dot active" id="dot-0"></div>
+      <div class="wizard-dot" id="dot-1"></div>
+      <div class="wizard-dot" id="dot-2"></div>
+      <div class="wizard-dot" id="dot-3"></div>
+    </div>
+  </div>
+  <div class="wizard-body">
+    <!-- STEP 1: CLIENTE -->
+    <div class="wizard-step active" id="ws-0">
+      <div class="wizard-label">¿A quién le vendiste?</div>
+      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" oninput="filtrarSugerencias()">
+      <div class="cliente-sugerencias" id="cliente-sugerencias"></div>
+    </div>
+    <!-- STEP 2: PRODUCTOS -->
+    <div class="wizard-step" id="ws-1">
+      <div class="wizard-label">¿Qué vendiste? (tocá para agregar)</div>
+      <div class="productos-grid" id="w-productos-grid"></div>
+    </div>
+    <!-- STEP 3: CANTIDADES -->
+    <div class="wizard-step" id="ws-2">
+      <div class="wizard-label">¿Cuántos?</div>
+      <div id="w-cantidades"></div>
+      <div class="qty-total">
+        <span>Total</span>
+        <span class="qty-total-monto" id="w-total">$0</span>
+      </div>
+    </div>
+    <!-- STEP 4: PAGO -->
+    <div class="wizard-step" id="ws-3">
+      <div class="wizard-label">¿Cómo pagó?</div>
+      <div class="pago-btns">
+        <button class="pago-btn pago-total" onclick="seleccionarPago('total')">
+          <span class="pago-btn-icon">✅</span>
+          <div><div style="font-size:1rem">Pagó todo</div><div style="font-size:0.78rem;opacity:0.8" id="pago-total-monto"></div></div>
+        </button>
+        <button class="pago-btn pago-cuenta" onclick="seleccionarPago('cuenta')">
+          <span class="pago-btn-icon">💰</span>
+          <div><div style="font-size:1rem">A cuenta</div><div style="font-size:0.78rem;opacity:0.8">Pagó una parte</div></div>
+        </button>
+        <button class="pago-btn pago-no" onclick="seleccionarPago('nopago')">
+          <span class="pago-btn-icon">📋</span>
+          <div><div style="font-size:1rem">No pagó</div><div style="font-size:0.78rem;opacity:0.8">Queda todo como deuda</div></div>
+        </button>
+      </div>
+      <div class="pago-cuenta-input" id="pago-cuenta-wrap">
+        <div class="pago-cuenta-label">¿Cuánto pagó?</div>
+        <input class="pago-monto-input" id="w-monto-parcial" type="number" placeholder="Ej: 2000" min="0">
+      </div>
+    </div>
+  </div>
+  <div class="wizard-footer">
+    <button class="btn-wizard" id="wizard-next" onclick="wizardNext()">Siguiente →</button>
   </div>
 </div>
 
@@ -270,8 +422,10 @@ const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
 function login(nombre) {
   usuario = nombre;
   sessionStorage.setItem('cs_usuario', nombre);
+  localStorage.setItem('cs_usuario', nombre);
   document.getElementById('login').style.display = 'none';
   document.getElementById('panel').style.display = 'flex';
+  document.getElementById('fab-venta').style.display = 'flex';
 
   const av = document.getElementById('avatar');
   av.textContent = nombre[0];
@@ -536,6 +690,258 @@ async function eliminarProducto() {
   if (res?.ok) { cerrarModal(); cargarDatos(); }
 }
 
+// ─── WIZARD NUEVA VENTA ──────────────────────────────────────────
+let wStep = 0;
+let wCliente = '';
+let wProductosSeleccionados = {}; // { codigo: { ...producto, qty } }
+let wPago = ''; // 'total' | 'cuenta' | 'nopago'
+let deudoresCache = [];
+
+const WIZARD_TITLES = ['¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
+
+function abrirWizard() {
+  wStep = 0; wCliente = ''; wProductosSeleccionados = {}; wPago = '';
+  document.getElementById('w-cliente').value = '';
+  document.getElementById('w-monto-parcial').value = '';
+  document.getElementById('pago-cuenta-wrap').classList.remove('open');
+  renderWizardStep(0);
+  renderSugerencias('');
+  renderProductosGrid();
+  document.getElementById('wizard-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('w-cliente').focus(), 300);
+}
+
+function cerrarWizard() {
+  document.getElementById('wizard-overlay').classList.remove('open');
+}
+
+function renderWizardStep(step) {
+  wStep = step;
+  document.querySelectorAll('.wizard-step').forEach((el, i) => el.classList.toggle('active', i === step));
+  document.getElementById('wizard-title').textContent = WIZARD_TITLES[step];
+  document.getElementById('wizard-back').style.opacity = step === 0 ? '0.3' : '1';
+  const btn = document.getElementById('wizard-next');
+  if (step === 3) { btn.style.display = 'none'; }
+  else { btn.style.display = 'block'; btn.textContent = step === 2 ? '¿Cómo pagó? →' : 'Siguiente →'; }
+  // dots
+  for (let i = 0; i < 4; i++) {
+    const d = document.getElementById('dot-' + i);
+    d.classList.toggle('active', i === step);
+    d.classList.toggle('done', i < step);
+  }
+}
+
+function wizardBack() {
+  if (wStep === 0) { cerrarWizard(); return; }
+  renderWizardStep(wStep - 1);
+  if (wStep === 2) renderCantidades();
+}
+
+function wizardNext() {
+  if (wStep === 0) {
+    wCliente = document.getElementById('w-cliente').value.trim();
+    if (!wCliente) { document.getElementById('w-cliente').focus(); return; }
+    renderProductosGrid();
+    renderWizardStep(1);
+  } else if (wStep === 1) {
+    if (!Object.keys(wProductosSeleccionados).length) return;
+    renderCantidades();
+    renderWizardStep(2);
+  } else if (wStep === 2) {
+    const total = calcTotal();
+    document.getElementById('pago-total-monto').textContent = fmt(total);
+    renderWizardStep(3);
+  }
+}
+
+function filtrarSugerencias() {
+  const q = document.getElementById('w-cliente').value.toLowerCase();
+  renderSugerencias(q);
+}
+
+function renderSugerencias(q) {
+  const lista = deudoresCache.filter(d => !q || d.cliente.toLowerCase().includes(q));
+  const el = document.getElementById('cliente-sugerencias');
+  el.innerHTML = lista.map(d => `
+    <div class="cliente-sug" onclick="seleccionarCliente('${d.cliente.replace(/'/g,"\\'")}')">
+      <span>${d.cliente}</span>
+      ${d.saldo > 0 ? `<span class="cliente-sug-deuda">Debe ${fmt(d.saldo)}</span>` : '<span style="font-size:0.75rem;color:#aaa">Sin deuda</span>'}
+    </div>`).join('');
+}
+
+function seleccionarCliente(nombre) {
+  wCliente = nombre;
+  document.getElementById('w-cliente').value = nombre;
+  renderProductosGrid();
+  renderWizardStep(1);
+}
+
+function renderProductosGrid() {
+  const el = document.getElementById('w-productos-grid');
+  el.innerHTML = catalogoCache.map(p => {
+    const sel = wProductosSeleccionados[p.codigo];
+    const fotoEl = p.foto ? `<div class="prod-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
+    return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleProducto('${p.codigo}')">
+      ${sel ? `<div class="prod-badge">${sel.qty}</div>` : ''}
+      ${fotoEl}
+      <div class="prod-info">
+        <div class="prod-nombre">${p.nombre}</div>
+        <div class="prod-precio">${fmt(p.precioVenta)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleProducto(codigo) {
+  const p = catalogoCache.find(x => x.codigo === codigo);
+  if (!p) return;
+  if (wProductosSeleccionados[codigo]) {
+    delete wProductosSeleccionados[codigo];
+  } else {
+    wProductosSeleccionados[codigo] = { ...p, qty: 1 };
+  }
+  renderProductosGrid();
+}
+
+function renderCantidades() {
+  const el = document.getElementById('w-cantidades');
+  el.innerHTML = Object.values(wProductosSeleccionados).map(p => {
+    const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
+    return `<div class="qty-item">
+      ${fotoEl}
+      <div class="qty-item-info">
+        <div class="qty-item-nombre">${p.nombre}</div>
+        <div class="qty-item-precio">${fmt(p.precioVenta)} c/u</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn-big" onclick="cambiarQtyWizard('${p.codigo}',-1)">−</button>
+        <span class="qty-num-big" id="wqty-${p.codigo}">${p.qty}</span>
+        <button class="qty-btn-big" onclick="cambiarQtyWizard('${p.codigo}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  actualizarTotalWizard();
+}
+
+function cambiarQtyWizard(codigo, delta) {
+  if (!wProductosSeleccionados[codigo]) return;
+  const nuevo = Math.max(1, wProductosSeleccionados[codigo].qty + delta);
+  wProductosSeleccionados[codigo].qty = nuevo;
+  const el = document.getElementById('wqty-' + codigo);
+  if (el) el.textContent = nuevo;
+  actualizarTotalWizard();
+}
+
+function calcTotal() {
+  return Object.values(wProductosSeleccionados).reduce((s, p) => s + p.precioVenta * p.qty, 0);
+}
+
+function actualizarTotalWizard() {
+  document.getElementById('w-total').textContent = fmt(calcTotal());
+}
+
+function seleccionarPago(tipo) {
+  wPago = tipo;
+  document.querySelectorAll('.pago-btn').forEach(b => b.style.opacity = '0.5');
+  const clases = { total: 'pago-total', cuenta: 'pago-cuenta', nopago: 'pago-no' };
+  document.querySelector('.' + clases[tipo]).style.opacity = '1';
+  if (tipo === 'cuenta') {
+    document.getElementById('pago-cuenta-wrap').classList.add('open');
+    setTimeout(() => document.getElementById('w-monto-parcial').focus(), 200);
+  } else {
+    document.getElementById('pago-cuenta-wrap').classList.remove('open');
+    if (tipo !== 'cuenta') confirmarVentaWizard();
+  }
+}
+
+async function confirmarVentaWizard() {
+  if (!wCliente || !Object.keys(wProductosSeleccionados).length || !wPago) return;
+  if (wPago === 'cuenta') {
+    const monto = parseFloat(document.getElementById('w-monto-parcial').value) || 0;
+    if (!monto) { document.getElementById('w-monto-parcial').focus(); return; }
+  }
+  document.getElementById('wizard-next').textContent = 'Registrando...';
+
+  const total = calcTotal();
+  const montoPago = wPago === 'total' ? total : wPago === 'nopago' ? 0 : (parseFloat(document.getElementById('w-monto-parcial').value) || 0);
+  const saldo = total - montoPago;
+
+  for (const p of Object.values(wProductosSeleccionados)) {
+    await api('registrarVentaHijos', {
+      hijo: usuario,
+      productoNombre: p.nombre,
+      productoCodigo: p.codigo,
+      cantidad: p.qty,
+      precio: p.precioVenta,
+      total: p.precioVenta * p.qty,
+      cliente: wCliente,
+      esDebe: saldo > 0 ? 'SI' : 'NO',
+      pagoParcial: montoPago > 0 && wPago === 'cuenta' ? montoPago : 0,
+      saldoPendiente: saldo > 0 ? p.precioVenta * p.qty * (saldo / total) : 0
+    });
+  }
+
+  cerrarWizard();
+  cargarDatos();
+  showTab('dashboard', document.querySelector('.tab'));
+}
+
+// ─── DEUDORES MEJORADO ────────────────────────────────────────────
+function renderDeudores(deudores) {
+  deudoresCache = deudores || [];
+  const el = document.getElementById('deudores-list');
+  if (!deudores.length) {
+    el.innerHTML = '<div class="card"><div class="empty">¡Nadie te debe nada! 🎉</div></div>';
+    return;
+  }
+  let totalDeuda = 0;
+  deudores.forEach(d => totalDeuda += d.saldo || 0);
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Total que te deben</div>
+      <div style="font-size:1.6rem;font-weight:800;color:#e05c2a">${fmt(totalDeuda)}</div>
+    </div>` +
+    deudores.map((d, i) => `
+    <div class="deudor-card">
+      <div class="deudor-header" onclick="toggleDeudor(${i})">
+        <div>
+          <div class="deudor-nombre">👤 ${d.cliente}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="deudor-monto">${fmt(d.saldo)}</div>
+          <div style="font-size:0.7rem;color:#aaa">Toca para cobrar ↓</div>
+        </div>
+      </div>
+      <div class="deudor-detail" id="dd-${i}">
+        <div class="deudor-cobrar">
+          <input class="cobrar-input" type="number" id="cobrar-monto-${i}" placeholder="¿Cuánto pagó?">
+          <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', ${i})">Cobrar</button>
+          <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', ${i})">Todo</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleDeudor(i) {
+  const el = document.getElementById('dd-' + i);
+  el.classList.toggle('open');
+  if (el.classList.contains('open')) {
+    setTimeout(() => document.getElementById('cobrar-monto-' + i).focus(), 200);
+  }
+}
+
+async function cobrarDeuda(cliente, i) {
+  const monto = parseFloat(document.getElementById('cobrar-monto-' + i).value) || 0;
+  if (!monto) return;
+  await api('registrarPagoCliente', { hijo: usuario, cliente, monto });
+  cargarDatos();
+}
+
+async function cobrarTodo(cliente, i) {
+  await api('registrarPagoCliente', { hijo: usuario, cliente, monto: 'todo' });
+  cargarDatos();
+}
+
 // ─── SUPABASE AUTH ───────────────────────────────────────────────
 const { createClient } = supabase;
 const sb = createClient(
@@ -572,7 +978,9 @@ async function verificarClave() {
 function logout() {
   sb.auth.signOut();
   sessionStorage.removeItem('cs_usuario');
+  localStorage.removeItem('cs_usuario');
   usuario = null;
+  document.getElementById('fab-venta').style.display = 'none';
   document.getElementById('login').style.display = 'flex';
   document.getElementById('panel').style.display = 'none';
 }
@@ -580,7 +988,7 @@ function logout() {
 // ─── INIT ─────────────────────────────────────────────────────────
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
-  const savedUser = sessionStorage.getItem('cs_usuario');
+  const savedUser = sessionStorage.getItem('cs_usuario') || localStorage.getItem('cs_usuario');
   if (session && savedUser) {
     login(savedUser);
   } else if (session) {
