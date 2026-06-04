@@ -770,26 +770,26 @@
       alt="Shuk Mamtakim — Dulces Tradicionales"
       style="width:100%;border-radius:12px;object-fit:cover;display:block;box-shadow:0 2px 12px rgba(0,0,0,0.1)" />
   </div>
+  <!-- BANNER MAYORISTA — solo visible en modo minorista -->
+  <div id="banner-mayorista-cta" style="display:none;max-width:900px;margin:0.75rem auto 0;padding:0 1rem">
+    <div style="background:#1a1a2e;border-radius:14px;padding:1rem 1.4rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="color:#c9954a;font-weight:700;font-size:0.9rem;margin-bottom:0.15rem">¿Comprás para revender?</div>
+        <div style="color:rgba(255,255,255,0.65);font-size:0.78rem">Tenemos precios especiales para mayoristas y revendedores.</div>
+      </div>
+      <button onclick="window.open('https://wa.me/5491131754540?text='+encodeURIComponent('Hola! Me interesan los precios mayoristas de Shuk Mamtakim 🍬'),'_blank')"
+        style="background:#25D366;color:white;border:none;border-radius:10px;padding:0.55rem 1.1rem;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+        💬 Consultar precios por mayor
+      </button>
+    </div>
+  </div>
+
   <div class="buscador-wrap">
     <input type="text" class="buscador" placeholder="Buscar producto..." id="buscador" oninput="filtrar()" />
   </div>
   <div class="filtros-wrap" id="filtros-wrap"></div>
   <div class="catalogo" id="catalogo"></div>
 
-  <!-- BANNER MAYORISTA — solo visible en modo minorista -->
-  <div id="banner-mayorista-cta" style="display:none;max-width:900px;margin:2rem auto 1.5rem;padding:0 1rem">
-    <div style="background:#1a1a2e;border-radius:14px;padding:1.2rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-      <div>
-        <div style="color:#c9954a;font-weight:700;font-size:0.95rem;margin-bottom:0.2rem">¿Comprás para revender?</div>
-        <div style="color:rgba(255,255,255,0.7);font-size:0.8rem">Tenemos precios especiales para mayoristas y revendedores.</div>
-      </div>
-      <a href="https://wa.me/5491131754540?text=${encodeURIComponent('Hola! Me interesan los precios mayoristas de Shuk Mamtakim 🍬')}"
-        target="_blank"
-        style="background:#25D366;color:white;border-radius:10px;padding:0.6rem 1.2rem;font-weight:700;font-size:0.85rem;text-decoration:none;white-space:nowrap;flex-shrink:0">
-        💬 Consultar precios por mayor
-      </a>
-    </div>
-  </div>
 </div>
 
 <!-- ADMIN -->
