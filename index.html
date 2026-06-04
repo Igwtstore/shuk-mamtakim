@@ -862,8 +862,8 @@
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
       <div style="text-align:center">
         <div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.5rem">MAYORISTA</div>
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/" style="border-radius:8px;border:2px solid var(--gris-medio)" />
-        <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/mayorista" style="border-radius:8px;border:2px solid var(--gris-medio)" />
+        <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/mayorista</div>
       </div>
       <div style="text-align:center">
         <div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.5rem">MINORISTA</div>
@@ -973,7 +973,8 @@
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:2;min-width:150px">
           <label>Cliente</label>
-          <input type="text" id="manual-cliente" placeholder="Nombre del cliente" />
+          <input type="text" id="manual-cliente" placeholder="Nombre del cliente" list="clientes-datalist" autocomplete="off" />
+          <datalist id="clientes-datalist"></datalist>
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Tipo</label>
@@ -2663,7 +2664,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
@@ -2732,7 +2733,7 @@ function compartirProducto(id) {
   const p = productos.find(x => x.id == id);
   if (!p) return;
   const precio = formatPrecio(p);
-  const link = modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/';
+  const link = modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
   const msg = `🛍️ *${p.nombre}*\n${p.desc}\n💰 *${precio}*\n\n📱 Ver catálogo completo: ${link}`;
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -2773,6 +2774,17 @@ async function renderClientes() {
 }
 
 let _filtroClientesTipo = 'todos';
+
+async function cargarClientesDatalist() {
+  const dl = document.getElementById('clientes-datalist');
+  if (!dl) return;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
+    const ventas = await res.json();
+    const nombres = [...new Set(ventas.map(v => v.cliente).filter(Boolean))].sort();
+    dl.innerHTML = nombres.map(n => `<option value="${n}">`).join('');
+  } catch(e) {}
+}
 
 function abrirNuevoClienteModal() {
   document.getElementById('nc-nombre').value = '';
@@ -2880,7 +2892,7 @@ function toggleClienteHistorial(id) {
 }
 
 function contactarCliente(nombre, tipo) {
-  const link = tipo === 'Minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/';
+  const link = tipo === 'Minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
   const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -3208,7 +3220,7 @@ async function renderNotificaciones() {
         const prod = g.nombre.replace(/'/g,'').replace(/"/g,'');
         const modo = c.modoCliente||'mayorista';
         const esViejo = dias >= 3;
-        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/'}`;
+        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista'}`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
           <div>
             <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span></div>
@@ -3247,7 +3259,7 @@ function eliminarNotificacion(productoId, telefono) {
 }
 
 function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
-  const link = modoCliente === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/';
+  const link = modoCliente === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
   const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
