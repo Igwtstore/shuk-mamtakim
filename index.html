@@ -798,6 +798,7 @@
     <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
     <button class="admin-subtab" id="subtab-dashboard" onclick="setAdminTab('dashboard')">📊 Dashboard</button>
     <button class="admin-subtab" id="subtab-clientes" onclick="setAdminTab('clientes')">👥 Clientes</button>
+    <button class="admin-subtab" id="subtab-docs" onclick="setAdminTab('docs')">📖 Docs</button>
   </div>
   <!-- CLIENTES TAB -->
   <div id="admin-tab-clientes" style="display:none">
@@ -1088,6 +1089,12 @@
     <div id="caja-contenido"><div class="sinpedidos">Cargando movimientos...</div></div>
   </div>
   </div><!-- cierre admin-tab-panel -->
+
+  <!-- DOCS TAB -->
+  <div id="admin-tab-docs" style="display:none;padding:0 0 1rem">
+    <iframe src="/docs.html" style="width:100%;height:80vh;border:none;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08)" loading="lazy"></iframe>
+  </div>
+
 </div>
 
 <!-- CARRITO OVERLAY -->
@@ -2404,7 +2411,7 @@ function compartirProducto(id) {
 
 let _dashCharts = {}, _clientesData = [];
 function setAdminTab(tab) {
-  ['panel','dashboard','clientes'].forEach(t => {
+  ['panel','dashboard','clientes','docs'].forEach(t => {
     const el = document.getElementById('admin-tab-' + t);
     if (el) el.style.display = t === tab ? '' : 'none';
     const btn = document.getElementById('subtab-' + t);

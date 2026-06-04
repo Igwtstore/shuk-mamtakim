@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v2.0</title>
+<title>Shuk Mamtakim — Documentación v2.01</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -146,7 +146,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 2.0 · Junio 2026 · Uso interno · Actualización completa</div>
+    <div class="cover-meta">Versión 2.01 · Junio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -159,9 +159,10 @@
 
   <div class="subsection">
     <h3>Shuk Mamtakim — Catálogo principal</h3>
-    <div class="url-box"><span class="label">Catálogo Mayorista</span><span>shuk-mamtakim.vercel.app/</span></div>
-    <div class="url-box"><span class="label">Catálogo Minorista (URL limpia para compartir)</span><span>shuk-mamtakim.vercel.app/tienda <span class="badge">NUEVO</span></span></div>
-    <div class="url-box"><span class="label">Catálogo Minorista (URL con token)</span><span>shuk-mamtakim.vercel.app/#min-pL3q7</span></div>
+    <div class="url-box"><span class="label">Catálogo Mayorista</span><span>shuk-mamtakim.vercel.app/mayorista <span class="badge">NUEVO</span></span></div>
+    <div class="url-box"><span class="label">Catálogo Minorista (URL limpia)</span><span>shuk-mamtakim.vercel.app/tienda</span></div>
+    <div class="url-box"><span class="label">Catálogo Minorista (URL campaña)</span><span>shuk-mamtakim.vercel.app/#min-pL3q7</span></div>
+    <div class="url-box"><span class="label">URL base (sin nada)</span><span>shuk-mamtakim.vercel.app → redirige a minorista <span class="badge">NUEVO</span></span></div>
     <div class="url-box"><span class="label">Panel Admin</span><span>shuk-mamtakim.vercel.app/#adm-wR7j4 + contraseña Supabase</span></div>
   </div>
 
@@ -171,7 +172,7 @@
     <div class="url-box"><span class="label">Tienda de Meir (para clientes)</span><span>shuk-mamtakim.vercel.app/candyshop/meir</span></div>
     <div class="url-box"><span class="label">Tienda de Iosi (para clientes)</span><span>shuk-mamtakim.vercel.app/candyshop/iosi</span></div>
   </div>
-  <div class="nota">⚠️ La URL del panel admin y el token minorista son secretos. La URL /tienda es pública y tiene preview de imagen en WhatsApp.</div>
+  <div class="nota">⚠️ La URL del panel admin es secreta. Las URLs /tienda y /mayorista son públicas. Sin hash, el sitio muestra el catálogo minorista por defecto.</div>
 </div>
 
 <!-- CATÁLOGO -->
@@ -476,11 +477,23 @@
   </div>
 </div>
 
+<!-- CHANGELOG -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">📋</span><h2>Historial de versiones</h2></div>
+  <table>
+    <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
+    <tbody>
+      <tr><td>v2.01</td><td>Jun 2026</td><td>URL /mayorista para catálogo mayorista · URL base redirige a minorista · Banner "¿Comprás para revender?" en catálogo minorista · Soporte video/GIF en productos · Docs integradas en panel admin · CSS de impresión para PDF · Fix nombre de producto en modal de edición</td></tr>
+      <tr><td>v2.0</td><td>Jun 2026</td><td>Documentación completa. Login Supabase · Edición de pedidos (reprecio, descuentos, agregar/eliminar) · Remito PDF · Tipo de cambio automático · Auto-refresh inteligente (5 min) · URL /tienda limpia · Candy Shop completo con bot WhatsApp</td></tr>
+    </tbody>
+  </table>
+</div>
+
 <!-- PIE -->
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v2.0 · Junio 2026 · Uso interno
+  Documentación v2.01 · Junio 2026 · Uso interno
 </div>
 
 </div>
