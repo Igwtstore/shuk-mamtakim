@@ -2997,22 +2997,41 @@ function abrirRemitoPDF(v) {
   if (parseFloat(v.totalARS) > 0) totales.push(`$ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
   if (parseFloat(v.totalUSD) > 0) totales.push(`U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
 
-  // Parsear líneas en columnas
+  // Mapa nombre→imagen desde el catálogo
+  const imgMap = {};
+  (productos || []).forEach(p => {
+    const primera = (p.imagen||'').split(',')[0].trim();
+    if (!primera) return;
+    let url;
+    if (primera.includes('/') && !primera.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+      url = `${CLOUDINARY_BASE}/w_80,h_80,c_fill/${primera}`;
+    } else {
+      url = `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
+    }
+    imgMap[p.nombre.toLowerCase()] = url;
+  });
+
+  // Parsear líneas en columnas con foto
   const filas = (v.productos||'').split(' || ').map(linea => {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u = (\$|U\$S) ([\d.,]+)/);
-    if (!m) return `<tr><td colspan="4" style="padding:8px 16px;font-size:0.8rem;color:#666;border-bottom:1px solid #f0ebe3">${linea}</td></tr>`;
+    if (!m) return `<tr><td colspan="5" style="padding:8px 16px;font-size:0.8rem;color:#666;border-bottom:1px solid #f0ebe3">${linea}</td></tr>`;
     const [, qty, nombreCompleto, moneda, precioUnit, , subtotal] = m;
     const partes = nombreCompleto.split(' · ');
-    const nombre = partes[0];
-    const desc = partes.slice(1).join(' · ');
+    const nombre = partes[0].trim();
+    const desc = partes.slice(1).join(' · ').trim();
+    const imgUrl = imgMap[nombre.toLowerCase()] || '';
+    const imgTag = imgUrl
+      ? `<img src="${imgUrl}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;display:block" onerror="this.style.display='none'">`
+      : `<div style="width:44px;height:44px;border-radius:6px;background:#f0ebe3;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🍬</div>`;
     return `<tr>
-      <td style="padding:9px 16px;border-bottom:1px solid #f0ebe3">
-        <div style="font-weight:600;font-size:0.85rem;color:#2d1a0a">${nombre}</div>
-        ${desc ? `<div style="font-size:0.72rem;color:#999;margin-top:1px">${desc}</div>` : ''}
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:56px">${imgTag}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3">
+        <div style="font-weight:600;font-size:0.84rem;color:#2d1a0a">${nombre}</div>
+        ${desc ? `<div style="font-size:0.7rem;color:#999;margin-top:1px">${desc}</div>` : ''}
       </td>
-      <td style="padding:9px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-size:0.85rem;color:#555">${qty}</td>
-      <td style="padding:9px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.85rem;color:#555">${moneda} ${precioUnit}</td>
-      <td style="padding:9px 16px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.85rem;font-weight:700;color:#2d1a0a">${moneda} ${subtotal}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-size:0.83rem;color:#555;white-space:nowrap">${qty}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.83rem;color:#555;white-space:nowrap">${moneda} ${precioUnit}</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.83rem;font-weight:700;color:#2d1a0a;white-space:nowrap">${moneda} ${subtotal}</td>
     </tr>`;
   }).join('');
   const lineas = filas;
@@ -3050,7 +3069,7 @@ function abrirRemitoPDF(v) {
   }
 </style></head><body>
 <div class="page">
-  <img class="banner" src="https://res.cloudinary.com/dq2boloyp/image/upload/w_1400,h_280,c_fill,g_center/website_banner_rhyfih.png" alt="Shuk Mamtakim">
+  <img class="banner" src="https://res.cloudinary.com/dq2boloyp/image/upload/w_1400/website_banner_rhyfih.png" alt="Shuk Mamtakim">
   <div class="nro-bar">
     <span>shuk-mamtakim.vercel.app</span>
     <strong>REMITO #${v.nVenta}</strong>
@@ -3062,8 +3081,8 @@ function abrirRemitoPDF(v) {
     <div class="info-item"><label>Forma de pago</label><span>${v.formaPago}</span></div>
   </div>
   ${v.notas && v.notas !== 'Manual' ? `<div class="nota-box" style="margin:12px 24px 0">📝 ${v.notas}</div>` : ''}
-  <div class="th-row" style="margin-top:12px">
-    <span>Producto</span><span style="text-align:center">Cant.</span><span>P. Unit.</span><span>Subtotal</span>
+  <div class="th-row" style="margin-top:12px;grid-template-columns:56px 1fr 50px 90px 90px">
+    <span></span><span>Producto</span><span style="text-align:center">Cant.</span><span>P. Unit.</span><span>Subtotal</span>
   </div>
   <table class="tabla"><tbody>${lineas}</tbody></table>
   <div class="total-bar">
