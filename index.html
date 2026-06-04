@@ -893,10 +893,11 @@
         </select>
       </div>
       <div class="nombre-campo" style="margin:0">
-        <label>Foto del producto</label>
-        <input type="file" id="np-foto" accept="image/*" onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
+        <label>Foto o video del producto</label>
+        <input type="file" id="np-foto" accept="image/*,video/*" onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
         <div id="np-preview" style="margin-top:0.5rem;display:none">
-          <img id="np-preview-img" style="max-height:120px;border-radius:8px;object-fit:contain;background:var(--gris);padding:0.5rem;" />
+          <img id="np-preview-img" style="max-height:120px;border-radius:8px;object-fit:contain;background:var(--gris);padding:0.5rem;display:none" />
+          <video id="np-preview-vid" autoplay loop muted playsinline style="max-height:120px;border-radius:8px;background:var(--gris);display:none"></video>
           <div id="np-upload-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
         </div>
       </div>
@@ -1421,7 +1422,7 @@ function imgFallbackNext(el) {
 }
 
 function esVideo(url) {
-  return /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
+  return /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url) || url.includes('/video/upload/');
 }
 
 function renderImg(p) {
@@ -2045,9 +2046,14 @@ function previewNuevoProducto(input) {
   if (!file) return;
   const preview = document.getElementById('np-preview');
   const img = document.getElementById('np-preview-img');
+  const vid = document.getElementById('np-preview-vid');
+  const esVid = file.type.startsWith('video/');
   preview.style.display = 'block';
-  img.src = URL.createObjectURL(file);
-  document.getElementById('np-upload-status').textContent = 'Foto seleccionada. Se subirá al guardar.';
+  img.style.display = esVid ? 'none' : 'block';
+  vid.style.display = esVid ? 'block' : 'none';
+  if (esVid) { vid.src = URL.createObjectURL(file); }
+  else { img.src = URL.createObjectURL(file); }
+  document.getElementById('np-upload-status').textContent = esVid ? 'Video seleccionado. Se subirá al guardar.' : 'Foto seleccionada. Se subirá al guardar.';
   _npCloudinaryId = '';
 }
 
@@ -2056,19 +2062,21 @@ async function subirFotoCloudinary() {
   const file = fileInput.files[0];
   if (!file) return '';
   const status = document.getElementById('np-upload-status');
-  status.textContent = 'Subiendo foto...';
+  const esVid = file.type.startsWith('video/');
+  status.textContent = esVid ? 'Subiendo video...' : 'Subiendo foto...';
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', CLOUDINARY_PRESET);
   formData.append('folder', 'shuk-mamtakim');
+  const endpoint = esVid ? 'video/upload' : 'image/upload';
   try {
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: formData });
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${endpoint}`, { method: 'POST', body: formData });
     const data = await res.json();
-    if (data.public_id) {
-      status.textContent = '✓ Foto subida correctamente';
-      return data.public_id;
+    if (data.secure_url) {
+      status.textContent = esVid ? '✓ Video subido correctamente' : '✓ Foto subida correctamente';
+      return esVid ? data.secure_url : data.public_id;
     }
-    status.textContent = 'Error al subir la foto';
+    status.textContent = 'Error al subir el archivo';
     return '';
   } catch(e) {
     status.textContent = 'Error de conexión';
