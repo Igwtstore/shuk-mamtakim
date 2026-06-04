@@ -583,6 +583,20 @@
   .btn-entregar { background: var(--verde-claro); color: var(--verde); }
   .btn-cancelar { background: var(--rojo-claro); color: var(--rojo); }
 
+  /* ─── MODAL REMITO ─── */
+  .remito-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9100; align-items:center; justify-content:center; padding:16px; }
+  .remito-overlay.open { display:flex; }
+  .remito-modal { background:var(--blanco); border-radius:16px; width:100%; max-width:480px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.2); }
+  .remito-header { padding:16px 20px; border-bottom:1px solid var(--gris-medio); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+  .remito-body { overflow-y:auto; padding:16px 20px; flex:1; }
+  .remito-pre { background:var(--gris); border-radius:10px; padding:14px; font-size:0.8rem; line-height:1.6; color:var(--texto); white-space:pre-wrap; font-family:monospace; margin-bottom:14px; }
+  .remito-phone-row { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .remito-phone-input { flex:1; padding:10px 12px; border:1.5px solid var(--gris-medio); border-radius:10px; font-family:'DM Sans',sans-serif; font-size:0.9rem; outline:none; }
+  .remito-phone-input:focus { border-color:var(--azul); }
+  .remito-footer { padding:12px 20px 18px; border-top:1px solid var(--gris-medio); display:flex; gap:8px; flex-shrink:0; }
+  .remito-btn-wa { flex:2; padding:11px; background:#25d366; color:white; border:none; border-radius:9px; font-weight:700; font-size:0.9rem; font-family:'DM Sans',sans-serif; cursor:pointer; }
+  .remito-btn-copy { flex:1; padding:11px; background:var(--gris); color:var(--texto-suave); border:none; border-radius:9px; font-weight:600; font-size:0.9rem; font-family:'DM Sans',sans-serif; cursor:pointer; }
+
   /* ─── MODAL EDITAR PEDIDO ─── */
   .edit-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9000; align-items:center; justify-content:center; padding:16px; }
   .edit-overlay.open { display:flex; }
@@ -1241,6 +1255,25 @@ function parseCSV(text) {
   return rows;
 }
 
+// ─── TIPO DE CAMBIO ──────────────────────────────────────────────────────────
+let _tc = 0;
+async function fetchTipoCambio() {
+  try {
+    const cached = localStorage.getItem('_tc_cache');
+    if (cached) {
+      const { v, t } = JSON.parse(cached);
+      if (Date.now() - t < 3600000) { _tc = v; return; }
+    }
+    const res = await fetch('https://api.bluelytics.com.ar/v2/latest');
+    const data = await res.json();
+    _tc = data.blue?.value_sell || data.oficial?.value_sell || 0;
+    localStorage.setItem('_tc_cache', JSON.stringify({ v: _tc, t: Date.now() }));
+  } catch { _tc = 0; }
+  if (modo === 'mayorista') renderCatalogo();
+}
+fetchTipoCambio();
+setInterval(fetchTipoCambio, 3600000); // actualiza cada 1 hora
+
 function formatPrecio(p) {
   const id = p.id;
   if (modo === 'mayorista') {
@@ -1250,7 +1283,12 @@ function formatPrecio(p) {
     }
     const v = parseFloat((p.precioMay||'0').toString().replace(',','.'));
     if (!v) return '—';
-    return 'U$S ' + v.toFixed(2);
+    let str = 'U$S ' + v.toFixed(2);
+    if (_tc > 0) {
+      const ars = Math.round(v * _tc);
+      str += `<span style="font-size:0.78em;color:var(--texto-suave);display:block;font-weight:400"> ≈ $ ${ars.toLocaleString('es-AR')}</span>`;
+    }
+    return str;
   } else {
     return '$ ' + Math.round(p.precioMin).toLocaleString('es-AR');
   }
@@ -1712,6 +1750,7 @@ async function renderPedidos() {
           <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaModal('pedido','${v.id}','${(v.notas&&v.notas!=='Manual'?v.notas:'').replace(/'/g,'')}','Nota del pedido')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
           <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
+          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${JSON.stringify(v).replace(/'/g,"&#39;")})'>🧾 Remito</button>
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick='exportarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>📤 Exportar</button>
         </div>
       </div>`;
@@ -2568,7 +2607,9 @@ function refreshAdmin() {
 
 function startAdminPolling() {
   if (_adminInterval) return;
-  _adminInterval = setInterval(() => { renderPedidos(); }, 60000);
+  _adminInterval = setInterval(() => {
+    if (document.visibilityState === 'visible') renderPedidos();
+  }, 300000); // 5 min, solo si la pestaña está activa
 }
 
 function stopAdminPolling() {
@@ -2905,6 +2946,49 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ─── REMITO ──────────────────────────────────────────────────────────────────
+let _remitoTexto = '';
+
+function abrirRemito(v) {
+  const lines = [];
+  lines.push(`🧾 *REMITO — Shuk Mamtakim*`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  lines.push(`📋 Pedido #${v.nVenta}`);
+  lines.push(`📅 ${v.fecha}`);
+  lines.push(`👤 Cliente: ${v.cliente} (${v.tipo})`);
+  lines.push(`💳 Pago: ${v.formaPago}`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  lines.push(`📦 *DETALLE:*`);
+  v.productos.split(' || ').forEach(l => lines.push(l));
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  const totales = [];
+  if (parseFloat(v.totalARS) > 0) totales.push(`$ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
+  if (parseFloat(v.totalUSD) > 0) totales.push(`U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
+  lines.push(`💰 *TOTAL: ${totales.join(' + ')}*`);
+  if (v.notas && v.notas !== 'Manual') lines.push(`📝 Nota: ${v.notas}`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  lines.push(`Shuk Mamtakim 🍬 — shuk-mamtakim.vercel.app`);
+
+  _remitoTexto = lines.join('\n');
+  document.getElementById('remito-pre').textContent = _remitoTexto;
+  document.getElementById('remito-phone').value = '';
+  document.getElementById('remito-overlay').classList.add('open');
+}
+
+function cerrarRemito() {
+  document.getElementById('remito-overlay').classList.remove('open');
+}
+
+function enviarRemitoWA() {
+  const phone = document.getElementById('remito-phone').value.replace(/\D/g,'');
+  if (!phone) { document.getElementById('remito-phone').focus(); return; }
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(_remitoTexto)}`, '_blank');
+}
+
+function copiarRemito() {
+  navigator.clipboard.writeText(_remitoTexto).then(() => showToast('Remito copiado ✓'));
+}
+
 // ─── EXPORTAR PEDIDO ─────────────────────────────────────────────────────────
 function exportarPedido(v) {
   const lines = [];
@@ -3057,6 +3141,26 @@ function cerrarEditPedido() {
   document.getElementById('edit-pedido-overlay').classList.remove('open');
 }
 </script>
+
+<!-- MODAL REMITO -->
+<div class="remito-overlay" id="remito-overlay" onclick="if(event.target.id==='remito-overlay')cerrarRemito()">
+  <div class="remito-modal">
+    <div class="remito-header">
+      <span style="font-weight:700;font-size:1rem">🧾 Remito</span>
+      <button onclick="cerrarRemito()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer">✕</button>
+    </div>
+    <div class="remito-body">
+      <pre class="remito-pre" id="remito-pre"></pre>
+      <div class="remito-phone-row">
+        <input class="remito-phone-input" id="remito-phone" type="tel" placeholder="Teléfono del cliente (ej: 5491112345678)">
+      </div>
+    </div>
+    <div class="remito-footer">
+      <button class="remito-btn-copy" onclick="copiarRemito()">📋 Copiar</button>
+      <button class="remito-btn-wa" onclick="enviarRemitoWA()">📲 Enviar por WhatsApp</button>
+    </div>
+  </div>
+</div>
 
 <!-- STOCK DRAWER -->
 <div class="stock-drawer-overlay" id="stock-drawer-overlay" onclick="cerrarStockDrawer()"></div>
