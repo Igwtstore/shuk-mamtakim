@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/tienda", "destination": "/index.html" },
+    { "source": "/mayorista", "destination": "/index.html" },
     { "source": "/candyshop/meir", "destination": "/tienda.html?kid=meir" },
     { "source": "/candyshop/iosi", "destination": "/tienda.html?kid=iosi" }
   ]

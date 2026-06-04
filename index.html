@@ -2890,10 +2890,10 @@ function init() {
     } else {
       document.getElementById('admin-login').style.display = 'flex';
     }
-  } else if (hash === TOKENS.minorista || path === '/tienda') {
-    setModo('minorista');
-  } else {
+  } else if (path === '/mayorista') {
     setModo('mayorista');
+  } else {
+    setModo('minorista');
   }
   cargarProductos();
 }
