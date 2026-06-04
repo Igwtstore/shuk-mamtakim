@@ -775,6 +775,21 @@
   </div>
   <div class="filtros-wrap" id="filtros-wrap"></div>
   <div class="catalogo" id="catalogo"></div>
+
+  <!-- BANNER MAYORISTA — solo visible en modo minorista -->
+  <div id="banner-mayorista-cta" style="display:none;max-width:900px;margin:2rem auto 1.5rem;padding:0 1rem">
+    <div style="background:#1a1a2e;border-radius:14px;padding:1.2rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="color:#c9954a;font-weight:700;font-size:0.95rem;margin-bottom:0.2rem">¿Comprás para revender?</div>
+        <div style="color:rgba(255,255,255,0.7);font-size:0.8rem">Tenemos precios especiales para mayoristas y revendedores.</div>
+      </div>
+      <a href="https://wa.me/5491131754540?text=${encodeURIComponent('Hola! Me interesan los precios mayoristas de Shuk Mamtakim 🍬')}"
+        target="_blank"
+        style="background:#25D366;color:white;border-radius:10px;padding:0.6rem 1.2rem;font-weight:700;font-size:0.85rem;text-decoration:none;white-space:nowrap;flex-shrink:0">
+        💬 Consultar precios por mayor
+      </a>
+    </div>
+  </div>
 </div>
 
 <!-- ADMIN -->
@@ -1398,16 +1413,27 @@ function imgFallbackNext(el) {
   }
 }
 
+function esVideo(url) {
+  return /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
+}
+
 function renderImg(p) {
   const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (!imagenes.length) return `<div class="producto-img-wrap"><div class="producto-img-placeholder">🍬</div></div>`;
-  const urls0 = imgUrl(imagenes[0]);
+  const primera = imagenes[0];
   const multi = imagenes.length > 1;
-  return `<div class="producto-img-wrap" id="carousel-${p.id}">
-    <img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
+  let mediaEl;
+  if (esVideo(primera)) {
+    mediaEl = `<video class="producto-img" id="cimg-${p.id}" src="${primera}"
+      autoplay loop muted playsinline style="object-fit:cover"></video>`;
+  } else {
+    const urls0 = imgUrl(primera);
+    mediaEl = `<img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
       data-f1="${urls0[1]}" data-f2="${urls0[2]}" data-f3="${urls0[3]}"
-      onerror="imgFallbackNext(this)"
-      loading="lazy" alt="${p.nombre}">
+      onerror="imgFallbackNext(this)" loading="lazy" alt="${p.nombre}">`;
+  }
+  return `<div class="producto-img-wrap" id="carousel-${p.id}">
+    ${mediaEl}
     <div class="producto-img-placeholder" style="display:none">🍬</div>
     ${multi ? `
     <button class="carousel-btn carousel-prev" onclick="prevSlide(${p.id},event)">‹</button>
@@ -2309,6 +2335,7 @@ function setModo(m) {
   document.getElementById('btn-admin').classList.toggle('activo', m === 'admin');
   document.getElementById('modo-label').textContent = m === 'mayorista' ? 'Mayorista' : m === 'minorista' ? 'Minorista' : 'Admin';
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
+  document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
   if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }

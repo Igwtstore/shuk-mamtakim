@@ -98,8 +98,26 @@
 
   /* PRINT */
   @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body { font-size:9pt; }
-    .cover { min-height:180px; padding:2rem 2.5rem 2rem; }
+    .cover { min-height:180px; padding:2rem 2.5rem 2rem; background:#1a1a2e !important; color:white !important; }
+    .cover-logo { color:#c9954a !important; }
+    .cover-badge { background:rgba(255,255,255,0.1) !important; color:rgba(255,255,255,0.7) !important; border:1px solid rgba(255,255,255,0.2) !important; }
+    .section-header { background:#1a1a2e !important; color:white !important; }
+    .section-header h2 { color:white !important; }
+    thead tr { background:#1a1a2e !important; color:white !important; }
+    thead th { color:white !important; }
+    tbody tr:nth-child(even) { background:#f7f6f2 !important; }
+    .feature-card { background:#f7f6f2 !important; border-left:3px solid #c9954a !important; }
+    .feature-card.nuevo { border-left-color:#1a7a3c !important; }
+    .caja-card { background:#1a1a2e !important; color:white !important; }
+    .url-box { background:#1a1a2e !important; color:#c9954a !important; }
+    .chip { background:#f7f6f2 !important; }
+    .chip.verde { background:#e8f5ee !important; color:#1a7a3c !important; }
+    .chip.dorado { background:#fdf3e3 !important; color:#c9954a !important; }
+    .nota { background:#fdf3e3 !important; }
+    .nota.verde { background:#e8f5ee !important; }
+    .flujo-step { background:#1a1a2e !important; color:white !important; }
     .content { padding:1.5rem 2.5rem; }
     .section { page-break-inside:avoid; }
     .section-header { page-break-after:avoid; }
