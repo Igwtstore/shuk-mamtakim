@@ -3089,6 +3089,10 @@ function abrirEditarPedido(v) {
   _editLineas = parsearLineasPedido(v.productos);
 
   document.getElementById('ep-titulo').textContent = `Pedido #${v.nVenta} — ${v.cliente}`;
+  // Poblar selector de productos
+  const sel = document.getElementById('ep-add-producto');
+  sel.innerHTML = '<option value="">— Elegir producto —</option>' +
+    productos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
   document.getElementById('ep-descuento').value = '';
 
@@ -3118,8 +3122,11 @@ function parsearLineasPedido(productosStr) {
 function renderEditLineas() {
   const cont = document.getElementById('ep-lineas');
   cont.innerHTML = _editLineas.map((l, i) => `
-    <div class="edit-row" style="flex-wrap:wrap;gap:6px">
-      <span class="edit-prod-name" title="${l.nombre}" style="width:100%;font-weight:600">${l.nombre}</span>
+    <div class="edit-row" style="flex-wrap:wrap;gap:6px;position:relative">
+      <div style="display:flex;align-items:center;width:100%;gap:6px">
+        <span class="edit-prod-name" title="${l.nombre}" style="flex:1;font-weight:600">${l.nombre}</span>
+        <button onclick="eliminarLineaEdit(${i})" style="background:#fde8e8;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:#e05c2a;font-size:1rem;flex-shrink:0" title="Eliminar producto">×</button>
+      </div>
       <div style="display:flex;align-items:center;gap:6px;width:100%">
         <label style="font-size:0.7rem;color:var(--texto-suave);min-width:28px">Cant.</label>
         <input class="edit-price-input" type="number" value="${l.qty}" min="1" step="1" style="width:60px;text-align:center"
@@ -3133,6 +3140,35 @@ function renderEditLineas() {
         <span class="edit-subtotal" id="ep-sub-${i}" style="flex:1;text-align:right">${l.moneda} ${formatEditVal(l.precio * l.qty, l.moneda)}</span>
       </div>
     </div>`).join('');
+}
+
+function eliminarLineaEdit(i) {
+  _editLineas.splice(i, 1);
+  renderEditLineas();
+  recalcularEditTotal();
+}
+
+function agregarProductoEdit() {
+  const sel = document.getElementById('ep-add-producto');
+  const id = parseInt(sel.value);
+  if (!id) return;
+  const p = productos.find(x => x.id === id);
+  if (!p) return;
+  const tipo = document.getElementById('ep-tipo').value;
+  const esMay = tipo === 'Mayorista';
+  const esPitz = PITZUJIM_IDS.includes(p.id);
+  let precio, moneda;
+  if (esMay) {
+    precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
+    moneda = esPitz ? '$' : 'U$S';
+  } else {
+    precio = Math.round(p.precioMin) || 0;
+    moneda = '$';
+  }
+  _editLineas.push({ nombre: p.nombre, qty: 1, moneda, precio, desc: 0 });
+  renderEditLineas();
+  recalcularEditTotal();
+  sel.value = '';
 }
 
 function formatEditVal(n, moneda) {
@@ -3267,6 +3303,14 @@ function cerrarEditPedido() {
 
       <div class="edit-section-label">Productos (editá el precio unitario)</div>
       <div id="ep-lineas"></div>
+
+      <div class="edit-section-label">Agregar producto</div>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <select id="ep-add-producto" class="edit-tipo-select" style="flex:1">
+          <option value="">— Elegir producto —</option>
+        </select>
+        <button onclick="agregarProductoEdit()" style="padding:7px 14px;background:var(--azul);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Agregar</button>
+      </div>
 
       <div class="edit-section-label">Descuento global</div>
       <div class="edit-discount-row">
