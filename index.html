@@ -3179,6 +3179,29 @@ function renderEditLineas() {
     </div>`).join('');
 }
 
+function onTipoChange() {
+  poblarSelectorProductos();
+  // Repreciar líneas existentes según el nuevo tipo
+  const tipo = document.getElementById('ep-tipo').value;
+  const esMay = tipo === 'Mayorista';
+  _editLineas = _editLineas.map(l => {
+    const p = productos.find(x => x.nombre.toLowerCase() === l.nombre.toLowerCase());
+    if (!p) return l;
+    const esPitz = PITZUJIM_IDS.includes(p.id);
+    let precio, moneda;
+    if (esMay) {
+      precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
+      moneda = esPitz ? '$' : 'U$S';
+    } else {
+      precio = Math.round(p.precioMin) || 0;
+      moneda = '$';
+    }
+    return { ...l, precio, moneda };
+  });
+  renderEditLineas();
+  recalcularEditTotal();
+}
+
 function poblarSelectorProductos() {
   const tipo = document.getElementById('ep-tipo')?.value || 'Mayorista';
   const esMay = tipo === 'Mayorista';
@@ -3358,7 +3381,7 @@ function cerrarEditPedido() {
     </div>
     <div class="edit-modal-body">
       <div class="edit-section-label">Tipo de cliente</div>
-      <select class="edit-tipo-select" id="ep-tipo" onchange="poblarSelectorProductos()">
+      <select class="edit-tipo-select" id="ep-tipo" onchange="onTipoChange()">
         <option>Minorista</option>
         <option>Mayorista</option>
       </select>
