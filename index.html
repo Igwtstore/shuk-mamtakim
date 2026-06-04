@@ -1177,6 +1177,14 @@
         <input type="number" id="oferta-precio-pack" placeholder="Ej: 9000" min="0" step="0.01"
           style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
       </div>
+      <div style="border-top:1px solid var(--gris-medio);padding-top:0.75rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Visible para</label>
+        <select id="oferta-visible" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;background:white;margin-top:0.25rem">
+          <option value="Ambos">Ambos (Mayorista y Minorista)</option>
+          <option value="Mayorista">Solo Mayorista</option>
+          <option value="Minorista">Solo Minorista</option>
+        </select>
+      </div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarOfertaModal()" style="flex:1;padding:0.65rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:white;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer">Cancelar</button>
@@ -1327,7 +1335,8 @@ async function cargarProductos() {
       precioOferta: parseFloat((r[10]||'0').replace(',','.')),
       fechaOferta: (r[11]||'').trim(),
       cantPack: parseInt(r[12]||'0'),
-      precioPack: parseFloat((r[13]||'0').replace(',','.'))
+      precioPack: parseFloat((r[13]||'0').replace(',','.')),
+      visibleOferta: (r[14]||'Ambos').trim()
     })).filter(p => p.activo && p.id);
     renderCatalogo();
     renderFiltros();
@@ -1398,6 +1407,9 @@ function formatPrecio(p) {
 
 function ofertaActiva(p) {
   if (!p.precioOferta || p.precioOferta <= 0) return false;
+  const vis = (p.visibleOferta || 'Ambos').trim();
+  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  if (vis !== 'Ambos' && vis !== tipoActual) return false;
   if (p.fechaOferta) {
     const parts = p.fechaOferta.split('/');
     if (parts.length >= 3) {
@@ -2031,6 +2043,7 @@ function abrirOfertaModal(id) {
   document.getElementById('oferta-fecha').value = p.fechaOferta || '';
   document.getElementById('oferta-cant-pack').value = p.cantPack || '';
   document.getElementById('oferta-precio-pack').value = p.precioPack || '';
+  document.getElementById('oferta-visible').value = p.visibleOferta || 'Ambos';
   document.getElementById('oferta-modal').style.display = 'flex';
 }
 
@@ -2047,7 +2060,8 @@ async function guardarOferta() {
     precioOferta: document.getElementById('oferta-precio').value || '0',
     fechaOferta: document.getElementById('oferta-fecha').value || '',
     cantPack: document.getElementById('oferta-cant-pack').value || '0',
-    precioPack: document.getElementById('oferta-precio-pack').value || '0'
+    precioPack: document.getElementById('oferta-precio-pack').value || '0',
+    visibleOferta: document.getElementById('oferta-visible').value || 'Ambos'
   });
   cerrarOfertaModal();
   showToast('Guardando oferta...');
