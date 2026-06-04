@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación del Sistema</title>
+<title>Shuk Mamtakim — Documentación v2.0</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -16,226 +16,99 @@
     --gris: #f7f6f2;
     --gris-medio: #e8e6e0;
     --texto-suave: #6b6b7a;
+    --rojo: #c0392b;
   }
 
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: white;
-    color: #1a1a2e;
-    font-size: 10pt;
-    line-height: 1.5;
-  }
+  body { font-family:'DM Sans',sans-serif; background:white; color:#1a1a2e; font-size:10pt; line-height:1.5; }
 
   /* PORTADA */
-  .cover {
-    background: var(--azul);
-    color: white;
-    min-height: 220px;
-    padding: 3rem 3rem 2.5rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-  .cover-logo {
-    font-family: 'Fraunces', serif;
-    font-size: 2.8rem;
-    font-weight: 700;
-    color: var(--dorado);
-    letter-spacing: -0.02em;
-  }
-  .cover-subtitle {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: rgba(255,255,255,0.5);
-    margin-top: 0.2rem;
-  }
-  .cover-title {
-    font-family: 'Fraunces', serif;
-    font-size: 1.8rem;
-    font-weight: 600;
-    color: white;
-    margin-top: 1.5rem;
-  }
-  .cover-meta {
-    font-size: 0.78rem;
-    color: rgba(255,255,255,0.5);
-    margin-top: 0.5rem;
-  }
-  .cover-bar {
-    height: 4px;
-    background: linear-gradient(90deg, var(--dorado), transparent);
-    margin-top: 2rem;
-  }
+  .cover { background:var(--azul); color:white; min-height:240px; padding:3rem 3rem 2.5rem; display:flex; flex-direction:column; justify-content:space-between; }
+  .cover-logo { font-family:'Fraunces',serif; font-size:2.8rem; font-weight:700; color:var(--dorado); letter-spacing:-0.02em; }
+  .cover-subtitle { font-size:0.8rem; text-transform:uppercase; letter-spacing:0.15em; color:rgba(255,255,255,0.5); margin-top:0.2rem; }
+  .cover-title { font-family:'Fraunces',serif; font-size:1.8rem; font-weight:600; color:white; margin-top:1.5rem; }
+  .cover-meta { font-size:0.78rem; color:rgba(255,255,255,0.5); margin-top:0.5rem; }
+  .cover-bar { height:4px; background:linear-gradient(90deg,var(--dorado),transparent); margin-top:2rem; }
+  .cover-badges { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:1rem; }
+  .cover-badge { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:20px; padding:0.2rem 0.8rem; font-size:0.7rem; color:rgba(255,255,255,0.7); }
 
   /* LAYOUT */
-  .content { padding: 2rem 3rem; max-width: 900px; margin: 0 auto; }
+  .content { padding:2rem 3rem; max-width:900px; margin:0 auto; }
 
   /* SECCIONES */
-  .section { margin-bottom: 2.5rem; }
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.6rem 1rem;
-    background: var(--azul);
-    color: white;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    page-break-after: avoid;
-  }
-  .section-header h2 {
-    font-family: 'Fraunces', serif;
-    font-size: 1rem;
-    font-weight: 600;
-  }
-  .section-icon { font-size: 1.1rem; }
-
-  .subsection { margin-bottom: 1.25rem; }
-  .subsection h3 {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--azul);
-    border-left: 3px solid var(--dorado);
-    padding-left: 0.6rem;
-    margin-bottom: 0.5rem;
-  }
-
-  p { margin-bottom: 0.4rem; color: #333; }
+  .section { margin-bottom:2.5rem; }
+  .section-header { display:flex; align-items:center; gap:0.6rem; padding:0.6rem 1rem; background:var(--azul); color:white; border-radius:8px; margin-bottom:1rem; page-break-after:avoid; }
+  .section-header h2 { font-family:'Fraunces',serif; font-size:1rem; font-weight:600; }
+  .section-icon { font-size:1.1rem; }
+  .subsection { margin-bottom:1.25rem; }
+  .subsection h3 { font-size:0.85rem; font-weight:700; color:var(--azul); border-left:3px solid var(--dorado); padding-left:0.6rem; margin-bottom:0.5rem; }
+  p { margin-bottom:0.4rem; color:#333; }
 
   /* TABLA */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.82rem;
-    margin: 0.5rem 0 1rem;
-  }
-  thead tr { background: var(--azul); color: white; }
-  thead th { padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; font-size: 0.78rem; }
-  tbody tr:nth-child(even) { background: var(--gris); }
-  tbody td { padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--gris-medio); }
-  tbody td:first-child { font-weight: 600; color: var(--azul); }
+  table { width:100%; border-collapse:collapse; font-size:0.82rem; margin:0.5rem 0 1rem; }
+  thead tr { background:var(--azul); color:white; }
+  thead th { padding:0.5rem 0.75rem; text-align:left; font-weight:600; font-size:0.78rem; }
+  tbody tr:nth-child(even) { background:var(--gris); }
+  tbody td { padding:0.4rem 0.75rem; border-bottom:1px solid var(--gris-medio); }
+  tbody td:first-child { font-weight:600; color:var(--azul); }
 
   /* CHIPS */
-  .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0; }
-  .chip {
-    background: var(--gris);
-    border: 1px solid var(--gris-medio);
-    border-radius: 20px;
-    padding: 0.2rem 0.7rem;
-    font-size: 0.75rem;
-    color: var(--azul);
-    font-weight: 500;
-  }
-  .chip.verde { background: #e8f5ee; border-color: #b2d8c0; color: var(--verde); }
-  .chip.dorado { background: #fdf3e3; border-color: #e8c97a; color: var(--dorado); }
-  .chip.azul { background: #e8e8f5; border-color: #c0c0e0; color: var(--azul); }
+  .chips { display:flex; flex-wrap:wrap; gap:0.4rem; margin:0.4rem 0; }
+  .chip { background:var(--gris); border:1px solid var(--gris-medio); border-radius:20px; padding:0.2rem 0.7rem; font-size:0.75rem; color:var(--azul); font-weight:500; }
+  .chip.verde { background:#e8f5ee; border-color:#b2d8c0; color:var(--verde); }
+  .chip.dorado { background:#fdf3e3; border-color:#e8c97a; color:var(--dorado); }
+  .chip.azul { background:#e8e8f5; border-color:#c0c0e0; color:var(--azul); }
+  .chip.rojo { background:#fde8e8; border-color:#e0b0b0; color:var(--rojo); }
 
   /* GRID DE FEATURES */
-  .features-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
-    margin: 0.5rem 0;
-  }
-  .feature-card {
-    background: var(--gris);
-    border-radius: 8px;
-    padding: 0.7rem 0.9rem;
-    border-left: 3px solid var(--dorado);
-  }
-  .feature-card .title { font-weight: 700; font-size: 0.82rem; color: var(--azul); margin-bottom: 0.2rem; }
-  .feature-card .desc { font-size: 0.75rem; color: var(--texto-suave); }
+  .features-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; margin:0.5rem 0; }
+  .feature-card { background:var(--gris); border-radius:8px; padding:0.7rem 0.9rem; border-left:3px solid var(--dorado); }
+  .feature-card.nuevo { border-left-color:#1a7a3c; }
+  .feature-card .title { font-weight:700; font-size:0.82rem; color:var(--azul); margin-bottom:0.2rem; }
+  .feature-card .desc { font-size:0.75rem; color:var(--texto-suave); }
+  .badge-new { background:#e8f5ee; color:#1a7a3c; font-size:0.62rem; font-weight:700; padding:0.1rem 0.4rem; border-radius:4px; margin-left:0.3rem; text-transform:uppercase; }
 
   /* CAJAS */
-  .cajas-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-    margin: 0.5rem 0;
-  }
-  .caja-card {
-    background: var(--azul);
-    color: white;
-    border-radius: 8px;
-    padding: 0.6rem 0.75rem;
-    text-align: center;
-  }
-  .caja-card .name { font-weight: 700; font-size: 0.78rem; }
-  .caja-card .desc { font-size: 0.65rem; color: rgba(255,255,255,0.6); margin-top: 0.2rem; }
+  .cajas-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem; margin:0.5rem 0; }
+  .caja-card { background:var(--azul); color:white; border-radius:8px; padding:0.6rem 0.75rem; text-align:center; }
+  .caja-card .name { font-weight:700; font-size:0.78rem; }
+  .caja-card .desc { font-size:0.65rem; color:rgba(255,255,255,0.6); margin-top:0.2rem; }
 
   /* URL BOXES */
-  .url-box {
-    background: #1a1a2e;
-    color: #c9954a;
-    border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-family: monospace;
-    font-size: 0.82rem;
-    margin: 0.3rem 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .url-box .label { color: rgba(255,255,255,0.5); font-family: 'DM Sans', sans-serif; font-size: 0.72rem; }
+  .url-box { background:#1a1a2e; color:#c9954a; border-radius:8px; padding:0.5rem 1rem; font-family:monospace; font-size:0.82rem; margin:0.3rem 0; display:flex; justify-content:space-between; align-items:center; }
+  .url-box .label { color:rgba(255,255,255,0.5); font-family:'DM Sans',sans-serif; font-size:0.72rem; }
+  .url-box .badge { background:rgba(201,149,74,0.2); color:var(--dorado); font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:4px; font-family:'DM Sans',sans-serif; }
 
   /* FLUJO */
-  .flujo {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    margin: 0.5rem 0;
-  }
-  .flujo-step {
-    background: var(--azul);
-    color: white;
-    border-radius: 20px;
-    padding: 0.3rem 0.8rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-  .flujo-arrow { color: var(--dorado); font-size: 1rem; }
+  .flujo { display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; margin:0.5rem 0; }
+  .flujo-step { background:var(--azul); color:white; border-radius:20px; padding:0.3rem 0.8rem; font-size:0.75rem; font-weight:600; }
+  .flujo-arrow { color:var(--dorado); font-size:1rem; }
 
   /* TECH STACK */
-  .tech-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.5rem;
-    margin: 0.5rem 0;
-  }
-  .tech-card {
-    border: 1.5px solid var(--gris-medio);
-    border-radius: 8px;
-    padding: 0.6rem;
-    text-align: center;
-  }
-  .tech-card .icon { font-size: 1.4rem; display: block; margin-bottom: 0.3rem; }
-  .tech-card .name { font-weight: 700; font-size: 0.75rem; color: var(--azul); }
-  .tech-card .role { font-size: 0.65rem; color: var(--texto-suave); }
+  .tech-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; margin:0.5rem 0; }
+  .tech-card { border:1.5px solid var(--gris-medio); border-radius:8px; padding:0.6rem; text-align:center; }
+  .tech-card .icon { font-size:1.4rem; display:block; margin-bottom:0.3rem; }
+  .tech-card .name { font-weight:700; font-size:0.75rem; color:var(--azul); }
+  .tech-card .role { font-size:0.65rem; color:var(--texto-suave); }
+
+  /* BOT COMMANDS */
+  .cmd-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin:0.5rem 0; }
+  .cmd-card { background:var(--gris); border-radius:8px; padding:0.6rem 0.8rem; }
+  .cmd-card .cmd { font-family:monospace; font-size:0.78rem; font-weight:700; color:var(--azul); }
+  .cmd-card .desc { font-size:0.72rem; color:var(--texto-suave); margin-top:0.2rem; }
 
   /* PRINT */
   @media print {
-    body { font-size: 9pt; }
-    .cover { min-height: 180px; padding: 2rem 2.5rem 2rem; }
-    .content { padding: 1.5rem 2.5rem; }
-    .section { page-break-inside: avoid; }
-    .section-header { page-break-after: avoid; }
-    @page { margin: 0; size: A4; }
+    body { font-size:9pt; }
+    .cover { min-height:180px; padding:2rem 2.5rem 2rem; }
+    .content { padding:1.5rem 2.5rem; }
+    .section { page-break-inside:avoid; }
+    .section-header { page-break-after:avoid; }
+    @page { margin:0; size:A4; }
   }
 
-  /* DIVIDER */
-  hr { border: none; border-top: 1px solid var(--gris-medio); margin: 1.5rem 0; }
-
-  .nota {
-    background: #fdf3e3;
-    border-left: 3px solid var(--dorado);
-    border-radius: 0 8px 8px 0;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.78rem;
-    color: #7a5a1a;
-    margin: 0.5rem 0;
-  }
+  hr { border:none; border-top:1px solid var(--gris-medio); margin:1.5rem 0; }
+  .nota { background:#fdf3e3; border-left:3px solid var(--dorado); border-radius:0 8px 8px 0; padding:0.5rem 0.75rem; font-size:0.78rem; color:#7a5a1a; margin:0.5rem 0; }
+  .nota.verde { background:#e8f5ee; border-color:var(--verde); color:#1a5a2e; }
 </style>
 </head>
 <body>
@@ -245,100 +118,103 @@
   <div>
     <div class="cover-logo">Shuk Mamtakim</div>
     <div class="cover-subtitle">Sistema de gestión y catálogo online</div>
+    <div class="cover-badges">
+      <span class="cover-badge">Catálogo mayorista + minorista</span>
+      <span class="cover-badge">Panel admin</span>
+      <span class="cover-badge">Caja JONY / MYRI</span>
+      <span class="cover-badge">Bot WhatsApp hijos</span>
+      <span class="cover-badge">Candy Shop</span>
+    </div>
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 1.0 · Junio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 2.0 · Junio 2026 · Uso interno · Actualización completa</div>
   </div>
   <div class="cover-bar"></div>
 </div>
 
 <div class="content">
 
-<!-- ACCESOS -->
+<!-- URLS -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">🔗</span>
-    <h2>URLs de Acceso</h2>
+  <div class="section-header"><span class="section-icon">🔗</span><h2>URLs de Acceso</h2></div>
+
+  <div class="subsection">
+    <h3>Shuk Mamtakim — Catálogo principal</h3>
+    <div class="url-box"><span class="label">Catálogo Mayorista</span><span>shuk-mamtakim.vercel.app/</span></div>
+    <div class="url-box"><span class="label">Catálogo Minorista (URL limpia para compartir)</span><span>shuk-mamtakim.vercel.app/tienda <span class="badge">NUEVO</span></span></div>
+    <div class="url-box"><span class="label">Catálogo Minorista (URL con token)</span><span>shuk-mamtakim.vercel.app/#min-pL3q7</span></div>
+    <div class="url-box"><span class="label">Panel Admin</span><span>shuk-mamtakim.vercel.app/#adm-wR7j4 + contraseña Supabase</span></div>
   </div>
-  <div class="url-box"><span class="label">Catálogo Mayorista</span><span>shuk-mamtakim.vercel.app/</span></div>
-  <div class="url-box"><span class="label">Catálogo Minorista</span><span>shuk-mamtakim.vercel.app/#min-pL3q7</span></div>
-  <div class="url-box"><span class="label">Panel Admin</span><span>shuk-mamtakim.vercel.app/#adm-wR7j4 + contraseña</span></div>
-  <div class="nota">⚠️ Las URLs de acceso son secretas. No compartir públicamente la URL del panel admin ni la del minorista con clientes mayoristas.</div>
+
+  <div class="subsection">
+    <h3>Candy Shop — Sistema de los hijos</h3>
+    <div class="url-box"><span class="label">Panel Meir e Iosi (con login)</span><span>shuk-mamtakim.vercel.app/candyshop.html</span></div>
+    <div class="url-box"><span class="label">Tienda de Meir (para clientes)</span><span>shuk-mamtakim.vercel.app/candyshop/meir</span></div>
+    <div class="url-box"><span class="label">Tienda de Iosi (para clientes)</span><span>shuk-mamtakim.vercel.app/candyshop/iosi</span></div>
+  </div>
+  <div class="nota">⚠️ La URL del panel admin y el token minorista son secretos. La URL /tienda es pública y tiene preview de imagen en WhatsApp.</div>
 </div>
 
 <!-- CATÁLOGO -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">🛍️</span>
-    <h2>Catálogo — Vista del Cliente</h2>
-  </div>
+  <div class="section-header"><span class="section-icon">🛍️</span><h2>Catálogo — Vista del Cliente</h2></div>
 
   <div class="subsection">
     <h3>Productos y visualización</h3>
     <div class="features-grid">
-      <div class="feature-card">
-        <div class="title">📸 Imágenes Cloudinary</div>
-        <div class="desc">Fotos servidas desde CDN global con optimización automática (WebP, compresión). Carga rápida en cualquier dispositivo.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">🎠 Carrusel de fotos</div>
-        <div class="desc">Múltiples imágenes por producto con auto-avance cada 3 segundos, flechas y puntos indicadores.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">📂 Ordenamiento por categoría</div>
-        <div class="desc">Pitzujim → Chocolate → Caramelo → Chupetín → Pastilla → Yumi → Varios. Agotados siempre al final.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">🔍 Búsqueda y filtros</div>
-        <div class="desc">Buscador por nombre/descripción + filtros rápidos por categoría (pills clickeables).</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">🌙 Modo oscuro</div>
-        <div class="desc">Toggle en el header. Preferencia guardada entre sesiones.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">📤 Compartir producto</div>
-        <div class="desc">Botón en cada card. Abre WhatsApp con nombre, descripción, precio y link al catálogo correcto.</div>
-      </div>
+      <div class="feature-card"><div class="title">📸 Imágenes Cloudinary</div><div class="desc">Fotos servidas desde CDN global con optimización automática (WebP, compresión). Múltiples imágenes por producto con carrusel auto-avance.</div></div>
+      <div class="feature-card"><div class="title">📂 Categorías y filtros</div><div class="desc">Pitzujim → Chocolate → Caramelo → Chupetín → Pastilla → Yumi → Varios. Buscador por nombre/descripción + filtros por categoría.</div></div>
+      <div class="feature-card"><div class="title">💱 Tipo de cambio en tiempo real<span class="badge-new">nuevo</span></div><div class="desc">Mayorista: precios en U$S muestran el equivalente en ARS entre paréntesis, actualizado cada hora desde bluelytics.com.ar (dólar blue vendedor).</div></div>
+      <div class="feature-card"><div class="title">🌙 Modo oscuro</div><div class="desc">Toggle en el header. Preferencia guardada entre sesiones.</div></div>
+      <div class="feature-card"><div class="title">📤 Compartir producto</div><div class="desc">Botón en cada card. Abre WhatsApp con nombre, descripción, precio y link al catálogo correcto.</div></div>
+      <div class="feature-card"><div class="title">📲 Preview en WhatsApp<span class="badge-new">nuevo</span></div><div class="desc">Al compartir /tienda por WhatsApp aparece el banner del Shuk con título y descripción (Open Graph tags).</div></div>
     </div>
   </div>
 
   <div class="subsection">
+    <h3>Precios por modo</h3>
+    <table>
+      <thead><tr><th>Modo</th><th>Pitzujim</th><th>Golosinas / Resto</th></tr></thead>
+      <tbody>
+        <tr><td>Mayorista</td><td>$ ARS</td><td>U$S + equivalente $ ARS (TC blue)</td></tr>
+        <tr><td>Minorista</td><td>$ ARS</td><td>$ ARS</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="subsection">
     <h3>Stock agotado — Lista de espera</h3>
-    <p>Cuando un producto está sin stock, en lugar del botón de compra aparece <strong>"🔔 Avisame cuando llegue"</strong>.</p>
+    <p>Producto sin stock → botón <strong>"🔔 Avisame cuando llegue"</strong>.</p>
     <div class="flujo">
-      <span class="flujo-step">Cliente completa nombre + WhatsApp</span>
+      <span class="flujo-step">Cliente: nombre + WhatsApp</span>
       <span class="flujo-arrow">→</span>
-      <span class="flujo-step">Admin recibe notificación WA</span>
+      <span class="flujo-step">Admin recibe aviso WA</span>
       <span class="flujo-arrow">→</span>
-      <span class="flujo-step">Queda en lista de espera</span>
+      <span class="flujo-step">Lista de espera</span>
+      <span class="flujo-arrow">→</span>
+      <span class="flujo-step">Notificado / Compró</span>
     </div>
-    <div class="nota">El sistema previene duplicados: si el mismo número intenta registrarse dos veces para el mismo producto, lo informa.</div>
+    <div class="nota">El sistema previene duplicados y detecta el modo del cliente para enviar el link correcto.</div>
   </div>
 </div>
 
 <!-- PEDIDO -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">📦</span>
-    <h2>Flujo de Pedido</h2>
-  </div>
+  <div class="section-header"><span class="section-icon">📦</span><h2>Flujo de Pedido</h2></div>
 
   <div class="subsection">
     <h3>Proceso del cliente</h3>
     <div class="flujo">
       <span class="flujo-step">1. Agrega productos</span>
       <span class="flujo-arrow">→</span>
-      <span class="flujo-step">2. Ingresa nombre + forma de pago</span>
+      <span class="flujo-step">2. Nombre + forma de pago + nota</span>
       <span class="flujo-arrow">→</span>
-      <span class="flujo-step">3. Enviar pedido</span>
+      <span class="flujo-step">3. Enviar por WhatsApp</span>
       <span class="flujo-arrow">→</span>
       <span class="flujo-step">4. Se registra en Sheets</span>
       <span class="flujo-arrow">→</span>
-      <span class="flujo-step">5. Stock se descuenta</span>
-      <span class="flujo-arrow">→</span>
-      <span class="flujo-step">6. WhatsApp al admin</span>
+      <span class="flujo-step">5. Stock descontado</span>
     </div>
   </div>
 
@@ -348,71 +224,21 @@
       <thead><tr><th>Campo</th><th>Detalle</th></tr></thead>
       <tbody>
         <tr><td>Productos</td><td>Nombre · Descripción — Precio unitario c/u = Subtotal</td></tr>
-        <tr><td>Total</td><td>Total en $ ARS y/o U$S según corresponda</td></tr>
+        <tr><td>Total</td><td>$ ARS y/o U$S según corresponda</td></tr>
         <tr><td>Split automático</td><td>Pitzujim JONY / Golosinas MYRI / Comisión JONY (15%)</td></tr>
-        <tr><td>Forma de cobro</td><td>Efectivo / Transferencia / Mercado Pago / Cuenta corriente</td></tr>
+        <tr><td>Formas de cobro</td><td>Efectivo / Transferencia / Mercado Pago / Cuenta corriente</td></tr>
+        <tr><td>Nota del pedido</td><td>Texto libre del cliente, editable desde el panel</td></tr>
       </tbody>
     </table>
-  </div>
-
-  <div class="subsection">
-    <h3>Seguridad</h3>
-    <div class="chips">
-      <span class="chip">Anti-duplicados (10s de bloqueo)</span>
-      <span class="chip">Validación de nombre y forma de pago</span>
-      <span class="chip">Toast de confirmación</span>
-    </div>
   </div>
 </div>
 
 <!-- PANEL ADMIN -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">🔐</span>
-    <h2>Panel Administrador</h2>
-  </div>
+  <div class="section-header"><span class="section-icon">🔐</span><h2>Panel Administrador</h2></div>
 
-  <div class="nota">Acceso por URL secreta + contraseña. La sesión persiste mientras no se cierra el navegador. Auto-refresh de pedidos cada 60 segundos.</div>
-
+  <div class="nota">Acceso por URL secreta + contraseña (autenticación Supabase). Sesión persiste hasta cerrar el navegador. Auto-refresh de pedidos cada 5 minutos, solo si la pestaña está activa.</div>
   <br>
-
-  <div class="subsection">
-    <h3>Pestaña: Panel</h3>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="title">📱 QR del catálogo</div>
-        <div class="desc">Dos QR listos: uno para mayorista y uno para minorista. Para compartir o imprimir.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">⚠️ Alerta de stock bajo</div>
-        <div class="desc">Aparece automáticamente cuando hay productos con ≤3 unidades. En rojo si queda solo 1.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">📦 Pedidos activos</div>
-        <div class="desc">Lista de pedidos pendientes con detalle, split JONY/MYRI y estado de cobro.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">💰 Confirmar cobro</div>
-        <div class="desc">Modal para asignar el pago a la caja correcta. Soporta tipo de cambio USD→ARS.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">✏️ Pedido manual</div>
-        <div class="desc">Selector de productos desde el catálogo. Calcula precios y splits automáticamente. Descuenta stock.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">➕ Nuevo producto</div>
-        <div class="desc">Formulario con upload de foto directo a Cloudinary. El producto aparece en el catálogo de inmediato.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">🔢 Actualizar stock</div>
-        <div class="desc">Tabla editable. Guardar impacta en Google Sheets y actualiza la lista de espera.</div>
-      </div>
-      <div class="feature-card">
-        <div class="title">💸 Gastos / Rendiciones</div>
-        <div class="desc">Registro de egresos asignados a cada columna de caja. Transferencias entre cajas incluidas.</div>
-      </div>
-    </div>
-  </div>
 
   <div class="subsection">
     <h3>Gestión de pedidos</h3>
@@ -421,11 +247,43 @@
       <tbody>
         <tr><td>✓ Entregado</td><td>Mueve al historial</td></tr>
         <tr><td>✕ Cancelar</td><td>Cancela y devuelve el stock automáticamente</td></tr>
-        <tr><td>💰 Confirmar cobro</td><td>Asigna el pago a la columna de caja correcta</td></tr>
+        <tr><td>💰 Confirmar cobro</td><td>Asigna el pago a la columna de caja correcta con tipo de cambio</td></tr>
         <tr><td>🔄 Re-confirmar</td><td>Reclasifica el cobro (útil para Cta Cte cuando pagan)</td></tr>
-        <tr><td>✕ Cancelar (historial)</td><td>Revierte un entregado y devuelve el stock</td></tr>
+        <tr><td>✏️ Editar pedido<span class="badge-new">nuevo</span></td><td>Cambia tipo (Mayorista/Minorista) con reprecio automático, edita cantidad y precio por producto, aplica descuento global o por producto, agrega/elimina productos</td></tr>
+        <tr><td>🧾 Remito<span class="badge-new">nuevo</span></td><td>Genera comprobante PDF con banner, fotos de productos y tabla de precios. Enviable por WhatsApp.</td></tr>
+        <tr><td>📤 Exportar<span class="badge-new">nuevo</span></td><td>Copia el pedido formateado al portapapeles o lo comparte vía app del sistema.</td></tr>
+        <tr><td>📝 Nota</td><td>Agrega o edita la nota del pedido</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="subsection">
+    <h3>Funcionalidades del panel</h3>
+    <div class="features-grid">
+      <div class="feature-card"><div class="title">📱 QR del catálogo</div><div class="desc">Dos QR: mayorista y minorista. Para compartir o imprimir.</div></div>
+      <div class="feature-card"><div class="title">⚠️ Alerta de stock bajo</div><div class="desc">Aparece automáticamente cuando hay productos con ≤3 unidades. En rojo si queda 1.</div></div>
+      <div class="feature-card"><div class="title">🔢 Actualizar stock<span class="badge-new">mejorado</span></div><div class="desc">Drawer lateral con buscador. Se abre sin perder el contexto del panel.</div></div>
+      <div class="feature-card"><div class="title">✏️ Pedido manual</div><div class="desc">Selector de productos. Calcula precios y splits automáticamente. Descuenta stock.</div></div>
+      <div class="feature-card"><div class="title">➕ Nuevo producto</div><div class="desc">Formulario con upload de foto directo a Cloudinary. El producto aparece de inmediato.</div></div>
+      <div class="feature-card"><div class="title">💸 Gastos / Rendiciones</div><div class="desc">Registro de egresos asignados a cada columna de caja. Transferencias incluidas.</div></div>
+      <div class="feature-card nuevo"><div class="title">🖨️ Remito PDF<span class="badge-new">nuevo</span></div><div class="desc">Comprobante profesional con banner del Shuk, foto de cada producto, columnas de precio unitario y subtotal. Imprimible o guardable como PDF.</div></div>
+      <div class="feature-card nuevo"><div class="title">⬇️ Exportar CSV<span class="badge-new">nuevo</span></div><div class="desc">Exportación de ventas a CSV para análisis externo.</div></div>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <h3>Edición de pedido — detalle</h3>
+    <div class="nota verde">✅ Al cambiar el tipo de cliente (Mayorista ↔ Minorista), todos los productos se reprecian automáticamente con la lista correspondiente.</div>
+    <div class="chips" style="margin-top:0.5rem">
+      <span class="chip verde">Cambiar tipo con reprecio automático</span>
+      <span class="chip verde">Editar cantidad por producto</span>
+      <span class="chip verde">Editar precio unitario</span>
+      <span class="chip verde">Descuento % por producto</span>
+      <span class="chip verde">Descuento % global</span>
+      <span class="chip verde">Agregar productos con precio correcto</span>
+      <span class="chip verde">Eliminar productos</span>
+      <span class="chip verde">Guarda en Google Sheets</span>
+    </div>
   </div>
 
   <div class="subsection">
@@ -435,36 +293,33 @@
       <span class="chip azul">Cantidad de pedidos</span>
       <span class="chip azul">Clientes únicos</span>
       <span class="chip azul">Ventas últimos 30 días (gráfico)</span>
-      <span class="chip azul">Top 5 productos (gráfico)</span>
-      <span class="chip azul">Distribución por forma de cobro (gráfico)</span>
+      <span class="chip azul">Top 5 productos</span>
+      <span class="chip azul">Distribución por forma de cobro</span>
     </div>
   </div>
 
   <div class="subsection">
     <h3>Pestaña: 👥 Clientes</h3>
-    <p>Historial de todos los clientes con: nombre, tipo, cantidad de pedidos, total gastado en $ y U$S, fecha última compra, y botón para contactar por WhatsApp con el link correcto según tipo.</p>
+    <p>Historial con: nombre, tipo, cantidad de pedidos, total gastado, fecha última compra, nota de cliente y botón WhatsApp con link según tipo.</p>
   </div>
 </div>
 
 <!-- CAJA -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">💼</span>
-    <h2>Sistema de Caja</h2>
-  </div>
+  <div class="section-header"><span class="section-icon">💼</span><h2>Sistema de Caja</h2></div>
 
   <div class="subsection">
-    <h3>Columnas de la caja</h3>
+    <h3>Columnas</h3>
     <div class="cajas-grid">
       <div class="caja-card"><div class="name">MP JONY</div><div class="desc">Mercado Pago de JONY</div></div>
-      <div class="caja-card"><div class="name">EFT $ JONY</div><div class="desc">Efectivo/transferencia de JONY</div></div>
+      <div class="caja-card"><div class="name">EFT $ JONY</div><div class="desc">Efectivo/transferencia JONY</div></div>
       <div class="caja-card"><div class="name">MP GABY</div><div class="desc">MP de MYRI (gestiona GABY)</div></div>
       <div class="caja-card"><div class="name">EFT $ MYRI</div><div class="desc">Efectivo físico de MYRI</div></div>
       <div class="caja-card"><div class="name">ETF U$S MYRI</div><div class="desc">Dólares de MYRI</div></div>
-      <div class="caja-card"><div class="name">Comi $ JONY</div><div class="desc">Comisión ARS pendiente JONY</div></div>
-      <div class="caja-card"><div class="name">Comi U$S JONY</div><div class="desc">Comisión USD pendiente JONY</div></div>
-      <div class="caja-card"><div class="name">Cta Cte $</div><div class="desc">Deudas en pesos pendientes</div></div>
-      <div class="caja-card"><div class="name">Cta Cte U$S</div><div class="desc">Deudas en dólares pendientes</div></div>
+      <div class="caja-card"><div class="name">Comi $ JONY</div><div class="desc">Comisión ARS pendiente</div></div>
+      <div class="caja-card"><div class="name">Comi U$S JONY</div><div class="desc">Comisión USD pendiente</div></div>
+      <div class="caja-card"><div class="name">Cta Cte $</div><div class="desc">Deudas en pesos</div></div>
+      <div class="caja-card"><div class="name">Cta Cte U$S</div><div class="desc">Deudas en dólares</div></div>
     </div>
   </div>
 
@@ -481,24 +336,13 @@
   </div>
 
   <div class="subsection">
-    <h3>Lógica de comisiones (JONY 15% de ventas MYRI)</h3>
+    <h3>Comisiones (JONY 15% de ventas MYRI)</h3>
     <table>
       <thead><tr><th>Caso</th><th>En la caja</th></tr></thead>
       <tbody>
-        <tr><td>Cliente pagó a MYRI (MP GABY / EFT $ MYRI)</td><td>Comisión aparece en Comi $ JONY (pendiente de cobrar)</td></tr>
+        <tr><td>Cliente pagó a MYRI</td><td>Comisión en Comi $ JONY (pendiente de cobrar)</td></tr>
         <tr><td>Cliente pagó a JONY directamente</td><td>Comisión ya en manos de JONY. NETO MYRI muestra "⚠️ En JONY: $X"</td></tr>
-        <tr><td>Venta en USD pagada en ARS (tipo de cambio)</td><td>Monto convertido, comisión calculada en pesos</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="subsection">
-    <h3>Filas especiales en el pie de la caja</h3>
-    <table>
-      <thead><tr><th>Fila</th><th>Qué muestra</th></tr></thead>
-      <tbody>
-        <tr><td>SALDO FÍSICO</td><td>Total real por columna (muestra ARS y USD si hay mezcla)</td></tr>
-        <tr><td>NETO MYRI</td><td>Dinero de MYRI neto de comisión, por titular: En GABY / Físico / ⚠️ En JONY</td></tr>
+        <tr><td>Venta USD pagada en ARS</td><td>Monto convertido con tipo de cambio, comisión calculada en pesos</td></tr>
       </tbody>
     </table>
   </div>
@@ -507,112 +351,110 @@
     <h3>🔒 Control personal JONY</h3>
     <p>Sección al pie de la caja, solo visible en el panel admin:</p>
     <div class="chips">
-      <span class="chip verde">Ganancias acumuladas $ = EFT JONY + MP JONY + Comi JONY − deuda a MYRI</span>
-      <span class="chip verde">Ganancias acumuladas U$S = Comi U$S JONY</span>
-      <span class="chip dorado">Diezmo (10%) calculado automáticamente</span>
+      <span class="chip verde">Ganancias $ = EFT JONY + MP JONY + Comi JONY − deuda a MYRI</span>
+      <span class="chip verde">Ganancias U$S = Comi U$S JONY</span>
+      <span class="chip dorado">Diezmo (10%) calculado automáticamente sobre comisiones</span>
     </div>
   </div>
 </div>
 
-<!-- LISTA DE ESPERA -->
+<!-- SISTEMA HIJOS -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">🔔</span>
-    <h2>Lista de Espera (Stock Agotado)</h2>
+  <div class="section-header"><span class="section-icon">🍬</span><h2>Candy Shop — Sistema de Meir e Iosi</h2></div>
+
+  <div class="nota verde">✅ Sistema completo para que Meir e Iosi registren ventas por WhatsApp y sus clientes compren desde su tienda online.</div>
+  <br>
+
+  <div class="subsection">
+    <h3>Bot WhatsApp (vía Twilio + Cloudflare Workers)</h3>
+    <div class="cmd-grid">
+      <div class="cmd-card"><div class="cmd">SPVE 2 Moshi</div><div class="desc">Venta de 2x Sopa Verde a Moshi, pago total</div></div>
+      <div class="cmd-card"><div class="cmd">CEX1 Moshi debe</div><div class="desc">Venta a crédito — queda en cuenta corriente</div></div>
+      <div class="cmd-card"><div class="cmd">CEX5 Moshi acta 5000</div><div class="desc">Venta con pago parcial de $5.000</div></div>
+      <div class="cmd-card"><div class="cmd">Moshi pagó 10000</div><div class="desc">Registra pago de cliente</div></div>
+      <div class="cmd-card"><div class="cmd">Moshi pagó todo</div><div class="desc">Salda deuda completa del cliente</div></div>
+      <div class="cmd-card"><div class="cmd">quienes deben</div><div class="desc">Lista de deudores con montos</div></div>
+      <div class="cmd-card"><div class="cmd">cuánto debe Moshi</div><div class="desc">Saldo de un cliente específico</div></div>
+      <div class="cmd-card"><div class="cmd">ventas hoy</div><div class="desc">Resumen de ventas del día</div></div>
+    </div>
+    <div class="nota">También acepta mensajes de audio — Whisper (OpenAI) transcribe el audio automáticamente.</div>
   </div>
 
   <div class="subsection">
-    <h3>Flujo completo</h3>
-    <div class="flujo">
-      <span class="flujo-step">Pendiente</span>
-      <span class="flujo-arrow">→ admin notifica →</span>
-      <span class="flujo-step">Notificado</span>
-      <span class="flujo-arrow">→ +3 días →</span>
-      <span class="flujo-step">Recordatorio disponible</span>
-      <span class="flujo-arrow">→ compra →</span>
-      <span class="flujo-step">Compró ✓</span>
+    <h3>Comandos del papá (superusuario)</h3>
+    <div class="chips">
+      <span class="chip azul">ventas hoy Meir / Iosi</span>
+      <span class="chip azul">quiénes deben a Meir / Iosi</span>
+      <span class="chip azul">cuánto debe Moshi a Meir</span>
+      <span class="chip azul">resumen (ambos chicos)</span>
     </div>
   </div>
 
-  <table>
-    <thead><tr><th>Estado</th><th>Vista admin</th><th>Acciones disponibles</th></tr></thead>
-    <tbody>
-      <tr><td>Pendiente</td><td>Sección "Pendientes de aviso"</td><td>📱 Notificar · ✕ Eliminar</td></tr>
-      <tr><td>Notificado</td><td>Sección "Seguimiento — ya avisados"</td><td>🔔 Recordatorio (si ≥3 días) · ✓ Compró · ✕ Eliminar</td></tr>
-      <tr><td>Comprado</td><td>No aparece en ninguna vista</td><td>—</td></tr>
-    </tbody>
-  </table>
+  <div class="subsection">
+    <h3>Panel Candy Shop (candyshop.html)</h3>
+    <table>
+      <thead><tr><th>Sección</th><th>Contenido</th></tr></thead>
+      <tbody>
+        <tr><td>Login</td><td>Clave compartida (Supabase auth) → selector Meir / Iosi</td></tr>
+        <tr><td>Hoy</td><td>Ventas del día, cobrado, ganancia, diezmo (10%)</td></tr>
+        <tr><td>Deudores</td><td>Lista de quién le debe a cada chico</td></tr>
+        <tr><td>Catálogo</td><td>Productos con foto, costo y ganancia. Agregar/editar/eliminar con foto subida a Cloudinary.</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-  <div class="nota">El sistema detecta el modo del cliente (mayorista/minorista) para enviar el link correcto en el mensaje de notificación.</div>
+  <div class="subsection">
+    <h3>Tienda para clientes (/candyshop/meir y /candyshop/iosi)</h3>
+    <p>Catálogo de golosinas de cada chico con carrito, checkout que pide nombre y nota, y envía el pedido por WhatsApp directo al número del chico correspondiente.</p>
+  </div>
+
+  <div class="subsection">
+    <h3>Hojas en Google Sheets</h3>
+    <div class="chips">
+      <span class="chip">CatalogoHijos — Codigo, Nombre, PrecioVenta, Costo, Foto</span>
+      <span class="chip">VentasHijos — Fecha, Hijo, Producto, Código, Cantidad, Precio, Total, Cliente, EsDebe, Saldo</span>
+      <span class="chip">CCHijos — Cuentas corrientes (deudas y pagos por cliente)</span>
+    </div>
+  </div>
 </div>
 
 <!-- BASE DE DATOS -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">🗄️</span>
-    <h2>Estructura de Datos (Google Sheets)</h2>
-  </div>
+  <div class="section-header"><span class="section-icon">🗄️</span><h2>Estructura de Datos (Google Sheets)</h2></div>
 
   <table>
     <thead><tr><th>Hoja</th><th>Contenido</th><th>Columnas principales</th></tr></thead>
     <tbody>
-      <tr><td>Stock</td><td>Catálogo de productos</td><td>ID, Nombre, Descripción, Precio May, Precio Min, Stock, Imagen, Activo, Categoría</td></tr>
-      <tr><td>Ventas</td><td>Historial de pedidos</td><td>ID, Fecha, Cliente, Tipo, Productos, Forma de Pago, Estado, Totales, Splits JONY/MYRI, Caja confirmada, Tipo de cambio, Stock Updates</td></tr>
-      <tr><td>Gastos</td><td>Egresos del negocio</td><td>Fecha, Descripción, Monto, Moneda, Categoría, Columna</td></tr>
-      <tr><td>Rendiciones</td><td>Retiros y transferencias</td><td>Fecha, Descripción, Monto, Moneda, Columna</td></tr>
-      <tr><td>Notificaciones</td><td>Lista de espera</td><td>Fecha, Producto ID, Producto, Nombre, Teléfono, Estado, Modo</td></tr>
+      <tr><td>Stock</td><td>Catálogo principal</td><td>ID, Nombre, Descripción, Precio May, Precio Min, Stock, Imagen, Activo, Categoría, Visible</td></tr>
+      <tr><td>Ventas</td><td>Pedidos del Shuk</td><td>ID, Fecha, Cliente, Tipo, Productos, Forma de Pago, Estado, Totales, Splits JONY/MYRI, Caja, TC, Stock Updates</td></tr>
+      <tr><td>Gastos</td><td>Egresos</td><td>Fecha, Descripción, Monto, Moneda, Categoría, Columna</td></tr>
+      <tr><td>Rendiciones</td><td>Retiros/transferencias</td><td>Fecha, Descripción, Monto, Moneda, Columna</td></tr>
+      <tr><td>Notificaciones</td><td>Lista de espera</td><td>Fecha, Producto ID, Nombre, Teléfono, Estado, Modo</td></tr>
+      <tr><td>NotasClientes</td><td>Notas por cliente</td><td>Cliente, Nota, Actualizado</td></tr>
+      <tr><td>CatalogoHijos</td><td>Productos Candy Shop</td><td>Codigo, Nombre, PrecioVenta, Costo, Foto</td></tr>
+      <tr><td>VentasHijos</td><td>Ventas de Meir e Iosi</td><td>Fecha, Hijo, Producto, Código, Cantidad, Precio, Total, Cliente, EsDebe, PagoParcial, Saldo</td></tr>
+      <tr><td>CCHijos</td><td>Cuentas corrientes hijos</td><td>Fecha, Hijo, Cliente, Monto, Descripción</td></tr>
     </tbody>
   </table>
 </div>
 
 <!-- TECNOLOGÍA -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-icon">⚙️</span>
-    <h2>Stack Tecnológico</h2>
-  </div>
+  <div class="section-header"><span class="section-icon">⚙️</span><h2>Stack Tecnológico</h2></div>
 
   <div class="tech-grid">
-    <div class="tech-card">
-      <span class="icon">🌐</span>
-      <div class="name">HTML/CSS/JS</div>
-      <div class="role">Frontend (sitio estático)</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">▲</span>
-      <div class="name">Vercel</div>
-      <div class="role">Hosting + deploy automático</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">📊</span>
-      <div class="name">Google Sheets</div>
-      <div class="role">Base de datos</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">⚡</span>
-      <div class="name">Apps Script</div>
-      <div class="role">API / backend</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">☁️</span>
-      <div class="name">Cloudinary</div>
-      <div class="role">CDN de imágenes</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">📈</span>
-      <div class="name">Chart.js</div>
-      <div class="role">Gráficos del dashboard</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">💬</span>
-      <div class="name">WhatsApp</div>
-      <div class="role">Comunicación cliente-admin</div>
-    </div>
-    <div class="tech-card">
-      <span class="icon">🐙</span>
-      <div class="name">GitHub</div>
-      <div class="role">Control de versiones</div>
-    </div>
+    <div class="tech-card"><span class="icon">🌐</span><div class="name">HTML/CSS/JS</div><div class="role">Frontend (SPA estática)</div></div>
+    <div class="tech-card"><span class="icon">▲</span><div class="name">Vercel</div><div class="role">Hosting + deploys automáticos + routing</div></div>
+    <div class="tech-card"><span class="icon">📊</span><div class="name">Google Sheets</div><div class="role">Base de datos</div></div>
+    <div class="tech-card"><span class="icon">⚡</span><div class="name">Apps Script</div><div class="role">API / backend serverless</div></div>
+    <div class="tech-card"><span class="icon">☁️</span><div class="name">Cloudinary</div><div class="role">CDN de imágenes + uploads</div></div>
+    <div class="tech-card"><span class="icon">📈</span><div class="name">Chart.js</div><div class="role">Gráficos del dashboard</div></div>
+    <div class="tech-card"><span class="icon">💬</span><div class="name">WhatsApp</div><div class="role">Pedidos + notificaciones + remitos</div></div>
+    <div class="tech-card"><span class="icon">🔒</span><div class="name">Supabase</div><div class="role">Autenticación admin + Candy Shop</div></div>
+    <div class="tech-card"><span class="icon">📞</span><div class="name">Twilio</div><div class="role">Sandbox WhatsApp bot hijos</div></div>
+    <div class="tech-card"><span class="icon">⚡</span><div class="name">Cloudflare Workers</div><div class="role">Bot WhatsApp + KV storage</div></div>
+    <div class="tech-card"><span class="icon">🎙️</span><div class="name">OpenAI Whisper</div><div class="role">Transcripción de audios del bot</div></div>
+    <div class="tech-card"><span class="icon">🐙</span><div class="name">GitHub</div><div class="role">Control de versiones + CI/CD</div></div>
   </div>
 </div>
 
@@ -620,7 +462,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documento de uso interno · Junio 2026
+  Documentación v2.0 · Junio 2026 · Uso interno
 </div>
 
 </div>
