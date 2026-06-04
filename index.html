@@ -1440,7 +1440,8 @@ function renderImg(p) {
       data-f1="${urls0[1]}" data-f2="${urls0[2]}" data-f3="${urls0[3]}"
       onerror="imgFallbackNext(this)" loading="lazy" alt="${p.nombre}">`;
   }
-  return `<div class="producto-img-wrap" id="carousel-${p.id}">
+  return `<div class="producto-img-wrap" id="carousel-${p.id}"
+    ${multi ? `onmouseenter="hoverCarouselStart(${p.id})" onmouseleave="hoverCarouselStop(${p.id})" ontouchstart="hoverCarouselStart(${p.id})"` : ''}>
     ${mediaEl}
     <div class="producto-img-placeholder" style="display:none">🍬</div>
     ${multi ? `
@@ -1477,11 +1478,19 @@ function startTimer(id, n) {
 }
 
 function initCarousels() {
-  Object.values(carouselTimers).forEach(t => clearInterval(t));
-  productos.forEach(p => {
-    const n = (p.imagen||'').split(',').filter(s=>s.trim()).length;
-    if (n > 1) { carouselIdx[p.id] = 0; startTimer(p.id, n); }
-  });
+  Object.keys(carouselTimers).forEach(k => { clearInterval(carouselTimers[k]); delete carouselTimers[k]; });
+  productos.forEach(p => { carouselIdx[p.id] = 0; });
+}
+
+function hoverCarouselStart(id) {
+  const p = productos.find(x => x.id == id); if (!p) return;
+  const n = (p.imagen||'').split(',').filter(s=>s.trim()).length;
+  if (n > 1) startTimer(id, n);
+}
+
+function hoverCarouselStop(id) {
+  if (carouselTimers[id]) { clearInterval(carouselTimers[id]); delete carouselTimers[id]; }
+  goToSlideInternal(id, 0);
 }
 
 function cambiarQty(id, delta, max) {
