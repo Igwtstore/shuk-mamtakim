@@ -2837,6 +2837,7 @@ if (localStorage.getItem('darkMode') === '1') {
 }
 function init() {
   const hash = window.location.hash.replace('#', '');
+  const path = window.location.pathname;
   document.getElementById('modo-bar').style.display = 'none';
   if (hash === TOKENS.admin) {
     if (sessionStorage.getItem('adminAuth') === '1') {
@@ -2846,7 +2847,7 @@ function init() {
     } else {
       document.getElementById('admin-login').style.display = 'flex';
     }
-  } else if (hash === TOKENS.minorista) {
+  } else if (hash === TOKENS.minorista || path === '/tienda') {
     setModo('minorista');
   } else {
     setModo('mayorista');
