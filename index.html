@@ -867,6 +867,14 @@
     </div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.75rem">Mantenelos presionados para guardar o compartir por WhatsApp.</div>
   </div>
+  <div class="admin-card" id="cc-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+      <div class="admin-titulo" style="margin:0">💳 Cuenta corriente</div>
+      <span id="cc-total-badge" style="background:#fde8e8;color:#c0392b;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;display:none"></span>
+    </div>
+    <div id="cc-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
+  </div>
+
   <div class="admin-card">
     <div class="admin-titulo">📦 Pedidos</div>
     <div class="filtros-estado" id="filtros-estado">
@@ -1276,7 +1284,11 @@ async function cargarProductos() {
       imagen: r[6],
       activo: (r[7]||'SI').trim().toUpperCase() === 'SI',
       categoria: (r[8]||'Varios').trim(),
-      visible: (r[9]||'Ambos').trim()
+      visible: (r[9]||'Ambos').trim(),
+      precioOferta: parseFloat((r[10]||'0').replace(',','.')),
+      fechaOferta: (r[11]||'').trim(),
+      cantPack: parseInt(r[12]||'0'),
+      precioPack: parseFloat((r[13]||'0').replace(',','.'))
     })).filter(p => p.activo && p.id);
     renderCatalogo();
     renderFiltros();
@@ -1344,6 +1356,22 @@ function formatPrecio(p) {
   }
 }
 
+function ofertaActiva(p) {
+  if (!p.precioOferta || p.precioOferta <= 0) return false;
+  if (p.fechaOferta) {
+    const parts = p.fechaOferta.split('/');
+    if (parts.length >= 3) {
+      const vence = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+      if (new Date() > vence) return false;
+    }
+  }
+  return true;
+}
+
+function packActivo(p) {
+  return p.cantPack > 0 && p.precioPack > 0;
+}
+
 function esPesos(p) {
   if (modo === 'minorista') return true;
   return PITZUJIM_IDS.includes(p.id);
@@ -1383,7 +1411,13 @@ function renderCatalogo() {
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
         <div class="producto-desc">${p.desc}</div>
-        <div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div>
+        ${ofertaActiva(p) ? `
+        <div style="display:flex;align-items:baseline;gap:0.4rem;flex-wrap:wrap">
+          <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.82rem">${precio}</span>
+          <span class="producto-precio ${esPeso ? 'pesos' : ''}" style="color:#c0392b">${esPeso ? '$ '+Math.round(p.precioOferta).toLocaleString('es-AR') : 'U$S '+p.precioOferta.toFixed(2)}</span>
+          <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase">Oferta</span>
+        </div>` : `<div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div>`}
+        ${packActivo(p) ? `<div style="background:#fdf3e3;border-radius:6px;padding:3px 8px;font-size:0.75rem;color:var(--dorado);font-weight:600;margin-top:3px">🎁 x${p.cantPack} → ${esPeso ? '$ '+Math.round(p.precioPack).toLocaleString('es-AR') : 'U$S '+p.precioPack.toFixed(2)} c/u</div>` : ''}
       </div>
       ${agotado ? `
       <div class="producto-controles">
@@ -1756,6 +1790,53 @@ function registrarPedido(nombre, items, tipo) {
     fecha: new Date().toLocaleString('es-AR')
   });
   savePedidos(pedidos);
+}
+
+async function renderCuentaCorriente() {
+  const lista = document.getElementById('cc-lista');
+  const badge = document.getElementById('cc-total-badge');
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
+    const ventas = await res.json();
+    const cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
+    if (!cc.length) {
+      lista.innerHTML = '<div style="color:var(--verde);font-size:0.82rem;padding:0.3rem 0">✓ Sin deudas pendientes</div>';
+      badge.style.display = 'none';
+      return;
+    }
+    // Agrupar por cliente
+    const porCliente = {};
+    cc.forEach(v => {
+      if (!porCliente[v.cliente]) porCliente[v.cliente] = { pedidos: [], totalARS: 0, totalUSD: 0 };
+      porCliente[v.cliente].pedidos.push(v);
+      porCliente[v.cliente].totalARS += parseFloat(v.totalARS||0);
+      porCliente[v.cliente].totalUSD += parseFloat(v.totalUSD||0);
+    });
+    const totalDeudores = Object.keys(porCliente).length;
+    badge.textContent = totalDeudores + ' deudor' + (totalDeudores !== 1 ? 'es' : '');
+    badge.style.display = '';
+    lista.innerHTML = Object.entries(porCliente).map(([cliente, data]) => {
+      const totStr = [
+        data.totalARS > 0 ? '$ ' + Math.round(data.totalARS).toLocaleString('es-AR') : '',
+        data.totalUSD > 0 ? 'U$S ' + data.totalUSD.toFixed(2) : ''
+      ].filter(Boolean).join(' + ');
+      return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
+          <div>
+            <div style="font-weight:700;color:var(--azul);font-size:0.9rem">${cliente}</div>
+            <div style="font-size:0.72rem;color:var(--texto-suave)">${data.pedidos.length} pedido${data.pedidos.length!==1?'s':''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
+            <button onclick="window.open('https://wa.me/${WA_NUM1}?text='+encodeURIComponent('Hola '+\`${cliente}\`+'! Te recordamos que tenés deuda pendiente de '+\`${totStr}\`+' en Shuk Mamtakim 🍬'),'_blank')"
+              style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px">💬 Recordar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    lista.innerHTML = '<div class="sinpedidos">Error al cargar</div>';
+  }
 }
 
 async function renderPedidos() {
@@ -2406,7 +2487,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
