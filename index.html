@@ -678,8 +678,13 @@
     letter-spacing: 0.04em;
   }
   .estado-pendiente { background: var(--dorado-claro); color: var(--dorado); }
+  .estado-preparando { background: #e8eeff; color: #2c6fad; }
   .estado-entregado { background: var(--verde-claro); color: var(--verde); }
   .estado-cancelado { background: var(--rojo-claro); color: var(--rojo); }
+  .pedido-item.preparando { border-left-color: #2c6fad; }
+  .filtros-estado { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.75rem; }
+  .filtro-estado-btn { padding:0.3rem 0.9rem; border:1.5px solid var(--gris-medio); border-radius:20px; background:white; font-family:'DM Sans',sans-serif; font-size:0.78rem; font-weight:600; cursor:pointer; color:var(--texto-suave); transition:all 0.15s; }
+  .filtro-estado-btn.activo { background:var(--azul); color:white; border-color:var(--azul); }
 
   .loading {
     text-align: center;
@@ -813,9 +818,24 @@
   </div>
   <!-- DASHBOARD TAB -->
   <div id="admin-tab-dashboard" style="display:none">
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem">
+      <button class="filtro-estado-btn activo" id="dash-btn-7" onclick="setDashPeriodo(7,this)">7 días</button>
+      <button class="filtro-estado-btn" id="dash-btn-30" onclick="setDashPeriodo(30,this)">30 días</button>
+      <button class="filtro-estado-btn" id="dash-btn-0" onclick="setDashPeriodo(0,this)">Todo</button>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.25rem" id="dash-resumen"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+      <div class="admin-card" style="background:#f0f4ff">
+        <div style="font-weight:700;color:#2c6fad;margin-bottom:0.4rem;font-size:0.85rem">🏭 Mayorista</div>
+        <div id="dash-mayorista" style="font-size:0.82rem;color:var(--texto-suave)">—</div>
+      </div>
+      <div class="admin-card" style="background:#f0fff4">
+        <div style="font-weight:700;color:var(--verde);margin-bottom:0.4rem;font-size:0.85rem">🛍️ Minorista</div>
+        <div id="dash-minorista" style="font-size:0.82rem;color:var(--texto-suave)">—</div>
+      </div>
+    </div>
     <div class="admin-card" style="margin-bottom:1rem">
-      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem;font-size:0.9rem">Ventas últimos 30 días</div>
+      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem;font-size:0.9rem" id="dash-titulo-ventas">Ventas últimos 7 días</div>
       <canvas id="dash-chart-ventas" height="80"></canvas>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem">
@@ -848,7 +868,14 @@
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.75rem">Mantenelos presionados para guardar o compartir por WhatsApp.</div>
   </div>
   <div class="admin-card">
-    <div class="admin-titulo">📦 Pedidos activos</div>
+    <div class="admin-titulo">📦 Pedidos</div>
+    <div class="filtros-estado" id="filtros-estado">
+      <button class="filtro-estado-btn activo" onclick="setFiltroEstado('todos',this)">Todos</button>
+      <button class="filtro-estado-btn" onclick="setFiltroEstado('pendiente',this)">⏳ Pendiente</button>
+      <button class="filtro-estado-btn" onclick="setFiltroEstado('preparando',this)">🔧 Preparando</button>
+      <button class="filtro-estado-btn" onclick="setFiltroEstado('entregado',this)">✓ Entregado</button>
+      <button class="filtro-estado-btn" onclick="setFiltroEstado('cancelado',this)">✕ Cancelado</button>
+    </div>
     <div class="pedidos-lista" id="pedidos-lista">
       <div class="sinpedidos">Cargando pedidos...</div>
     </div>
@@ -1742,8 +1769,9 @@ async function renderPedidos() {
       return;
     }
     const todos = [...ventas].reverse();
-    const pendientes = todos.filter(v => (v.estado || 'pendiente') === 'pendiente');
-    const historial = todos.filter(v => (v.estado || 'pendiente') !== 'pendiente');
+    const activos = ['pendiente','preparando'];
+    const pendientes = todos.filter(v => activos.includes(v.estado || 'pendiente'));
+    const historial = todos.filter(v => !activos.includes(v.estado || 'pendiente'));
 
     const renderCard = (v, conAcciones) => {
       const estado = v.estado || 'pendiente';
@@ -1785,6 +1813,7 @@ async function renderPedidos() {
         ${v.notas && v.notas !== 'Manual' ? `<div style="font-size:0.75rem;background:#e8f5ee;border-left:3px solid var(--verde);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.2rem;color:#1a5a2e">📝 ${v.notas}</div>` : ''}
         <div class="pedido-acciones">
           ${conAcciones ? `
+          ${estado === 'pendiente' ? `<button class="btn-accion" style="background:#e8eeff;color:#2c6fad" onclick="cambiarEstado('${v.id}','preparando',this)">🔧 Preparando</button>` : ''}
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : `
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`}
@@ -1799,16 +1828,32 @@ async function renderPedidos() {
       </div>`;
     };
 
-    const htmlPendientes = pendientes.length
-      ? pendientes.map(v => renderCard(v, true)).join('')
-      : '<div class="sinpedidos">No hay pedidos pendientes.</div>';
+    // Guardar todos para filtrado
+    _todosLosPedidos = todos;
 
-    const htmlHistorial = historial.length
-      ? `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Historial (${historial.length})</div>` +
-        historial.slice(0,10).map(v => renderCard(v, false)).join('')
+    const filtro = _filtroEstadoActual || 'todos';
+    let pedidosFiltrados, historialFiltrado;
+    if (filtro === 'todos') {
+      pedidosFiltrados = pendientes;
+      historialFiltrado = historial.slice(0,10);
+    } else if (['pendiente','preparando'].includes(filtro)) {
+      pedidosFiltrados = todos.filter(v => (v.estado||'pendiente') === filtro);
+      historialFiltrado = [];
+    } else {
+      pedidosFiltrados = [];
+      historialFiltrado = todos.filter(v => (v.estado||'pendiente') === filtro).slice(0,20);
+    }
+
+    const htmlPedidos = pedidosFiltrados.length
+      ? pedidosFiltrados.map(v => renderCard(v, true)).join('')
+      : '<div class="sinpedidos">Sin pedidos en este estado.</div>';
+
+    const htmlHistorial = historialFiltrado.length
+      ? `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Historial (${historialFiltrado.length})</div>` +
+        historialFiltrado.map(v => renderCard(v, false)).join('')
       : '';
 
-    lista.innerHTML = htmlPendientes + htmlHistorial;
+    lista.innerHTML = htmlPedidos + htmlHistorial;
   } catch(e) {
     lista.innerHTML = '<div class="sinpedidos">Error al cargar pedidos.</div>';
   }
@@ -2366,6 +2411,15 @@ function setModo(m) {
 }
 
 let _categoriaActiva = 'Todos';
+let _filtroEstadoActual = 'todos';
+let _todosLosPedidos = [];
+
+function setFiltroEstado(filtro, btn) {
+  _filtroEstadoActual = filtro;
+  document.querySelectorAll('.filtro-estado-btn').forEach(b => b.classList.remove('activo'));
+  if (btn) btn.classList.add('activo');
+  renderPedidos();
+}
 
 function renderFiltros() {
   const wrap = document.getElementById('filtros-wrap');
@@ -2505,26 +2559,59 @@ function contactarCliente(nombre, tipo) {
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
+let _dashPeriodo = 7;
+function setDashPeriodo(dias, btn) {
+  _dashPeriodo = dias;
+  document.querySelectorAll('[id^="dash-btn-"]').forEach(b => b.classList.remove('activo'));
+  if (btn) btn.classList.add('activo');
+  renderDashboard();
+}
+
 async function renderDashboard() {
   const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
   if (!res) return;
   const ventas = await res.json().catch(() => []);
-  const entregadas = ventas.filter(v => v.estado !== 'cancelado');
+  const todas = ventas.filter(v => v.estado !== 'cancelado');
+
+  // Filtrar por período
+  const hoy = new Date();
+  const entregadas = _dashPeriodo === 0 ? todas : todas.filter(v => {
+    const parts = (v.fecha||'').split(' ')[0].split('/');
+    if (parts.length < 3) return false;
+    const fv = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+    return (hoy - fv) / 86400000 <= _dashPeriodo;
+  });
+
+  const periodoLabel = _dashPeriodo === 0 ? 'todo el período' : `últimos ${_dashPeriodo} días`;
+  const tituloVentas = document.getElementById('dash-titulo-ventas');
+  if (tituloVentas) tituloVentas.textContent = `Ventas — ${periodoLabel}`;
 
   // Resumen
   const totalARS = entregadas.reduce((s,v) => s + (parseFloat(v.totalARS)||0), 0);
   const totalUSD = entregadas.reduce((s,v) => s + (parseFloat(v.totalUSD)||0), 0);
   const clientes = new Set(entregadas.map(v => v.cliente)).size;
+  const pendientesCount = ventas.filter(v => ['pendiente','preparando'].includes(v.estado||'pendiente')).length;
   document.getElementById('dash-resumen').innerHTML = [
     { label: 'Ventas $', val: '$ ' + Math.round(totalARS).toLocaleString('es-AR'), color: 'var(--verde)' },
     { label: 'Ventas U$S', val: 'U$S ' + totalUSD.toFixed(2), color: 'var(--verde)' },
     { label: 'Pedidos', val: entregadas.length, color: 'var(--azul)' },
-    { label: 'Clientes únicos', val: clientes, color: 'var(--azul)' }
+    { label: 'Clientes únicos', val: clientes, color: 'var(--azul)' },
+    { label: 'Pend. activos', val: pendientesCount, color: pendientesCount > 0 ? 'var(--dorado)' : 'var(--texto-suave)' }
   ].map(d => `<div class="dash-card"><div class="dash-label">${d.label}</div><div class="dash-num" style="color:${d.color}">${d.val}</div></div>`).join('');
 
-  // Ventas por día (últimos 30 días)
-  const hoy = new Date();
-  const dias = Array.from({length:30}, (_,i) => { const d = new Date(hoy); d.setDate(d.getDate()-29+i); return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}); });
+  // Desglose Mayorista / Minorista
+  const may = entregadas.filter(v => v.tipo === 'Mayorista');
+  const min = entregadas.filter(v => v.tipo === 'Minorista');
+  const mayARS = may.reduce((s,v)=>s+(parseFloat(v.totalARS)||0),0);
+  const mayUSD = may.reduce((s,v)=>s+(parseFloat(v.totalUSD)||0),0);
+  const minARS = min.reduce((s,v)=>s+(parseFloat(v.totalARS)||0),0);
+  const minUSD = min.reduce((s,v)=>s+(parseFloat(v.totalUSD)||0),0);
+  document.getElementById('dash-mayorista').innerHTML = `${may.length} pedidos · ${mayARS>0?'$ '+Math.round(mayARS).toLocaleString('es-AR'):''}${mayUSD>0?' U$S '+mayUSD.toFixed(2):''}`;
+  document.getElementById('dash-minorista').innerHTML = `${min.length} pedidos · ${minARS>0?'$ '+Math.round(minARS).toLocaleString('es-AR'):''}${minUSD>0?' U$S '+minUSD.toFixed(2):''}`;
+
+  // Ventas por día
+  const nDias = _dashPeriodo === 0 ? 60 : _dashPeriodo;
+  const dias = Array.from({length:nDias}, (_,i) => { const d = new Date(hoy); d.setDate(d.getDate()-nDias+1+i); return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}); });
   const ventasPorDia = Object.fromEntries(dias.map(d => [d, 0]));
   entregadas.forEach(v => {
     const f = (v.fecha||'').split(' ')[0];
