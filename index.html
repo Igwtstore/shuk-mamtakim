@@ -809,10 +809,16 @@
   <div id="admin-tab-clientes" style="display:none">
     <div class="admin-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
-        <div style="font-weight:700;color:var(--azul)">Historial de clientes</div>
-        <input type="text" id="clientes-buscar" placeholder="Buscar cliente..." oninput="filtrarClientes()"
-          style="padding:0.4rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:20px;font-size:0.85rem;outline:none;width:180px" />
+        <div style="font-weight:700;color:var(--azul)">👥 Clientes</div>
+        <button onclick="abrirNuevoClienteModal()" style="padding:0.4rem 0.9rem;background:var(--azul);color:white;border:none;border-radius:20px;font-size:0.82rem;font-weight:600;cursor:pointer">➕ Nuevo cliente</button>
       </div>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem">
+        <button class="filtro-estado-btn activo" onclick="setFiltroClientes('todos',this)">Todos</button>
+        <button class="filtro-estado-btn" onclick="setFiltroClientes('Mayorista',this)">🏭 Mayorista</button>
+        <button class="filtro-estado-btn" onclick="setFiltroClientes('Minorista',this)">🛍️ Minorista</button>
+      </div>
+      <input type="text" id="clientes-buscar" placeholder="Buscar cliente..." oninput="filtrarClientes()"
+        style="padding:0.4rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:20px;font-size:0.85rem;outline:none;width:100%;box-sizing:border-box;margin-bottom:0.75rem" />
       <div id="clientes-lista"><div class="sinpedidos">Cargando...</div></div>
     </div>
   </div>
@@ -867,6 +873,16 @@
     </div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.75rem">Mantenelos presionados para guardar o compartir por WhatsApp.</div>
   </div>
+  <div class="admin-card" id="visitas-card">
+    <div class="admin-titulo">👁️ Visitas al catálogo</div>
+    <div id="visitas-content" style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">
+      <div class="dash-card"><div class="dash-label">/tienda hoy</div><div class="dash-num" id="vis-tienda-hoy" style="color:var(--azul)">—</div></div>
+      <div class="dash-card"><div class="dash-label">/tienda total</div><div class="dash-num" id="vis-tienda-total" style="color:var(--azul)">—</div></div>
+      <div class="dash-card"><div class="dash-label">/mayorista hoy</div><div class="dash-num" id="vis-may-hoy" style="color:#2c6fad">—</div></div>
+      <div class="dash-card"><div class="dash-num" id="vis-may-total" style="color:#2c6fad"><div class="dash-label">/mayorista total</div>—</div></div>
+    </div>
+  </div>
+
   <div class="admin-card" id="cc-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
       <div class="admin-titulo" style="margin:0">💳 Cuenta corriente</div>
@@ -1151,6 +1167,26 @@
 <div class="toast" id="toast"></div>
 
 <!-- MODAL NOTAS -->
+<!-- MODAL NUEVO CLIENTE -->
+<div id="nuevo-cliente-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:1rem">👤 Nuevo cliente</div>
+    <div style="display:flex;flex-direction:column;gap:0.6rem">
+      <input type="text" id="nc-nombre" placeholder="Nombre *" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none">
+      <input type="tel" id="nc-tel" placeholder="Teléfono (ej: 5491131234567)" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none">
+      <select id="nc-tipo" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;background:white">
+        <option value="Mayorista">Mayorista</option>
+        <option value="Minorista">Minorista</option>
+      </select>
+      <input type="text" id="nc-nota" placeholder="Nota (opcional)" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none">
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
+      <button onclick="cerrarNuevoClienteModal()" style="flex:1;padding:0.65rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:white;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer">Cancelar</button>
+      <button onclick="guardarNuevoCliente()" style="flex:2;padding:0.65rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">Guardar cliente</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL OFERTA -->
 <div id="oferta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:600;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
@@ -1842,6 +1878,22 @@ function registrarPedido(nombre, items, tipo) {
     fecha: new Date().toLocaleString('es-AR')
   });
   savePedidos(pedidos);
+}
+
+async function renderVisitas() {
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=visitas');
+    const data = await res.json();
+    const hoy = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const tiendaHoy = (data.filter(v => v.pagina==='tienda' && v.fecha.startsWith(hoy.split('/').reverse().join('/')))).length;
+    const tiendaTotal = data.filter(v => v.pagina==='tienda').length;
+    const mayHoy = data.filter(v => v.pagina==='mayorista' && v.fecha.startsWith(hoy.split('/').reverse().join('/'))).length;
+    const mayTotal = data.filter(v => v.pagina==='mayorista').length;
+    document.getElementById('vis-tienda-hoy').textContent = tiendaHoy;
+    document.getElementById('vis-tienda-total').textContent = tiendaTotal;
+    document.getElementById('vis-may-hoy').textContent = mayHoy;
+    document.getElementById('vis-may-total').innerHTML = `<div class="dash-label">/mayorista total</div>${mayTotal}`;
+  } catch(e) {}
 }
 
 async function renderCuentaCorriente() {
@@ -2611,7 +2663,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
@@ -2720,42 +2772,111 @@ async function renderClientes() {
   mostrarClientes(_clientesRaw);
 }
 
-function mostrarClientes(arr) {
-  const lista = document.getElementById('clientes-lista');
-  if (!arr.length) { lista.innerHTML = '<div class="sinpedidos">Sin clientes aún.</div>'; return; }
-  lista.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
-    <thead><tr style="background:var(--gris)">
-      <th style="text-align:left;padding:0.5rem;color:var(--texto-suave);font-weight:600">Cliente</th>
-      <th style="text-align:center;padding:0.5rem;color:var(--texto-suave);font-weight:600">Tipo</th>
-      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Pedidos</th>
-      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Total $</th>
-      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Total U$S</th>
-      <th style="text-align:right;padding:0.5rem;color:var(--texto-suave);font-weight:600">Última compra</th>
-      <th style="padding:0.5rem"></th>
-    </tr></thead>
-    <tbody>${arr.map(c => `
-    <tr style="border-bottom:1px solid var(--gris-medio)">
-      <td style="padding:0.5rem">
-        <div style="font-weight:600;color:var(--azul)">${c.nombre}</div>
-        ${_notasClientes[c.nombre] ? `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.2rem">📝 ${_notasClientes[c.nombre].substring(0,60)}${_notasClientes[c.nombre].length>60?'…':''}</div>` : ''}
-      </td>
-      <td style="padding:0.5rem;text-align:center"><span style="font-size:0.72rem;background:var(--gris);padding:2px 8px;border-radius:20px">${c.tipo}</span></td>
-      <td style="padding:0.5rem;text-align:right">${c.pedidos}</td>
-      <td style="padding:0.5rem;text-align:right;color:var(--verde);font-weight:600">${c.totalARS > 0 ? '$ ' + Math.round(c.totalARS).toLocaleString('es-AR') : '—'}</td>
-      <td style="padding:0.5rem;text-align:right;color:var(--verde);font-weight:600">${c.totalUSD > 0 ? 'U$S ' + c.totalUSD.toFixed(2) : '—'}</td>
-      <td style="padding:0.5rem;text-align:right;color:var(--texto-suave);font-size:0.78rem">${c.ultima}</td>
-      <td style="padding:0.5rem;text-align:right">
-        <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="contactarCliente('${c.nombre.replace(/'/g,'')}','${c.tipo}')">💬 WA</button>
-        <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.72rem" onclick="abrirNotaModal('cliente','${c.nombre.replace(/'/g,'')}','${(_notasClientes[c.nombre]||'').replace(/'/g,'')}','Nota — ${c.nombre.replace(/'/g,'')}')">📝</button>
-      </td>
-    </tr>`).join('')}
-    </tbody>
-  </table>`;
+let _filtroClientesTipo = 'todos';
+
+function abrirNuevoClienteModal() {
+  document.getElementById('nc-nombre').value = '';
+  document.getElementById('nc-tel').value = '';
+  document.getElementById('nc-tipo').value = 'Mayorista';
+  document.getElementById('nc-nota').value = '';
+  document.getElementById('nuevo-cliente-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('nc-nombre').focus(), 100);
+}
+
+function cerrarNuevoClienteModal() {
+  document.getElementById('nuevo-cliente-modal').style.display = 'none';
+}
+
+async function guardarNuevoCliente() {
+  const nombre = document.getElementById('nc-nombre').value.trim();
+  if (!nombre) { showToast('Ingresá el nombre del cliente'); return; }
+  const tel = document.getElementById('nc-tel').value.trim();
+  const tipo = document.getElementById('nc-tipo').value;
+  const nota = document.getElementById('nc-nota').value.trim();
+  cerrarNuevoClienteModal();
+  const params = new URLSearchParams({ accion: 'agregarCliente', nombre, telefono: tel, tipo, nota });
+  await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+  if (nota) await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'guardarNotaCliente', cliente: nombre, nota }).toString());
+  showToast('Cliente guardado ✓');
+  renderClientes();
+}
+
+function setFiltroClientes(tipo, btn) {
+  _filtroClientesTipo = tipo;
+  document.querySelectorAll('#admin-tab-clientes .filtro-estado-btn').forEach(b => b.classList.remove('activo'));
+  if (btn) btn.classList.add('activo');
+  filtrarClientes();
 }
 
 function filtrarClientes() {
   const q = document.getElementById('clientes-buscar').value.toLowerCase();
-  mostrarClientes(_clientesRaw.filter(c => c.nombre.toLowerCase().includes(q)));
+  let arr = _clientesRaw.filter(c => c.nombre.toLowerCase().includes(q));
+  if (_filtroClientesTipo !== 'todos') arr = arr.filter(c => c.tipo === _filtroClientesTipo);
+  mostrarClientes(arr);
+}
+
+function diasDesde(fechaStr) {
+  if (!fechaStr) return null;
+  const parts = fechaStr.split(' ')[0].split('/');
+  if (parts.length < 3) return null;
+  const f = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+  return Math.floor((new Date() - f) / 86400000);
+}
+
+function mostrarClientes(arr) {
+  const lista = document.getElementById('clientes-lista');
+  if (!arr.length) { lista.innerHTML = '<div class="sinpedidos">Sin clientes aún.</div>'; return; }
+  lista.innerHTML = arr.map(c => {
+    const deuda = c.historial.filter(v => v.formaPago === 'Cuenta corriente' && !v.cajaJony && !v.cajaMyri);
+    const deudaARS = deuda.reduce((s,v) => s + (parseFloat(v.totalARS)||0), 0);
+    const deudaUSD = deuda.reduce((s,v) => s + (parseFloat(v.totalUSD)||0), 0);
+    const deudaStr = [deudaARS>0?'$ '+Math.round(deudaARS).toLocaleString('es-AR'):'', deudaUSD>0?'U$S '+deudaUSD.toFixed(2):''].filter(Boolean).join(' + ');
+    const dias = diasDesde(c.ultima);
+    const diasStr = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias}d`;
+    const tipoBadge = c.tipo === 'Mayorista'
+      ? `<span style="background:#e8eeff;color:#2c6fad;font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:20px">Mayorista</span>`
+      : `<span style="background:#e8f5ee;color:var(--verde);font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:20px">Minorista</span>`;
+    const nombre = c.nombre.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    return `
+    <div style="border:1.5px solid var(--gris-medio);border-radius:12px;margin-bottom:0.6rem;overflow:hidden">
+      <div style="padding:0.75rem;display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;cursor:pointer" onclick="toggleClienteHistorial('ch-${c.nombre.replace(/[^a-z0-9]/gi,'_')}')">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">
+            <span style="font-weight:700;color:var(--azul);font-size:0.9rem">${c.nombre}</span>
+            ${tipoBadge}
+            ${deudaStr ? `<span style="background:#fde8e8;color:#c0392b;font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:20px">💳 ${deudaStr}</span>` : ''}
+          </div>
+          ${_notasClientes[c.nombre] ? `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.2rem">📝 ${_notasClientes[c.nombre].substring(0,60)}${_notasClientes[c.nombre].length>60?'…':''}</div>` : ''}
+          <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.25rem">
+            ${c.pedidos} pedido${c.pedidos!==1?'s':''} ·
+            ${c.totalARS>0?'$ '+Math.round(c.totalARS).toLocaleString('es-AR'):''}${c.totalUSD>0?' + U$S '+c.totalUSD.toFixed(2):''} total ·
+            ${diasStr}
+          </div>
+        </div>
+        <div style="display:flex;gap:0.3rem;flex-shrink:0">
+          <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${c.tipo}')">💬</button>
+          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirNotaModal('cliente','${nombre}','${(_notasClientes[c.nombre]||'').replace(/'/g,"\\'")}','Nota — ${nombre}')">📝</button>
+        </div>
+      </div>
+      <div id="ch-${c.nombre.replace(/[^a-z0-9]/gi,'_')}" style="display:none;border-top:1px solid var(--gris-medio);background:var(--gris);padding:0.6rem 0.75rem">
+        <div style="font-size:0.72rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.4rem">HISTORIAL DE PEDIDOS</div>
+        ${c.historial.slice().reverse().map(v => `
+          <div style="font-size:0.78rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio);display:flex;justify-content:space-between;gap:0.5rem">
+            <div>
+              <span style="color:var(--texto-suave)">${v.fecha.split(' ')[0]}</span>
+              <span style="color:var(--azul);font-weight:600;margin-left:0.3rem">${v.totalARS>0?'$ '+Math.round(v.totalARS).toLocaleString('es-AR'):''}${v.totalUSD>0?' U$S '+parseFloat(v.totalUSD).toFixed(2):''}</span>
+              <span style="color:var(--texto-suave);font-size:0.7rem;margin-left:0.3rem">${v.formaPago}</span>
+            </div>
+            <span class="estado-pill estado-${v.estado||'pendiente'}" style="flex-shrink:0">${v.estado||'pendiente'}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleClienteHistorial(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 function contactarCliente(nombre, tipo) {
@@ -3235,10 +3356,16 @@ function init() {
     }
   } else if (path === '/mayorista') {
     setModo('mayorista');
+    registrarVisita('mayorista');
   } else {
     setModo('minorista');
+    registrarVisita('tienda');
   }
   cargarProductos();
+}
+
+function registrarVisita(pagina) {
+  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarVisita', pagina }), { mode: 'no-cors' }).catch(() => {});
 }
 
 init();
