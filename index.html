@@ -3143,7 +3143,9 @@ function parsearLineasPedido(productosStr) {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u/);
     if (!m) return { nombre: linea, qty: 1, moneda: '$', precio: 0, raw: linea };
     const qty = parseInt(m[1]);
-    const nombre = m[2].replace(/ · .+$/, '').trim();
+    const partes = m[2].split(' · ');
+    const nombre = partes[0].trim();
+    const descripcion = partes.slice(1).join(' · ').trim();
     const moneda = m[3];
     const precioStr = m[4];
     let precio;
@@ -3152,7 +3154,7 @@ function parsearLineasPedido(productosStr) {
     } else {
       precio = parseInt(precioStr.replace(/\./g, '').replace(',', '.'));
     }
-    return { nombre, qty, moneda, precio, raw: linea };
+    return { nombre, descripcion, qty, moneda, precio, raw: linea };
   });
 }
 
@@ -3161,7 +3163,7 @@ function renderEditLineas() {
   cont.innerHTML = _editLineas.map((l, i) => `
     <div class="edit-row" style="flex-wrap:wrap;gap:6px;position:relative">
       <div style="display:flex;align-items:center;width:100%;gap:6px">
-        <span class="edit-prod-name" title="${l.nombre}" style="flex:1;font-weight:600">${l.nombre}</span>
+        <span class="edit-prod-name" style="flex:1;font-weight:600;font-size:0.85rem">${l.nombre}${l.descripcion ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${l.descripcion}</span>` : ''}</span>
         <button onclick="eliminarLineaEdit(${i})" style="background:#fde8e8;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:#e05c2a;font-size:1rem;flex-shrink:0" title="Eliminar producto">×</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px;width:100%">
@@ -3390,12 +3392,10 @@ function cerrarEditPedido() {
       <div id="ep-lineas"></div>
 
       <div class="edit-section-label">Agregar producto</div>
-      <div style="display:flex;gap:8px;margin-bottom:4px">
-        <select id="ep-add-producto" class="edit-tipo-select" style="flex:1">
-          <option value="">— Elegir producto —</option>
-        </select>
-        <button onclick="agregarProductoEdit()" style="padding:7px 14px;background:var(--azul);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Agregar</button>
-      </div>
+      <select id="ep-add-producto" class="edit-tipo-select" style="width:100%;margin-bottom:6px">
+        <option value="">— Elegir producto —</option>
+      </select>
+      <button onclick="agregarProductoEdit()" style="width:100%;padding:9px;background:var(--azul);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:4px">+ Agregar al pedido</button>
 
       <div class="edit-section-label">Descuento global</div>
       <div class="edit-discount-row">
