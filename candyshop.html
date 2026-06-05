@@ -980,6 +980,7 @@ async function verificarClave() {
     document.getElementById('input-clave').value = '';
     document.getElementById('input-clave').focus();
   } else {
+    localStorage.setItem('cs_auth', '1');
     document.getElementById('pantalla-clave').style.display = 'none';
     document.getElementById('login').style.display = 'flex';
     document.getElementById('clave-error').style.display = 'none';
@@ -990,6 +991,7 @@ function logout() {
   sb.auth.signOut();
   sessionStorage.removeItem('cs_usuario');
   localStorage.removeItem('cs_usuario');
+  localStorage.removeItem('cs_auth');
   usuario = null;
   document.getElementById('fab-venta').style.display = 'none';
   document.getElementById('login').style.display = 'flex';
@@ -998,13 +1000,24 @@ function logout() {
 
 // ─── INIT ─────────────────────────────────────────────────────────
 (async () => {
-  const { data: { session } } = await sb.auth.getSession();
   const savedUser = sessionStorage.getItem('cs_usuario') || localStorage.getItem('cs_usuario');
-  if (session && savedUser) {
+  const yaAutenticado = localStorage.getItem('cs_auth') === '1';
+
+  if (savedUser && yaAutenticado) {
+    // Ya autenticado y sabe quién es → directo al panel
     login(savedUser);
-  } else if (session) {
+  } else if (yaAutenticado) {
+    // Ya autenticado pero no sabe quién es → elegir usuario
     document.getElementById('pantalla-clave').style.display = 'none';
     document.getElementById('login').style.display = 'flex';
+  } else {
+    // Primera vez → pedir clave
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      localStorage.setItem('cs_auth', '1');
+      document.getElementById('pantalla-clave').style.display = 'none';
+      document.getElementById('login').style.display = 'flex';
+    }
   }
 })();
 </script>
