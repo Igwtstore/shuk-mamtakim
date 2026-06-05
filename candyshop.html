@@ -784,7 +784,10 @@ function renderProductosGrid() {
     const sel = wProductosSeleccionados[p.codigo];
     const fotoEl = p.foto ? `<div class="prod-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
     return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleProducto('${p.codigo}')">
-      ${sel ? `<div class="prod-badge">${sel.qty}</div>` : ''}
+      ${sel ? `<div class="prod-badge" style="display:flex;gap:2px;width:auto;border-radius:12px;padding:0 6px;min-width:22px">
+        <span>${sel.qty}</span>
+        <span onclick="quitarProducto('${p.codigo}',event)" style="opacity:0.7;font-size:0.7rem;margin-left:2px">✕</span>
+      </div>` : ''}
       ${fotoEl}
       <div class="prod-info">
         <div class="prod-nombre">${p.nombre}</div>
@@ -798,10 +801,16 @@ function toggleProducto(codigo) {
   const p = catalogoCache.find(x => x.codigo === codigo);
   if (!p) return;
   if (wProductosSeleccionados[codigo]) {
-    delete wProductosSeleccionados[codigo];
+    wProductosSeleccionados[codigo].qty++;
   } else {
     wProductosSeleccionados[codigo] = { ...p, qty: 1 };
   }
+  renderProductosGrid();
+}
+
+function quitarProducto(codigo, event) {
+  event.stopPropagation();
+  delete wProductosSeleccionados[codigo];
   renderProductosGrid();
 }
 
