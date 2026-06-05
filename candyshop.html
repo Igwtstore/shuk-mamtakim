@@ -323,7 +323,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <!-- STEP 1: CLIENTE -->
     <div class="wizard-step active" id="ws-0">
       <div class="wizard-label">¿A quién le vendiste?</div>
-      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" oninput="filtrarSugerencias()">
+      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" enterkeyhint="next" oninput="filtrarSugerencias()" onkeydown="if(event.key==='Enter') wizardNext()">
       <div class="cliente-sugerencias" id="cliente-sugerencias"></div>
     </div>
     <!-- STEP 2: PRODUCTOS -->
@@ -359,7 +359,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
       <div class="pago-cuenta-input" id="pago-cuenta-wrap">
         <div class="pago-cuenta-label">¿Cuánto pagó?</div>
-        <input class="pago-monto-input" id="w-monto-parcial" type="number" placeholder="Ej: 2000" min="0">
+        <input class="pago-monto-input" id="w-monto-parcial" type="number" placeholder="Ej: 2000" min="0" enterkeyhint="done" onkeydown="if(event.key==='Enter') confirmarVentaWizard()">
       </div>
     </div>
   </div>
