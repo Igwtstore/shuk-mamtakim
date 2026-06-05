@@ -117,7 +117,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .foto-uploading { font-size: 0.8rem; color: #aaa; }
 
 /* ─── FAB NUEVA VENTA ──────────────────────────────────────────── */
-.fab { position: fixed; bottom: 24px; right: 20px; z-index: 50; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #2e8b57, #1a6b3c); color: white; border: none; font-size: 2rem; box-shadow: 0 6px 20px rgba(46,139,87,0.5); cursor: pointer; display: none; align-items: center; justify-content: center; transition: transform 0.15s; }
+.fab { position: fixed; bottom: 88px; right: 20px; z-index: 200; width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #2e8b57, #1a6b3c); color: white; border: none; font-size: 2rem; box-shadow: 0 6px 24px rgba(46,139,87,0.55); cursor: pointer; display: none; align-items: center; justify-content: center; transition: transform 0.15s; }
+#panel ~ .fab, #panel + .fab { display: none; }
 .fab:active { transform: scale(0.9); }
 
 /* ─── WIZARD ───────────────────────────────────────────────────── */
@@ -426,6 +427,7 @@ function login(nombre) {
   document.getElementById('login').style.display = 'none';
   document.getElementById('panel').style.display = 'flex';
   document.getElementById('fab-venta').style.display = 'flex';
+  document.getElementById('fab-venta').style.setProperty('display', 'flex', 'important');
 
   const av = document.getElementById('avatar');
   av.textContent = nombre[0];
