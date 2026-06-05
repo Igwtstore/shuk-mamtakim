@@ -893,8 +893,18 @@ async function confirmarVentaWizard() {
   }
 
   cerrarWizard();
-  cargarDatos();
-  showTab('dashboard', document.querySelector('.tab'));
+  // Pequeña espera para que el Sheet procese
+  document.getElementById('fab-venta').style.setProperty('display','flex','important');
+  await new Promise(r => setTimeout(r, 1200));
+  await cargarDatos();
+  const tabHoy = document.querySelector('.tab');
+  if (tabHoy) showTab('dashboard', tabHoy);
+  // Toast de confirmación
+  const t = document.createElement('div');
+  t.textContent = '✅ Venta registrada!';
+  t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2e8b57;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
 }
 
 // ─── DEUDORES MEJORADO ────────────────────────────────────────────
