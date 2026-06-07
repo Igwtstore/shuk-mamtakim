@@ -1,0 +1,29 @@
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - candyshop-apps-script.js
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Write credentials
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Push & deploy
+        run: |
+          clasp push -f
+          clasp deploy -i AKfycbxdAaSjGfBQoMz_38kHvTvUNswM94BdQexq5IDAINgTbvgpNOcOdyu8TXIHsbAZWAJ-hA
