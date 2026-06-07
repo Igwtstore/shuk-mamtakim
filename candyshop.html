@@ -441,7 +441,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <!-- STEP 1: CLIENTE -->
     <div class="wizard-step active" id="ws-0">
       <div class="wizard-label">¿A quién le vendiste?</div>
-      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" enterkeyhint="next" oninput="filtrarSugerencias()" onkeydown="if(event.key==='Enter') wizardNext()">
+      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente (opcional)" autocomplete="off" enterkeyhint="next" oninput="filtrarSugerencias(); this.placeholder='Nombre del cliente (opcional)';" onkeydown="if(event.key==='Enter') wizardNext()">
       <div class="cliente-sugerencias" id="cliente-sugerencias"></div>
     </div>
     <!-- STEP 2: PRODUCTOS -->
@@ -944,10 +944,18 @@ function wizardBack() {
   if (wStep === 2) renderCantidades();
 }
 
+function _pedirClienteWizard() {
+  renderWizardStep(0);
+  setTimeout(() => {
+    const el = document.getElementById('w-cliente');
+    el.placeholder = '⚠️ Nombre requerido para registrar deuda';
+    el.focus();
+  }, 150);
+}
+
 function wizardNext() {
   if (wStep === 0) {
     wCliente = document.getElementById('w-cliente').value.trim();
-    if (!wCliente) { document.getElementById('w-cliente').focus(); return; }
     renderProductosGrid();
     renderWizardStep(1);
   } else if (wStep === 1) {
@@ -1063,7 +1071,11 @@ function seleccionarPago(tipo) {
   document.querySelector('#wizard-overlay .' + clases[tipo]).style.opacity = '1';
   document.getElementById('pago-cuenta-wrap').classList.remove('open');
   document.getElementById('pago-masque-wrap').classList.remove('open');
-  if (tipo === 'cuenta') {
+  if (tipo === 'nopago') {
+    if (!wCliente) { _pedirClienteWizard(); return; }
+    confirmarVentaWizard();
+  } else if (tipo === 'cuenta') {
+    if (!wCliente) { _pedirClienteWizard(); return; }
     document.getElementById('pago-cuenta-wrap').classList.add('open');
     setTimeout(() => document.getElementById('w-monto-parcial').focus(), 200);
   } else if (tipo === 'masque') {
@@ -1081,7 +1093,8 @@ function calcCambio() {
 }
 
 async function confirmarVentaWizard() {
-  if (!wCliente || !Object.keys(wProductosSeleccionados).length || !wPago) return;
+  if (!Object.keys(wProductosSeleccionados).length || !wPago) return;
+  if ((wPago === 'nopago' || wPago === 'cuenta') && !wCliente) { _pedirClienteWizard(); return; }
   if (wPago === 'cuenta') {
     const monto = parseFloat(document.getElementById('w-monto-parcial').value) || 0;
     if (!monto) { document.getElementById('w-monto-parcial').focus(); return; }
