@@ -380,7 +380,7 @@ function registrarPagoCliente(ss, p) {
 function registrarVueltoCC(ss, p) {
   // El cliente pagó de más — le debemos cambio (monto negativo en CC)
   if (!p.cliente || !p.monto) return { ok: false };
-  registrarMovimientoCC(ss, p.hijo, dec(p.cliente), -(parseFloat(p.monto)||0), 'vuelto');
+  registrarMovimientoCC(ss, p.hijo, dec(p.cliente), -(parseFloat(p.monto)||0), 'vuelto', dec(p.producto||''));
   return { ok: true };
 }
 

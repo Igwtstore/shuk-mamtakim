@@ -1159,7 +1159,8 @@ async function confirmarVentaWizard() {
     await api('registrarPagoCliente', { hijo: usuario, cliente: wCliente, monto: montoPago });
   }
   if (wPago === 'masque' && wCliente && saldo > 0) {
-    await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo });
+    const prodLabel = Object.values(wProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
+    await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo, producto: prodLabel });
   }
 
   cerrarWizard();
@@ -1541,7 +1542,8 @@ async function confirmarRetroVenta() {
     await api('registrarPagoCliente', { hijo: usuario, cliente: rCliente, monto: montoPago });
   }
   if (rPago === 'masque' && rCliente && saldo > 0) {
-    await api('registrarVueltoCC', { hijo: usuario, cliente: rCliente, monto: saldo });
+    const prodLabelR = Object.values(rProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
+    await api('registrarVueltoCC', { hijo: usuario, cliente: rCliente, monto: saldo, producto: prodLabelR });
   }
 
   cerrarRetroWizard();
