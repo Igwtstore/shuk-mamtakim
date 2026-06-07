@@ -1719,10 +1719,11 @@ function renderCarrito() {
     </div>`;
   }).join('');
 
+  const _savedNombre = localStorage.getItem('shuk_may_nombre') || '';
   cont.innerHTML = itemsHTML + `
     <div class="nombre-campo">
       <label>Tu nombre</label>
-      <input type="text" id="nombre-cliente" placeholder="Ej: Carlos García" />
+      <input type="text" id="nombre-cliente" placeholder="Ej: Carlos García" value="${_savedNombre.replace(/"/g,'&quot;')}" />
     </div>
     <div class="nombre-campo">
       <label>Nota / indicación especial <span style="color:var(--texto-suave);font-weight:400">(opcional)</span></label>
@@ -1763,6 +1764,7 @@ function eliminarDelCarrito(id) {
 }
 
 let _enviando = false, _enviandoManual = false;
+let _registroCallback = null;
 function enviarPedido() {
   if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
@@ -1771,6 +1773,15 @@ function enviarPedido() {
   if (!formaPago) { showToast('Seleccioná la forma de cobro'); document.getElementById('forma-pago').focus(); return; }
   const items = Object.values(carrito);
   if (!items.length) return;
+  // Si no está registrado, pedir datos antes de enviar
+  const telGuardado = localStorage.getItem('shuk_may_tel');
+  if (!telGuardado || telGuardado.length !== 10) {
+    const regNombre = document.getElementById('reg-nombre');
+    if (regNombre) regNombre.value = nombre;
+    _registroCallback = () => enviarPedido();
+    mostrarRegistroModal();
+    return;
+  }
   const notaPedido = document.getElementById('nota-pedido')?.value.trim() || '';
   _enviando = true;
   const btnPedido = document.querySelector('.pedido-btn');
@@ -3377,7 +3388,6 @@ function init() {
   } else if (path === '/mayorista') {
     setModo('mayorista');
     registrarVisita('mayorista');
-    setTimeout(checkRegistroMayorista, 800);
   } else {
     setModo('minorista');
     registrarVisita('tienda');
@@ -3419,6 +3429,7 @@ async function submitRegistro() {
     localStorage.setItem('shuk_may_tel', tel);
     cerrarRegistroModal();
   }
+  if (_registroCallback) { const cb = _registroCallback; _registroCallback = null; cb(); }
 }
 
 function checkRegistroMayorista() {
@@ -3959,7 +3970,7 @@ function cerrarEditPedido() {
       </div>
       <div>
         <label style="font-size:0.78rem;font-weight:600;color:#1a1a2e;display:block;margin-bottom:0.3rem">Teléfono con código de área <span style="font-weight:400;color:var(--texto-suave)">(sin el 15 ni el 54)</span></label>
-        <input id="reg-tel" type="tel" placeholder="1131754540" maxlength="10" inputmode="numeric"
+        <input id="reg-tel" type="tel" placeholder="1156009900" maxlength="10" inputmode="numeric"
           oninput="this.value=this.value.replace(/\D/g,'')"
           style="width:100%;padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;letter-spacing:1px;" />
         <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.3rem">Ej: 1131754540 (CABA) · 3814123456 (Tucumán)</div>
