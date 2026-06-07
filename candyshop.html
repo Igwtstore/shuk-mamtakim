@@ -1569,12 +1569,20 @@ function renderHistorialCliente(movs, cliente) {
   const withSaldo = rowsAsc.map(m => { saldoAcum += m.monto; return { ...m, saldoAcum }; }).reverse();
 
   el.innerHTML = withSaldo.map(m => {
-    const t = TIPOS[m.tipo] || { label: m.tipo, cls: 'mov-pago', signo: '' };
+    let t = TIPOS[m.tipo] || { label: m.tipo, cls: 'mov-pago', signo: '' };
+    if (m.tipo === 'pago') {
+      if (m.saldoAcum <= 0.01) {
+        t = { label: 'CUENTA SALDADA', cls: 'mov-pago', signo: '−' };
+      } else {
+        t = { label: 'Pago a cuenta', cls: 'mov-pago', signo: '−' };
+      }
+    }
+    const saldada = m.tipo === 'pago' && m.saldoAcum <= 0.01;
     const montoAbs = Math.abs(m.monto);
     const prodLine = m.producto ? `<div style="font-size:0.78rem;color:#5c3d1e;font-weight:600;margin-top:3px">🛍️ ${m.producto}</div>` : '';
-    return `<div class="mov-row">
+    return `<div class="mov-row" ${saldada ? 'style="background:#f0faf4;border-radius:12px;padding:2px 0"' : ''}>
       <div>
-        <span class="mov-badge ${t.cls}">${t.label}</span>
+        <span class="mov-badge ${t.cls}" ${saldada ? 'style="font-weight:900;letter-spacing:0.03em"' : ''}>${t.label}</span>
         ${prodLine}
         <div style="font-size:0.72rem;color:#aaa;margin-top:2px">${m.fecha}</div>
       </div>
