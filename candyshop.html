@@ -472,7 +472,7 @@ async function cargarDatos() {
   ]);
 
   catalogoCache = catalogo || [];
-  renderDashboard(ventas || [], catalogoCache);
+  renderDashboard(ventas || [], catalogoCache, deudores || []);
   renderDeudores(deudores || []);
   renderCatalogo(catalogoCache);
   renderVisitasKid(visitas || [], usuario);
@@ -490,9 +490,10 @@ function renderVisitasKid(visitas, hijo) {
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
-function renderDashboard(ventas, catalogo) {
+function renderDashboard(ventas, catalogo, deudores = []) {
   const costoMap = {};
   catalogo.forEach(p => { costoMap[p.codigo?.toLowerCase()] = p.costo || 0; });
+  const conDeuda = new Set(deudores.map(d => d.cliente.toLowerCase()));
 
   let cobrado = 0, ganancia = 0;
   ventas.forEach(v => {
@@ -517,7 +518,7 @@ function renderDashboard(ventas, catalogo) {
     const cod = (v.codigo || '').toLowerCase();
     const costo = costoMap[cod] || 0;
     const gan = (v.precio - costo) * v.cantidad;
-    const debeTag = v.saldoPendiente > 0 ? '<span class="badge badge-debe">DEBE</span>' : '';
+    const debeTag = v.saldoPendiente > 0 && conDeuda.has((v.cliente || '').toLowerCase()) ? '<span class="badge badge-debe">DEBE</span>' : '';
     return `<div class="item-row">
       <div class="item-info">
         <div class="item-name">${v.cantidad}x ${v.producto}${debeTag}</div>
