@@ -424,6 +424,7 @@ function login(nombre) {
   usuario = nombre;
   sessionStorage.setItem('cs_usuario', nombre);
   localStorage.setItem('cs_usuario', nombre);
+  document.getElementById('pantalla-clave').style.display = 'none';
   document.getElementById('login').style.display = 'none';
   document.getElementById('panel').style.display = 'flex';
   document.getElementById('fab-venta').style.display = 'flex';
