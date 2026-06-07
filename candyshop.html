@@ -241,6 +241,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .total-kid-nombre { font-size: 0.95rem; font-weight: 800; margin-bottom: 8px; }
 .total-kid-stat { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
 .total-kid-monto { font-size: 1.05rem; font-weight: 800; color: #5c3d1e; }
+
+/* ─── HISTORIAL CLIENTE ─────────────────────────────────────────── */
+.mov-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-bottom: 1px solid #f0ebe3; }
+.mov-row:last-child { border-bottom: none; }
+.mov-badge { font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 8px; display: inline-block; margin-bottom: 3px; }
+.mov-deuda     { background: #fff3e0; color: #e8854a; }
+.mov-pago      { background: #e8f5ee; color: #2e8b57; }
+.mov-vuelto    { background: #e8f0ff; color: #2c6fad; }
+.mov-pago_vuelto { background: #e8f5ee; color: #2e8b57; }
+.mov-saldo-chip { font-size: 0.7rem; background: #f5f0e8; color: #888; padding: 2px 7px; border-radius: 8px; margin-top: 3px; display: inline-block; }
+.btn-historial { background: none; border: none; font-size: 0.78rem; color: #2c6fad; font-weight: 700; cursor: pointer; padding: 4px 0; text-decoration: underline; }
+
+/* ─── STOCK DEL DÍA ─────────────────────────────────────────────── */
+.stock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stock-chip { background: #f8f4ee; border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+.stock-chip-nombre { font-size: 0.78rem; font-weight: 600; color: #2d1a0a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
+.stock-chip-nums { text-align: right; flex-shrink: 0; }
+.stock-chip-rest { font-size: 1rem; font-weight: 800; color: #2d1a0a; }
+.stock-chip-rest.bajo { color: #e05c2a; }
+.stock-chip-rest.cero { color: #ccc; }
+.stock-chip-sub { font-size: 0.68rem; color: #aaa; }
+.stock-load-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0ebe3; }
+.stock-load-item:last-child { border-bottom: none; }
+.stock-load-nombre { font-weight: 600; font-size: 0.9rem; color: #2d1a0a; }
+.stock-load-precio { font-size: 0.75rem; color: #aaa; }
 </style>
 </head>
 <body>
@@ -288,6 +313,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
     </div>
     <div class="topbar-actions">
+      <button class="icon-btn" onclick="abrirCargaStock()" title="Stock del día">📦</button>
       <button class="icon-btn" onclick="abrirRetroWizard()" title="Cargar ventas pasadas">📅</button>
       <button class="icon-btn" onclick="cargarDatos()">↻</button>
       <button class="icon-btn" onclick="logout()">Salir</button>
@@ -330,6 +356,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="stat"><div class="stat-num" id="s-vis-total">—</div><div class="stat-label">Total</div></div>
       </div>
     </div>
+    <div class="card" id="stock-card" style="display:none">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📦 Stock restante</span>
+        <button class="btn-edit" onclick="abrirCargaStock()">Recargar</button>
+      </div>
+      <div class="stock-grid" id="stock-grid"></div>
+    </div>
     <div class="card">
       <div class="card-title">Ventas de hoy</div>
       <div id="ventas-list"><div class="spinner">Cargando...</div></div>
@@ -358,6 +391,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <!-- TOTAL -->
   <div class="tab-content" id="tab-total">
     <div id="total-content"><div class="spinner" style="padding:30px 0">Tocá Total para cargar</div></div>
+  </div>
+</div>
+
+<!-- HISTORIAL CLIENTE -->
+<div class="modal-overlay" id="historial-overlay" onclick="cerrarHistorialSiAfuera(event)">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="historial-titulo">Historial</span>
+      <button class="modal-close" onclick="cerrarHistorial()">✕</button>
+    </div>
+    <div id="historial-saldo-banner" style="background:#f8f4ee;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:none">
+      <div style="font-size:0.72rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">Saldo actual</div>
+      <div id="historial-saldo-num" style="font-size:1.4rem;font-weight:800;color:#5c3d1e"></div>
+    </div>
+    <div id="historial-list"><div class="spinner">Cargando...</div></div>
+  </div>
+</div>
+
+<!-- STOCK DEL DÍA -->
+<div class="modal-overlay" id="stock-overlay" onclick="cerrarStockSiAfuera(event)">
+  <div class="modal">
+    <div class="modal-title">
+      <span>📦 ¿Qué llevás hoy?</span>
+      <button class="modal-close" onclick="cerrarCargaStock()">✕</button>
+    </div>
+    <p style="font-size:0.82rem;color:#aaa;margin-bottom:14px">Ingresá cuántas unidades llevás de cada producto</p>
+    <div id="stock-modal-list"></div>
+    <button class="btn-save" onclick="confirmarCargaStock()" style="margin-top:16px">Guardar stock</button>
   </div>
 </div>
 
@@ -608,11 +669,12 @@ async function cargarDatos() {
     document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
   });
 
-  const [ventas, deudores, catalogo, visitas] = await Promise.all([
+  const [ventas, deudores, catalogo, visitas, stockDia] = await Promise.all([
     api('ventasHoy', { hijo: usuario }),
     api('consultarDeudores', { hijo: usuario }),
     api('getCatalogoHijos'),
-    api('visitas')
+    api('visitas'),
+    api('getStockDia', { hijo: usuario })
   ]);
 
   catalogoCache = catalogo || [];
@@ -620,6 +682,7 @@ async function cargarDatos() {
   renderDeudores(deudores || []);
   renderCatalogo(catalogoCache);
   renderVisitasKid(visitas || [], usuario);
+  renderStockRestante(stockDia || {}, ventas || [], catalogoCache);
 }
 
 // ─── VISITAS ──────────────────────────────────────────────────────
@@ -1111,6 +1174,7 @@ function renderDeudores(deudores) {
           <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', 'd${i}')">Cobrar</button>
           <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', 'd${i}')">Todo</button>
         </div>
+        <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
       </div>
     </div>`).join('');
   }
@@ -1137,6 +1201,7 @@ function renderDeudores(deudores) {
         <button class="btn-saldar" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}')">
           Marcar como saldado ✓
         </button>
+        <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
       </div>
     </div>`).join('');
   }
@@ -1405,6 +1470,148 @@ async function confirmarRetroVenta() {
   t.textContent = '✅ Venta histórica registrada!';
   t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2c6fad;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
   document.body.appendChild(t); setTimeout(() => t.remove(), 2500);
+}
+
+// ─── HISTORIAL POR CLIENTE ───────────────────────────────────────
+async function verHistorial(cliente) {
+  document.getElementById('historial-titulo').textContent = '👤 ' + cliente;
+  document.getElementById('historial-saldo-banner').style.display = 'none';
+  document.getElementById('historial-list').innerHTML = '<div class="spinner">Cargando...</div>';
+  document.getElementById('historial-overlay').classList.add('open');
+  const data = await api('historialCliente', { hijo: usuario, cliente });
+  renderHistorialCliente(data || [], cliente);
+}
+
+function renderHistorialCliente(movs, cliente) {
+  const el = document.getElementById('historial-list');
+  if (!movs.length) { el.innerHTML = '<div class="empty">Sin movimientos aún</div>'; return; }
+
+  const TIPOS = {
+    deuda:      { label: 'Deuda nueva',       cls: 'mov-deuda',      signo: '+' },
+    pago:       { label: 'Pagó',               cls: 'mov-pago',       signo: '−' },
+    vuelto:     { label: 'Vuelto pendiente',   cls: 'mov-vuelto',     signo: '−' },
+    pago_vuelto:{ label: 'Vuelto saldado',     cls: 'mov-pago_vuelto',signo: '+' }
+  };
+
+  // Calcular saldo acumulado (movs vienen desc, invertir para acumular)
+  let saldoFinal = 0;
+  movs.forEach(m => { saldoFinal += m.monto; });
+
+  // Banner saldo actual
+  const banner = document.getElementById('historial-saldo-banner');
+  const saldoEl = document.getElementById('historial-saldo-num');
+  banner.style.display = 'block';
+  if (saldoFinal > 0.01) {
+    saldoEl.textContent = fmt(saldoFinal) + ' te debe';
+    saldoEl.style.color = '#e05c2a';
+  } else if (saldoFinal < -0.01) {
+    saldoEl.textContent = fmt(Math.abs(saldoFinal)) + ' le debés';
+    saldoEl.style.color = '#2c6fad';
+  } else {
+    saldoEl.textContent = 'Todo en cero ✓';
+    saldoEl.style.color = '#2e8b57';
+  }
+
+  let saldoAcum = 0;
+  const rowsAsc = [...movs].reverse();
+  const withSaldo = rowsAsc.map(m => { saldoAcum += m.monto; return { ...m, saldoAcum }; }).reverse();
+
+  el.innerHTML = withSaldo.map(m => {
+    const t = TIPOS[m.tipo] || { label: m.tipo, cls: 'mov-pago', signo: '' };
+    const montoAbs = Math.abs(m.monto);
+    return `<div class="mov-row">
+      <div>
+        <span class="mov-badge ${t.cls}">${t.label}</span>
+        <div style="font-size:0.72rem;color:#aaa;margin-top:2px">${m.fecha}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;font-size:0.92rem;color:${m.monto > 0 ? '#e05c2a' : '#2e8b57'}">${t.signo}${fmt(montoAbs)}</div>
+        <span class="mov-saldo-chip">Saldo: ${fmt(m.saldoAcum)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function cerrarHistorial() { document.getElementById('historial-overlay').classList.remove('open'); }
+function cerrarHistorialSiAfuera(e) { if (e.target.id === 'historial-overlay') cerrarHistorial(); }
+
+// ─── STOCK DEL DÍA ────────────────────────────────────────────────
+let stockQtys = {}; // { codigo: qty }
+
+function abrirCargaStock() {
+  if (!catalogoCache.length) { alert('Primero cargá los productos en Catálogo'); return; }
+  stockQtys = {};
+  document.getElementById('stock-modal-list').innerHTML = catalogoCache.map(p => `
+    <div class="stock-load-item">
+      <div>
+        <div class="stock-load-nombre">${p.nombre}</div>
+        <div class="stock-load-precio">${fmt(p.precioVenta)}</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn-big" onclick="cambiarStockQty('${p.codigo}',-1)">−</button>
+        <span class="qty-num-big" id="sqty-${p.codigo}">0</span>
+        <button class="qty-btn-big" onclick="cambiarStockQty('${p.codigo}',1)">+</button>
+      </div>
+    </div>`).join('');
+  document.getElementById('stock-overlay').classList.add('open');
+}
+
+function cambiarStockQty(codigo, delta) {
+  stockQtys[codigo] = Math.max(0, (stockQtys[codigo] || 0) + delta);
+  const el = document.getElementById('sqty-' + codigo);
+  if (el) el.textContent = stockQtys[codigo];
+}
+
+async function confirmarCargaStock() {
+  const items = catalogoCache
+    .filter(p => (stockQtys[p.codigo] || 0) > 0)
+    .map(p => ({ codigo: p.codigo, nombre: p.nombre, cantidad: stockQtys[p.codigo] }));
+  if (!items.length) { alert('Ingresá al menos un producto'); return; }
+  const btn = document.querySelector('#stock-overlay .btn-save');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+  await api('cargarStock', { hijo: usuario, items: JSON.stringify(items) });
+  btn.textContent = 'Guardar stock'; btn.disabled = false;
+  cerrarCargaStock();
+  await cargarDatos();
+  const t = document.createElement('div');
+  t.textContent = '✅ Stock cargado!';
+  t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2e8b57;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2000);
+}
+
+function cerrarCargaStock() { document.getElementById('stock-overlay').classList.remove('open'); }
+function cerrarStockSiAfuera(e) { if (e.target.id === 'stock-overlay') cerrarCargaStock(); }
+
+function renderStockRestante(stockDia, ventas, catalogo) {
+  const card = document.getElementById('stock-card');
+  const grid = document.getElementById('stock-grid');
+  if (!stockDia || !Object.keys(stockDia).length) { card.style.display = 'none'; return; }
+
+  // Calcular vendido por codigo hoy
+  const vendidoHoy = {};
+  ventas.forEach(v => {
+    const cod = (v.codigo || '').toString();
+    vendidoHoy[cod] = (vendidoHoy[cod] || 0) + (v.cantidad || 1);
+  });
+
+  const items = Object.entries(stockDia).map(([cod, inicial]) => {
+    const vendido = vendidoHoy[cod] || 0;
+    const restante = inicial - vendido;
+    const prod = catalogo.find(p => p.codigo === cod);
+    return { nombre: prod?.nombre || cod, inicial, vendido, restante };
+  });
+
+  card.style.display = 'block';
+  grid.innerHTML = items.map(it => {
+    const cls = it.restante <= 0 ? 'cero' : (it.restante <= 2 ? 'bajo' : '');
+    return `<div class="stock-chip">
+      <div class="stock-chip-nombre" title="${it.nombre}">${it.nombre}</div>
+      <div class="stock-chip-nums">
+        <div class="stock-chip-rest ${cls}">${it.restante}</div>
+        <div class="stock-chip-sub">/${it.inicial}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ─── HISTORIA ────────────────────────────────────────────────────
