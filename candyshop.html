@@ -201,6 +201,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .cobrar-input:focus { border-color: #2e8b57; }
 .btn-cobrar { padding: 10px 16px; background: linear-gradient(135deg, #2e8b57, #1a6b3c); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
 .btn-cobrar-todo { padding: 10px 12px; background: #e8f5ee; color: #2e8b57; border: 1.5px solid #b2d8c0; border-radius: 10px; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+
+/* ─── RETRO WIZARD / FECHA ──────────────────────────────────────── */
+.fecha-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.fecha-btn { padding: 14px 8px; background: white; border: 2px solid #e5e0d8; border-radius: 12px; font-size: 0.85rem; font-weight: 700; color: #2d1a0a; cursor: pointer; text-align: center; transition: all 0.15s; line-height: 1.4; }
+.fecha-btn.selected { border-color: #5c3d1e; background: #fdf8f0; color: #5c3d1e; }
+.fecha-btn:active { transform: scale(0.96); }
+.fecha-dia { font-size: 0.7rem; color: #aaa; }
+.fecha-btn.selected .fecha-dia { color: #8b5e3c; }
+.fecha-num { font-size: 1.3rem; font-weight: 800; }
+
+/* ─── PAGÓ DE MÁS / VUELTO ─────────────────────────────────────── */
+.pago-btn.pago-masque { background: linear-gradient(135deg, #2c6fad, #1a4d8f); color: white; }
+.cambio-info { font-size: 0.88rem; color: #2c6fad; font-weight: 700; margin-top: 10px; text-align: center; }
+
+/* ─── BADGES BIDIRECCIONAL ──────────────────────────────────────── */
+.badge-cambio { background: #e8f0ff; color: #2c6fad; }
+.deudor-monto-cambio { font-weight: 800; font-size: 1rem; color: #2c6fad; }
+.deudor-card-vuelto { border-left: 3px solid #2c6fad; }
+.btn-saldar { width: 100%; padding: 10px; background: linear-gradient(135deg, #2c6fad, #1a4d8f); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.88rem; cursor: pointer; margin-top: 10px; }
+.deudores-seccion { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #bbb; padding: 4px 0 8px; }
 </style>
 </head>
 <body>
@@ -248,6 +268,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
     </div>
     <div class="topbar-actions">
+      <button class="icon-btn" onclick="abrirRetroWizard()" title="Cargar ventas pasadas">📅</button>
       <button class="icon-btn" onclick="cargarDatos()">↻</button>
       <button class="icon-btn" onclick="logout()">Salir</button>
     </div>
@@ -356,15 +377,100 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           <span class="pago-btn-icon">📋</span>
           <div><div style="font-size:1rem">No pagó</div><div style="font-size:0.78rem;opacity:0.8">Queda todo como deuda</div></div>
         </button>
+        <button class="pago-btn pago-masque" onclick="seleccionarPago('masque')">
+          <span class="pago-btn-icon">💵</span>
+          <div><div style="font-size:1rem">Pagó de más</div><div style="font-size:0.78rem;opacity:0.8">Le queda cambio pendiente</div></div>
+        </button>
       </div>
       <div class="pago-cuenta-input" id="pago-cuenta-wrap">
         <div class="pago-cuenta-label">¿Cuánto pagó?</div>
         <input class="pago-monto-input" id="w-monto-parcial" type="number" placeholder="Ej: 2000" min="0" enterkeyhint="done" onkeydown="if(event.key==='Enter') confirmarVentaWizard()">
       </div>
+      <div class="pago-cuenta-input" id="pago-masque-wrap">
+        <div class="pago-cuenta-label">¿Cuánto pagó?</div>
+        <input class="pago-monto-input" id="w-monto-masque" type="number" placeholder="Ej: 6000" min="0" enterkeyhint="done" oninput="calcCambio()" onkeydown="if(event.key==='Enter') confirmarVentaWizard()">
+        <div class="cambio-info" id="cambio-display"></div>
+      </div>
     </div>
   </div>
   <div class="wizard-footer">
     <button class="btn-wizard" id="wizard-next" onclick="wizardNext()">Siguiente →</button>
+  </div>
+</div>
+
+<!-- RETRO WIZARD: CARGAR VENTAS PASADAS -->
+<div class="wizard-overlay" id="retro-overlay">
+  <div class="wizard-header">
+    <button class="wizard-back" id="retro-back" onclick="rWizardBack()">←</button>
+    <div class="wizard-title" id="retro-title">Cargar venta pasada</div>
+    <div class="wizard-steps">
+      <div class="wizard-dot active" id="rdot-0"></div>
+      <div class="wizard-dot" id="rdot-1"></div>
+      <div class="wizard-dot" id="rdot-2"></div>
+      <div class="wizard-dot" id="rdot-3"></div>
+      <div class="wizard-dot" id="rdot-4"></div>
+    </div>
+  </div>
+  <div class="wizard-body">
+    <!-- STEP 0: FECHA -->
+    <div class="wizard-step active" id="rws-0">
+      <div class="wizard-label">¿Qué día fue la venta?</div>
+      <div class="fecha-grid" id="rw-fecha-grid"></div>
+    </div>
+    <!-- STEP 1: CLIENTE -->
+    <div class="wizard-step" id="rws-1">
+      <div class="wizard-label">¿A quién le vendiste? (opcional)</div>
+      <input class="wizard-input" id="rw-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" enterkeyhint="next" oninput="filtrarRSugerencias()" onkeydown="if(event.key==='Enter') rWizardNext()">
+      <div class="cliente-sugerencias" id="rw-sugerencias"></div>
+    </div>
+    <!-- STEP 2: PRODUCTOS -->
+    <div class="wizard-step" id="rws-2">
+      <div class="wizard-label">¿Qué vendiste? (tocá para agregar)</div>
+      <div class="productos-grid" id="rw-productos-grid"></div>
+    </div>
+    <!-- STEP 3: CANTIDADES -->
+    <div class="wizard-step" id="rws-3">
+      <div class="wizard-label">¿Cuántos?</div>
+      <div id="rw-cantidades"></div>
+      <div class="qty-total">
+        <span>Total</span>
+        <span class="qty-total-monto" id="rw-total">$0</span>
+      </div>
+    </div>
+    <!-- STEP 4: PAGO -->
+    <div class="wizard-step" id="rws-4">
+      <div class="wizard-label">¿Cómo pagó?</div>
+      <div class="pago-btns">
+        <button class="pago-btn pago-total" onclick="seleccionarRPago('total')">
+          <span class="pago-btn-icon">✅</span>
+          <div><div style="font-size:1rem">Pagó todo</div><div style="font-size:0.78rem;opacity:0.8" id="rpago-total-monto"></div></div>
+        </button>
+        <button class="pago-btn pago-cuenta" onclick="seleccionarRPago('cuenta')">
+          <span class="pago-btn-icon">💰</span>
+          <div><div style="font-size:1rem">A cuenta</div><div style="font-size:0.78rem;opacity:0.8">Pagó una parte</div></div>
+        </button>
+        <button class="pago-btn pago-no" onclick="seleccionarRPago('nopago')">
+          <span class="pago-btn-icon">📋</span>
+          <div><div style="font-size:1rem">No pagó</div><div style="font-size:0.78rem;opacity:0.8">Queda todo como deuda</div></div>
+        </button>
+        <button class="pago-btn pago-masque" onclick="seleccionarRPago('masque')">
+          <span class="pago-btn-icon">💵</span>
+          <div><div style="font-size:1rem">Pagó de más</div><div style="font-size:0.78rem;opacity:0.8">Le queda cambio pendiente</div></div>
+        </button>
+      </div>
+      <div class="pago-cuenta-input" id="rpago-cuenta-wrap">
+        <div class="pago-cuenta-label">¿Cuánto pagó?</div>
+        <input class="pago-monto-input" id="rw-monto-parcial" type="number" placeholder="Ej: 2000" min="0" enterkeyhint="done" onkeydown="if(event.key==='Enter') confirmarRetroVenta()">
+      </div>
+      <div class="pago-cuenta-input" id="rpago-masque-wrap">
+        <div class="pago-cuenta-label">¿Cuánto pagó?</div>
+        <input class="pago-monto-input" id="rw-monto-masque" type="number" placeholder="Ej: 6000" min="0" enterkeyhint="done" oninput="calcRCambio()" onkeydown="if(event.key==='Enter') confirmarRetroVenta()">
+        <div class="cambio-info" id="rw-cambio-display"></div>
+      </div>
+    </div>
+  </div>
+  <div class="wizard-footer">
+    <button class="btn-wizard" id="retro-next" onclick="rWizardNext()">Siguiente →</button>
   </div>
 </div>
 
@@ -493,7 +599,8 @@ function renderVisitasKid(visitas, hijo) {
 function renderDashboard(ventas, catalogo, deudores = []) {
   const costoMap = {};
   catalogo.forEach(p => { costoMap[p.codigo?.toLowerCase()] = p.costo || 0; });
-  const conDeuda = new Set(deudores.map(d => d.cliente.toLowerCase()));
+  const conDeuda = new Set(deudores.filter(d => d.saldo > 0).map(d => d.cliente.toLowerCase()));
+  const conVuelto = new Set(deudores.filter(d => d.saldo < 0).map(d => d.cliente.toLowerCase()));
 
   let cobrado = 0, ganancia = 0;
   ventas.forEach(v => {
@@ -518,10 +625,12 @@ function renderDashboard(ventas, catalogo, deudores = []) {
     const cod = (v.codigo || '').toLowerCase();
     const costo = costoMap[cod] || 0;
     const gan = (v.precio - costo) * v.cantidad;
-    const debeTag = v.saldoPendiente > 0 && conDeuda.has((v.cliente || '').toLowerCase()) ? '<span class="badge badge-debe">DEBE</span>' : '';
+    const clienteLC = (v.cliente || '').toLowerCase();
+    const debeTag = v.saldoPendiente > 0 && conDeuda.has(clienteLC) ? '<span class="badge badge-debe">DEBE</span>' : '';
+    const cambioTag = conVuelto.has(clienteLC) ? '<span class="badge badge-cambio">CAMBIO</span>' : '';
     return `<div class="item-row">
       <div class="item-info">
-        <div class="item-name">${v.cantidad}x ${v.producto}${debeTag}</div>
+        <div class="item-name">${v.cantidad}x ${v.producto}${debeTag}${cambioTag}</div>
         ${v.cliente ? `<div class="item-sub">👤 ${v.cliente}</div>` : ''}
       </div>
       <div class="item-right">
@@ -532,21 +641,6 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   }).join('');
 }
 
-// ─── DEUDORES ─────────────────────────────────────────────────────
-function renderDeudores(deudores) {
-  const el = document.getElementById('deudores-list');
-  if (!deudores.length) { el.innerHTML = '<div class="empty">¡Nadie te debe nada! 🎉</div>'; return; }
-  let total = 0;
-  let html = deudores.map(d => {
-    total += d.saldo || 0;
-    return `<div class="item-row">
-      <div class="item-info"><div class="item-name">👤 ${d.cliente}</div></div>
-      <div class="item-right"><div class="item-price" style="color:#e05c2a">${fmt(d.saldo)}</div></div>
-    </div>`;
-  }).join('');
-  html += `<div class="total-row"><span>Total</span><strong>${fmt(total)}</strong></div>`;
-  el.innerHTML = html;
-}
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────
 function renderCatalogo(catalogo) {
@@ -855,16 +949,26 @@ function actualizarTotalWizard() {
 
 function seleccionarPago(tipo) {
   wPago = tipo;
-  document.querySelectorAll('.pago-btn').forEach(b => b.style.opacity = '0.5');
-  const clases = { total: 'pago-total', cuenta: 'pago-cuenta', nopago: 'pago-no' };
-  document.querySelector('.' + clases[tipo]).style.opacity = '1';
+  document.querySelectorAll('#wizard-overlay .pago-btn').forEach(b => b.style.opacity = '0.5');
+  const clases = { total: 'pago-total', cuenta: 'pago-cuenta', nopago: 'pago-no', masque: 'pago-masque' };
+  document.querySelector('#wizard-overlay .' + clases[tipo]).style.opacity = '1';
+  document.getElementById('pago-cuenta-wrap').classList.remove('open');
+  document.getElementById('pago-masque-wrap').classList.remove('open');
   if (tipo === 'cuenta') {
     document.getElementById('pago-cuenta-wrap').classList.add('open');
     setTimeout(() => document.getElementById('w-monto-parcial').focus(), 200);
+  } else if (tipo === 'masque') {
+    document.getElementById('pago-masque-wrap').classList.add('open');
+    setTimeout(() => document.getElementById('w-monto-masque').focus(), 200);
   } else {
-    document.getElementById('pago-cuenta-wrap').classList.remove('open');
-    if (tipo !== 'cuenta') confirmarVentaWizard();
+    confirmarVentaWizard();
   }
+}
+
+function calcCambio() {
+  const pagado = parseFloat(document.getElementById('w-monto-masque').value) || 0;
+  const cambio = pagado - calcTotal();
+  document.getElementById('cambio-display').textContent = cambio > 0 ? `Cambio a devolver: ${fmt(cambio)}` : '';
 }
 
 async function confirmarVentaWizard() {
@@ -873,11 +977,23 @@ async function confirmarVentaWizard() {
     const monto = parseFloat(document.getElementById('w-monto-parcial').value) || 0;
     if (!monto) { document.getElementById('w-monto-parcial').focus(); return; }
   }
+  if (wPago === 'masque') {
+    const monto = parseFloat(document.getElementById('w-monto-masque').value) || 0;
+    if (!monto) { document.getElementById('w-monto-masque').focus(); return; }
+  }
   document.getElementById('wizard-next').textContent = 'Registrando...';
 
   const total = calcTotal();
-  const montoPago = wPago === 'total' ? total : wPago === 'nopago' ? 0 : (parseFloat(document.getElementById('w-monto-parcial').value) || 0);
-  const saldo = total - montoPago;
+  let montoPago, saldo, esDebe;
+  if (wPago === 'total') { montoPago = total; saldo = 0; esDebe = 'NO'; }
+  else if (wPago === 'nopago') { montoPago = 0; saldo = total; esDebe = 'SI'; }
+  else if (wPago === 'cuenta') {
+    montoPago = parseFloat(document.getElementById('w-monto-parcial').value) || 0;
+    saldo = total - montoPago; esDebe = saldo > 0 ? 'SI' : 'NO';
+  } else if (wPago === 'masque') {
+    montoPago = parseFloat(document.getElementById('w-monto-masque').value) || 0;
+    saldo = montoPago - total; esDebe = 'NO';
+  }
 
   for (const p of Object.values(wProductosSeleccionados)) {
     await api('registrarVentaHijos', {
@@ -888,10 +1004,13 @@ async function confirmarVentaWizard() {
       precio: p.precioVenta,
       total: p.precioVenta * p.qty,
       cliente: wCliente,
-      esDebe: saldo > 0 ? 'SI' : 'NO',
-      pagoParcial: montoPago > 0 && wPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: saldo > 0 ? p.precioVenta * p.qty * (saldo / total) : 0
+      esDebe: esDebe,
+      pagoParcial: wPago === 'cuenta' ? montoPago : 0,
+      saldoPendiente: esDebe === 'SI' ? p.precioVenta * p.qty * (saldo / total) : 0
     });
+  }
+  if (wPago === 'masque' && wCliente && saldo > 0) {
+    await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo });
   }
 
   cerrarWizard();
@@ -909,47 +1028,90 @@ async function confirmarVentaWizard() {
   setTimeout(() => t.remove(), 2500);
 }
 
-// ─── DEUDORES MEJORADO ────────────────────────────────────────────
+// ─── DEUDORES BIDIRECCIONAL ───────────────────────────────────────
 function renderDeudores(deudores) {
   deudoresCache = deudores || [];
   const el = document.getElementById('deudores-list');
-  if (!deudores.length) {
-    el.innerHTML = '<div class="card"><div class="empty">¡Nadie te debe nada! 🎉</div></div>';
+  const meDebenEllos = deudores.filter(d => d.saldo > 0);
+  const leDeboYo = deudores.filter(d => d.saldo < 0);
+
+  if (!meDebenEllos.length && !leDeboYo.length) {
+    el.innerHTML = '<div class="card"><div class="empty">¡Todo en cero! No hay deudas 🎉</div></div>';
     return;
   }
-  let totalDeuda = 0;
-  deudores.forEach(d => totalDeuda += d.saldo || 0);
-  el.innerHTML = `
+
+  let html = '';
+
+  if (meDebenEllos.length) {
+    let totalDeuda = 0;
+    meDebenEllos.forEach(d => totalDeuda += d.saldo);
+    html += `<div class="deudores-seccion">Te deben a vos</div>
     <div class="card" style="margin-bottom:0">
-      <div class="card-title">Total que te deben</div>
+      <div class="card-title">Total</div>
       <div style="font-size:1.6rem;font-weight:800;color:#e05c2a">${fmt(totalDeuda)}</div>
     </div>` +
-    deudores.map((d, i) => `
+    meDebenEllos.map((d, i) => `
     <div class="deudor-card">
-      <div class="deudor-header" onclick="toggleDeudor(${i})">
-        <div>
-          <div class="deudor-nombre">👤 ${d.cliente}</div>
-        </div>
+      <div class="deudor-header" onclick="toggleDeudor('d${i}')">
+        <div><div class="deudor-nombre">👤 ${d.cliente}</div></div>
         <div style="text-align:right">
           <div class="deudor-monto">${fmt(d.saldo)}</div>
-          <div style="font-size:0.7rem;color:#aaa">Toca para cobrar ↓</div>
+          <div style="font-size:0.7rem;color:#aaa">Tocá para cobrar ↓</div>
         </div>
       </div>
-      <div class="deudor-detail" id="dd-${i}">
+      <div class="deudor-detail" id="dd-d${i}">
         <div class="deudor-cobrar">
-          <input class="cobrar-input" type="number" id="cobrar-monto-${i}" placeholder="¿Cuánto pagó?">
-          <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', ${i})">Cobrar</button>
-          <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', ${i})">Todo</button>
+          <input class="cobrar-input" type="number" id="cobrar-monto-d${i}" placeholder="¿Cuánto pagó?">
+          <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', 'd${i}')">Cobrar</button>
+          <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', 'd${i}')">Todo</button>
         </div>
       </div>
     </div>`).join('');
+  }
+
+  if (leDeboYo.length) {
+    let totalVuelto = 0;
+    leDeboYo.forEach(d => totalVuelto += Math.abs(d.saldo));
+    html += `<div class="deudores-seccion" style="color:#2c6fad;margin-top:${meDebenEllos.length ? '16px' : '0'}">Les debés cambio</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title" style="color:#2c6fad">Total cambio pendiente</div>
+      <div style="font-size:1.6rem;font-weight:800;color:#2c6fad">${fmt(totalVuelto)}</div>
+    </div>` +
+    leDeboYo.map((d, i) => `
+    <div class="deudor-card deudor-card-vuelto">
+      <div class="deudor-header" onclick="toggleDeudor('v${i}')">
+        <div><div class="deudor-nombre">👤 ${d.cliente}</div></div>
+        <div style="text-align:right">
+          <div class="deudor-monto-cambio">${fmt(Math.abs(d.saldo))}</div>
+          <div style="font-size:0.7rem;color:#aaa">Tocá para saldar ↓</div>
+        </div>
+      </div>
+      <div class="deudor-detail" id="dd-v${i}">
+        <div style="font-size:0.85rem;color:#666;padding:6px 0">Le debés ${fmt(Math.abs(d.saldo))} de cambio</div>
+        <button class="btn-saldar" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}')">
+          Marcar como saldado ✓
+        </button>
+      </div>
+    </div>`).join('');
+  }
+
+  el.innerHTML = html;
+}
+
+async function pagarVuelto(cliente) {
+  const d = deudoresCache.find(x => x.cliente === cliente);
+  const monto = d ? Math.abs(d.saldo) : 0;
+  if (!monto) return;
+  await api('registrarPagoVuelto', { hijo: usuario, cliente, monto });
+  cargarDatos();
 }
 
 function toggleDeudor(i) {
   const el = document.getElementById('dd-' + i);
   el.classList.toggle('open');
   if (el.classList.contains('open')) {
-    setTimeout(() => document.getElementById('cobrar-monto-' + i).focus(), 200);
+    const inp = document.getElementById('cobrar-monto-' + i);
+    if (inp) setTimeout(() => inp.focus(), 200);
   }
 }
 
@@ -963,6 +1125,234 @@ async function cobrarDeuda(cliente, i) {
 async function cobrarTodo(cliente, i) {
   await api('registrarPagoCliente', { hijo: usuario, cliente, monto: 'todo' });
   cargarDatos();
+}
+
+// ─── RETRO WIZARD ─────────────────────────────────────────────────
+let rStep = 0, rFecha = '', rCliente = '', rProductosSeleccionados = {}, rPago = '';
+const RETRO_TITLES = ['¿Qué día?', '¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
+
+function abrirRetroWizard() {
+  rStep = 0; rFecha = ''; rCliente = ''; rProductosSeleccionados = {}; rPago = '';
+  document.getElementById('rw-cliente').value = '';
+  document.getElementById('rw-monto-parcial').value = '';
+  document.getElementById('rw-monto-masque').value = '';
+  document.getElementById('rpago-cuenta-wrap').classList.remove('open');
+  document.getElementById('rpago-masque-wrap').classList.remove('open');
+  renderFechas();
+  renderRWizardStep(0);
+  document.getElementById('retro-overlay').classList.add('open');
+}
+
+function cerrarRetroWizard() {
+  document.getElementById('retro-overlay').classList.remove('open');
+}
+
+function renderRWizardStep(step) {
+  rStep = step;
+  document.querySelectorAll('#retro-overlay .wizard-step').forEach((el, i) => el.classList.toggle('active', i === step));
+  document.getElementById('retro-title').textContent = RETRO_TITLES[step];
+  document.getElementById('retro-back').style.opacity = step === 0 ? '0.3' : '1';
+  const btn = document.getElementById('retro-next');
+  if (step === 4) { btn.style.display = 'none'; }
+  else { btn.style.display = 'block'; btn.textContent = step === 3 ? '¿Cómo pagó? →' : 'Siguiente →'; }
+  for (let i = 0; i < 5; i++) {
+    const d = document.getElementById('rdot-' + i);
+    d.classList.toggle('active', i === step);
+    d.classList.toggle('done', i < step);
+  }
+}
+
+function rWizardBack() {
+  if (rStep === 0) { cerrarRetroWizard(); return; }
+  renderRWizardStep(rStep - 1);
+  if (rStep === 3) renderRCantidades();
+}
+
+function rWizardNext() {
+  if (rStep === 0) {
+    if (!rFecha) return;
+    renderRWizardStep(1);
+    setTimeout(() => document.getElementById('rw-cliente').focus(), 200);
+  } else if (rStep === 1) {
+    rCliente = document.getElementById('rw-cliente').value.trim();
+    renderRProductosGrid();
+    renderRWizardStep(2);
+  } else if (rStep === 2) {
+    if (!Object.keys(rProductosSeleccionados).length) return;
+    renderRCantidades();
+    renderRWizardStep(3);
+  } else if (rStep === 3) {
+    document.getElementById('rpago-total-monto').textContent = fmt(calcRTotal());
+    document.querySelectorAll('#retro-overlay .pago-btn').forEach(b => b.style.opacity = '1');
+    renderRWizardStep(4);
+  }
+}
+
+function renderFechas() {
+  const hoy = new Date();
+  const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const dias = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(hoy); d.setDate(hoy.getDate() - i); dias.push(d);
+  }
+  document.getElementById('rw-fecha-grid').innerHTML = dias.map(d => {
+    const iso = d.toISOString().split('T')[0];
+    const esHoy = iso === hoy.toISOString().split('T')[0];
+    return `<button class="fecha-btn ${rFecha === iso ? 'selected' : ''}" onclick="seleccionarFecha('${iso}')">
+      <div class="fecha-dia">${DIAS[d.getDay()]}${esHoy ? ' · Hoy' : ''}</div>
+      <div class="fecha-num">${d.getDate()}</div>
+      <div class="fecha-dia">${MESES[d.getMonth()]}</div>
+    </button>`;
+  }).join('');
+}
+
+function seleccionarFecha(iso) {
+  rFecha = iso; renderFechas();
+}
+
+function filtrarRSugerencias() {
+  const q = document.getElementById('rw-cliente').value.toLowerCase();
+  const lista = deudoresCache.filter(d => !q || d.cliente.toLowerCase().includes(q));
+  document.getElementById('rw-sugerencias').innerHTML = lista.map(d =>
+    `<div class="cliente-sug" onclick="seleccionarRCliente('${d.cliente.replace(/'/g,"\\'")}')">
+      <span>${d.cliente}</span>
+      ${d.saldo > 0 ? `<span class="cliente-sug-deuda">Debe ${fmt(d.saldo)}</span>` : '<span style="font-size:0.75rem;color:#aaa">Sin deuda</span>'}
+    </div>`).join('');
+}
+
+function seleccionarRCliente(nombre) {
+  rCliente = nombre;
+  document.getElementById('rw-cliente').value = nombre;
+  renderRProductosGrid();
+  renderRWizardStep(2);
+}
+
+function renderRProductosGrid() {
+  document.getElementById('rw-productos-grid').innerHTML = catalogoCache.map(p => {
+    const sel = rProductosSeleccionados[p.codigo];
+    const fotoEl = p.foto ? `<div class="prod-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
+    return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleRProducto('${p.codigo}')">
+      ${sel ? `<div class="prod-badge" style="display:flex;gap:2px;width:auto;border-radius:12px;padding:0 6px;min-width:22px">
+        <span>${sel.qty}</span>
+        <span onclick="quitarRProducto('${p.codigo}',event)" style="opacity:0.7;font-size:0.7rem;margin-left:2px">✕</span>
+      </div>` : ''}
+      ${fotoEl}
+      <div class="prod-info"><div class="prod-nombre">${p.nombre}</div><div class="prod-precio">${fmt(p.precioVenta)}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function toggleRProducto(codigo) {
+  const p = catalogoCache.find(x => x.codigo === codigo);
+  if (!p) return;
+  if (rProductosSeleccionados[codigo]) { rProductosSeleccionados[codigo].qty++; }
+  else { rProductosSeleccionados[codigo] = { ...p, qty: 1 }; }
+  renderRProductosGrid();
+}
+
+function quitarRProducto(codigo, event) {
+  event.stopPropagation(); delete rProductosSeleccionados[codigo]; renderRProductosGrid();
+}
+
+function renderRCantidades() {
+  document.getElementById('rw-cantidades').innerHTML = Object.values(rProductosSeleccionados).map(p => {
+    const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
+    return `<div class="qty-item">
+      ${fotoEl}
+      <div class="qty-item-info"><div class="qty-item-nombre">${p.nombre}</div><div class="qty-item-precio">${fmt(p.precioVenta)} c/u</div></div>
+      <div class="qty-control">
+        <button class="qty-btn-big" onclick="cambiarRQtyWizard('${p.codigo}',-1)">−</button>
+        <span class="qty-num-big" id="rwqty-${p.codigo}">${p.qty}</span>
+        <button class="qty-btn-big" onclick="cambiarRQtyWizard('${p.codigo}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('rw-total').textContent = fmt(calcRTotal());
+}
+
+function cambiarRQtyWizard(codigo, delta) {
+  if (!rProductosSeleccionados[codigo]) return;
+  rProductosSeleccionados[codigo].qty = Math.max(1, rProductosSeleccionados[codigo].qty + delta);
+  const el = document.getElementById('rwqty-' + codigo);
+  if (el) el.textContent = rProductosSeleccionados[codigo].qty;
+  document.getElementById('rw-total').textContent = fmt(calcRTotal());
+}
+
+function calcRTotal() {
+  return Object.values(rProductosSeleccionados).reduce((s, p) => s + p.precioVenta * p.qty, 0);
+}
+
+function seleccionarRPago(tipo) {
+  rPago = tipo;
+  document.querySelectorAll('#retro-overlay .pago-btn').forEach(b => b.style.opacity = '0.5');
+  const clases = { total: 'pago-total', cuenta: 'pago-cuenta', nopago: 'pago-no', masque: 'pago-masque' };
+  document.querySelector('#retro-overlay .' + clases[tipo]).style.opacity = '1';
+  document.getElementById('rpago-cuenta-wrap').classList.remove('open');
+  document.getElementById('rpago-masque-wrap').classList.remove('open');
+  if (tipo === 'cuenta') {
+    document.getElementById('rpago-cuenta-wrap').classList.add('open');
+    setTimeout(() => document.getElementById('rw-monto-parcial').focus(), 200);
+  } else if (tipo === 'masque') {
+    document.getElementById('rpago-masque-wrap').classList.add('open');
+    setTimeout(() => document.getElementById('rw-monto-masque').focus(), 200);
+  } else {
+    confirmarRetroVenta();
+  }
+}
+
+function calcRCambio() {
+  const pagado = parseFloat(document.getElementById('rw-monto-masque').value) || 0;
+  const cambio = pagado - calcRTotal();
+  document.getElementById('rw-cambio-display').textContent = cambio > 0 ? `Cambio a devolver: ${fmt(cambio)}` : '';
+}
+
+async function confirmarRetroVenta() {
+  if (!rFecha || !Object.keys(rProductosSeleccionados).length || !rPago) return;
+  if (rPago === 'cuenta') {
+    const m = parseFloat(document.getElementById('rw-monto-parcial').value) || 0;
+    if (!m) { document.getElementById('rw-monto-parcial').focus(); return; }
+  }
+  if (rPago === 'masque') {
+    const m = parseFloat(document.getElementById('rw-monto-masque').value) || 0;
+    if (!m) { document.getElementById('rw-monto-masque').focus(); return; }
+  }
+  const btn = document.getElementById('retro-next');
+  btn.textContent = 'Registrando...'; btn.style.display = 'block';
+
+  const total = calcRTotal();
+  let montoPago, saldo, esDebe;
+  if (rPago === 'total') { montoPago = total; saldo = 0; esDebe = 'NO'; }
+  else if (rPago === 'nopago') { montoPago = 0; saldo = total; esDebe = 'SI'; }
+  else if (rPago === 'cuenta') {
+    montoPago = parseFloat(document.getElementById('rw-monto-parcial').value) || 0;
+    saldo = total - montoPago; esDebe = saldo > 0 ? 'SI' : 'NO';
+  } else if (rPago === 'masque') {
+    montoPago = parseFloat(document.getElementById('rw-monto-masque').value) || 0;
+    saldo = montoPago - total; esDebe = 'NO';
+  }
+
+  for (const p of Object.values(rProductosSeleccionados)) {
+    await api('registrarVentaHijos', {
+      hijo: usuario, productoNombre: p.nombre, productoCodigo: p.codigo,
+      cantidad: p.qty, precio: p.precioVenta, total: p.precioVenta * p.qty,
+      cliente: rCliente || '', esDebe: esDebe,
+      pagoParcial: rPago === 'cuenta' ? montoPago : 0,
+      saldoPendiente: esDebe === 'SI' ? p.precioVenta * p.qty * (saldo / total) : 0,
+      fecha: rFecha
+    });
+  }
+  if (rPago === 'masque' && rCliente && saldo > 0) {
+    await api('registrarVueltoCC', { hijo: usuario, cliente: rCliente, monto: saldo });
+  }
+
+  cerrarRetroWizard();
+  await new Promise(r => setTimeout(r, 1200));
+  await cargarDatos();
+  const t = document.createElement('div');
+  t.textContent = '✅ Venta histórica registrada!';
+  t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2c6fad;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2500);
 }
 
 // ─── SUPABASE AUTH ───────────────────────────────────────────────
