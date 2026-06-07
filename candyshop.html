@@ -1131,6 +1131,10 @@ async function cobrarTodo(cliente, i) {
 let rStep = 0, rFecha = '', rCliente = '', rProductosSeleccionados = {}, rPago = '';
 const RETRO_TITLES = ['¿Qué día?', '¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
 
+function _retroEnterKey(e) {
+  if (e.key === 'Enter' && rStep < 4) rWizardNext();
+}
+
 function abrirRetroWizard() {
   rStep = 0; rFecha = ''; rCliente = ''; rProductosSeleccionados = {}; rPago = '';
   document.getElementById('rw-cliente').value = '';
@@ -1141,10 +1145,12 @@ function abrirRetroWizard() {
   renderFechas();
   renderRWizardStep(0);
   document.getElementById('retro-overlay').classList.add('open');
+  document.addEventListener('keydown', _retroEnterKey);
 }
 
 function cerrarRetroWizard() {
   document.getElementById('retro-overlay').classList.remove('open');
+  document.removeEventListener('keydown', _retroEnterKey);
 }
 
 function renderRWizardStep(step) {
