@@ -991,7 +991,7 @@ async function verificarClave() {
     document.getElementById('input-clave').value = '';
     document.getElementById('input-clave').focus();
   } else {
-    localStorage.setItem('cs_auth', '1');
+    localStorage.setItem('cs_auth', Date.now().toString());
     document.getElementById('pantalla-clave').style.display = 'none';
     document.getElementById('login').style.display = 'flex';
     document.getElementById('clave-error').style.display = 'none';
@@ -1012,7 +1012,8 @@ function logout() {
 // ─── INIT ─────────────────────────────────────────────────────────
 (async () => {
   const savedUser = sessionStorage.getItem('cs_usuario') || localStorage.getItem('cs_usuario');
-  const yaAutenticado = localStorage.getItem('cs_auth') === '1';
+  const authTs = parseInt(localStorage.getItem('cs_auth') || '0');
+  const yaAutenticado = authTs > 0 && (Date.now() - authTs) < 24 * 60 * 60 * 1000;
 
   if (savedUser && yaAutenticado) {
     // Ya autenticado y sabe quién es → directo al panel
@@ -1025,7 +1026,7 @@ function logout() {
     // Primera vez → pedir clave
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
-      localStorage.setItem('cs_auth', '1');
+      localStorage.setItem('cs_auth', Date.now().toString());
       document.getElementById('pantalla-clave').style.display = 'none';
       document.getElementById('login').style.display = 'flex';
     }
