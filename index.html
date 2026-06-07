@@ -3377,6 +3377,7 @@ function init() {
   } else if (path === '/mayorista') {
     setModo('mayorista');
     registrarVisita('mayorista');
+    setTimeout(checkRegistroMayorista, 800);
   } else {
     setModo('minorista');
     registrarVisita('tienda');
@@ -3386,6 +3387,46 @@ function init() {
 
 function registrarVisita(pagina) {
   fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarVisita', pagina }), { mode: 'no-cors' }).catch(() => {});
+}
+
+function mostrarRegistroModal() {
+  const el = document.getElementById('registro-modal');
+  if (el) el.style.display = 'flex';
+  setTimeout(() => { const n = document.getElementById('reg-nombre'); if (n) n.focus(); }, 100);
+}
+
+function cerrarRegistroModal() {
+  const el = document.getElementById('registro-modal');
+  if (el) el.style.display = 'none';
+}
+
+async function submitRegistro() {
+  const nombre = (document.getElementById('reg-nombre').value||'').trim();
+  const tel = (document.getElementById('reg-tel').value||'').replace(/\D/g,'');
+  if (!nombre) { document.getElementById('reg-nombre').focus(); showToast('Ingresá tu nombre'); return; }
+  if (tel.length !== 10) { document.getElementById('reg-tel').focus(); showToast('El teléfono debe tener 10 dígitos'); return; }
+  const btn = document.getElementById('reg-btn');
+  btn.disabled = true; btn.textContent = 'Registrando...';
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarClienteMayorista', nombre, telefono: tel }));
+    const data = await r.json();
+    localStorage.setItem('shuk_may_nombre', data.nombre || nombre);
+    localStorage.setItem('shuk_may_tel', tel);
+    cerrarRegistroModal();
+    if (!data.nuevo) showToast('Bienvenido de nuevo, ' + (data.nombre || nombre).split(' ')[0] + ' 👋');
+  } catch(e) {
+    localStorage.setItem('shuk_may_nombre', nombre);
+    localStorage.setItem('shuk_may_tel', tel);
+    cerrarRegistroModal();
+  }
+}
+
+function checkRegistroMayorista() {
+  const nombre = localStorage.getItem('shuk_may_nombre');
+  const tel = localStorage.getItem('shuk_may_tel');
+  if (!nombre || !tel || tel.length !== 10) {
+    mostrarRegistroModal();
+  }
 }
 
 init();
@@ -3901,6 +3942,32 @@ function cerrarEditPedido() {
     <div class="edit-modal-footer">
       <button class="edit-btn-cancel" onclick="cerrarEditPedido()">Cancelar</button>
       <button class="edit-btn-save" id="ep-btn-save" onclick="guardarEditPedido()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REGISTRO MAYORISTA -->
+<div id="registro-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:900;align-items:center;justify-content:center;padding:1rem;">
+  <div style="background:white;border-radius:16px;padding:1.75rem 1.5rem;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:700;color:#1a1a2e;margin-bottom:0.25rem">👋 Bienvenido</div>
+    <div style="font-size:0.88rem;color:var(--texto-suave);margin-bottom:1.25rem">Para acceder al catálogo mayorista, registrá tu nombre y teléfono una sola vez.</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem">
+      <div>
+        <label style="font-size:0.78rem;font-weight:600;color:#1a1a2e;display:block;margin-bottom:0.3rem">Nombre y apellido</label>
+        <input id="reg-nombre" type="text" placeholder="Juan García" maxlength="60"
+          style="width:100%;padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="font-size:0.78rem;font-weight:600;color:#1a1a2e;display:block;margin-bottom:0.3rem">Teléfono con código de área <span style="font-weight:400;color:var(--texto-suave)">(sin el 15 ni el 54)</span></label>
+        <input id="reg-tel" type="tel" placeholder="1131754540" maxlength="10" inputmode="numeric"
+          oninput="this.value=this.value.replace(/\D/g,'')"
+          style="width:100%;padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;letter-spacing:1px;" />
+        <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.3rem">Ej: 1131754540 (CABA) · 3814123456 (Tucumán)</div>
+      </div>
+      <button onclick="submitRegistro()" id="reg-btn"
+        style="width:100%;padding:0.75rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;margin-top:0.25rem">
+        Entrar al catálogo
+      </button>
     </div>
   </div>
 </div>

@@ -263,6 +263,23 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.nombre), dec(e.parameter.telefono||''), dec(e.parameter.tipo||'Mayorista'), dec(e.parameter.nota||'')]);
       return ok();
     }
+    if (accion === 'registrarClienteMayorista') {
+      const tel = dec(e.parameter.telefono||'').replace(/\D/g,'').slice(-10);
+      const nombre = dec(e.parameter.nombre||'');
+      if (!tel || !nombre) return json({error:'datos incompletos'});
+      const h = getOrCreate(ss, 'Clientes', ['Fecha','Nombre','Telefono','Tipo','Nota','UltimoAcceso']);
+      const datos = h.getDataRange().getValues();
+      for (let i = 1; i < datos.length; i++) {
+        const telGuardado = (datos[i][2]||'').toString().replace(/\D/g,'').slice(-10);
+        if (telGuardado === tel) {
+          h.getRange(i+1, 6).setValue(Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'));
+          return json({ok:true, nuevo:false, nombre: datos[i][1]||nombre});
+        }
+      }
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      h.appendRow([fecha, nombre, tel, 'Mayorista', '', fecha]);
+      return json({ok:true, nuevo:true});
+    }
     if (accion === 'registrarVisita') {
       const h = getOrCreate(ss, 'Visitas', ['Fecha','Pagina']);
       const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
