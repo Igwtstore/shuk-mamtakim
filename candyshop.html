@@ -317,7 +317,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="topbar-actions">
       <button class="icon-btn" onclick="abrirCargaStock()" title="Stock del día">📦</button>
       <button class="icon-btn" onclick="abrirRetroWizard()" title="Cargar ventas pasadas">📅</button>
-      <button class="icon-btn" onclick="cargarDatos()">↻</button>
+      <button class="icon-btn" onclick="recargarTodo(this)">↻</button>
       <button class="icon-btn" onclick="logout()">Salir</button>
     </div>
   </div>
@@ -648,7 +648,9 @@ function login(nombre) {
 
 
 // ─── TABS ─────────────────────────────────────────────────────────
+let tabActual = 'dashboard';
 function showTab(id, btn) {
+  tabActual = id;
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
@@ -664,6 +666,14 @@ async function api(accion, extra = {}) {
     const res = await fetch(APPS_URL + '?' + p.toString());
     return await res.json();
   } catch { return null; }
+}
+
+async function recargarTodo(btn) {
+  if (btn) { btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none'; }
+  await cargarDatos();
+  if (tabActual === 'historia') cargarHistoria();
+  if (tabActual === 'total') cargarTotal();
+  if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
 }
 
 // ─── CARGAR DATOS ─────────────────────────────────────────────────
