@@ -1044,7 +1044,10 @@ function renderCantidades() {
     return `<div class="qty-item">
       ${fotoEl}
       <div class="qty-item-info">
-        <div class="qty-item-nombre">${p.nombre}</div>
+        <div class="qty-item-nombre" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${p.nombre}</span>
+          <button onclick="eliminarDeQty('${p.codigo}')" style="background:none;border:none;font-size:1rem;color:#ccc;cursor:pointer;padding:0 2px;line-height:1" title="Quitar">✕</button>
+        </div>
         <div class="qty-item-precio" style="display:flex;align-items:center;gap:4px">
           <input class="precio-edit" inputmode="numeric" value="${precio}" onchange="setPrecioWizard('${p.codigo}',this.value)" onclick="this.select()"> c/u
         </div>
@@ -1057,6 +1060,12 @@ function renderCantidades() {
     </div>`;
   }).join('');
   actualizarTotalWizard();
+}
+
+function eliminarDeQty(codigo) {
+  delete wProductosSeleccionados[codigo];
+  if (!Object.keys(wProductosSeleccionados).length) { renderWizardStep(1); return; }
+  renderCantidades();
 }
 
 function cambiarQtyWizard(codigo, delta) {
@@ -1141,8 +1150,12 @@ async function confirmarVentaWizard() {
       cliente: wCliente,
       esDebe: esDebe,
       pagoParcial: wPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: esDebe === 'SI' ? precio * p.qty * (saldo / total) : 0
+      saldoPendiente: esDebe === 'SI' ? precio * p.qty : 0
     });
+  }
+  // Para "a cuenta": registrar el abono en CC (así aparece en el historial)
+  if (wPago === 'cuenta' && wCliente && montoPago > 0) {
+    await api('registrarPagoCliente', { hijo: usuario, cliente: wCliente, monto: montoPago });
   }
   if (wPago === 'masque' && wCliente && saldo > 0) {
     await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo });
@@ -1411,7 +1424,11 @@ function renderRCantidades() {
     const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
     return `<div class="qty-item">
       ${fotoEl}
-      <div class="qty-item-info"><div class="qty-item-nombre">${p.nombre}</div>
+      <div class="qty-item-info">
+        <div class="qty-item-nombre" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${p.nombre}</span>
+          <button onclick="eliminarDeRQty('${p.codigo}')" style="background:none;border:none;font-size:1rem;color:#ccc;cursor:pointer;padding:0 2px;line-height:1" title="Quitar">✕</button>
+        </div>
         <div class="qty-item-precio" style="display:flex;align-items:center;gap:4px">
           <input class="precio-edit" inputmode="numeric" value="${precio}" onchange="setPrecioRWizard('${p.codigo}',this.value)" onclick="this.select()"> c/u
         </div>
@@ -1424,6 +1441,12 @@ function renderRCantidades() {
     </div>`;
   }).join('');
   document.getElementById('rw-total').textContent = fmt(calcRTotal());
+}
+
+function eliminarDeRQty(codigo) {
+  delete rProductosSeleccionados[codigo];
+  if (!Object.keys(rProductosSeleccionados).length) { renderRWizardStep(2); return; }
+  renderRCantidades();
 }
 
 function cambiarRQtyWizard(codigo, delta) {
@@ -1507,9 +1530,12 @@ async function confirmarRetroVenta() {
       cantidad: p.qty, precio: precio, total: precio * p.qty,
       cliente: rCliente || '', esDebe: esDebe,
       pagoParcial: rPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: esDebe === 'SI' ? precio * p.qty * (saldo / total) : 0,
+      saldoPendiente: esDebe === 'SI' ? precio * p.qty : 0,
       fecha: rFecha
     });
+  }
+  if (rPago === 'cuenta' && rCliente && montoPago > 0) {
+    await api('registrarPagoCliente', { hijo: usuario, cliente: rCliente, monto: montoPago });
   }
   if (rPago === 'masque' && rCliente && saldo > 0) {
     await api('registrarVueltoCC', { hijo: usuario, cliente: rCliente, monto: saldo });
