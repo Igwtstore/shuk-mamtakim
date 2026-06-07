@@ -840,6 +840,16 @@
         <div id="dash-minorista" style="font-size:0.82rem;color:var(--texto-suave)">—</div>
       </div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+      <div class="admin-card" style="background:#fff8e8">
+        <div style="font-weight:700;color:#b87a00;margin-bottom:0.4rem;font-size:0.85rem">👤 Jony</div>
+        <div id="dash-jony" style="font-size:0.82rem;color:var(--texto-suave)">—</div>
+      </div>
+      <div class="admin-card" style="background:#fef0f8">
+        <div style="font-weight:700;color:#c050a0;margin-bottom:0.4rem;font-size:0.85rem">👤 Miri</div>
+        <div id="dash-miri" style="font-size:0.82rem;color:var(--texto-suave)">—</div>
+      </div>
+    </div>
     <div class="admin-card" style="margin-bottom:1rem">
       <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem;font-size:0.9rem" id="dash-titulo-ventas">Ventas últimos 7 días</div>
       <canvas id="dash-chart-ventas" height="80"></canvas>
@@ -1180,7 +1190,7 @@
 <!-- MODAL NUEVO CLIENTE -->
 <div id="nuevo-cliente-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:600;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-    <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:1rem">👤 Nuevo cliente</div>
+    <div id="nc-titulo" style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:1rem">👤 Nuevo cliente</div>
     <div style="display:flex;flex-direction:column;gap:0.6rem">
       <input type="text" id="nc-nombre" placeholder="Nombre *" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none">
       <input type="tel" id="nc-tel" placeholder="Teléfono (ej: 5491131234567)" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none">
@@ -1839,6 +1849,9 @@ function enviarPedido() {
 
   const url1 = `https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`;
   window.open(url1, '_blank');
+  // Backup: notificación Twilio al admin por si el WA no llega
+  const resumen = lineas.join('\n') + totalLine;
+  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'notificarPedido', cliente: nombre, tipo: tipoCliente, resumen })).catch(() => {});
   showToast('¡Pedido enviado! ✓');
 }
 
@@ -2819,7 +2832,11 @@ async function cargarClientesDatalist() {
   } catch(e) {}
 }
 
+let _editandoCliente = null;
+
 function abrirNuevoClienteModal() {
+  _editandoCliente = null;
+  document.getElementById('nc-titulo').textContent = '👤 Nuevo cliente';
   document.getElementById('nc-nombre').value = '';
   document.getElementById('nc-tel').value = '';
   document.getElementById('nc-tipo').value = 'Mayorista';
@@ -2828,8 +2845,20 @@ function abrirNuevoClienteModal() {
   setTimeout(() => document.getElementById('nc-nombre').focus(), 100);
 }
 
+function abrirEditarClienteModal(nombre, tel, tipo) {
+  _editandoCliente = nombre;
+  document.getElementById('nc-titulo').textContent = '✏️ Editar cliente';
+  document.getElementById('nc-nombre').value = nombre;
+  document.getElementById('nc-tel').value = tel;
+  document.getElementById('nc-tipo').value = tipo || 'Mayorista';
+  document.getElementById('nc-nota').value = '';
+  document.getElementById('nuevo-cliente-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('nc-nombre').focus(), 100);
+}
+
 function cerrarNuevoClienteModal() {
   document.getElementById('nuevo-cliente-modal').style.display = 'none';
+  _editandoCliente = null;
 }
 
 async function guardarNuevoCliente() {
@@ -2839,10 +2868,16 @@ async function guardarNuevoCliente() {
   const tipo = document.getElementById('nc-tipo').value;
   const nota = document.getElementById('nc-nota').value.trim();
   cerrarNuevoClienteModal();
-  const params = new URLSearchParams({ accion: 'agregarCliente', nombre, telefono: tel, tipo, nota });
-  await fetch(APPS_SCRIPT_URL + '?' + params.toString());
-  if (nota) await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'guardarNotaCliente', cliente: nombre, nota }).toString());
-  showToast('Cliente guardado ✓');
+  if (_editandoCliente) {
+    const params = new URLSearchParams({ accion: 'editarCliente', nombreOriginal: _editandoCliente, nombre, telefono: tel, tipo, nota });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+    showToast('Cliente actualizado ✓');
+  } else {
+    const params = new URLSearchParams({ accion: 'agregarCliente', nombre, telefono: tel, tipo, nota });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+    if (nota) await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'guardarNotaCliente', cliente: nombre, nota }).toString());
+    showToast('Cliente guardado ✓');
+  }
   renderClientes();
 }
 
@@ -2901,6 +2936,7 @@ function mostrarClientes(arr) {
         </div>
         <div style="display:flex;gap:0.3rem;flex-shrink:0">
           <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${c.tipo}','${c.telefono||''}')">💬</button>
+          ${c.telefono ? `<button class="btn-accion" style="background:#f0f4ff;color:#2c6fad;font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirEditarClienteModal('${nombre}','${c.telefono}','${c.tipo}')">✏️</button>` : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirNotaModal('cliente','${nombre}','${(_notasClientes[c.nombre]||'').replace(/'/g,"\\'")}','Nota — ${nombre}')">📝</button>
         </div>
       </div>
@@ -2981,6 +3017,13 @@ async function renderDashboard() {
   const minUSD = min.reduce((s,v)=>s+(parseFloat(v.totalUSD)||0),0);
   document.getElementById('dash-mayorista').innerHTML = `${may.length} pedidos · ${mayARS>0?'$ '+Math.round(mayARS).toLocaleString('es-AR'):''}${mayUSD>0?' U$S '+mayUSD.toFixed(2):''}`;
   document.getElementById('dash-minorista').innerHTML = `${min.length} pedidos · ${minARS>0?'$ '+Math.round(minARS).toLocaleString('es-AR'):''}${minUSD>0?' U$S '+minUSD.toFixed(2):''}`;
+
+  // Desglose Jony / Miri
+  const jonyARS = entregadas.reduce((s,v) => s + (parseFloat(v.arsJONY)||0), 0);
+  const miriARS = entregadas.reduce((s,v) => s + (parseFloat(v.arsMyri)||0), 0);
+  const miriUSD = entregadas.reduce((s,v) => s + (parseFloat(v.usdMyri)||0), 0);
+  document.getElementById('dash-jony').innerHTML = `$ ${Math.round(jonyARS).toLocaleString('es-AR')}`;
+  document.getElementById('dash-miri').innerHTML = `$ ${Math.round(miriARS).toLocaleString('es-AR')}${miriUSD > 0 ? ' + U$S ' + miriUSD.toFixed(2) : ''}`;
 
   // Ventas por día
   const nDias = _dashPeriodo === 0 ? 60 : _dashPeriodo;

@@ -152,7 +152,9 @@ function doGet(e) {
       const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
       const row = h.getLastRow() + 1;
       h.appendRow([fecha, dec(e.parameter.productoId), dec(e.parameter.producto), dec(e.parameter.nombre), dec(e.parameter.telefono), 'pendiente', dec(e.parameter.modoCliente||'mayorista')]);
-      h.getRange(row,1).setNumberFormat('@'); return ok();
+      h.getRange(row,1).setNumberFormat('@');
+      sendTwilioWA('+5491131754540', '🔔 *Lista de espera - Shuk Mamtakim*\n\n👤 ' + dec(e.parameter.nombre) + '\n📱 ' + dec(e.parameter.telefono) + '\n\n🛒 Quiere aviso cuando llegue:\n*' + dec(e.parameter.producto) + '*');
+      return ok();
     }
     if (accion === 'notificaciones') {
       const h = ss.getSheetByName('Notificaciones');
@@ -264,6 +266,29 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.nombre), dec(e.parameter.telefono||''), dec(e.parameter.tipo||'Mayorista'), dec(e.parameter.nota||'')]);
       return ok();
     }
+    if (accion === 'notificarPedido') {
+      const cliente = dec(e.parameter.cliente||'');
+      const tipo = dec(e.parameter.tipo||'');
+      const resumen = dec(e.parameter.resumen||'');
+      sendTwilioWA('+5491131754540', '🛍️ *Nuevo pedido - Shuk Mamtakim*\n\n👤 *' + cliente + '* (' + tipo + ')\n\n' + resumen);
+      return ok();
+    }
+    if (accion === 'editarCliente') {
+      const h = ss.getSheetByName('Clientes');
+      if (!h || h.getLastRow() < 2) return ok();
+      const nombreOriginal = dec(e.parameter.nombreOriginal);
+      const datos = h.getDataRange().getValues();
+      for (let i = 1; i < datos.length; i++) {
+        if (datos[i][1].toString() === nombreOriginal) {
+          h.getRange(i+1, 2).setValue(dec(e.parameter.nombre));
+          h.getRange(i+1, 3).setValue(dec(e.parameter.telefono||''));
+          h.getRange(i+1, 4).setValue(dec(e.parameter.tipo||'Mayorista'));
+          if (e.parameter.nota !== undefined) h.getRange(i+1, 5).setValue(dec(e.parameter.nota));
+          return ok();
+        }
+      }
+      return ok();
+    }
     if (accion === 'getClientes') {
       const h = ss.getSheetByName('Clientes');
       if (!h || h.getLastRow() < 2) return json([]);
@@ -347,6 +372,21 @@ function dec(v){try{return decodeURIComponent(v||'');}catch(e){return v||'';}}
 function ok(){return json({ok:true});}
 function json(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}
 function getOrCreate(ss,nombre,headers){let h=ss.getSheetByName(nombre);if(!h){h=ss.insertSheet(nombre);h.appendRow(headers);h.getRange(1,1,1,headers.length).setFontWeight('bold');}return h;}
+function sendTwilioWA(to, body) {
+  const props = PropertiesService.getScriptProperties();
+  const SID = props.getProperty('TWILIO_SID');
+  const TOKEN = props.getProperty('TWILIO_TOKEN');
+  const FROM = props.getProperty('TWILIO_FROM') || 'whatsapp:+14155238886';
+  if (!SID || !TOKEN) return;
+  try {
+    UrlFetchApp.fetch('https://api.twilio.com/2010-04-01/Accounts/' + SID + '/Messages.json', {
+      method: 'post',
+      headers: { Authorization: 'Basic ' + Utilities.base64Encode(SID + ':' + TOKEN) },
+      payload: { From: FROM, To: 'whatsapp:' + to, Body: body },
+      muteHttpExceptions: true
+    });
+  } catch(err) {}
+}
 
 // ─── FUNCIONES HIJOS ──────────────────────────────────────────────────────────
 
