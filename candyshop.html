@@ -1739,11 +1739,11 @@ function renderStockRestante(stockDia, ventas, catalogo) {
   card.style.display = 'block';
   grid.innerHTML = items.map(it => {
     const cls = it.restante <= 0 ? 'cero' : (it.restante <= 2 ? 'bajo' : '');
+    const pct = it.inicial > 0 ? Math.round((it.restante / it.inicial) * 100) : 0;
     return `<div class="stock-chip">
       <div class="stock-chip-nombre" title="${it.nombre}">${it.nombre}</div>
       <div class="stock-chip-nums">
-        <div class="stock-chip-rest ${cls}">${it.restante}</div>
-        <div class="stock-chip-sub">/${it.inicial}</div>
+        <div class="stock-chip-rest ${cls}">${it.restante === 0 ? '✓' : it.restante}<span class="stock-chip-sub">/${it.inicial}</span></div>
       </div>
     </div>`;
   }).join('');
