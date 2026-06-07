@@ -1268,8 +1268,7 @@ function toggleDeudor(i) {
   const el = document.getElementById('dd-' + i);
   el.classList.toggle('open');
   if (el.classList.contains('open')) {
-    const inp = document.getElementById('cobrar-monto-' + i);
-    if (inp) setTimeout(() => inp.focus(), 200);
+    setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
   }
 }
 
