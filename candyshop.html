@@ -968,6 +968,8 @@ function wizardNext() {
     const total = calcTotal();
     document.getElementById('pago-total-monto').textContent = fmt(total);
     renderWizardStep(3);
+  } else if (wStep === 3) {
+    confirmarVentaWizard();
   }
 }
 
@@ -1098,10 +1100,14 @@ function seleccionarPago(tipo) {
   } else if (tipo === 'cuenta') {
     if (!wCliente) { _pedirClienteWizard(); return; }
     document.getElementById('pago-cuenta-wrap').classList.add('open');
+    const btn = document.getElementById('wizard-next');
+    btn.style.display = 'block'; btn.textContent = 'Confirmar →';
     setTimeout(() => document.getElementById('w-monto-parcial').focus(), 200);
   } else if (tipo === 'masque') {
     if (!wCliente) { _pedirClienteWizard(); return; }
     document.getElementById('pago-masque-wrap').classList.add('open');
+    const btn = document.getElementById('wizard-next');
+    btn.style.display = 'block'; btn.textContent = 'Confirmar →';
     setTimeout(() => document.getElementById('w-monto-masque').focus(), 200);
   } else {
     confirmarVentaWizard();
@@ -1343,6 +1349,8 @@ function rWizardNext() {
     document.getElementById('rpago-total-monto').textContent = fmt(calcRTotal());
     document.querySelectorAll('#retro-overlay .pago-btn').forEach(b => b.style.opacity = '1');
     renderRWizardStep(4);
+  } else if (rStep === 4) {
+    confirmarRetroVenta();
   }
 }
 
@@ -1485,10 +1493,14 @@ function seleccionarRPago(tipo) {
   } else if (tipo === 'cuenta') {
     if (!rCliente) { _pedirClienteRetro(); return; }
     document.getElementById('rpago-cuenta-wrap').classList.add('open');
+    const btn = document.getElementById('retro-next');
+    btn.style.display = 'block'; btn.textContent = 'Confirmar →';
     setTimeout(() => document.getElementById('rw-monto-parcial').focus(), 200);
   } else if (tipo === 'masque') {
     if (!rCliente) { _pedirClienteRetro(); return; }
     document.getElementById('rpago-masque-wrap').classList.add('open');
+    const btn = document.getElementById('retro-next');
+    btn.style.display = 'block'; btn.textContent = 'Confirmar →';
     setTimeout(() => document.getElementById('rw-monto-masque').focus(), 200);
   } else {
     confirmarRetroVenta();
