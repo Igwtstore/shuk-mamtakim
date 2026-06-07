@@ -1761,11 +1761,13 @@ function renderHistoria(ventas) {
 
   el.innerHTML = fechas.map((fecha, idx) => {
     const vd = porDia[fecha];
-    let vendido = 0, ganancia = 0;
+    let cobrado = 0, enCC = 0, ganancia = 0;
     const resumenMap = {};
     vd.forEach(v => {
       const sub = (v.precio || 0) * (v.cantidad || 1);
-      vendido += sub - (v.saldoPendiente || 0);
+      const pendiente = v.saldoPendiente || 0;
+      cobrado += sub - pendiente;
+      enCC += pendiente;
       const cod = (v.codigo || '').toLowerCase();
       ganancia += ((v.precio || 0) - (costoMap[cod] || 0)) * (v.cantidad || 1);
       const key = v.producto || '?';
@@ -1783,8 +1785,8 @@ function renderHistoria(ventas) {
           <div class="dia-resumen">${resumen}</div>
         </div>
         <div class="dia-nums">
-          <div class="dia-vendido-label">${fmt(vendido)}</div>
-          <div class="dia-ganancia-label">+${fmt(ganancia)}</div>
+          <div class="dia-vendido-label">${fmt(cobrado)}</div>
+          <div class="dia-ganancia-label">+${fmt(ganancia)}${enCC > 0 ? ` · <span style="color:#e05c2a;font-size:0.78rem">CC ${fmt(enCC)}</span>` : ''}</div>
         </div>
       </div>
       <div class="dia-detalle" id="dia-det-${idx}">
@@ -1800,8 +1802,9 @@ function renderHistoria(ventas) {
         }).join('')}
         <div class="dia-stat-row">
           <div><strong>${vd.length}</strong>ventas</div>
+          <div><strong>${fmt(cobrado)}</strong>cobrado</div>
+          ${enCC > 0 ? `<div><strong style="color:#e05c2a">${fmt(enCC)}</strong>en CC</div>` : ''}
           <div><strong>${fmt(ganancia)}</strong>ganancia</div>
-          <div><strong>${fmt(diezmo)}</strong>diezmo</div>
         </div>
       </div>
     </div>`;
@@ -1815,43 +1818,129 @@ function toggleDia(idx) {
 // ─── TOTAL ───────────────────────────────────────────────────────
 async function cargarTotal() {
   document.getElementById('total-content').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
-  const [meirVentas, iosiVentas] = await Promise.all([
+  const [meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores] = await Promise.all([
     api('ventasPeriodo', { hijo: 'Meir' }),
-    api('ventasPeriodo', { hijo: 'Iosi' })
+    api('ventasPeriodo', { hijo: 'Iosi' }),
+    api('getStockDia', { hijo: 'Meir' }),
+    api('getStockDia', { hijo: 'Iosi' }),
+    api('consultarDeudores', { hijo: 'Meir' }),
+    api('consultarDeudores', { hijo: 'Iosi' })
   ]);
-  renderTotal(meirVentas || [], iosiVentas || []);
+  renderTotal(meirVentas || [], iosiVentas || [], meirStock || {}, iosiStock || {}, meirDeudores || [], iosiDeudores || []);
 }
 
-function renderTotal(meirVentas, iosiVentas) {
-  const costoMap = {};
-  catalogoCache.forEach(p => { costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0; });
+function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores) {
+  const costoMap = {}, nombreMap = {};
+  catalogoCache.forEach(p => {
+    costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0;
+    nombreMap[p.codigo] = p.nombre;
+  });
 
   const hoy = new Date();
   const hoyFmt = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+  const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const fechaLabel = `${DIAS[hoy.getDay()]} ${hoyFmt}`;
 
   const calcStats = ventas => {
-    let vendidoTotal = 0, gananciaTotal = 0, ventasTotal = 0;
-    let vendidoHoy = 0, gananciaHoy = 0, ventasHoy = 0;
+    let cobradoTotal = 0, gananciaTotal = 0, ventasTotal = 0;
+    let vendidoHoy = 0, cobradoHoy = 0, enCCHoy = 0, gananciaHoy = 0, ventasHoy = 0;
     ventas.forEach(v => {
       const sub = (v.precio || 0) * (v.cantidad || 1);
-      const cobrado = sub - (v.saldoPendiente || 0);
+      const pendiente = v.saldoPendiente || 0;
+      const cobrado = sub - pendiente;
       const cod = (v.codigo || '').toLowerCase();
       const gan = ((v.precio || 0) - (costoMap[cod] || 0)) * (v.cantidad || 1);
-      vendidoTotal += cobrado; gananciaTotal += gan; ventasTotal++;
-      if (v.fecha === hoyFmt) { vendidoHoy += cobrado; gananciaHoy += gan; ventasHoy++; }
+      cobradoTotal += cobrado; gananciaTotal += gan; ventasTotal++;
+      if (v.fecha === hoyFmt) {
+        vendidoHoy += sub; cobradoHoy += cobrado; enCCHoy += pendiente;
+        gananciaHoy += gan; ventasHoy++;
+      }
     });
-    return { vendidoTotal, gananciaTotal, diezmoTotal: gananciaTotal * 0.1, ventasTotal,
-             vendidoHoy, gananciaHoy, diezmoHoy: gananciaHoy * 0.1, ventasHoy };
+    return { cobradoTotal, gananciaTotal, diezmoTotal: gananciaTotal * 0.1, ventasTotal,
+             vendidoHoy, cobradoHoy, enCCHoy, gananciaHoy, diezmoHoy: gananciaHoy * 0.1, ventasHoy };
   };
 
   const meir = calcStats(meirVentas);
   const iosi = calcStats(iosiVentas);
+
+  // ─── Cierre del día por chico ─────────────────────────────────
+  const buildCierre = (ventas, stockDia, deudores) => {
+    const ventasHoy = ventas.filter(v => v.fecha === hoyFmt);
+    const stockKeys = Object.keys(stockDia);
+    if (!ventasHoy.length && !stockKeys.length)
+      return `<div style="text-align:center;color:#aaa;padding:10px;font-size:0.85rem">Sin actividad hoy</div>`;
+
+    // Agrupar ventas por código
+    const vm = {};
+    let totalVendido = 0, totalCobrado = 0, totalEnCC = 0;
+    ventasHoy.forEach(v => {
+      const cod = v.codigo || '_';
+      if (!vm[cod]) vm[cod] = { nombre: v.producto, qty: 0 };
+      vm[cod].qty += v.cantidad || 1;
+      const sub = (v.precio || 0) * (v.cantidad || 1);
+      const pend = v.saldoPendiente || 0;
+      totalVendido += sub; totalCobrado += sub - pend; totalEnCC += pend;
+    });
+
+    // Combinar stock + ventas en filas de producto
+    const allCods = [...new Set([...stockKeys, ...Object.keys(vm)])];
+    const prodRows = allCods.map(cod => {
+      const llevo = stockDia[cod] || 0;
+      const vendio = vm[cod]?.qty || 0;
+      const sobra = llevo - vendio;
+      const nombre = vm[cod]?.nombre || nombreMap[cod] || cod;
+      let sobraStr, sobraStyle;
+      if (llevo === 0 && vendio > 0) { sobraStr = '?'; sobraStyle = 'color:#aaa'; }
+      else if (sobra === 0)           { sobraStr = '✓'; sobraStyle = 'color:#2e8b57;font-weight:800'; }
+      else if (sobra > 0)             { sobraStr = sobra; sobraStyle = 'color:#e05c2a;font-weight:700'; }
+      else                            { sobraStr = sobra; sobraStyle = 'color:#c00;font-weight:700'; }
+      return `<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f5f0e8">
+        <div style="flex:2;font-size:0.87rem;font-weight:600;color:#3d2a12;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nombre}</div>
+        <div style="flex:1;text-align:center;font-size:0.85rem;color:#888">${llevo || '—'}</div>
+        <div style="flex:1;text-align:center;font-size:0.85rem">${vendio || '—'}</div>
+        <div style="flex:1;text-align:center;font-size:0.9rem;${sobraStyle}">${sobraStr}</div>
+      </div>`;
+    }).join('');
+
+    const vueltoTotal = deudores.filter(d => d.saldo < 0).reduce((s, d) => s + Math.abs(d.saldo), 0);
+    const aRendir = Math.max(0, totalCobrado - vueltoTotal);
+
+    return `
+      ${allCods.length ? `<div style="margin-bottom:8px">
+        <div style="display:flex;padding:4px 0;border-bottom:2px solid #e5e0d8;margin-bottom:2px">
+          <div style="flex:2;font-size:0.72rem;color:#aaa;text-transform:uppercase">Producto</div>
+          <div style="flex:1;text-align:center;font-size:0.72rem;color:#aaa">Llevó</div>
+          <div style="flex:1;text-align:center;font-size:0.72rem;color:#aaa">Vendió</div>
+          <div style="flex:1;text-align:center;font-size:0.72rem;color:#aaa">Sobra</div>
+        </div>
+        ${prodRows}
+      </div>` : ''}
+      <div style="background:#f9f6f0;border-radius:10px;padding:12px;margin-top:6px">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.88rem">
+          <span style="color:#888">Total vendido</span><span style="font-weight:700">${fmt(totalVendido)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.88rem">
+          <span style="color:#888">Cobrado en efectivo</span><span style="font-weight:700;color:#2e8b57">${fmt(totalCobrado)}</span>
+        </div>
+        ${totalEnCC > 0 ? `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.88rem">
+          <span style="color:#888">Quedó en cuenta (CC)</span><span style="font-weight:700;color:#e05c2a">${fmt(totalEnCC)}</span>
+        </div>` : ''}
+        ${vueltoTotal > 0 ? `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.88rem">
+          <span style="color:#888">Vuelto pendiente</span><span style="font-weight:700;color:#2c6fad">− ${fmt(vueltoTotal)}</span>
+        </div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:7px 0;margin-top:4px;border-top:1.5px solid #e0d8cc">
+          <span style="font-weight:800;color:#3d2a12;font-size:0.95rem">A rendir</span>
+          <span style="font-weight:800;color:#3d2a12;font-size:1.05rem">${fmt(aRendir)}</span>
+        </div>
+      </div>`;
+  };
+
   const comb = {
-    vendidoHoy: meir.vendidoHoy + iosi.vendidoHoy,
+    ventasHoy: meir.ventasHoy + iosi.ventasHoy,
+    cobradoHoy: meir.cobradoHoy + iosi.cobradoHoy,
     gananciaHoy: meir.gananciaHoy + iosi.gananciaHoy,
     diezmoHoy: meir.diezmoHoy + iosi.diezmoHoy,
-    ventasHoy: meir.ventasHoy + iosi.ventasHoy,
-    vendidoTotal: meir.vendidoTotal + iosi.vendidoTotal,
+    cobradoTotal: meir.cobradoTotal + iosi.cobradoTotal,
     gananciaTotal: meir.gananciaTotal + iosi.gananciaTotal,
     diezmoTotal: meir.diezmoTotal + iosi.diezmoTotal,
     ventasTotal: meir.ventasTotal + iosi.ventasTotal
@@ -1859,10 +1948,20 @@ function renderTotal(meirVentas, iosiVentas) {
 
   document.getElementById('total-content').innerHTML = `
     <div class="card">
+      <div class="card-title" style="color:#2c6fad">🧑 Meir — Cierre del día</div>
+      <div style="font-size:0.78rem;color:#aaa;margin-bottom:10px">${fechaLabel}</div>
+      ${buildCierre(meirVentas, meirStock, meirDeudores)}
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#c45e20">🧑 Iosi — Cierre del día</div>
+      <div style="font-size:0.78rem;color:#aaa;margin-bottom:10px">${fechaLabel}</div>
+      ${buildCierre(iosiVentas, iosiStock, iosiDeudores)}
+    </div>
+    <div class="card">
       <div class="card-title">Hoy — Meir + Iosi juntos</div>
       <div class="stats">
         <div class="stat"><div class="stat-num">${comb.ventasHoy}</div><div class="stat-label">Ventas</div></div>
-        <div class="stat blue"><div class="stat-num">${fmt(comb.vendidoHoy)}</div><div class="stat-label">Cobrado</div></div>
+        <div class="stat blue"><div class="stat-num">${fmt(comb.cobradoHoy)}</div><div class="stat-label">Cobrado</div></div>
         <div class="stat green"><div class="stat-num">${fmt(comb.gananciaHoy)}</div><div class="stat-label">Ganancia</div></div>
         <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoHoy)}</div><div class="stat-label">Diezmo</div></div>
       </div>
@@ -1870,20 +1969,20 @@ function renderTotal(meirVentas, iosiVentas) {
     <div class="total-kids-grid">
       <div class="total-kid-card">
         <div class="total-kid-nombre" style="color:#2c6fad">🧑 Meir</div>
-        <div class="total-kid-monto">${fmt(meir.vendidoHoy)}</div>
-        <div class="total-kid-stat">hoy</div>
+        <div class="total-kid-monto">${fmt(meir.cobradoHoy)}</div>
+        <div class="total-kid-stat">cobrado hoy</div>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe3">
-          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(meir.vendidoTotal)}</div>
+          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(meir.cobradoTotal)}</div>
           <div class="total-kid-stat">histórico total</div>
           <div style="font-size:0.75rem;color:#2e8b57;font-weight:700;margin-top:2px">+${fmt(meir.gananciaTotal)} gan.</div>
         </div>
       </div>
       <div class="total-kid-card">
         <div class="total-kid-nombre" style="color:#c45e20">🧑 Iosi</div>
-        <div class="total-kid-monto">${fmt(iosi.vendidoHoy)}</div>
-        <div class="total-kid-stat">hoy</div>
+        <div class="total-kid-monto">${fmt(iosi.cobradoHoy)}</div>
+        <div class="total-kid-stat">cobrado hoy</div>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe3">
-          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(iosi.vendidoTotal)}</div>
+          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(iosi.cobradoTotal)}</div>
           <div class="total-kid-stat">histórico total</div>
           <div style="font-size:0.75rem;color:#2e8b57;font-weight:700;margin-top:2px">+${fmt(iosi.gananciaTotal)} gan.</div>
         </div>
@@ -1893,7 +1992,7 @@ function renderTotal(meirVentas, iosiVentas) {
       <div class="card-title">Histórico total — Juntos</div>
       <div class="stats">
         <div class="stat"><div class="stat-num">${comb.ventasTotal}</div><div class="stat-label">Ventas</div></div>
-        <div class="stat blue"><div class="stat-num">${fmt(comb.vendidoTotal)}</div><div class="stat-label">Cobrado</div></div>
+        <div class="stat blue"><div class="stat-num">${fmt(comb.cobradoTotal)}</div><div class="stat-label">Cobrado</div></div>
         <div class="stat green"><div class="stat-num">${fmt(comb.gananciaTotal)}</div><div class="stat-label">Ganancia</div></div>
         <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoTotal)}</div><div class="stat-label">Diezmo</div></div>
       </div>
