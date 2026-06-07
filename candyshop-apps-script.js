@@ -238,7 +238,7 @@ function doGet(e) {
         dec(e.parameter.pMay), parseFloat(e.parameter.pMin||0),
         parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
         dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
-        0, '', 0, 0, 'Ambos']);
+        0, '', 0, 0, 'Ambos', dec(e.parameter.dueno||'Miri')]);
       return ok();
     }
     if (accion === 'actualizarOferta') {
@@ -533,6 +533,6 @@ function setupHojaHijos() {
   let cc = ss.getSheetByName('CCHijos');
   if (!cc) cc = ss.insertSheet('CCHijos');
   cc.clearContents();
-  cc.getRange(1,1,1,5).setValues([['Fecha','Hijo','Cliente','Monto','Descripcion']]);
+  cc.getRange(1,1,1,6).setValues([['Fecha','Hijo','Cliente','Monto','Descripcion','Producto']]);
   Logger.log('Hojas creadas OK');
 }
