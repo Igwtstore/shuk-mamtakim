@@ -1158,22 +1158,22 @@ async function confirmarVentaWizard() {
 
   for (const p of Object.values(wProductosSeleccionados)) {
     const precio = p.precioCustom ?? p.precioVenta;
+    const productTotal = precio * p.qty;
+    let productSaldo = 0;
+    if (wPago === 'nopago') productSaldo = productTotal;
+    else if (wPago === 'cuenta' && saldo > 0) productSaldo = total > 0 ? Math.round((productTotal / total) * saldo) : 0;
     await api('registrarVentaHijos', {
       hijo: usuario,
       productoNombre: p.nombre,
       productoCodigo: p.codigo,
       cantidad: p.qty,
       precio: precio,
-      total: precio * p.qty,
+      total: productTotal,
       cliente: wCliente,
       esDebe: esDebe,
       pagoParcial: wPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: esDebe === 'SI' ? precio * p.qty : 0
+      saldoPendiente: productSaldo
     });
-  }
-  // Para "a cuenta": registrar el abono en CC (así aparece en el historial)
-  if (wPago === 'cuenta' && wCliente && montoPago > 0) {
-    await api('registrarPagoCliente', { hijo: usuario, cliente: wCliente, monto: montoPago });
   }
   if (wPago === 'masque' && wCliente && saldo > 0) {
     const prodLabel = Object.values(wProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
@@ -1560,17 +1560,18 @@ async function confirmarRetroVenta() {
 
   for (const p of Object.values(rProductosSeleccionados)) {
     const precio = p.precioCustom ?? p.precioVenta;
+    const productTotal = precio * p.qty;
+    let productSaldo = 0;
+    if (rPago === 'nopago') productSaldo = productTotal;
+    else if (rPago === 'cuenta' && saldo > 0) productSaldo = total > 0 ? Math.round((productTotal / total) * saldo) : 0;
     await api('registrarVentaHijos', {
       hijo: usuario, productoNombre: p.nombre, productoCodigo: p.codigo,
-      cantidad: p.qty, precio: precio, total: precio * p.qty,
+      cantidad: p.qty, precio: precio, total: productTotal,
       cliente: rCliente || '', esDebe: esDebe,
       pagoParcial: rPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: esDebe === 'SI' ? precio * p.qty : 0,
+      saldoPendiente: productSaldo,
       fecha: rFecha
     });
-  }
-  if (rPago === 'cuenta' && rCliente && montoPago > 0) {
-    await api('registrarPagoCliente', { hijo: usuario, cliente: rCliente, monto: montoPago });
   }
   if (rPago === 'masque' && rCliente && saldo > 0) {
     const prodLabelR = Object.values(rProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
