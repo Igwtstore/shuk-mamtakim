@@ -3440,7 +3440,8 @@ async function submitRegistro() {
   const btn = document.getElementById('reg-btn');
   btn.disabled = true; btn.textContent = 'Registrando...';
   try {
-    const r = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarClienteMayorista', nombre, telefono: tel }));
+    const tipo = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+    const r = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarClienteMayorista', nombre, telefono: tel, tipo }));
     const data = await r.json();
     localStorage.setItem('shuk_may_nombre', data.nombre || nombre);
     localStorage.setItem('shuk_may_tel', tel);

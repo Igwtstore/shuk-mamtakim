@@ -291,7 +291,8 @@ function doGet(e) {
         }
       }
       const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
-      h.appendRow([fecha, nombre, tel, 'Mayorista', '', fecha]);
+      const tipo = dec(e.parameter.tipo||'Mayorista');
+      h.appendRow([fecha, nombre, tel, tipo, '', fecha]);
       return json({ok:true, nuevo:true});
     }
     if (accion === 'registrarVisita') {
