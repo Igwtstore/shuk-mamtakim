@@ -2774,21 +2774,35 @@ async function renderClientes() {
   await cargarNotasClientes();
   const lista = document.getElementById('clientes-lista');
   lista.innerHTML = '<div class="sinpedidos">Cargando...</div>';
-  const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
-  if (!res) { lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
-  const ventas = await res.json().catch(() => []);
-  // Agrupar por cliente
-  const mapa = {};
+  const [resV, resC] = await Promise.all([
+    fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null),
+    fetch(APPS_SCRIPT_URL + '?accion=getClientes').catch(() => null)
+  ]);
+  if (!resV) { lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
+  const ventas = await resV.json().catch(() => []);
+  const clientesSheet = resC ? await resC.json().catch(() => []) : [];
+  // Agrupar pedidos por cliente
+  const ventasMapa = {};
   ventas.filter(v => v.estado !== 'cancelado').forEach(v => {
     const key = v.cliente;
-    if (!mapa[key]) mapa[key] = { nombre: v.cliente, tipo: v.tipo, pedidos: 0, totalARS: 0, totalUSD: 0, ultima: v.fecha, historial: [] };
-    mapa[key].pedidos++;
-    mapa[key].totalARS += parseFloat(v.totalARS||0);
-    mapa[key].totalUSD += parseFloat(v.totalUSD||0);
-    if (v.fecha > mapa[key].ultima) mapa[key].ultima = v.fecha;
-    mapa[key].historial.push(v);
+    if (!ventasMapa[key]) ventasMapa[key] = { pedidos: 0, totalARS: 0, totalUSD: 0, ultima: v.fecha, historial: [], tipo: v.tipo };
+    ventasMapa[key].pedidos++;
+    ventasMapa[key].totalARS += parseFloat(v.totalARS||0);
+    ventasMapa[key].totalUSD += parseFloat(v.totalUSD||0);
+    if (v.fecha > ventasMapa[key].ultima) ventasMapa[key].ultima = v.fecha;
+    ventasMapa[key].historial.push(v);
   });
-  _clientesRaw = Object.values(mapa).sort((a,b) => b.totalARS - a.totalARS);
+  // Combinar: clientes registrados + historial de pedidos
+  const mapaFinal = {};
+  clientesSheet.forEach(c => {
+    const vd = ventasMapa[c.nombre] || { pedidos: 0, totalARS: 0, totalUSD: 0, ultima: c.fecha, historial: [] };
+    mapaFinal[c.nombre] = { nombre: c.nombre, telefono: c.telefono, tipo: c.tipo || vd.tipo || 'Mayorista', ...vd };
+  });
+  // Clientes con pedidos pero sin registro en sheet
+  Object.entries(ventasMapa).forEach(([nombre, data]) => {
+    if (!mapaFinal[nombre]) mapaFinal[nombre] = { nombre, telefono: '', tipo: data.tipo, ...data };
+  });
+  _clientesRaw = Object.values(mapaFinal).sort((a,b) => b.totalARS - a.totalARS);
   mostrarClientes(_clientesRaw);
 }
 
@@ -2877,15 +2891,16 @@ function mostrarClientes(arr) {
             ${tipoBadge}
             ${deudaStr ? `<span style="background:#fde8e8;color:#c0392b;font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:20px">💳 ${deudaStr}</span>` : ''}
           </div>
+          ${c.telefono ? `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.1rem">📱 ${c.telefono}</div>` : ''}
           ${_notasClientes[c.nombre] ? `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.2rem">📝 ${_notasClientes[c.nombre].substring(0,60)}${_notasClientes[c.nombre].length>60?'…':''}</div>` : ''}
           <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.25rem">
-            ${c.pedidos} pedido${c.pedidos!==1?'s':''} ·
-            ${c.totalARS>0?'$ '+Math.round(c.totalARS).toLocaleString('es-AR'):''}${c.totalUSD>0?' + U$S '+c.totalUSD.toFixed(2):''} total ·
-            ${diasStr}
+            ${c.pedidos > 0
+              ? `${c.pedidos} pedido${c.pedidos!==1?'s':''} · ${c.totalARS>0?'$ '+Math.round(c.totalARS).toLocaleString('es-AR'):''}${c.totalUSD>0?' + U$S '+c.totalUSD.toFixed(2):''} total · ${diasStr}`
+              : 'Sin pedidos aún'}
           </div>
         </div>
         <div style="display:flex;gap:0.3rem;flex-shrink:0">
-          <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${c.tipo}')">💬</button>
+          <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${c.tipo}','${c.telefono||''}')">💬</button>
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirNotaModal('cliente','${nombre}','${(_notasClientes[c.nombre]||'').replace(/'/g,"\\'")}','Nota — ${nombre}')">📝</button>
         </div>
       </div>
@@ -2910,10 +2925,11 @@ function toggleClienteHistorial(id) {
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
-function contactarCliente(nombre, tipo) {
+function contactarCliente(nombre, tipo, tel) {
   const link = tipo === 'Minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
   const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  const waBase = tel ? `https://wa.me/549${tel}` : `https://wa.me/`;
+  window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 let _dashPeriodo = 7;
@@ -3401,6 +3417,10 @@ function registrarVisita(pagina) {
 
 function mostrarRegistroModal() {
   const el = document.getElementById('registro-modal');
+  const sub = document.getElementById('reg-subtitulo');
+  if (sub) sub.textContent = modo === 'mayorista'
+    ? 'Para hacer tu pedido mayorista, registrá tu nombre y teléfono una sola vez.'
+    : 'Para hacer tu pedido, registrá tu nombre y teléfono una sola vez.';
   if (el) el.style.display = 'flex';
   setTimeout(() => { const n = document.getElementById('reg-nombre'); if (n) n.focus(); }, 100);
 }
@@ -3963,7 +3983,7 @@ function cerrarEditPedido() {
 <div id="registro-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:900;align-items:center;justify-content:center;padding:1rem;" onclick="if(event.target===this)cerrarRegistroModal()">
   <div style="background:white;border-radius:16px;padding:1.75rem 1.5rem;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:700;color:#1a1a2e;margin-bottom:0.25rem">👋 Bienvenido</div>
-    <div style="font-size:0.88rem;color:var(--texto-suave);margin-bottom:1.25rem">Para acceder al catálogo mayorista, registrá tu nombre y teléfono una sola vez.</div>
+    <div id="reg-subtitulo" style="font-size:0.88rem;color:var(--texto-suave);margin-bottom:1.25rem">Para hacer tu pedido, registrá tu nombre y teléfono una sola vez.</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem">
       <div>
         <label style="font-size:0.78rem;font-weight:600;color:#1a1a2e;display:block;margin-bottom:0.3rem">Nombre y apellido</label>

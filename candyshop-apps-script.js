@@ -264,6 +264,19 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.nombre), dec(e.parameter.telefono||''), dec(e.parameter.tipo||'Mayorista'), dec(e.parameter.nota||'')]);
       return ok();
     }
+    if (accion === 'getClientes') {
+      const h = ss.getSheetByName('Clientes');
+      if (!h || h.getLastRow() < 2) return json([]);
+      const rows = h.getRange(2,1,h.getLastRow()-1,6).getValues();
+      return json(rows.map(r => ({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+        nombre: r[1].toString(),
+        telefono: r[2].toString(),
+        tipo: r[3].toString(),
+        nota: r[4].toString(),
+        ultimoAcceso: r[5] instanceof Date ? Utilities.formatDate(r[5],TZ,'dd/MM/yyyy HH:mm') : (r[5]||'').toString()
+      })));
+    }
     if (accion === 'registrarClienteMayorista') {
       const tel = dec(e.parameter.telefono||'').replace(/\D/g,'').slice(-10);
       const nombre = dec(e.parameter.nombre||'');
