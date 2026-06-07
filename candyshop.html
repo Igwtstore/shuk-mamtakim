@@ -516,8 +516,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     </div>
     <!-- STEP 1: CLIENTE -->
     <div class="wizard-step" id="rws-1">
-      <div class="wizard-label">¿A quién le vendiste? (opcional)</div>
-      <input class="wizard-input" id="rw-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" enterkeyhint="next" oninput="filtrarRSugerencias()" onkeydown="if(event.key==='Enter') rWizardNext()">
+      <div class="wizard-label">¿A quién le vendiste?</div>
+      <input class="wizard-input" id="rw-cliente" type="text" placeholder="Nombre del cliente" autocomplete="off" enterkeyhint="next" oninput="filtrarRSugerencias(); this.placeholder='Nombre del cliente';" onkeydown="if(event.key==='Enter') rWizardNext()">
       <div class="cliente-sugerencias" id="rw-sugerencias"></div>
     </div>
     <!-- STEP 2: PRODUCTOS -->
@@ -1400,6 +1400,15 @@ function calcRTotal() {
   return Object.values(rProductosSeleccionados).reduce((s, p) => s + p.precioVenta * p.qty, 0);
 }
 
+function _pedirClienteRetro() {
+  renderRWizardStep(1);
+  setTimeout(() => {
+    const el = document.getElementById('rw-cliente');
+    el.placeholder = '⚠️ Nombre requerido para registrar deuda';
+    el.focus();
+  }, 150);
+}
+
 function seleccionarRPago(tipo) {
   rPago = tipo;
   document.querySelectorAll('#retro-overlay .pago-btn').forEach(b => b.style.opacity = '0.5');
@@ -1407,7 +1416,11 @@ function seleccionarRPago(tipo) {
   document.querySelector('#retro-overlay .' + clases[tipo]).style.opacity = '1';
   document.getElementById('rpago-cuenta-wrap').classList.remove('open');
   document.getElementById('rpago-masque-wrap').classList.remove('open');
-  if (tipo === 'cuenta') {
+  if (tipo === 'nopago') {
+    if (!rCliente) { _pedirClienteRetro(); return; }
+    confirmarRetroVenta();
+  } else if (tipo === 'cuenta') {
+    if (!rCliente) { _pedirClienteRetro(); return; }
     document.getElementById('rpago-cuenta-wrap').classList.add('open');
     setTimeout(() => document.getElementById('rw-monto-parcial').focus(), 200);
   } else if (tipo === 'masque') {
