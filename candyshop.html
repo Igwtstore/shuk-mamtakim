@@ -164,6 +164,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .qty-item-info { flex: 1; }
 .qty-item-nombre { font-weight: 700; font-size: 0.9rem; color: #2d1a0a; }
 .qty-item-precio { font-size: 0.78rem; color: #aaa; }
+.precio-edit { width: 80px; font-size: 0.85rem; font-weight: 700; color: #5c3d1e; border: 1.5px solid #e5e0d8; border-radius: 8px; padding: 4px 6px; text-align: center; background: #fdf9f4; outline: none; }
+.precio-edit:focus { border-color: #f59b5b; }
 .qty-control { display: flex; align-items: center; gap: 10px; }
 .qty-btn-big { width: 38px; height: 38px; border-radius: 10px; background: #f0ebe3; border: none; font-size: 1.3rem; font-weight: 700; color: #5c3d1e; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .qty-num-big { font-size: 1.2rem; font-weight: 800; color: #2d1a0a; min-width: 28px; text-align: center; }
@@ -1027,15 +1029,25 @@ function quitarProducto(codigo, event) {
   renderProductosGrid();
 }
 
+function setPrecioWizard(codigo, val) {
+  if (wProductosSeleccionados[codigo]) {
+    wProductosSeleccionados[codigo].precioCustom = parseInt(val) || 0;
+    actualizarTotalWizard();
+  }
+}
+
 function renderCantidades() {
   const el = document.getElementById('w-cantidades');
   el.innerHTML = Object.values(wProductosSeleccionados).map(p => {
+    const precio = p.precioCustom ?? p.precioVenta;
     const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
     return `<div class="qty-item">
       ${fotoEl}
       <div class="qty-item-info">
         <div class="qty-item-nombre">${p.nombre}</div>
-        <div class="qty-item-precio">${fmt(p.precioVenta)} c/u</div>
+        <div class="qty-item-precio" style="display:flex;align-items:center;gap:4px">
+          <input class="precio-edit" inputmode="numeric" value="${precio}" onchange="setPrecioWizard('${p.codigo}',this.value)" onclick="this.select()"> c/u
+        </div>
       </div>
       <div class="qty-control">
         <button class="qty-btn-big" onclick="cambiarQtyWizard('${p.codigo}',-1)">−</button>
@@ -1057,7 +1069,7 @@ function cambiarQtyWizard(codigo, delta) {
 }
 
 function calcTotal() {
-  return Object.values(wProductosSeleccionados).reduce((s, p) => s + p.precioVenta * p.qty, 0);
+  return Object.values(wProductosSeleccionados).reduce((s, p) => s + (p.precioCustom ?? p.precioVenta) * p.qty, 0);
 }
 
 function actualizarTotalWizard() {
@@ -1118,17 +1130,18 @@ async function confirmarVentaWizard() {
   }
 
   for (const p of Object.values(wProductosSeleccionados)) {
+    const precio = p.precioCustom ?? p.precioVenta;
     await api('registrarVentaHijos', {
       hijo: usuario,
       productoNombre: p.nombre,
       productoCodigo: p.codigo,
       cantidad: p.qty,
-      precio: p.precioVenta,
-      total: p.precioVenta * p.qty,
+      precio: precio,
+      total: precio * p.qty,
       cliente: wCliente,
       esDebe: esDebe,
       pagoParcial: wPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: esDebe === 'SI' ? p.precioVenta * p.qty * (saldo / total) : 0
+      saldoPendiente: esDebe === 'SI' ? precio * p.qty * (saldo / total) : 0
     });
   }
   if (wPago === 'masque' && wCliente && saldo > 0) {
@@ -1385,12 +1398,24 @@ function quitarRProducto(codigo, event) {
   event.stopPropagation(); delete rProductosSeleccionados[codigo]; renderRProductosGrid();
 }
 
+function setPrecioRWizard(codigo, val) {
+  if (rProductosSeleccionados[codigo]) {
+    rProductosSeleccionados[codigo].precioCustom = parseInt(val) || 0;
+    document.getElementById('rw-total').textContent = fmt(calcRTotal());
+  }
+}
+
 function renderRCantidades() {
   document.getElementById('rw-cantidades').innerHTML = Object.values(rProductosSeleccionados).map(p => {
+    const precio = p.precioCustom ?? p.precioVenta;
     const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
     return `<div class="qty-item">
       ${fotoEl}
-      <div class="qty-item-info"><div class="qty-item-nombre">${p.nombre}</div><div class="qty-item-precio">${fmt(p.precioVenta)} c/u</div></div>
+      <div class="qty-item-info"><div class="qty-item-nombre">${p.nombre}</div>
+        <div class="qty-item-precio" style="display:flex;align-items:center;gap:4px">
+          <input class="precio-edit" inputmode="numeric" value="${precio}" onchange="setPrecioRWizard('${p.codigo}',this.value)" onclick="this.select()"> c/u
+        </div>
+      </div>
       <div class="qty-control">
         <button class="qty-btn-big" onclick="cambiarRQtyWizard('${p.codigo}',-1)">−</button>
         <span class="qty-num-big" id="rwqty-${p.codigo}">${p.qty}</span>
@@ -1410,7 +1435,7 @@ function cambiarRQtyWizard(codigo, delta) {
 }
 
 function calcRTotal() {
-  return Object.values(rProductosSeleccionados).reduce((s, p) => s + p.precioVenta * p.qty, 0);
+  return Object.values(rProductosSeleccionados).reduce((s, p) => s + (p.precioCustom ?? p.precioVenta) * p.qty, 0);
 }
 
 function _pedirClienteRetro() {
@@ -1476,12 +1501,13 @@ async function confirmarRetroVenta() {
   }
 
   for (const p of Object.values(rProductosSeleccionados)) {
+    const precio = p.precioCustom ?? p.precioVenta;
     await api('registrarVentaHijos', {
       hijo: usuario, productoNombre: p.nombre, productoCodigo: p.codigo,
-      cantidad: p.qty, precio: p.precioVenta, total: p.precioVenta * p.qty,
+      cantidad: p.qty, precio: precio, total: precio * p.qty,
       cliente: rCliente || '', esDebe: esDebe,
       pagoParcial: rPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: esDebe === 'SI' ? p.precioVenta * p.qty * (saldo / total) : 0,
+      saldoPendiente: esDebe === 'SI' ? precio * p.qty * (saldo / total) : 0,
       fecha: rFecha
     });
   }
@@ -1545,9 +1571,11 @@ function renderHistorialCliente(movs, cliente) {
   el.innerHTML = withSaldo.map(m => {
     const t = TIPOS[m.tipo] || { label: m.tipo, cls: 'mov-pago', signo: '' };
     const montoAbs = Math.abs(m.monto);
+    const prodLine = m.producto ? `<div style="font-size:0.78rem;color:#5c3d1e;font-weight:600;margin-top:3px">🛍️ ${m.producto}</div>` : '';
     return `<div class="mov-row">
       <div>
         <span class="mov-badge ${t.cls}">${t.label}</span>
+        ${prodLine}
         <div style="font-size:0.72rem;color:#aaa;margin-top:2px">${m.fecha}</div>
       </div>
       <div style="text-align:right">
