@@ -1245,9 +1245,11 @@ function renderDeudores(deudores) {
       </div>
       <div class="deudor-detail" id="dd-v${i}">
         <div style="font-size:0.85rem;color:#666;padding:6px 0">Le debés ${fmt(Math.abs(d.saldo))} de cambio</div>
-        <button class="btn-saldar" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}')">
-          Marcar como saldado ✓
-        </button>
+        <div class="deudor-cobrar">
+          <input class="cobrar-input" type="number" id="vuelto-monto-v${i}" placeholder="¿Cuánto le diste?">
+          <button class="btn-cobrar" style="background:linear-gradient(135deg,#2c6fad,#1a4f8a)" onclick="darVueltoParcial('${d.cliente.replace(/'/g,"\\'")}', 'v${i}')">Dar</button>
+          <button class="btn-cobrar-todo" style="color:#2c6fad;border-color:#b2cce8" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}')">Todo</button>
+        </div>
         <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
       </div>
     </div>`).join('');
@@ -1259,6 +1261,13 @@ function renderDeudores(deudores) {
 async function pagarVuelto(cliente) {
   const d = deudoresCache.find(x => x.cliente === cliente);
   const monto = d ? Math.abs(d.saldo) : 0;
+  if (!monto) return;
+  await api('registrarPagoVuelto', { hijo: usuario, cliente, monto });
+  cargarDatos();
+}
+
+async function darVueltoParcial(cliente, i) {
+  const monto = parseFloat(document.getElementById('vuelto-monto-' + i).value) || 0;
   if (!monto) return;
   await api('registrarPagoVuelto', { hijo: usuario, cliente, monto });
   cargarDatos();
