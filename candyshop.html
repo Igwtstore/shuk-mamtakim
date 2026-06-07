@@ -1100,6 +1100,7 @@ function seleccionarPago(tipo) {
     document.getElementById('pago-cuenta-wrap').classList.add('open');
     setTimeout(() => document.getElementById('w-monto-parcial').focus(), 200);
   } else if (tipo === 'masque') {
+    if (!wCliente) { _pedirClienteWizard(); return; }
     document.getElementById('pago-masque-wrap').classList.add('open');
     setTimeout(() => document.getElementById('w-monto-masque').focus(), 200);
   } else {
@@ -1115,7 +1116,7 @@ function calcCambio() {
 
 async function confirmarVentaWizard() {
   if (!Object.keys(wProductosSeleccionados).length || !wPago) return;
-  if ((wPago === 'nopago' || wPago === 'cuenta') && !wCliente) { _pedirClienteWizard(); return; }
+  if ((wPago === 'nopago' || wPago === 'cuenta' || wPago === 'masque') && !wCliente) { _pedirClienteWizard(); return; }
   if (wPago === 'cuenta') {
     const monto = parseFloat(document.getElementById('w-monto-parcial').value) || 0;
     if (!monto) { document.getElementById('w-monto-parcial').focus(); return; }
@@ -1485,6 +1486,7 @@ function seleccionarRPago(tipo) {
     document.getElementById('rpago-cuenta-wrap').classList.add('open');
     setTimeout(() => document.getElementById('rw-monto-parcial').focus(), 200);
   } else if (tipo === 'masque') {
+    if (!rCliente) { _pedirClienteRetro(); return; }
     document.getElementById('rpago-masque-wrap').classList.add('open');
     setTimeout(() => document.getElementById('rw-monto-masque').focus(), 200);
   } else {
@@ -1500,6 +1502,7 @@ function calcRCambio() {
 
 async function confirmarRetroVenta() {
   if (!rFecha || !Object.keys(rProductosSeleccionados).length || !rPago) return;
+  if ((rPago === 'nopago' || rPago === 'cuenta' || rPago === 'masque') && !rCliente) { _pedirClienteRetro(); return; }
   if (rPago === 'cuenta') {
     const m = parseFloat(document.getElementById('rw-monto-parcial').value) || 0;
     if (!m) { document.getElementById('rw-monto-parcial').focus(); return; }
