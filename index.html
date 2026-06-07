@@ -935,13 +935,22 @@
           <input type="number" id="np-stock" placeholder="0" min="0" />
         </div>
       </div>
-      <div class="nombre-campo" style="margin:0">
-        <label>Visible para</label>
-        <select id="np-visible" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
-          <option value="Ambos">Ambos (mayorista y minorista)</option>
-          <option value="Mayorista">Solo Mayorista</option>
-          <option value="Minorista">Solo Minorista</option>
-        </select>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:140px">
+          <label>Dueño</label>
+          <select id="np-dueno" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="Miri">Miri</option>
+            <option value="Jony">Jony</option>
+          </select>
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:180px">
+          <label>Visible para</label>
+          <select id="np-visible" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="Ambos">Ambos (mayorista y minorista)</option>
+            <option value="Mayorista">Solo Mayorista</option>
+            <option value="Minorista">Solo Minorista</option>
+          </select>
+        </div>
       </div>
       <div class="nombre-campo" style="margin:0">
         <label>Foto o video del producto</label>
@@ -1340,11 +1349,8 @@ let modo = 'mayorista';
 let cantidades = {};
 let adminAuth = false;
 
-// PITZUJIM ids (precios en ARS para mayorista)
-const PITZUJIM_IDS = [43,44,45,46,47,48,49];
 const CATEGORIA_ORDEN = ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Varios'];
 function getCatIdx(p) {
-  if (PITZUJIM_IDS.includes(p.id)) return 0;
   const i = CATEGORIA_ORDEN.indexOf(p.categoria || 'Varios');
   return i === -1 ? CATEGORIA_ORDEN.length : i;
 }
@@ -1373,7 +1379,8 @@ async function cargarProductos() {
       fechaOferta: (r[11]||'').trim(),
       cantPack: parseInt(r[12]||'0'),
       precioPack: parseFloat((r[13]||'0').replace(',','.')),
-      visibleOferta: (r[14]||'Ambos').trim()
+      dueno: (r[14]||'').trim(),
+      visibleOferta: (r[15]||'Ambos').trim()
     })).filter(p => p.activo && p.id);
     renderCatalogo();
     renderFiltros();
@@ -1425,7 +1432,7 @@ setInterval(fetchTipoCambio, 3600000); // actualiza cada 1 hora
 function formatPrecio(p) {
   const id = p.id;
   if (modo === 'mayorista') {
-    if (PITZUJIM_IDS.includes(id)) {
+    if (p.dueno === 'Jony') {
       const v = parseFloat((p.precioMay||'0').toString().replace(',','.'));
       return '$ ' + Math.round(v).toLocaleString('es-AR');
     }
@@ -1463,7 +1470,7 @@ function packActivo(p) {
 
 function esPesos(p) {
   if (modo === 'minorista') return true;
-  return PITZUJIM_IDS.includes(p.id);
+  return p.dueno === 'Jony';
 }
 
 function renderCatalogo() {
@@ -1474,7 +1481,7 @@ function renderCatalogo() {
     const vis = (p.visible||'Ambos').trim();
     if (vis !== 'Ambos' && vis !== tipoActual) return false;
     return (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
-      (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva || (PITZUJIM_IDS.includes(p.id) && _categoriaActiva === 'Pitzujim'));
+      (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva);
   }).sort((a, b) => {
     const aOut = a.stock <= 0 ? 1 : 0;
     const bOut = b.stock <= 0 ? 1 : 0;
@@ -1692,7 +1699,7 @@ function renderCarrito() {
   }
   const itemsHTML = items.map(item => {
     const precio = modo === 'mayorista' 
-      ? (PITZUJIM_IDS.includes(item.id) ? '$ ' + Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))).toLocaleString('es-AR') : 'U$S ' + parseFloat((item.precioMay||'0').toString().replace(',','.')).toFixed(2))
+      ? (item.dueno === 'Jony' ? '$ ' + Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))).toLocaleString('es-AR') : 'U$S ' + parseFloat((item.precioMay||'0').toString().replace(',','.')).toFixed(2))
       : '$ ' + Math.round(item.precioMin).toLocaleString('es-AR');
     return `
     <div class="carrito-item">
@@ -1772,7 +1779,7 @@ function enviarPedido() {
 
   let arsJONY = 0, arsMyri = 0, usdMyri = 0;
   const lineas = items.map(item => {
-    const esPitz = PITZUJIM_IDS.includes(item.id);
+    const esPitz = item.dueno === 'Jony';
     let precioUnit, moneda;
     if (modo === 'mayorista') {
       if (esPitz) {
@@ -2199,7 +2206,7 @@ function renderManualProductos() {
     const vis = (p.visible||'Ambos').trim();
     return vis === 'Ambos' || vis === _tipoM;
   }).map(p => {
-    const esPitz = PITZUJIM_IDS.includes(p.id);
+    const esPitz = p.dueno === 'Jony';
     let precioUnit, moneda;
     if (tipo === 'Mayorista') {
       if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; }
@@ -2231,7 +2238,7 @@ function actualizarTotalManual() {
     if (!inp) return;
     const qty = parseInt(inp.value) || 0;
     if (!qty) return;
-    const esPitz = PITZUJIM_IDS.includes(p.id);
+    const esPitz = p.dueno === 'Jony';
     if (tipo === 'Mayorista') {
       if (esPitz) arsJ += Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))) * qty;
       else usdM += parseFloat((p.precioMay||'0').toString().replace(',','.')) * qty;
@@ -2265,7 +2272,7 @@ function cargarPedidoManual() {
     if (!inp) return;
     const qty = parseInt(inp.value) || 0;
     if (!qty) return;
-    const esPitz = PITZUJIM_IDS.includes(p.id);
+    const esPitz = p.dueno === 'Jony';
     let precioUnit, moneda;
     if (tipo === 'Mayorista') {
       if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; arsJ += precioUnit * qty; }
@@ -2404,6 +2411,7 @@ async function guardarNuevoProducto() {
   const stock = parseInt(document.getElementById('np-stock').value) || 0;
   const categoria = document.getElementById('np-categoria').value.trim() || 'Varios';
   const visible = document.getElementById('np-visible').value || 'Ambos';
+  const dueno = document.getElementById('np-dueno').value || 'Miri';
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
   // Subir foto si hay una seleccionada
   let imagenId = '';
@@ -2412,7 +2420,7 @@ async function guardarNuevoProducto() {
   }
   // Guardar en Google Sheet via Apps Script
   const params = new URLSearchParams({
-    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible
+    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible, dueno
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(r => r.json())
@@ -3671,7 +3679,7 @@ function onTipoChange() {
   _editLineas = _editLineas.map(l => {
     const p = productos.find(x => x.nombre.toLowerCase() === l.nombre.toLowerCase());
     if (!p) return l;
-    const esPitz = PITZUJIM_IDS.includes(p.id);
+    const esPitz = p.dueno === 'Jony';
     let precio, moneda;
     if (esMay) {
       precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
@@ -3694,7 +3702,7 @@ function poblarSelectorProductos() {
   const disponibles = productos.filter(p => p.stock > 0);
   sel.innerHTML = '<option value="">— Elegir producto —</option>' +
     disponibles.map(p => {
-      const esPitz = PITZUJIM_IDS.includes(p.id);
+      const esPitz = p.dueno === 'Jony';
       let precio, moneda;
       if (esMay) {
         precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
@@ -3725,7 +3733,7 @@ function agregarProductoEdit() {
   if (!p) return;
   const tipo = document.getElementById('ep-tipo').value;
   const esMay = tipo === 'Mayorista';
-  const esPitz = PITZUJIM_IDS.includes(p.id);
+  const esPitz = p.dueno === 'Jony';
   let precio, moneda;
   if (esMay) {
     precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;

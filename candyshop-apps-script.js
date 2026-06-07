@@ -238,7 +238,7 @@ function doGet(e) {
         dec(e.parameter.pMay), parseFloat(e.parameter.pMin||0),
         parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
         dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
-        0, '', 0, 0, 'Ambos', dec(e.parameter.dueno||'Miri')]);
+        0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos']);
       return ok();
     }
     if (accion === 'actualizarOferta') {
@@ -251,7 +251,7 @@ function doGet(e) {
           h.getRange(i+1, 12).setValue(dec(e.parameter.fechaOferta||''));
           h.getRange(i+1, 13).setValue(parseInt(e.parameter.cantPack||0));
           h.getRange(i+1, 14).setValue(parseFloat(e.parameter.precioPack||0));
-          h.getRange(i+1, 15).setValue(dec(e.parameter.visibleOferta||'Ambos'));
+          h.getRange(i+1, 16).setValue(dec(e.parameter.visibleOferta||'Ambos'));
           return ok();
         }
       }
