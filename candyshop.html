@@ -221,6 +221,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .deudor-card-vuelto { border-left: 3px solid #2c6fad; }
 .btn-saldar { width: 100%; padding: 10px; background: linear-gradient(135deg, #2c6fad, #1a4d8f); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.88rem; cursor: pointer; margin-top: 10px; }
 .deudores-seccion { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #bbb; padding: 4px 0 8px; }
+
+/* ─── HISTORIA ──────────────────────────────────────────────────── */
+.dia-card { background: white; border-radius: 14px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.dia-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; cursor: pointer; gap: 10px; }
+.dia-fecha-label { font-weight: 700; font-size: 0.9rem; color: #2d1a0a; }
+.dia-resumen { font-size: 0.72rem; color: #aaa; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 185px; }
+.dia-nums { text-align: right; flex-shrink: 0; }
+.dia-vendido-label { font-weight: 800; color: #5c3d1e; font-size: 0.92rem; }
+.dia-ganancia-label { font-size: 0.74rem; color: #2e8b57; font-weight: 600; }
+.dia-detalle { display: none; border-top: 1px solid #f0ebe3; padding: 6px 14px 12px; }
+.dia-detalle.open { display: block; }
+.dia-stat-row { display: flex; justify-content: space-around; padding-top: 10px; margin-top: 8px; border-top: 1px solid #f0ebe3; font-size: 0.8rem; color: #888; text-align: center; }
+.dia-stat-row strong { color: #2d1a0a; display: block; font-size: 0.88rem; }
+
+/* ─── TOTAL ─────────────────────────────────────────────────────── */
+.total-kids-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.total-kid-card { background: white; border-radius: 14px; padding: 14px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.total-kid-nombre { font-size: 0.95rem; font-weight: 800; margin-bottom: 8px; }
+.total-kid-stat { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
+.total-kid-monto { font-size: 1.05rem; font-weight: 800; color: #5c3d1e; }
 </style>
 </head>
 <body>
@@ -284,6 +304,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <button class="tab" onclick="showTab('catalogo', this)">
       <span class="tab-icon">📦</span>Catálogo
     </button>
+    <button class="tab" onclick="showTab('historia', this)">
+      <span class="tab-icon">🗓️</span>Historia
+    </button>
+    <button class="tab" onclick="showTab('total', this)">
+      <span class="tab-icon">👥</span>Total
+    </button>
   </div>
 
   <!-- DASHBOARD -->
@@ -322,6 +348,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
     </div>
+  </div>
+
+  <!-- HISTORIA -->
+  <div class="tab-content" id="tab-historia">
+    <div id="historia-list"><div class="spinner" style="padding:30px 0">Tocá Historia para cargar</div></div>
+  </div>
+
+  <!-- TOTAL -->
+  <div class="tab-content" id="tab-total">
+    <div id="total-content"><div class="spinner" style="padding:30px 0">Tocá Total para cargar</div></div>
   </div>
 </div>
 
@@ -553,6 +589,8 @@ function showTab(id, btn) {
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   btn.classList.add('active');
+  if (id === 'historia') cargarHistoria();
+  if (id === 'total') cargarTotal();
 }
 
 // ─── API ──────────────────────────────────────────────────────────
@@ -789,6 +827,12 @@ async function eliminarProducto() {
 }
 
 // ─── WIZARD NUEVA VENTA ──────────────────────────────────────────
+function _wizardEnterKey(e) {
+  if (e.key !== 'Enter') return;
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (wStep === 1 || wStep === 2) wizardNext();
+}
+
 let wStep = 0;
 let wCliente = '';
 let wProductosSeleccionados = {}; // { codigo: { ...producto, qty } }
@@ -807,10 +851,12 @@ function abrirWizard() {
   renderProductosGrid();
   document.getElementById('wizard-overlay').classList.add('open');
   setTimeout(() => document.getElementById('w-cliente').focus(), 300);
+  document.addEventListener('keydown', _wizardEnterKey);
 }
 
 function cerrarWizard() {
   document.getElementById('wizard-overlay').classList.remove('open');
+  document.removeEventListener('keydown', _wizardEnterKey);
 }
 
 function renderWizardStep(step) {
@@ -1359,6 +1405,179 @@ async function confirmarRetroVenta() {
   t.textContent = '✅ Venta histórica registrada!';
   t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2c6fad;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
   document.body.appendChild(t); setTimeout(() => t.remove(), 2500);
+}
+
+// ─── HISTORIA ────────────────────────────────────────────────────
+async function cargarHistoria() {
+  document.getElementById('historia-list').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
+  const ventas = await api('ventasPeriodo', { hijo: usuario });
+  renderHistoria(ventas || []);
+}
+
+function renderHistoria(ventas) {
+  const el = document.getElementById('historia-list');
+  if (!ventas.length) {
+    el.innerHTML = '<div class="card"><div class="empty">Sin historial todavía</div></div>';
+    return;
+  }
+
+  const costoMap = {};
+  catalogoCache.forEach(p => { costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0; });
+
+  const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  // Agrupar por fecha
+  const porDia = {};
+  ventas.forEach(v => {
+    if (!porDia[v.fecha]) porDia[v.fecha] = [];
+    porDia[v.fecha].push(v);
+  });
+
+  // Ordenar fechas desc
+  const fechas = Object.keys(porDia).sort((a, b) => {
+    const parseFecha = f => { const [d, m, y] = f.split('/'); return new Date(y, m - 1, d); };
+    return parseFecha(b) - parseFecha(a);
+  });
+
+  el.innerHTML = fechas.map((fecha, idx) => {
+    const vd = porDia[fecha];
+    let vendido = 0, ganancia = 0;
+    const resumenMap = {};
+    vd.forEach(v => {
+      const sub = (v.precio || 0) * (v.cantidad || 1);
+      vendido += sub - (v.saldoPendiente || 0);
+      const cod = (v.codigo || '').toLowerCase();
+      ganancia += ((v.precio || 0) - (costoMap[cod] || 0)) * (v.cantidad || 1);
+      const key = v.producto || '?';
+      resumenMap[key] = (resumenMap[key] || 0) + (v.cantidad || 1);
+    });
+    const diezmo = ganancia * 0.1;
+    const resumen = Object.entries(resumenMap).map(([p, q]) => `${q}× ${p}`).join(' · ');
+    const [d, m, y] = fecha.split('/');
+    const diaNom = DIAS[new Date(y, m - 1, d).getDay()];
+
+    return `<div class="dia-card">
+      <div class="dia-header" onclick="toggleDia(${idx})">
+        <div style="flex:1;min-width:0">
+          <div class="dia-fecha-label">${diaNom} ${fecha}</div>
+          <div class="dia-resumen">${resumen}</div>
+        </div>
+        <div class="dia-nums">
+          <div class="dia-vendido-label">${fmt(vendido)}</div>
+          <div class="dia-ganancia-label">+${fmt(ganancia)}</div>
+        </div>
+      </div>
+      <div class="dia-detalle" id="dia-det-${idx}">
+        ${vd.map(v => {
+          const sub = (v.precio || 0) * (v.cantidad || 1);
+          return `<div class="item-row">
+            <div class="item-info">
+              <div class="item-name">${v.cantidad}× ${v.producto}</div>
+              ${v.cliente ? `<div class="item-sub">👤 ${v.cliente}${v.saldoPendiente > 0 ? ` · <span style="color:#e05c2a">Debe ${fmt(v.saldoPendiente)}</span>` : ''}</div>` : ''}
+            </div>
+            <div class="item-right"><div class="item-price">${fmt(sub)}</div></div>
+          </div>`;
+        }).join('')}
+        <div class="dia-stat-row">
+          <div><strong>${vd.length}</strong>ventas</div>
+          <div><strong>${fmt(ganancia)}</strong>ganancia</div>
+          <div><strong>${fmt(diezmo)}</strong>diezmo</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDia(idx) {
+  document.getElementById('dia-det-' + idx).classList.toggle('open');
+}
+
+// ─── TOTAL ───────────────────────────────────────────────────────
+async function cargarTotal() {
+  document.getElementById('total-content').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
+  const [meirVentas, iosiVentas] = await Promise.all([
+    api('ventasPeriodo', { hijo: 'Meir' }),
+    api('ventasPeriodo', { hijo: 'Iosi' })
+  ]);
+  renderTotal(meirVentas || [], iosiVentas || []);
+}
+
+function renderTotal(meirVentas, iosiVentas) {
+  const costoMap = {};
+  catalogoCache.forEach(p => { costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0; });
+
+  const hoy = new Date();
+  const hoyFmt = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+
+  const calcStats = ventas => {
+    let vendidoTotal = 0, gananciaTotal = 0, ventasTotal = 0;
+    let vendidoHoy = 0, gananciaHoy = 0, ventasHoy = 0;
+    ventas.forEach(v => {
+      const sub = (v.precio || 0) * (v.cantidad || 1);
+      const cobrado = sub - (v.saldoPendiente || 0);
+      const cod = (v.codigo || '').toLowerCase();
+      const gan = ((v.precio || 0) - (costoMap[cod] || 0)) * (v.cantidad || 1);
+      vendidoTotal += cobrado; gananciaTotal += gan; ventasTotal++;
+      if (v.fecha === hoyFmt) { vendidoHoy += cobrado; gananciaHoy += gan; ventasHoy++; }
+    });
+    return { vendidoTotal, gananciaTotal, diezmoTotal: gananciaTotal * 0.1, ventasTotal,
+             vendidoHoy, gananciaHoy, diezmoHoy: gananciaHoy * 0.1, ventasHoy };
+  };
+
+  const meir = calcStats(meirVentas);
+  const iosi = calcStats(iosiVentas);
+  const comb = {
+    vendidoHoy: meir.vendidoHoy + iosi.vendidoHoy,
+    gananciaHoy: meir.gananciaHoy + iosi.gananciaHoy,
+    diezmoHoy: meir.diezmoHoy + iosi.diezmoHoy,
+    ventasHoy: meir.ventasHoy + iosi.ventasHoy,
+    vendidoTotal: meir.vendidoTotal + iosi.vendidoTotal,
+    gananciaTotal: meir.gananciaTotal + iosi.gananciaTotal,
+    diezmoTotal: meir.diezmoTotal + iosi.diezmoTotal,
+    ventasTotal: meir.ventasTotal + iosi.ventasTotal
+  };
+
+  document.getElementById('total-content').innerHTML = `
+    <div class="card">
+      <div class="card-title">Hoy — Meir + Iosi juntos</div>
+      <div class="stats">
+        <div class="stat"><div class="stat-num">${comb.ventasHoy}</div><div class="stat-label">Ventas</div></div>
+        <div class="stat blue"><div class="stat-num">${fmt(comb.vendidoHoy)}</div><div class="stat-label">Cobrado</div></div>
+        <div class="stat green"><div class="stat-num">${fmt(comb.gananciaHoy)}</div><div class="stat-label">Ganancia</div></div>
+        <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoHoy)}</div><div class="stat-label">Diezmo</div></div>
+      </div>
+    </div>
+    <div class="total-kids-grid">
+      <div class="total-kid-card">
+        <div class="total-kid-nombre" style="color:#2c6fad">🧑 Meir</div>
+        <div class="total-kid-monto">${fmt(meir.vendidoHoy)}</div>
+        <div class="total-kid-stat">hoy</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe3">
+          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(meir.vendidoTotal)}</div>
+          <div class="total-kid-stat">histórico total</div>
+          <div style="font-size:0.75rem;color:#2e8b57;font-weight:700;margin-top:2px">+${fmt(meir.gananciaTotal)} gan.</div>
+        </div>
+      </div>
+      <div class="total-kid-card">
+        <div class="total-kid-nombre" style="color:#c45e20">🧑 Iosi</div>
+        <div class="total-kid-monto">${fmt(iosi.vendidoHoy)}</div>
+        <div class="total-kid-stat">hoy</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe3">
+          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(iosi.vendidoTotal)}</div>
+          <div class="total-kid-stat">histórico total</div>
+          <div style="font-size:0.75rem;color:#2e8b57;font-weight:700;margin-top:2px">+${fmt(iosi.gananciaTotal)} gan.</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Histórico total — Juntos</div>
+      <div class="stats">
+        <div class="stat"><div class="stat-num">${comb.ventasTotal}</div><div class="stat-label">Ventas</div></div>
+        <div class="stat blue"><div class="stat-num">${fmt(comb.vendidoTotal)}</div><div class="stat-label">Cobrado</div></div>
+        <div class="stat green"><div class="stat-num">${fmt(comb.gananciaTotal)}</div><div class="stat-label">Ganancia</div></div>
+        <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoTotal)}</div><div class="stat-label">Diezmo</div></div>
+      </div>
+    </div>`;
 }
 
 // ─── SUPABASE AUTH ───────────────────────────────────────────────
