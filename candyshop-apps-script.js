@@ -303,6 +303,7 @@ function doGet(e) {
     if (accion === 'historialCliente')     { return json(historialCliente(ss, e.parameter)); }
     if (accion === 'cargarStock')          { return json(cargarStock(ss, e.parameter)); }
     if (accion === 'getStockDia')          { return json(getStockDia(ss, e.parameter)); }
+    if (accion === 'resetearStockDia')     { return json(resetearStockDia(ss, e.parameter)); }
     if (accion === 'agregarProductoHijo')  { return json(agregarProductoHijo(ss, e.parameter)); }
     if (accion === 'editarProductoHijo')   { return json(editarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarProductoHijo') { return json(eliminarProductoHijo(ss, e.parameter)); }
@@ -518,6 +519,22 @@ function getStockDia(ss, p) {
       stock[cod] = (stock[cod] || 0) + (parseInt(r[4]) || 0);
     });
   return stock;
+}
+
+function resetearStockDia(ss, p) {
+  const h = ss.getSheetByName('StockDiario');
+  if (!h || h.getLastRow() < 2) return { ok: true };
+  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  const datos = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues();
+  for (let i = datos.length - 1; i >= 0; i--) {
+    const r = datos[i];
+    if (r[0] && typeof r[0].getTime === 'function' &&
+        Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr &&
+        r[1] === p.hijo) {
+      h.deleteRow(i + 2);
+    }
+  }
+  return { ok: true };
 }
 
 function setupHojaHijos() {
