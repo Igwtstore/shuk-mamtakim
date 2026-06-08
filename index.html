@@ -804,6 +804,7 @@
     <button class="socio-vista-btn" id="socio-btn-todo" onclick="setVistaSocio('todo')" style="padding:0.35rem 0.9rem;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:0.82rem;cursor:pointer">Todo</button>
     <button class="socio-vista-btn" id="socio-btn-miri" onclick="setVistaSocio('miri')" style="padding:0.35rem 0.9rem;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:0.82rem;cursor:pointer">Solo Miri</button>
     <span id="socio-label-miri" style="display:none;font-weight:700;color:#c050a0">👤 Vista de Miri</span>
+    <button onclick="cerrarSesionAdmin()" style="margin-left:auto;padding:0.35rem 0.9rem;border:none;border-radius:8px;background:#fde8e8;color:#c0392b;font-family:'DM Sans',sans-serif;font-weight:600;font-size:0.82rem;cursor:pointer">Salir</button>
   </div>
   <div class="admin-subtabs">
     <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
@@ -2061,6 +2062,7 @@ async function renderPedidos() {
       return;
     }
     const soloMiri = esVistaMiri();
+    const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
     let todos = [...ventas].reverse();
     if (soloMiri) todos = todos.filter(pedidoEsDeMiri);
     const activos = ['pendiente','preparando'];
@@ -2079,7 +2081,12 @@ async function renderPedidos() {
             v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : ''
           ].filter(Boolean).join(' + ');
       const productLines = v.productos
-        ? v.productos.split(' || ').map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
+        ? v.productos.split(' || ').filter(l => {
+            if (!soloMiri) return true;
+            const m = l.match(/^\s*\d+x\s+([^—·]+)/);
+            const nom = m ? m[1].trim() : '';
+            return !nombresJony.has(nom);   // en vista Miri oculta líneas de productos de Jony
+          }).map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
         : '';
       const arsJ = parseFloat(v.arsJONY || 0);
       const arsM = parseFloat(v.arsMyri || 0);
@@ -2106,7 +2113,7 @@ async function renderPedidos() {
             ${cobrado ? `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>` : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`}
           </div>
         </div>
-        <div style="margin:0.4rem 0">${productLines || v.productos}</div>
+        <div style="margin:0.4rem 0">${productLines || (soloMiri ? '' : v.productos)}</div>
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
         ${_notasClientes[v.cliente] ? `<div style="font-size:0.75rem;background:#fdf3e3;border-left:3px solid var(--dorado);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.3rem;color:#7a5a1a">👤 ${_notasClientes[v.cliente]}</div>` : ''}
         ${v.notas && v.notas !== 'Manual' ? `<div style="font-size:0.75rem;background:#e8f5ee;border-left:3px solid var(--verde);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.2rem;color:#1a5a2e">📝 ${v.notas}</div>` : ''}
@@ -2249,7 +2256,7 @@ async function quitarOferta() {
 
 function abrirStockDrawer() {
   document.getElementById('stock-search').value = '';
-  renderStockDrawer(productos);
+  renderStockDrawer(productosVisibles());
   document.getElementById('stock-drawer-overlay').classList.add('open');
   document.getElementById('stock-drawer').classList.add('open');
   setTimeout(() => document.getElementById('stock-search').focus(), 300);
@@ -2275,9 +2282,10 @@ function renderStockDrawer(lista) {
 }
 
 function filtrarStockDrawer(q) {
+  const base = productosVisibles();
   const filtrados = q.trim()
-    ? productos.filter(p => p.nombre.toLowerCase().includes(q.toLowerCase()) || (p.desc||'').toLowerCase().includes(q.toLowerCase()))
-    : productos;
+    ? base.filter(p => p.nombre.toLowerCase().includes(q.toLowerCase()) || (p.desc||'').toLowerCase().includes(q.toLowerCase()))
+    : base;
   renderStockDrawer(filtrados);
 }
 
@@ -3682,6 +3690,14 @@ async function verificarAdmin() {
     document.getElementById('admin-pass-input').value = '';
     document.getElementById('admin-pass-input').focus();
   }
+}
+
+async function cerrarSesionAdmin() {
+  try { await _sb.auth.signOut(); } catch(e) {}
+  sessionStorage.removeItem('adminAuth');
+  sessionStorage.removeItem('adminSocio');
+  adminAuth = false;
+  location.reload();
 }
 
 // INIT — detectar modo por token secreto en URL
