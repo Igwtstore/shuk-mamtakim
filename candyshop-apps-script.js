@@ -31,6 +31,21 @@ function doGet(e) {
           });
         }
       }
+      // Trackear ganancias automáticamente
+      const jonyItems = dec(e.parameter.jonyItems||'');
+      const comiARSv = parseFloat(e.parameter.comiARS||0);
+      const hG = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
+      if (jonyItems) {
+        let gananciaPitz = 0;
+        jonyItems.split(',').forEach(it => {
+          const parts = it.split(':');
+          const pid = parts[0]; const qty = parseFloat(parts[1])||0; const precio = parseFloat(parts[2])||0;
+          const avgCosto = getCostoPromedio(ss, pid);
+          if (avgCosto > 0) gananciaPitz += (precio - avgCosto) * qty;
+        });
+        if (gananciaPitz > 0) hG.appendRow([fecha, 'ganancia_pitzujim', 'Pitzujim — ' + dec(e.parameter.cliente), Math.round(gananciaPitz)]);
+      }
+      if (comiARSv > 0) hG.appendRow([fecha, 'comision_miri', 'Comisión Miri — ' + dec(e.parameter.cliente), Math.round(comiARSv)]);
       return json({ok:true, nVenta});
     }
     if (accion === 'actualizarEstado') {
@@ -266,6 +281,49 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.nombre), dec(e.parameter.telefono||''), dec(e.parameter.tipo||'Mayorista'), dec(e.parameter.nota||'')]);
       return ok();
     }
+    if (accion === 'registrarCompra') {
+      const h = getOrCreate(ss, 'CostosJony', ['Fecha','ProductoId','Producto','Cantidad','CostoTotal','CostoUnitario']);
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const cantidad = parseFloat(dec(e.parameter.cantidad||0));
+      const costoTotal = parseFloat(dec(e.parameter.costoTotal||0));
+      h.appendRow([fecha, dec(e.parameter.productoId), dec(e.parameter.producto), cantidad, costoTotal, cantidad > 0 ? costoTotal/cantidad : 0]);
+      return ok();
+    }
+    if (accion === 'getCompras') {
+      const h = ss.getSheetByName('CostosJony');
+      if (!h || h.getLastRow() < 2) return json([]);
+      return json(h.getRange(2,1,h.getLastRow()-1,6).getValues().map(r => ({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+        productoId: r[1].toString(), producto: r[2].toString(),
+        cantidad: parseFloat(r[3])||0, costoTotal: parseFloat(r[4])||0, costoUnitario: parseFloat(r[5])||0
+      })));
+    }
+    if (accion === 'getGanancias') {
+      const h = ss.getSheetByName('GananciasJony');
+      if (!h || h.getLastRow() < 2) return json({balance:0, movimientos:[]});
+      const rows = h.getRange(2,1,h.getLastRow()-1,4).getValues();
+      const movimientos = rows.map(r => ({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+        tipo: r[1].toString(), descripcion: r[2].toString(), monto: parseFloat(r[3])||0
+      }));
+      return json({balance: movimientos.reduce((s,m) => s + m.monto, 0), movimientos});
+    }
+    if (accion === 'registrarRetiro') {
+      const h = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const balance = parseFloat(dec(e.parameter.balance||0));
+      const diezmo = Math.round(balance * 0.10);
+      const retiro = Math.round(balance - diezmo);
+      h.appendRow([fecha, 'diezmo', 'Diezmo 10%', -diezmo]);
+      h.appendRow([fecha, 'retiro', dec(e.parameter.nota||'Retiro de ganancias'), -retiro]);
+      return json({ok:true, diezmo, retiro});
+    }
+    if (accion === 'setSaldoInicial') {
+      const h = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      h.appendRow([fecha, 'saldo_inicial', 'Saldo inicial', parseFloat(dec(e.parameter.monto||0))]);
+      return ok();
+    }
     if (accion === 'notificarPedido') {
       const cliente = dec(e.parameter.cliente||'');
       const tipo = dec(e.parameter.tipo||'');
@@ -372,6 +430,19 @@ function dec(v){try{return decodeURIComponent(v||'');}catch(e){return v||'';}}
 function ok(){return json({ok:true});}
 function json(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}
 function getOrCreate(ss,nombre,headers){let h=ss.getSheetByName(nombre);if(!h){h=ss.insertSheet(nombre);h.appendRow(headers);h.getRange(1,1,1,headers.length).setFontWeight('bold');}return h;}
+function getCostoPromedio(ss, productoId) {
+  const h = ss.getSheetByName('CostosJony');
+  if (!h || h.getLastRow() < 2) return 0;
+  const data = h.getDataRange().getValues();
+  let totalUnits = 0, totalCost = 0;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1].toString() === productoId.toString()) {
+      totalUnits += parseFloat(data[i][3]) || 0;
+      totalCost += parseFloat(data[i][4]) || 0;
+    }
+  }
+  return totalUnits > 0 ? totalCost / totalUnits : 0;
+}
 function sendTwilioWA(to, body) {
   const props = PropertiesService.getScriptProperties();
   const SID = props.getProperty('TWILIO_SID');

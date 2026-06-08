@@ -803,7 +803,44 @@
     <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
     <button class="admin-subtab" id="subtab-dashboard" onclick="setAdminTab('dashboard')">📊 Dashboard</button>
     <button class="admin-subtab" id="subtab-clientes" onclick="setAdminTab('clientes')">👥 Clientes</button>
+    <button class="admin-subtab" id="subtab-ganancias" onclick="setAdminTab('ganancias')">💰 Ganancias</button>
     <button class="admin-subtab" id="subtab-docs" onclick="setAdminTab('docs')">📖 Docs</button>
+  </div>
+  <!-- GANANCIAS TAB -->
+  <div id="admin-tab-ganancias" style="display:none">
+    <!-- Balance acumulado -->
+    <div class="admin-card" style="margin-bottom:0.75rem">
+      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">💰 Balance acumulado</div>
+      <div id="gan-balance-box" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Ganancia acumulada</div><div class="dash-num" id="gan-total" style="color:var(--verde)">—</div></div>
+        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Diezmo (10%)</div><div class="dash-num" id="gan-diezmo" style="color:#c0392b">—</div></div>
+        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">A retirar (90%)</div><div class="dash-num" id="gan-retiro" style="color:var(--azul)">—</div></div>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button onclick="abrirRetiroModal()" style="padding:0.5rem 1.2rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">Registrar retiro</button>
+        <button onclick="abrirSaldoInicialModal()" style="padding:0.5rem 1rem;background:var(--gris);color:var(--texto-suave);border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;cursor:pointer">Saldo inicial</button>
+      </div>
+    </div>
+    <!-- Registrar compra -->
+    <div class="admin-card" style="margin-bottom:0.75rem">
+      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">📦 Registrar compra de Pitzujim</div>
+      <div style="display:flex;flex-direction:column;gap:0.5rem">
+        <select id="compra-producto" style="padding:0.5rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white">
+          <option value="">Seleccioná producto...</option>
+        </select>
+        <div style="display:flex;gap:0.5rem">
+          <input type="number" id="compra-cantidad" placeholder="Cantidad" min="1" oninput="calcularCostoUnitario()" style="flex:1;padding:0.5rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
+          <input type="number" id="compra-costo" placeholder="Costo total $" min="0" oninput="calcularCostoUnitario()" style="flex:2;padding:0.5rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
+        </div>
+        <div id="compra-unitario" style="font-size:0.78rem;color:var(--texto-suave);min-height:1rem"></div>
+        <button onclick="guardarCompra()" style="padding:0.5rem 1.2rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">Guardar compra</button>
+      </div>
+    </div>
+    <!-- Historial de movimientos -->
+    <div class="admin-card">
+      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">📋 Movimientos</div>
+      <div id="gan-movimientos"><div class="sinpedidos">Cargando...</div></div>
+    </div>
   </div>
   <!-- CLIENTES TAB -->
   <div id="admin-tab-clientes" style="display:none">
@@ -1881,11 +1918,19 @@ function mostrarConfirmacionWA(msg) {
 function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido) {
   const productos_str = (lineas || items.map(i => `${i.qty}x ${i.nombre}`)).join(' || ');
   const stockUpdates = items.map(i => `${i.id}:${i.qty}`).join(',');
+  const jonyItems = items
+    .filter(i => i.dueno === 'Jony')
+    .map(i => {
+      const precioUnit = tipo === 'Mayorista'
+        ? Math.round(parseFloat((i.precioMay||'0').toString().replace(',','.')))
+        : Math.round(i.precioMin);
+      return `${i.id}:${i.qty}:${precioUnit}`;
+    }).join(',');
   const params = new URLSearchParams({
     accion: 'venta', cliente: nombre, tipo,
-    productos: productos_str, formaPago, notas: '',
+    productos: productos_str, formaPago,
     totalARS: Math.round(totalARS || 0), totalUSD: (totalUSD || 0).toFixed(2),
-    stockUpdates,
+    stockUpdates, jonyItems,
     arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
     usdMyri: (usdMyri || 0).toFixed(2),
     comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
@@ -2696,7 +2741,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); startAdminPolling(); }
+  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
@@ -2772,7 +2817,7 @@ function compartirProducto(id) {
 
 let _dashCharts = {}, _clientesData = [];
 function setAdminTab(tab) {
-  ['panel','dashboard','clientes','docs'].forEach(t => {
+  ['panel','dashboard','clientes','ganancias','docs'].forEach(t => {
     const el = document.getElementById('admin-tab-' + t);
     if (el) el.style.display = t === tab ? '' : 'none';
     const btn = document.getElementById('subtab-' + t);
@@ -2780,6 +2825,7 @@ function setAdminTab(tab) {
   });
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'clientes') renderClientes();
+  if (tab === 'ganancias') renderGanancias();
 }
 
 let _clientesRaw = [];
@@ -2974,6 +3020,96 @@ function setDashPeriodo(dias, btn) {
   document.querySelectorAll('[id^="dash-btn-"]').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   renderDashboard();
+}
+
+// ─── GANANCIAS / DIEZMO ─────────────────────────────────────────────────────
+
+function cargarProductosJonySelect() {
+  const sel = document.getElementById('compra-producto');
+  if (!sel) return;
+  const jonyProds = productos.filter(p => p.dueno === 'Jony').sort((a,b) => a.nombre.localeCompare(b.nombre));
+  sel.innerHTML = '<option value="">Seleccioná producto...</option>' +
+    jonyProds.map(p => `<option value="${p.id}" data-nombre="${p.nombre}${p.desc?' · '+p.desc:''}">${p.nombre}${p.desc?' · '+p.desc:''}</option>`).join('');
+}
+
+async function renderGanancias() {
+  const [resG, resC] = await Promise.all([
+    fetch(APPS_SCRIPT_URL + '?accion=getGanancias').catch(() => null),
+    fetch(APPS_SCRIPT_URL + '?accion=getCompras').catch(() => null)
+  ]);
+  const ganData = resG ? await resG.json().catch(() => ({balance:0,movimientos:[]})) : {balance:0,movimientos:[]};
+  const compras = resC ? await resC.json().catch(() => []) : [];
+  const balance = ganData.balance || 0;
+  const diezmo = Math.round(balance * 0.10);
+  const retiro = Math.round(balance - diezmo);
+  document.getElementById('gan-total').textContent = '$ ' + Math.round(balance).toLocaleString('es-AR');
+  document.getElementById('gan-diezmo').textContent = '$ ' + diezmo.toLocaleString('es-AR');
+  document.getElementById('gan-retiro').textContent = '$ ' + retiro.toLocaleString('es-AR');
+  // Movimientos combinados (ganancias + compras recientes)
+  const movs = [...(ganData.movimientos||[])].reverse();
+  const lista = document.getElementById('gan-movimientos');
+  if (!movs.length && !compras.length) { lista.innerHTML = '<div class="sinpedidos">Sin movimientos aún.</div>'; return; }
+  const tipoColor = { ganancia_pitzujim:'#1a7a3c', comision_miri:'#2c6fad', saldo_inicial:'#7a5a1a', retiro:'#c0392b', diezmo:'#c0392b' };
+  const tipoLabel = { ganancia_pitzujim:'Pitzujim', comision_miri:'Comisión Miri', saldo_inicial:'Saldo inicial', retiro:'Retiro', diezmo:'Diezmo' };
+  lista.innerHTML = movs.map(m => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.45rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem">
+      <div>
+        <span style="font-size:0.65rem;font-weight:700;background:#f0f0f0;padding:2px 6px;border-radius:10px;color:${tipoColor[m.tipo]||'#666'}">${tipoLabel[m.tipo]||m.tipo}</span>
+        <span style="font-size:0.8rem;color:var(--texto-suave);margin-left:0.4rem">${m.descripcion}</span>
+        <div style="font-size:0.7rem;color:var(--texto-suave)">${m.fecha}</div>
+      </div>
+      <span style="font-weight:700;font-size:0.9rem;color:${m.monto>=0?'var(--verde)':'#c0392b'};flex-shrink:0">${m.monto>=0?'+':''}$ ${Math.abs(Math.round(m.monto)).toLocaleString('es-AR')}</span>
+    </div>`).join('');
+  // Calcular costo promedio por producto (de compras)
+  document.getElementById('compra-unitario').textContent = '';
+}
+
+function calcularCostoUnitario() {
+  const qty = parseFloat(document.getElementById('compra-cantidad').value) || 0;
+  const costo = parseFloat(document.getElementById('compra-costo').value) || 0;
+  const el = document.getElementById('compra-unitario');
+  if (qty > 0 && costo > 0) el.textContent = `Costo unitario: $ ${(costo/qty).toFixed(2)}`;
+  else el.textContent = '';
+}
+
+async function guardarCompra() {
+  const sel = document.getElementById('compra-producto');
+  const productoId = sel.value;
+  const opt = sel.options[sel.selectedIndex];
+  const producto = opt ? opt.dataset.nombre || opt.text : '';
+  const cantidad = parseFloat(document.getElementById('compra-cantidad').value) || 0;
+  const costoTotal = parseFloat(document.getElementById('compra-costo').value) || 0;
+  if (!productoId) { showToast('Seleccioná un producto'); return; }
+  if (cantidad <= 0) { showToast('Ingresá la cantidad'); return; }
+  if (costoTotal <= 0) { showToast('Ingresá el costo total'); return; }
+  const params = new URLSearchParams({ accion: 'registrarCompra', productoId, producto, cantidad, costoTotal });
+  await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+  document.getElementById('compra-cantidad').value = '';
+  document.getElementById('compra-costo').value = '';
+  document.getElementById('compra-unitario').textContent = '';
+  showToast('Compra registrada ✓');
+  renderGanancias();
+}
+
+function abrirRetiroModal() {
+  const balance = parseFloat(document.getElementById('gan-total').textContent.replace(/[^0-9]/g,'')) || 0;
+  if (balance <= 0) { showToast('No hay ganancias acumuladas para retirar'); return; }
+  const diezmo = Math.round(balance * 0.10);
+  const retiro = balance - diezmo;
+  const conf = confirm(`Confirmar retiro:\n\nGanancia acumulada: $ ${balance.toLocaleString('es-AR')}\nDiezmo (10%): $ ${diezmo.toLocaleString('es-AR')}\nA retirar: $ ${retiro.toLocaleString('es-AR')}\n\n¿Confirmás?`);
+  if (!conf) return;
+  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarRetiro', balance, nota: 'Retiro de ganancias' }))
+    .then(r => r.json())
+    .then(() => { showToast('Retiro registrado ✓'); renderGanancias(); })
+    .catch(() => showToast('Error al registrar'));
+}
+
+function abrirSaldoInicialModal() {
+  const monto = prompt('Ingresá el saldo inicial acumulado ($):');
+  if (!monto || isNaN(parseFloat(monto))) return;
+  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'setSaldoInicial', monto: parseFloat(monto) }))
+    .then(() => { showToast('Saldo inicial guardado ✓'); renderGanancias(); })
+    .catch(() => showToast('Error'));
 }
 
 async function renderDashboard() {
