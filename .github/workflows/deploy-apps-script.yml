@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - candyshop-apps-script.js
+      - appsscript.json
 
 jobs:
   deploy:
@@ -23,7 +24,12 @@ jobs:
       - name: Write credentials
         run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
 
-      - name: Push & deploy
+      - name: Push & deploy to all 3 web apps
         run: |
           clasp push -f
+          # Shuk Mamtakim (index.html)
           clasp deploy -i AKfycbyW18FtDDS9sG3qcgS4h85tZrM4aWnP4NfvOKDYzV67nEt_kme8jPUiKVFJa1u7iG9-4Q
+          # Candy Shop (candyshop.html)
+          clasp deploy -i AKfycbzaxlnfpPqE1oU3onsSGHv9gcBiip4y9bNH4dJ0aCBYXMZAAkLhaL83itj9HsvrntvoCA
+          # Tienda minorista (tienda.html)
+          clasp deploy -i AKfycbxdAaSjGfBQoMz_38kHvTvUNswM94BdQexq5IDAINgTbvgpNOcOdyu8TXIHsbAZWAJ-hA

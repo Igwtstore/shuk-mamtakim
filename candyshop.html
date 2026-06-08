@@ -1750,7 +1750,6 @@ async function confirmarEditarVenta() {
     saldoPendiente: parseFloat(document.getElementById('ev-saldo').value) || 0
   });
   btn.disabled = false; btn.textContent = 'Guardar cambios';
-  console.log('[editar]', { evRowIndex, usuario, res });
   cerrarEditVenta();
   if (res?.ok) { mostrarToast('✅ Venta actualizada'); cargarHistoria(); }
   else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
@@ -1762,7 +1761,6 @@ function cerrarEditVentaSiAfuera(e) { if (e.target.id === 'edit-venta-overlay') 
 async function eliminarVenta(rowIndex) {
   if (!confirm('¿Eliminar esta venta? Se revertirá el saldo de la cuenta corriente si corresponde.')) return;
   const res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
-  console.log('[eliminar]', { rowIndex, usuario, res });
   if (res?.ok) { mostrarToast('🗑️ Venta eliminada'); cargarHistoria(); }
   else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
 }
