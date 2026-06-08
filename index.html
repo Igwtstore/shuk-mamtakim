@@ -1386,7 +1386,19 @@
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.3rem">💵 Pago a cuenta</div>
     <div id="pago-sub" style="font-size:0.8rem;color:var(--texto-suave);margin-bottom:1rem"></div>
-    <div style="margin-bottom:0.75rem">
+    <!-- Reparto Pitzujim / golosinas (solo pago de un pedido mixto) -->
+    <div id="pago-split-wrap" style="display:none">
+      <div style="margin-bottom:0.75rem">
+        <label style="font-size:0.82rem;font-weight:600;color:var(--verde);display:block;margin-bottom:0.3rem">A Pitzujim (Jony) $</label>
+        <input type="number" id="pago-pitz" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+      </div>
+      <div style="margin-bottom:0.75rem">
+        <label style="font-size:0.82rem;font-weight:600;color:#c050a0;display:block;margin-bottom:0.3rem">A golosinas (Myri) $</label>
+        <input type="number" id="pago-gol" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+      </div>
+    </div>
+    <!-- Monto único (pago a deuda total del cliente) -->
+    <div id="pago-single-wrap" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto $ (pesos)</label>
       <input type="number" id="pago-ars" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
     </div>
@@ -2123,13 +2135,27 @@ async function renderPedidos() {
   const lista = document.getElementById('pedidos-lista');
   lista.innerHTML = '<div class="sinpedidos">Cargando pedidos...</div>';
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
+    const soloMiri = esVistaMiri();
+    const [res, resP] = await Promise.all([
+      fetch(APPS_SCRIPT_URL + '?accion=ventas'),
+      soloMiri ? Promise.resolve(null) : fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
+    ]);
     const ventas = await res.json();
     if (!Array.isArray(ventas) || !ventas.length) {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
     }
-    const soloMiri = esVistaMiri();
+    const pagos = resP ? await resP.json().catch(() => []) : [];
+    // Pagado por pedido, separado en Pitzujim / golosinas
+    const pagadoPed = {};
+    (pagos || []).forEach(p => {
+      if (!p.pedidoId) return;
+      if (!pagadoPed[p.pedidoId]) pagadoPed[p.pedidoId] = { pitz: 0, golARS: 0, golUSD: 0 };
+      const mp = parseFloat(p.montoPitz)||0;
+      pagadoPed[p.pedidoId].pitz += mp;
+      pagadoPed[p.pedidoId].golARS += (parseFloat(p.montoARS)||0) - mp;
+      pagadoPed[p.pedidoId].golUSD += parseFloat(p.montoUSD)||0;
+    });
     const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
     let todos = [...ventas].reverse();
     if (soloMiri) todos = todos.filter(pedidoEsDeMiri);
@@ -2194,7 +2220,13 @@ async function renderPedidos() {
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
           <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
-          ${!cobrado ? `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${soloMiri ? Math.round(arsM) : Math.round(parseFloat(v.totalARS)||0)},${(parseFloat(v.totalUSD)||0).toFixed(2)})">💵 Pago a cuenta</button>` : ''}
+          ${(!cobrado && !soloMiri) ? (() => {
+            const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0 };
+            const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
+            const remGolARS = Math.max(0, Math.round(arsM - pg.golARS));
+            const remGolUSD = Math.max(0, (usdM - pg.golUSD));
+            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
+          })() : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaModal('pedido','${v.id}','${(v.notas&&v.notas!=='Manual'?v.notas:'').replace(/'/g,'')}','Nota del pedido')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
           <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
           <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${JSON.stringify(v).replace(/'/g,"&#39;")})'>🧾 Remito</button>
@@ -2877,13 +2909,16 @@ const JONY_BOXES_CC = ['EFT_JONY','MP_JONY'];
 async function renderCuentaSocios() {
   const cont = document.getElementById('cuenta-socios-contenido');
   if (!cont) return;
-  const [vR, lR] = await Promise.all([
+  const [vR, lR, pR] = await Promise.all([
     fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null),
-    fetch(APPS_SCRIPT_URL + '?accion=getLiquidaciones').catch(() => null)
+    fetch(APPS_SCRIPT_URL + '?accion=getLiquidaciones').catch(() => null),
+    fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
   ]);
   if (!vR) { cont.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
   const ventas = await vR.json().catch(() => []);
   const liq = lR ? await lR.json().catch(() => ({totalARS:0,totalUSD:0})) : {totalARS:0,totalUSD:0};
+  const pagos = pR ? await pR.json().catch(() => []) : [];
+  const pedidosConPago = new Set((pagos||[]).filter(p => p.pedidoId).map(p => String(p.pedidoId)));
 
   // Componentes (ARS)
   let comiDebe = 0;      // Myri cobró golosinas → debe comisión a Jony
@@ -2894,6 +2929,7 @@ async function renderCuentaSocios() {
 
   const MYRI_ARS = ['MP_GABY','EFT_MYRI'];   // cajas de Myri en pesos
   ventas.filter(v => v.estado !== 'cancelado').forEach(v => {
+    if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
     const fp = (v.formaPago||'').trim();
     const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
     const comiA = (parseFloat(v.comiARS)||0) || Math.round(arsM*0.15);
@@ -2924,6 +2960,26 @@ async function renderCuentaSocios() {
         if (colUSD === 'ETF_USD_MYRI') comiDebeU += comiU;
         else if (JONY_BOXES_CC.includes(colUSD)) jonyTieneU += (usdM - comiU);
       }
+    }
+  });
+
+  // Pagos a cuenta de un pedido (con reparto Pitzujim/golosinas): alimentan la cuenta de socios
+  (pagos || []).forEach(p => {
+    if (!p.pedidoId) return;   // los pagos a deuda general no se reparten
+    const caja = (p.caja||'').trim();
+    const pitz = parseFloat(p.montoPitz)||0;
+    const golARS = (parseFloat(p.montoARS)||0) - pitz;
+    const golUSD = parseFloat(p.montoUSD)||0;
+    if (pitz > 0 && MYRI_ARS.includes(caja)) pitzMyri += pitz;        // Pitzujim cobrado en caja de Myri
+    if (golARS > 0) {
+      const comi = Math.round(golARS * 0.15);
+      if (MYRI_ARS.includes(caja)) comiDebe += comi;                  // Myri cobró golosinas → debe comisión
+      else if (JONY_BOXES_CC.includes(caja)) jonyTiene += (golARS - comi); // Jony tiene su neto
+    }
+    if (golUSD > 0) {
+      const comiU2 = parseFloat((golUSD*0.15).toFixed(2));
+      if (caja === 'ETF_USD_MYRI') comiDebeU += comiU2;
+      else if (JONY_BOXES_CC.includes(caja)) jonyTieneU += (golUSD - comiU2);
     }
   });
 
@@ -3848,16 +3904,32 @@ function cerrarModalCobro() {
 
 // ─── PAGO A CUENTA ────────────────────────────────────────────────────────────
 let _pagoCliente = '', _pagoPedidoId = '';
-function abrirPagoCuenta(cliente, pedidoId, saldoARS, saldoUSD) {
+// Per-pedido: (cliente, pedidoId, remPitz, remGolARS, remGolUSD) — muestra reparto Pitz/golosinas, default Pitzujim-primero.
+// Per-cliente (deuda total): (cliente, '', 0, netARS, netUSD) — monto único, sin reparto.
+function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD) {
   _pagoCliente = cliente; _pagoPedidoId = pedidoId || '';
+  const esPedido = !!_pagoPedidoId;
+  document.getElementById('pago-split-wrap').style.display = esPedido ? '' : 'none';
+  document.getElementById('pago-single-wrap').style.display = esPedido ? 'none' : '';
   document.getElementById('pago-ars').value = '';
   document.getElementById('pago-usd').value = '';
-  const partes = [];
-  if (saldoARS > 0) partes.push('$ ' + Math.round(saldoARS).toLocaleString('es-AR'));
-  if (saldoUSD > 0) partes.push('U$S ' + parseFloat(saldoUSD).toFixed(2));
-  document.getElementById('pago-sub').textContent =
-    (pedidoId ? 'Pago de pedido · ' : 'Pago a deuda total · ') + cliente +
-    (partes.length ? ' · Debe ' + partes.join(' + ') : '');
+  document.getElementById('pago-pitz').value = '';
+  document.getElementById('pago-gol').value = '';
+  remPitz = Math.round(remPitz||0); remGolARS = Math.round(remGolARS||0); remGolUSD = parseFloat(remGolUSD||0);
+  if (esPedido) {
+    // Default Pitzujim-primero: prellena Pitzujim con lo que falta, golosinas en 0
+    document.getElementById('pago-pitz').value = remPitz > 0 ? remPitz : '';
+    const partes = [];
+    if (remPitz > 0) partes.push('Pitzujim $ ' + remPitz.toLocaleString('es-AR'));
+    if (remGolARS > 0) partes.push('Golosinas $ ' + remGolARS.toLocaleString('es-AR'));
+    if (remGolUSD > 0) partes.push('Golosinas U$S ' + remGolUSD.toFixed(2));
+    document.getElementById('pago-sub').textContent = cliente + ' · Debe: ' + (partes.join(' · ') || 'nada');
+  } else {
+    const partes = [];
+    if (remGolARS > 0) partes.push('$ ' + Math.round(remGolARS).toLocaleString('es-AR'));
+    if (remGolUSD > 0) partes.push('U$S ' + parseFloat(remGolUSD).toFixed(2));
+    document.getElementById('pago-sub').textContent = 'Deuda total de ' + cliente + (partes.length ? ' · Debe ' + partes.join(' + ') : '');
+  }
   document.getElementById('pago-modal').style.display = 'flex';
 }
 function cerrarPagoModal() {
@@ -3865,11 +3937,19 @@ function cerrarPagoModal() {
   _pagoCliente = ''; _pagoPedidoId = '';
 }
 function confirmarPagoCuenta() {
-  const ars = parseFloat(document.getElementById('pago-ars').value) || 0;
+  const esPedido = !!_pagoPedidoId;
+  let ars, montoPitz;
+  if (esPedido) {
+    const pitz = parseFloat(document.getElementById('pago-pitz').value) || 0;
+    const gol = parseFloat(document.getElementById('pago-gol').value) || 0;
+    ars = pitz + gol; montoPitz = pitz;
+  } else {
+    ars = parseFloat(document.getElementById('pago-ars').value) || 0; montoPitz = 0;
+  }
   const usd = parseFloat(document.getElementById('pago-usd').value) || 0;
   if (ars <= 0 && usd <= 0) { showToast('Ingresá un monto'); return; }
   const caja = document.getElementById('pago-caja').value;
-  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pagoPedidoId, montoARS:ars, montoUSD:usd, caja, nota:'Pago a cuenta' });
+  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pagoPedidoId, montoARS:ars, montoUSD:usd, montoPitz, caja, nota:'Pago a cuenta' });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode:'no-cors' }).catch(()=>{});
   showToast('Pago registrado ✓');
   cerrarPagoModal();
