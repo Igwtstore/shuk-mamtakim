@@ -422,6 +422,8 @@ function doGet(e) {
     if (accion === 'agregarProductoHijo')  { return json(agregarProductoHijo(ss, e.parameter)); }
     if (accion === 'editarProductoHijo')   { return json(editarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarProductoHijo') { return json(eliminarProductoHijo(ss, e.parameter)); }
+    if (accion === 'eliminarVentaHijos')   { return json(eliminarVentaHijos(ss, e.parameter)); }
+    if (accion === 'editarVentaHijos')     { return json(editarVentaHijos(ss, e.parameter)); }
 
   } catch(err) { return json({error:err.toString()}); }
 }
@@ -585,9 +587,10 @@ function ventasHoyHijos(ss, p) {
 
 function ventasPeriodo(ss, p) {
   const h = ss.getSheetByName('VentasHijos'); if (!h || h.getLastRow() < 2) return [];
-  return h.getRange(2,1,h.getLastRow()-1,11).getValues()
-    .filter(r => r[0] && (!p.hijo || r[1] === p.hijo))
-    .map(r => {
+  const rows = h.getRange(2,1,h.getLastRow()-1,11).getValues();
+  return rows
+    .map((r, idx) => {
+      if (!r[0] || (p.hijo && r[1] !== p.hijo)) return null;
       let fecha;
       if (r[0] && typeof r[0].getTime === 'function') {
         fecha = Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy');
@@ -595,11 +598,61 @@ function ventasPeriodo(ss, p) {
         fecha = r[0].toString().trim().substring(0, 10);
       }
       return {
+        rowIndex: idx + 2,
         fecha, hijo: r[1], producto: r[2], codigo: r[3],
         cantidad: r[4], precio: r[5], total: r[6],
         cliente: r[7], esDebe: r[8], pagoParcial: r[9], saldoPendiente: r[10]
       };
-    });
+    })
+    .filter(r => r !== null);
+}
+
+function eliminarVentaHijos(ss, p) {
+  const h = ss.getSheetByName('VentasHijos');
+  if (!h) return { error: 'sin hoja' };
+  const rowIndex = parseInt(p.rowIndex);
+  if (!rowIndex || rowIndex < 2) return { error: 'fila inválida' };
+  const row = h.getRange(rowIndex, 1, 1, 11).getValues()[0];
+  if (row[1] !== p.hijo) return { error: 'no autorizado' };
+  const saldo = parseFloat(row[10]) || 0;
+  if (saldo > 0 && row[7]) {
+    registrarMovimientoCC(ss, row[1], row[7].toString(), -saldo, 'anulacion', row[2]);
+  }
+  h.deleteRow(rowIndex);
+  return { ok: true };
+}
+
+function editarVentaHijos(ss, p) {
+  const h = ss.getSheetByName('VentasHijos');
+  if (!h) return { error: 'sin hoja' };
+  const rowIndex = parseInt(p.rowIndex);
+  if (!rowIndex || rowIndex < 2) return { error: 'fila inválida' };
+  const row = h.getRange(rowIndex, 1, 1, 11).getValues()[0];
+  if (row[1] !== p.hijo) return { error: 'no autorizado' };
+  const oldSaldo = parseFloat(row[10]) || 0;
+  const oldCliente = (row[7] || '').toString();
+  const newNombre = dec(p.productoNombre || row[2]);
+  const newCodigo = dec(p.productoCodigo || row[3]);
+  const newCantidad = parseInt(p.cantidad) || parseInt(row[4]) || 1;
+  const newPrecio = parseFloat(p.precio) || parseFloat(row[5]) || 0;
+  const newTotal = newCantidad * newPrecio;
+  const newCliente = dec(p.cliente !== undefined ? p.cliente : oldCliente);
+  const newSaldo = parseFloat(p.saldoPendiente) || 0;
+  h.getRange(rowIndex, 3).setValue(newNombre);
+  h.getRange(rowIndex, 4).setValue(newCodigo);
+  h.getRange(rowIndex, 5).setValue(newCantidad);
+  h.getRange(rowIndex, 6).setValue(newPrecio);
+  h.getRange(rowIndex, 7).setValue(newTotal);
+  h.getRange(rowIndex, 8).setValue(newCliente);
+  h.getRange(rowIndex, 9).setValue(newSaldo > 0 ? 'SI' : 'NO');
+  h.getRange(rowIndex, 11).setValue(newSaldo);
+  if (oldSaldo > 0 && oldCliente) {
+    registrarMovimientoCC(ss, row[1], oldCliente, -oldSaldo, 'correccion', row[2]);
+  }
+  if (newSaldo > 0 && newCliente) {
+    registrarMovimientoCC(ss, row[1], newCliente, newSaldo, 'correccion', newNombre);
+  }
+  return { ok: true };
 }
 
 function getSaldoCliente(ss, hijo, cliente) {
