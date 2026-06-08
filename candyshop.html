@@ -1220,12 +1220,7 @@ async function confirmarVentaWizard() {
   await cargarDatos();
   const tabHoy = document.querySelector('.tab');
   if (tabHoy) showTab('dashboard', tabHoy);
-  // Toast de confirmación
-  const t = document.createElement('div');
-  t.textContent = '✅ Venta registrada!';
-  t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2e8b57;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2500);
+  mostrarToast('✅ Venta registrada!');
 }
 
 // ─── DEUDORES BIDIRECCIONAL ───────────────────────────────────────
@@ -1696,6 +1691,14 @@ function renderHistorialCliente(movs, cliente) {
 function cerrarHistorial() { document.getElementById('historial-overlay').classList.remove('open'); }
 function cerrarHistorialSiAfuera(e) { if (e.target.id === 'historial-overlay') cerrarHistorial(); }
 
+function mostrarToast(msg, color = '#2e8b57') {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:${color};color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.2);white-space:nowrap`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
 // ── EDITAR / BORRAR VENTA ─────────────────────────────────────────────────────
 let evRowIndex = null;
 
@@ -1733,7 +1736,7 @@ async function confirmarEditarVenta() {
   if (!evRowIndex) return;
   const sel = document.getElementById('ev-producto');
   const opt = sel.options[sel.selectedIndex];
-  if (!opt) { mostrarToast('❌ Seleccioná un producto'); return; }
+  if (!opt) { mostrarToast('❌ Seleccioná un producto', '#c0392b'); return; }
   const btn = document.getElementById('ev-save-btn');
   btn.disabled = true; btn.textContent = 'Guardando...';
   const res = await api('editarVentaHijos', {
@@ -1749,7 +1752,7 @@ async function confirmarEditarVenta() {
   btn.disabled = false; btn.textContent = 'Guardar cambios';
   cerrarEditVenta();
   if (res?.ok) { mostrarToast('✅ Venta actualizada'); cargarHistoria(); }
-  else mostrarToast('❌ Error al actualizar');
+  else mostrarToast('❌ Error al actualizar', '#c0392b');
 }
 
 function cerrarEditVenta() { document.getElementById('edit-venta-overlay').classList.remove('open'); }
@@ -1759,7 +1762,7 @@ async function eliminarVenta(rowIndex) {
   if (!confirm('¿Eliminar esta venta? Se revertirá el saldo de la cuenta corriente si corresponde.')) return;
   const res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
   if (res?.ok) { mostrarToast('🗑️ Venta eliminada'); cargarHistoria(); }
-  else mostrarToast('❌ Error al eliminar');
+  else mostrarToast('❌ Error al eliminar', '#c0392b');
 }
 
 // ─── STOCK DEL DÍA ────────────────────────────────────────────────
