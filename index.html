@@ -2820,18 +2820,38 @@ async function renderCuentaSocios() {
   // Componentes (USD)
   let comiDebeU = 0, jonyTieneU = 0;
 
+  const MYRI_ARS = ['MP_GABY','EFT_MYRI'];   // cajas de Myri en pesos
   ventas.filter(v => v.estado !== 'cancelado').forEach(v => {
+    const fp = (v.formaPago||'').trim();
     const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
-    const comiA = parseFloat(v.comiARS)||0, comiU = parseFloat(v.comiUSD)||0;
-    const cajaJ = (v.cajaJony||'').trim(), cajaM = (v.cajaMyri||'').trim();
-    if (arsJ > 0 && MYRI_BOXES_CC.includes(cajaJ)) pitzMyri += arsJ;
+    const comiA = (parseFloat(v.comiARS)||0) || Math.round(arsM*0.15);
+    const comiU = (parseFloat(v.comiUSD)||0) || parseFloat((usdM*0.15).toFixed(2));
+    // Mismo ruteo que el Caja: usa lo confirmado o deduce de la forma de pago.
+    // La cuenta corriente NO se cuenta hasta que efectivamente se cobre.
+    const cajaJ = v.cajaJony || (fp==='Cuenta corriente'?'CTA_CTE_ARS':fp==='Efectivo'?'EFT_JONY':'');
+    const cajaM = v.cajaMyri || (fp==='Cuenta corriente'?'CTA_CTE_ARS':fp==='Efectivo'?'EFT_MYRI':'');
+
+    // Pitzujim que terminó en caja de Myri → Myri le debe el total
+    if (arsJ > 0 && MYRI_ARS.includes(cajaJ)) pitzMyri += arsJ;
+
+    // Golosinas en ARS
     if (arsM > 0) {
-      if (MYRI_BOXES_CC.includes(cajaM)) comiDebe += comiA;
-      else if (JONY_BOXES_CC.includes(cajaM)) jonyTiene += (arsM - comiA);
+      if (MYRI_ARS.includes(cajaM)) comiDebe += comiA;               // Myri cobró → debe comisión
+      else if (JONY_BOXES_CC.includes(cajaM)) jonyTiene += (arsM - comiA); // Jony tiene su neto
     }
+
+    // Golosinas en USD (puede haberse convertido a ARS con tipo de cambio)
     if (usdM > 0) {
-      if (cajaM === 'ETF_USD_MYRI') comiDebeU += comiU;
-      else if (JONY_BOXES_CC.includes(cajaM)) jonyTieneU += (usdM - comiU);
+      const colUSD = v.cajaMyri || (fp==='Cuenta corriente'?'CTA_CTE_USD':fp==='Efectivo'?'ETF_USD_MYRI':'');
+      const tc = parseFloat(v.tipoCambio)||0;
+      if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
+        const arsEq = usdM * tc; const comiConv = Math.round(arsEq*0.15);
+        if (MYRI_ARS.includes(colUSD)) comiDebe += comiConv;
+        else if (JONY_BOXES_CC.includes(colUSD)) jonyTiene += (arsEq - comiConv);
+      } else {
+        if (colUSD === 'ETF_USD_MYRI') comiDebeU += comiU;
+        else if (JONY_BOXES_CC.includes(colUSD)) jonyTieneU += (usdM - comiU);
+      }
     }
   });
 
