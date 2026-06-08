@@ -1381,6 +1381,40 @@
   </div>
 </div>
 
+<!-- MODAL PAGO A CUENTA -->
+<div id="pago-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;padding:1.5rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.3rem">💵 Pago a cuenta</div>
+    <div id="pago-sub" style="font-size:0.8rem;color:var(--texto-suave);margin-bottom:1rem"></div>
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto $ (pesos)</label>
+      <input type="number" id="pago-ars" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+    </div>
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto U$S (opcional)</label>
+      <input type="number" id="pago-usd" placeholder="0" min="0" step="0.01" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+    </div>
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">¿A qué caja entró?</label>
+      <select id="pago-caja" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
+        <optgroup label="Cajas MYRI">
+          <option value="MP_GABY">MP GABY</option>
+          <option value="EFT_MYRI">EFT $ MYRI</option>
+          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+        </optgroup>
+        <optgroup label="Cajas JONY">
+          <option value="EFT_JONY">EFT $ JONY</option>
+          <option value="MP_JONY">MP JONY</option>
+        </optgroup>
+      </select>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
+      <button onclick="cerrarPagoModal()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
+      <button onclick="confirmarPagoCuenta()" style="flex:2;padding:0.75rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;">Registrar pago</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADMIN LOGIN -->
 <div id="admin-login" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:400;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:2rem 1.75rem;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
@@ -2018,16 +2052,22 @@ async function renderCuentaCorriente() {
   const lista = document.getElementById('cc-lista');
   const badge = document.getElementById('cc-total-badge');
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
-    const ventas = await res.json();
     const soloMiri = esVistaMiri();
+    const [resV, resP] = await Promise.all([
+      fetch(APPS_SCRIPT_URL + '?accion=ventas'),
+      soloMiri ? Promise.resolve(null) : fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
+    ]);
+    const ventas = await resV.json();
+    const pagos = resP ? await resP.json().catch(() => []) : [];
     let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
-    if (!cc.length) {
-      lista.innerHTML = '<div style="color:var(--verde);font-size:0.82rem;padding:0.3rem 0">✓ Sin deudas pendientes</div>';
-      badge.style.display = 'none';
-      return;
-    }
+    // Pagos acumulados por cliente (solo vista Jony)
+    const pagadoPorCliente = {};
+    (pagos || []).forEach(p => {
+      if (!pagadoPorCliente[p.cliente]) pagadoPorCliente[p.cliente] = { ars: 0, usd: 0 };
+      pagadoPorCliente[p.cliente].ars += parseFloat(p.montoARS)||0;
+      pagadoPorCliente[p.cliente].usd += parseFloat(p.montoUSD)||0;
+    });
     // Agrupar por cliente (en vista Miri usa solo los montos de Miri)
     const porCliente = {};
     cc.forEach(v => {
@@ -2036,14 +2076,29 @@ async function renderCuentaCorriente() {
       porCliente[v.cliente].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
       porCliente[v.cliente].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
     });
-    const totalDeudores = Object.keys(porCliente).length;
-    badge.textContent = totalDeudores + ' deudor' + (totalDeudores !== 1 ? 'es' : '');
+    // Restar pagos a cuenta (vista Jony)
+    Object.entries(porCliente).forEach(([cli, d]) => {
+      const pg = pagadoPorCliente[cli];
+      if (pg) { d.totalARS -= pg.ars; d.totalUSD -= pg.usd; }
+    });
+    // Quitar los que quedaron saldados
+    const entries = Object.entries(porCliente).filter(([_, d]) => d.totalARS > 1 || d.totalUSD > 0.01);
+    if (!entries.length) {
+      lista.innerHTML = '<div style="color:var(--verde);font-size:0.82rem;padding:0.3rem 0">✓ Sin deudas pendientes</div>';
+      badge.style.display = 'none';
+      return;
+    }
+    badge.textContent = entries.length + ' deudor' + (entries.length !== 1 ? 'es' : '');
     badge.style.display = '';
-    lista.innerHTML = Object.entries(porCliente).map(([cliente, data]) => {
+    lista.innerHTML = entries.map(([cliente, data]) => {
       const totStr = [
         data.totalARS > 0 ? '$ ' + Math.round(data.totalARS).toLocaleString('es-AR') : '',
         data.totalUSD > 0 ? 'U$S ' + data.totalUSD.toFixed(2) : ''
       ].filter(Boolean).join(' + ');
+      const cliEsc = cliente.replace(/'/g, "\\'");
+      const btnPago = soloMiri ? '' :
+        `<button onclick="abrirPagoCuenta('${cliEsc}','',${Math.round(data.totalARS)},${data.totalUSD.toFixed(2)})"
+          style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px;margin-right:4px">💵 Pago a cuenta</button>`;
       return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
           <div>
@@ -2052,6 +2107,7 @@ async function renderCuentaCorriente() {
           </div>
           <div style="text-align:right">
             <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
+            ${btnPago}
             <button onclick="window.open('https://wa.me/${WA_NUM1}?text='+encodeURIComponent('Hola '+\`${cliente}\`+'! Te recordamos que tenés deuda pendiente de '+\`${totStr}\`+' en Shuk Mamtakim 🍬'),'_blank')"
               style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px">💬 Recordar</button>
           </div>
@@ -2138,6 +2194,7 @@ async function renderPedidos() {
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
           <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
+          ${!cobrado ? `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${soloMiri ? Math.round(arsM) : Math.round(parseFloat(v.totalARS)||0)},${(parseFloat(v.totalUSD)||0).toFixed(2)})">💵 Pago a cuenta</button>` : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaModal('pedido','${v.id}','${(v.notas&&v.notas!=='Manual'?v.notas:'').replace(/'/g,'')}','Nota del pedido')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
           <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
           <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${JSON.stringify(v).replace(/'/g,"&#39;")})'>🧾 Remito</button>
@@ -2629,14 +2686,16 @@ async function renderCaja() {
   const MIRI_COLS = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI','CTA_CTE_ARS','CTA_CTE_USD'];
   const cols = soloMiri ? COLS.filter(c => MIRI_COLS.includes(c.key)) : COLS;
   try {
-    const [vR, gR, rR] = await Promise.all([
+    const [vR, gR, rR, pR] = await Promise.all([
       fetch(APPS_SCRIPT_URL + '?accion=ventas'),
       fetch(APPS_SCRIPT_URL + '?accion=gastos'),
-      fetch(APPS_SCRIPT_URL + '?accion=rendiciones').catch(() => null)
+      fetch(APPS_SCRIPT_URL + '?accion=rendiciones').catch(() => null),
+      fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
     ]);
     const ventas = await vR.json();
     const gastos = await gR.json();
     const rendiciones = rR ? await rR.json().catch(() => []) : [];
+    const pagosCuenta = pR ? await pR.json().catch(() => []) : [];
 
     const movs = [];
     ventas.filter(v => v.estado !== 'cancelado').forEach((v, idx) => {
@@ -2684,6 +2743,19 @@ async function renderCaja() {
     });
     if (Array.isArray(rendiciones)) rendiciones.forEach(r => {
       if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
+    });
+    // Pagos a cuenta: ingresan a la caja elegida y bajan la cuenta corriente
+    if (Array.isArray(pagosCuenta)) pagosCuenta.forEach(p => {
+      const aRS = parseFloat(p.montoARS)||0, uSD = parseFloat(p.montoUSD)||0;
+      const desc = `Pago cta ${p.cliente||''} ${p.fecha||''}`;
+      if (aRS > 0 && p.caja) {
+        movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
+        movs.push({ desc: `↳ baja Cta Cte`, col: 'CTA_CTE_ARS', val: -aRS, mon: 'ARS', tipo: 'venta' });
+      }
+      if (uSD > 0 && p.caja) {
+        movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta' });
+        movs.push({ desc: `↳ baja Cta Cte`, col: 'CTA_CTE_USD', val: -uSD, mon: 'USD', tipo: 'venta' });
+      }
     });
 
     // En vista Miri, descartar movimientos de cajas de Jony
@@ -3771,6 +3843,36 @@ function cobro_calcularTC() {
 function cerrarModalCobro() {
   document.getElementById('cobro-modal').style.display = 'none';
   _cobroId = null; _cobroUsdM = 0;
+}
+
+// ─── PAGO A CUENTA ────────────────────────────────────────────────────────────
+let _pagoCliente = '', _pagoPedidoId = '';
+function abrirPagoCuenta(cliente, pedidoId, saldoARS, saldoUSD) {
+  _pagoCliente = cliente; _pagoPedidoId = pedidoId || '';
+  document.getElementById('pago-ars').value = '';
+  document.getElementById('pago-usd').value = '';
+  const partes = [];
+  if (saldoARS > 0) partes.push('$ ' + Math.round(saldoARS).toLocaleString('es-AR'));
+  if (saldoUSD > 0) partes.push('U$S ' + parseFloat(saldoUSD).toFixed(2));
+  document.getElementById('pago-sub').textContent =
+    (pedidoId ? 'Pago de pedido · ' : 'Pago a deuda total · ') + cliente +
+    (partes.length ? ' · Debe ' + partes.join(' + ') : '');
+  document.getElementById('pago-modal').style.display = 'flex';
+}
+function cerrarPagoModal() {
+  document.getElementById('pago-modal').style.display = 'none';
+  _pagoCliente = ''; _pagoPedidoId = '';
+}
+function confirmarPagoCuenta() {
+  const ars = parseFloat(document.getElementById('pago-ars').value) || 0;
+  const usd = parseFloat(document.getElementById('pago-usd').value) || 0;
+  if (ars <= 0 && usd <= 0) { showToast('Ingresá un monto'); return; }
+  const caja = document.getElementById('pago-caja').value;
+  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pagoPedidoId, montoARS:ars, montoUSD:usd, caja, nota:'Pago a cuenta' });
+  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode:'no-cors' }).catch(()=>{});
+  showToast('Pago registrado ✓');
+  cerrarPagoModal();
+  setTimeout(refreshAdmin, 2500);
 }
 function confirmarCobroModal() {
   if (!_cobroId) return;
