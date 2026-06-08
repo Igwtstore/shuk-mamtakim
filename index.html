@@ -799,6 +799,12 @@
 
 <!-- ADMIN -->
 <div class="admin-section" id="admin-section">
+  <div id="socio-bar" style="display:none;align-items:center;gap:0.6rem;margin-bottom:0.9rem;padding:0.55rem 0.8rem;background:#f0f4ff;border-radius:10px;font-size:0.85rem">
+    <span style="font-weight:700;color:var(--azul)">Viendo:</span>
+    <button class="socio-vista-btn" id="socio-btn-todo" onclick="setVistaSocio('todo')" style="padding:0.35rem 0.9rem;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:0.82rem;cursor:pointer">Todo</button>
+    <button class="socio-vista-btn" id="socio-btn-miri" onclick="setVistaSocio('miri')" style="padding:0.35rem 0.9rem;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:0.82rem;cursor:pointer">Solo Miri</button>
+    <span id="socio-label-miri" style="display:none;font-weight:700;color:#c050a0">👤 Vista de Miri</span>
+  </div>
   <div class="admin-subtabs">
     <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
     <button class="admin-subtab" id="subtab-dashboard" onclick="setAdminTab('dashboard')">📊 Dashboard</button>
@@ -1395,6 +1401,28 @@ let carrito = {};
 let modo = 'mayorista';
 let cantidades = {};
 let adminAuth = false;
+let socioActual = 'jony';   // quién entró: 'jony' (ve todo) | 'miri' (solo lo suyo)
+let vistaSocio = 'todo';    // filtro de vista actual: 'todo' | 'miri'
+
+// Define quién entró y ajusta la vista. Miri queda forzada a 'miri'; Jony arranca en 'todo'.
+function setSocio(s) {
+  socioActual = s;
+  sessionStorage.setItem('adminSocio', s);
+  vistaSocio = (s === 'miri') ? 'miri' : 'todo';
+}
+
+// True cuando la vista actual debe mostrar solo lo de Miri.
+function esVistaMiri() { return vistaSocio === 'miri'; }
+
+// Productos visibles según la vista: en vista Miri excluye los de Jony (Pitzujim).
+function productosVisibles() {
+  return esVistaMiri() ? productos.filter(p => p.dueno !== 'Jony') : productos;
+}
+
+// True si un pedido tiene monto de Miri (golosinas ARS o USD).
+function pedidoEsDeMiri(v) {
+  return (parseFloat(v.arsMyri) || 0) > 0 || (parseFloat(v.usdMyri) || 0) > 0;
+}
 
 const CATEGORIA_ORDEN = ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Varios'];
 function getCatIdx(p) {
@@ -1979,19 +2007,21 @@ async function renderCuentaCorriente() {
   try {
     const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
     const ventas = await res.json();
-    const cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
+    const soloMiri = esVistaMiri();
+    let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
+    if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     if (!cc.length) {
       lista.innerHTML = '<div style="color:var(--verde);font-size:0.82rem;padding:0.3rem 0">✓ Sin deudas pendientes</div>';
       badge.style.display = 'none';
       return;
     }
-    // Agrupar por cliente
+    // Agrupar por cliente (en vista Miri usa solo los montos de Miri)
     const porCliente = {};
     cc.forEach(v => {
       if (!porCliente[v.cliente]) porCliente[v.cliente] = { pedidos: [], totalARS: 0, totalUSD: 0 };
       porCliente[v.cliente].pedidos.push(v);
-      porCliente[v.cliente].totalARS += parseFloat(v.totalARS||0);
-      porCliente[v.cliente].totalUSD += parseFloat(v.totalUSD||0);
+      porCliente[v.cliente].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
+      porCliente[v.cliente].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
     });
     const totalDeudores = Object.keys(porCliente).length;
     badge.textContent = totalDeudores + ' deudor' + (totalDeudores !== 1 ? 'es' : '');
@@ -2030,17 +2060,24 @@ async function renderPedidos() {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
     }
-    const todos = [...ventas].reverse();
+    const soloMiri = esVistaMiri();
+    let todos = [...ventas].reverse();
+    if (soloMiri) todos = todos.filter(pedidoEsDeMiri);
     const activos = ['pendiente','preparando'];
     const pendientes = todos.filter(v => activos.includes(v.estado || 'pendiente'));
     const historial = todos.filter(v => !activos.includes(v.estado || 'pendiente'));
 
     const renderCard = (v, conAcciones) => {
       const estado = v.estado || 'pendiente';
-      const totalStr = [
-        v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` : '',
-        v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : ''
-      ].filter(Boolean).join(' + ');
+      const totalStr = soloMiri
+        ? [
+            parseFloat(v.arsMyri) > 0 ? `$ ${Math.round(v.arsMyri).toLocaleString('es-AR')}` : '',
+            parseFloat(v.usdMyri) > 0 ? `U$S ${parseFloat(v.usdMyri).toFixed(2)}` : ''
+          ].filter(Boolean).join(' + ')
+        : [
+            v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` : '',
+            v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : ''
+          ].filter(Boolean).join(' + ');
       const productLines = v.productos
         ? v.productos.split(' || ').map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
         : '';
@@ -2051,11 +2088,11 @@ async function renderPedidos() {
       const comiU = parseFloat(v.comiUSD || 0);
       const cobrado = v.cajaJony || v.cajaMyri;
       const splitParts = [];
-      if (arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">Pitzujim JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
+      if (!soloMiri && arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">Pitzujim JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
       if (arsM > 0) splitParts.push(`<span>Golosinas MYRI: $ ${Math.round(arsM).toLocaleString('es-AR')}</span>`);
       if (usdM > 0) splitParts.push(`<span>Golosinas MYRI: U$S ${usdM.toFixed(2)}</span>`);
-      if (comiA > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: $ ${Math.round(comiA).toLocaleString('es-AR')}</span>`);
-      if (comiU > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: U$S ${comiU.toFixed(2)}</span>`);
+      if (!soloMiri && comiA > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: $ ${Math.round(comiA).toLocaleString('es-AR')}</span>`);
+      if (!soloMiri && comiU > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: U$S ${comiU.toFixed(2)}</span>`);
       return `
       <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}" id="pedido-${v.id}">
         <div class="pedido-item-header">
@@ -2142,7 +2179,7 @@ function renderOfertasAdmin() {
   const lista = document.getElementById('ofertas-lista');
   if (!lista) return;
   if (!productos.length) { lista.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Cargando productos...</div>'; return; }
-  lista.innerHTML = productos.map(p => {
+  lista.innerHTML = productosVisibles().map(p => {
     const tieneOferta = ofertaActiva(p);
     const tienePack = packActivo(p);
     const badge = tieneOferta ? `<span style="background:#fde8e8;color:#c0392b;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px">OFERTA</span>` : '';
@@ -2270,7 +2307,7 @@ function renderManualProductos() {
   if (!lista || !productos.length) return;
   const tipo = document.getElementById('manual-tipo').value;
   const _tipoM = document.getElementById('manual-tipo')?.value || 'Mayorista';
-  lista.innerHTML = productos.filter(p => {
+  lista.innerHTML = productosVisibles().filter(p => {
     if (p.stock <= 0) return false;
     const vis = (p.visible||'Ambos').trim();
     return vis === 'Ambos' || vis === _tipoM;
@@ -2567,6 +2604,10 @@ async function renderCaja() {
     { key: 'CTA_CTE_USD',   label: 'Cta Cte U$S',   mon: 'USD' }
   ];
   const fmt = (v, mon) => mon === 'USD' ? `U$S ${Math.abs(v).toFixed(2)}` : `$ ${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;
+  // En vista Miri solo se muestran sus cajas y se oculta el control de Jony
+  const soloMiri = esVistaMiri();
+  const MIRI_COLS = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI','CTA_CTE_ARS','CTA_CTE_USD'];
+  const cols = soloMiri ? COLS.filter(c => MIRI_COLS.includes(c.key)) : COLS;
   try {
     const [vR, gR, rR] = await Promise.all([
       fetch(APPS_SCRIPT_URL + '?accion=ventas'),
@@ -2625,9 +2666,12 @@ async function renderCaja() {
       if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
     });
 
+    // En vista Miri, descartar movimientos de cajas de Jony
+    const movsVis = soloMiri ? movs.filter(m => MIRI_COLS.includes(m.col)) : movs;
+
     const totalsARS = {}, totalsUSD = {};
-    COLS.forEach(c => { totalsARS[c.key] = 0; totalsUSD[c.key] = 0; });
-    movs.forEach(m => {
+    cols.forEach(c => { totalsARS[c.key] = 0; totalsUSD[c.key] = 0; });
+    movsVis.forEach(m => {
       if (totalsARS[m.col] !== undefined) {
         if (m.mon === 'ARS') totalsARS[m.col] += m.val;
         else totalsUSD[m.col] += m.val;
@@ -2642,24 +2686,24 @@ async function renderCaja() {
       <thead>
         <tr style="background:var(--azul);color:white">
           <th style="text-align:left;padding:0.45rem 0.5rem;white-space:nowrap">Movimiento</th>
-          ${COLS.map(c => `<th style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">${c.label}</th>`).join('')}
+          ${cols.map(c => `<th style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">${c.label}</th>`).join('')}
         </tr>
       </thead>
       <tbody>
-        ${movs.length ? movs.map(m => `
+        ${movsVis.length ? movsVis.map(m => `
         <tr style="border-bottom:1px solid var(--gris-medio)">
           <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.desc}${m.sub ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${m.sub}</span>` : ''}</td>
-          ${COLS.map(c => {
+          ${cols.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
             return `<td style="text-align:right;padding:0.35rem 0.5rem;font-weight:600;color:${color};white-space:nowrap">${m.val < 0 ? '-' : ''}${fmt(m.val, m.mon)}</td>`;
           }).join('')}
-        </tr>`).join('') : `<tr><td colspan="${COLS.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="${cols.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
       </tbody>
       <tfoot>
         <tr style="background:var(--gris);font-weight:700;border-top:2px solid var(--azul)">
           <td style="padding:0.5rem;color:var(--azul);font-weight:700">SALDO FÍSICO</td>
-          ${COLS.map(c => {
+          ${cols.map(c => {
             const aVal = totalsARS[c.key] || 0;
             const uVal = totalsUSD[c.key] || 0;
             const parts = [];
@@ -2686,7 +2730,7 @@ async function renderCaja() {
             const myriEnJonyARS = movs
               .filter(m => ['EFT_JONY','MP_JONY'].includes(m.col) && m.mon==='ARS' && m.tipo==='venta' && m.myriNet !== undefined)
               .reduce((s,m) => s + m.myriNet, 0);
-            return COLS.map(c => {
+            return cols.map(c => {
               let v, mon, label;
               if (c.key === 'MP_GABY')      { v = netoG; mon = 'ARS'; label = 'En GABY'; }
               else if (c.key === 'EFT_MYRI') { v = netoE; mon = 'ARS'; label = 'Físico'; }
@@ -2726,7 +2770,7 @@ async function renderCaja() {
       </div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.5rem">Para registrar un retiro usá el formulario <strong>Rendición / retiro</strong> seleccionando la caja correspondiente.</div>
     </div>`;
-    cont.innerHTML = tabla + controlJony;
+    cont.innerHTML = tabla + (soloMiri ? '' : controlJony);
   } catch(e) {
     cont.innerHTML = '<div class="sinpedidos">Error al cargar movimientos.</div>';
   }
@@ -2741,7 +2785,7 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); startAdminPolling(); }
+  if (m === 'admin') { renderSocioBar(); renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); startAdminPolling(); }
   else { stopAdminPolling(); renderCatalogo(); }
 }
 
@@ -2816,7 +2860,9 @@ function compartirProducto(id) {
 }
 
 let _dashCharts = {}, _clientesData = [];
+let _adminTabActual = 'panel';
 function setAdminTab(tab) {
+  _adminTabActual = tab;
   ['panel','dashboard','clientes','ganancias','docs'].forEach(t => {
     const el = document.getElementById('admin-tab-' + t);
     if (el) el.style.display = t === tab ? '' : 'none';
@@ -2826,6 +2872,60 @@ function setAdminTab(tab) {
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'clientes') renderClientes();
   if (tab === 'ganancias') renderGanancias();
+}
+
+// Configura la barra "Viendo:" según quién entró. Jony ve el toggle; Miri ve un label fijo.
+function renderSocioBar() {
+  const bar = document.getElementById('socio-bar');
+  if (!bar) return;
+  bar.style.display = 'flex';
+  const btnTodo = document.getElementById('socio-btn-todo');
+  const btnMiri = document.getElementById('socio-btn-miri');
+  const labelMiri = document.getElementById('socio-label-miri');
+  // Miri: oculta los botones, muestra label fijo
+  if (socioActual === 'miri') {
+    btnTodo.style.display = 'none';
+    btnMiri.style.display = 'none';
+    labelMiri.style.display = '';
+    return;
+  }
+  // Jony: muestra toggle, resalta el activo
+  labelMiri.style.display = 'none';
+  [['socio-btn-todo','todo'],['socio-btn-miri','miri']].forEach(([id,v]) => {
+    const b = document.getElementById(id);
+    b.style.display = '';
+    const on = vistaSocio === v;
+    b.style.background = on ? 'var(--azul)' : '#fff';
+    b.style.color = on ? '#fff' : 'var(--azul)';
+    b.style.boxShadow = on ? 'none' : 'inset 0 0 0 1.5px var(--azul)';
+  });
+  // El tab Ganancias (diezmo/Pitzujim de Jony) no aplica a la vista Miri
+  const subGan = document.getElementById('subtab-ganancias');
+  if (subGan) subGan.style.display = esVistaMiri() ? 'none' : '';
+  aplicarBloqueoDuenoMiri();
+}
+
+// En vista Miri, el alta de producto queda forzada a dueño Miri.
+function aplicarBloqueoDuenoMiri() {
+  const sel = document.getElementById('np-dueno');
+  if (!sel) return;
+  if (esVistaMiri()) { sel.value = 'Miri'; sel.disabled = true; }
+  else { sel.disabled = false; }
+}
+
+// Jony cambia la vista. Re-renderiza el panel y el tab activo con el nuevo filtro.
+function setVistaSocio(v) {
+  vistaSocio = v;
+  renderSocioBar();
+  // Si estaba en Ganancias y pasa a vista Miri, lo saco a Panel
+  if (esVistaMiri() && _adminTabActual === 'ganancias') { setAdminTab('panel'); }
+  // Re-render del panel (secciones siempre presentes)
+  renderManualProductos(); verificarStockBajo(); renderOfertasAdmin();
+  renderPedidos(); renderCuentaCorriente(); renderCaja(); cargarProductosJonySelect();
+  // Re-render del tab activo
+  if (_adminTabActual === 'dashboard') renderDashboard();
+  else if (_adminTabActual === 'clientes') renderClientes();
+  else if (_adminTabActual === 'ganancias' && !esVistaMiri()) renderGanancias();
 }
 
 let _clientesRaw = [];
@@ -2840,20 +2940,23 @@ async function renderClientes() {
   if (!resV) { lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
   const ventas = await resV.json().catch(() => []);
   const clientesSheet = resC ? await resC.json().catch(() => []) : [];
-  // Agrupar pedidos por cliente
+  const soloMiri = esVistaMiri();
+  // Agrupar pedidos por cliente (en vista Miri solo sus pedidos y montos)
   const ventasMapa = {};
-  ventas.filter(v => v.estado !== 'cancelado').forEach(v => {
+  ventas.filter(v => v.estado !== 'cancelado' && (!soloMiri || pedidoEsDeMiri(v))).forEach(v => {
     const key = v.cliente;
     if (!ventasMapa[key]) ventasMapa[key] = { pedidos: 0, totalARS: 0, totalUSD: 0, ultima: v.fecha, historial: [], tipo: v.tipo };
     ventasMapa[key].pedidos++;
-    ventasMapa[key].totalARS += parseFloat(v.totalARS||0);
-    ventasMapa[key].totalUSD += parseFloat(v.totalUSD||0);
+    ventasMapa[key].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
+    ventasMapa[key].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
     if (v.fecha > ventasMapa[key].ultima) ventasMapa[key].ultima = v.fecha;
     ventasMapa[key].historial.push(v);
   });
-  // Combinar: clientes registrados + historial de pedidos
+  // Combinar: clientes registrados + historial de pedidos.
+  // En vista Miri se excluyen los registrados que nunca le compraron a ella.
   const mapaFinal = {};
   clientesSheet.forEach(c => {
+    if (soloMiri && !ventasMapa[c.nombre]) return;
     const vd = ventasMapa[c.nombre] || { pedidos: 0, totalARS: 0, totalUSD: 0, ultima: c.fecha, historial: [] };
     mapaFinal[c.nombre] = { nombre: c.nombre, telefono: c.telefono, tipo: c.tipo || vd.tipo || 'Mayorista', ...vd };
   });
@@ -3118,24 +3221,30 @@ async function renderDashboard() {
   const ventas = await res.json().catch(() => []);
   const todas = ventas.filter(v => v.estado !== 'cancelado');
 
+  // En vista Miri se usan solo los montos de Miri (no totalARS/USD, que incluyen Jony)
+  const soloMiri = esVistaMiri();
+  const vARS = v => soloMiri ? (parseFloat(v.arsMyri)||0) : (parseFloat(v.totalARS)||0);
+  const vUSD = v => soloMiri ? (parseFloat(v.usdMyri)||0) : (parseFloat(v.totalUSD)||0);
+
   // Filtrar por período
   const hoy = new Date();
-  const entregadas = _dashPeriodo === 0 ? todas : todas.filter(v => {
+  let entregadas = _dashPeriodo === 0 ? todas : todas.filter(v => {
     const parts = (v.fecha||'').split(' ')[0].split('/');
     if (parts.length < 3) return false;
     const fv = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
     return (hoy - fv) / 86400000 <= _dashPeriodo;
   });
+  if (soloMiri) entregadas = entregadas.filter(pedidoEsDeMiri);
 
   const periodoLabel = _dashPeriodo === 0 ? 'todo el período' : `últimos ${_dashPeriodo} días`;
   const tituloVentas = document.getElementById('dash-titulo-ventas');
   if (tituloVentas) tituloVentas.textContent = `Ventas — ${periodoLabel}`;
 
   // Resumen
-  const totalARS = entregadas.reduce((s,v) => s + (parseFloat(v.totalARS)||0), 0);
-  const totalUSD = entregadas.reduce((s,v) => s + (parseFloat(v.totalUSD)||0), 0);
+  const totalARS = entregadas.reduce((s,v) => s + vARS(v), 0);
+  const totalUSD = entregadas.reduce((s,v) => s + vUSD(v), 0);
   const clientes = new Set(entregadas.map(v => v.cliente)).size;
-  const pendientesCount = ventas.filter(v => ['pendiente','preparando'].includes(v.estado||'pendiente')).length;
+  const pendientesCount = ventas.filter(v => ['pendiente','preparando'].includes(v.estado||'pendiente') && (!soloMiri || pedidoEsDeMiri(v))).length;
   document.getElementById('dash-resumen').innerHTML = [
     { label: 'Ventas $', val: '$ ' + Math.round(totalARS).toLocaleString('es-AR'), color: 'var(--verde)' },
     { label: 'Ventas U$S', val: 'U$S ' + totalUSD.toFixed(2), color: 'var(--verde)' },
@@ -3147,17 +3256,19 @@ async function renderDashboard() {
   // Desglose Mayorista / Minorista
   const may = entregadas.filter(v => v.tipo === 'Mayorista');
   const min = entregadas.filter(v => v.tipo === 'Minorista');
-  const mayARS = may.reduce((s,v)=>s+(parseFloat(v.totalARS)||0),0);
-  const mayUSD = may.reduce((s,v)=>s+(parseFloat(v.totalUSD)||0),0);
-  const minARS = min.reduce((s,v)=>s+(parseFloat(v.totalARS)||0),0);
-  const minUSD = min.reduce((s,v)=>s+(parseFloat(v.totalUSD)||0),0);
+  const mayARS = may.reduce((s,v)=>s+vARS(v),0);
+  const mayUSD = may.reduce((s,v)=>s+vUSD(v),0);
+  const minARS = min.reduce((s,v)=>s+vARS(v),0);
+  const minUSD = min.reduce((s,v)=>s+vUSD(v),0);
   document.getElementById('dash-mayorista').innerHTML = `${may.length} pedidos · ${mayARS>0?'$ '+Math.round(mayARS).toLocaleString('es-AR'):''}${mayUSD>0?' U$S '+mayUSD.toFixed(2):''}`;
   document.getElementById('dash-minorista').innerHTML = `${min.length} pedidos · ${minARS>0?'$ '+Math.round(minARS).toLocaleString('es-AR'):''}${minUSD>0?' U$S '+minUSD.toFixed(2):''}`;
 
-  // Desglose Jony / Miri
+  // Desglose Jony / Miri (la card de Jony se oculta en vista Miri)
   const jonyARS = entregadas.reduce((s,v) => s + (parseFloat(v.arsJONY)||0), 0);
   const miriARS = entregadas.reduce((s,v) => s + (parseFloat(v.arsMyri)||0), 0);
   const miriUSD = entregadas.reduce((s,v) => s + (parseFloat(v.usdMyri)||0), 0);
+  const cardJony = document.getElementById('dash-jony').parentElement;
+  if (cardJony) cardJony.style.display = soloMiri ? 'none' : '';
   document.getElementById('dash-jony').innerHTML = `$ ${Math.round(jonyARS).toLocaleString('es-AR')}`;
   document.getElementById('dash-miri').innerHTML = `$ ${Math.round(miriARS).toLocaleString('es-AR')}${miriUSD > 0 ? ' + U$S ' + miriUSD.toFixed(2) : ''}`;
 
@@ -3170,7 +3281,7 @@ async function renderDashboard() {
     const parts = f.split('/');
     if (parts.length === 3) {
       const label = parts[0] + '/' + parts[1];
-      if (ventasPorDia[label] !== undefined) ventasPorDia[label] += parseFloat(v.totalARS||0) + parseFloat(v.totalUSD||0) * 1000;
+      if (ventasPorDia[label] !== undefined) ventasPorDia[label] += vARS(v) + vUSD(v) * 1000;
     }
   });
   if (_dashCharts.ventas) _dashCharts.ventas.destroy();
@@ -3180,12 +3291,17 @@ async function renderDashboard() {
     options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } } }
   });
 
-  // Top productos
+  // Top productos (en vista Miri se excluyen líneas de productos de Jony)
+  const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
   const prodCount = {};
   entregadas.forEach(v => {
     (v.productos||'').split('||').forEach(l => {
       const m = l.match(/(\d+)x\s+([^—·]+)/);
-      if (m) { const nom = m[2].trim().substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]); }
+      if (m) {
+        const nomFull = m[2].trim();
+        if (soloMiri && nombresJony.has(nomFull)) return;
+        const nom = nomFull.substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]);
+      }
     });
   });
   const top5 = Object.entries(prodCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -3252,7 +3368,7 @@ function enviarPushAcumulado() {
 }
 
 function verificarStockBajo() {
-  const bajos = productos.filter(p => p.activo && p.stock > 0 && p.stock <= STOCK_MINIMO);
+  const bajos = productosVisibles().filter(p => p.activo && p.stock > 0 && p.stock <= STOCK_MINIMO);
   const card = document.getElementById('stock-alerta-card');
   const lista = document.getElementById('stock-alerta-lista');
   if (!card || !lista) return;
@@ -3545,11 +3661,19 @@ async function verificarAdmin() {
   const pass = document.getElementById('admin-pass-input').value;
   const btnEl = document.querySelector('#admin-login button[onclick*="verificarAdmin"]');
   if (btnEl) { btnEl.textContent = 'Verificando...'; btnEl.disabled = true; }
-  const { error } = await _sb.auth.signInWithPassword({ email: 'admin@shukmamtakim.com', password: pass });
+  // Probar primero Jony (admin@), si falla probar Miri (miri@). La clave la tipea el usuario.
+  let socio = null;
+  let { error } = await _sb.auth.signInWithPassword({ email: 'admin@shukmamtakim.com', password: pass });
+  if (!error) socio = 'jony';
+  else {
+    const r2 = await _sb.auth.signInWithPassword({ email: 'miri@shukmamtakim.com', password: pass });
+    if (!r2.error) socio = 'miri';
+  }
   if (btnEl) { btnEl.textContent = 'Entrar'; btnEl.disabled = false; }
-  if (!error) {
+  if (socio) {
     adminAuth = true;
     sessionStorage.setItem('adminAuth', '1');
+    setSocio(socio);
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('modo-bar').style.display = '';
     setModo('admin');
@@ -3575,6 +3699,7 @@ function init() {
   if (hash === TOKENS.admin) {
     if (sessionStorage.getItem('adminAuth') === '1') {
       adminAuth = true;
+      setSocio(sessionStorage.getItem('adminSocio') || 'jony');
       document.getElementById('modo-bar').style.display = '';
       setModo('admin');
     } else {
