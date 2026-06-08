@@ -749,3 +749,47 @@ function setupHojaHijos() {
   cc.getRange(1,1,1,6).setValues([['Fecha','Hijo','Cliente','Monto','Descripcion','Producto']]);
   Logger.log('Hojas creadas OK');
 }
+
+// ─── BACKUP AUTOMÁTICO ────────────────────────────────────────────────────────
+const BACKUP_FOLDER_NAME = 'Backups Shuk Mamtakim';
+const BACKUP_RETENTION_DAYS = 30;
+
+// Copia toda la planilla a una carpeta en Drive y borra backups de más de 30 días.
+// La ejecuta el trigger diario (ver configurarBackupDiario).
+function crearBackup() {
+  const folder = getBackupFolder_();
+  const fecha = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
+  const src = DriveApp.getFileById(SPREADSHEET_ID);
+  src.makeCopy('Backup Shuk ' + fecha, folder);
+  limpiarBackupsViejos_(folder);
+  Logger.log('Backup creado: Backup Shuk ' + fecha);
+}
+
+function getBackupFolder_() {
+  const it = DriveApp.getFoldersByName(BACKUP_FOLDER_NAME);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER_NAME);
+}
+
+function limpiarBackupsViejos_(folder) {
+  const limite = new Date().getTime() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const files = folder.getFiles();
+  while (files.hasNext()) {
+    const f = files.next();
+    if (f.getDateCreated().getTime() < limite) f.setTrashed(true);
+  }
+}
+
+// EJECUTAR UNA SOLA VEZ desde el editor para activar el backup diario (~3am).
+// Borra triggers previos de crearBackup para no duplicar.
+function configurarBackupDiario() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'crearBackup')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('crearBackup')
+    .timeBased()
+    .everyDays(1)
+    .atHour(3)
+    .inTimezone(TZ)
+    .create();
+  Logger.log('Backup diario configurado (~3am)');
+}
