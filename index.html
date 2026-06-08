@@ -2965,7 +2965,8 @@ async function renderCuentaSocios() {
     </div>`;
     html += `<button onclick="saldarCuentaSocios()" style="width:100%;padding:0.7rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer">✓ Saldar y poner en cero</button>`;
   } else {
-    html += `<div style="font-size:0.72rem;color:var(--texto-suave)">Cuenta al día con Jony. Cuando transfieran se actualiza solo.</div>`;
+    const hayDeuda = Math.abs(ars) >= 1 || Math.abs(usd) >= 0.01;
+    html += `<div style="font-size:0.72rem;color:var(--texto-suave)">${hayDeuda ? 'Se actualiza solo cuando salden con Jony.' : 'Todo al día con Jony 🎉'}</div>`;
   }
   cont.innerHTML = html;
 }
