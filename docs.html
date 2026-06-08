@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v2.02</title>
+<title>Shuk Mamtakim — Documentación v2.1</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -140,13 +140,14 @@
       <span class="cover-badge">Catálogo mayorista + minorista</span>
       <span class="cover-badge">Panel admin</span>
       <span class="cover-badge">Caja JONY / MYRI</span>
-      <span class="cover-badge">Bot WhatsApp hijos</span>
+      <span class="cover-badge">Vista por socio</span>
+      <span class="cover-badge">Bot Telegram hijos</span>
       <span class="cover-badge">Candy Shop</span>
     </div>
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 2.02 · Junio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 2.1 · Junio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -368,12 +369,79 @@
 
   <div class="subsection">
     <h3>🔒 Control personal JONY</h3>
-    <p>Sección al pie de la caja, solo visible en el panel admin:</p>
+    <p>Sección al pie de la caja, solo visible para JONY:</p>
     <div class="chips">
       <span class="chip verde">Ganancias $ = EFT JONY + MP JONY + Comi JONY − deuda a MYRI</span>
       <span class="chip verde">Ganancias U$S = Comi U$S JONY</span>
-      <span class="chip dorado">Diezmo (10%) calculado automáticamente sobre comisiones</span>
+      <span class="chip dorado">Diezmo (10%) sobre comisión MYRI + ganancia Pitzujim</span>
     </div>
+  </div>
+
+  <div class="subsection">
+    <h3>🤝 Cuenta corriente entre socios<span class="badge-new">nuevo</span></h3>
+    <p>Tarjeta que resuelve el desfasaje de pedidos mixtos pagados a una sola cuenta. Convención: positivo = Myri le debe a Jony; negativo = Jony le debe a Myri.</p>
+    <table>
+      <thead><tr><th>Situación</th><th>Efecto en la cuenta</th></tr></thead>
+      <tbody>
+        <tr><td>Myri cobró golosinas en su caja</td><td>Myri le debe a Jony el 15% de comisión</td></tr>
+        <tr><td>Jony cobró golosinas de Myri (pago mixto a Jony)</td><td>Jony le debe a Myri el neto (golosinas − comisión)</td></tr>
+        <tr><td>Myri cobró Pitzujim de Jony (pago mixto a Myri)</td><td>Myri le debe a Jony el total de Pitzujim</td></tr>
+      </tbody>
+    </table>
+    <div class="chips" style="margin-top:0.5rem">
+      <span class="chip verde">Jony: saldo neto + desglose + botón "Saldar"</span>
+      <span class="chip dorado">Myri: solo su lado (no ve ventas de Jony)</span>
+      <span class="chip azul">Saldar registra el movimiento sin afectar el diezmo (hoja LiquidacionSocios)</span>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <h3>💵 Pago a cuenta<span class="badge-new">nuevo</span></h3>
+    <p>Botón en cada pedido pendiente y por cliente en la Cuenta Corriente. Registra pagos parciales eligiendo la caja.</p>
+    <div class="chips">
+      <span class="chip verde">Por pedido: reparto editable Pitzujim / golosinas (default Pitzujim-primero)</span>
+      <span class="chip verde">Por cliente: pago a la deuda total</span>
+      <span class="chip azul">Baja la deuda del cliente y entra a la caja elegida</span>
+      <span class="chip dorado">El reparto por pedido alimenta la cuenta entre socios</span>
+    </div>
+  </div>
+</div>
+
+<!-- VISTA POR SOCIO -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">👥</span><h2>Acceso por socio (Miri / Jony)</h2></div>
+  <div class="nota verde">✅ El panel distingue quién entra y filtra la vista. Objetivo: Myri ve solo lo suyo y no ve cuánto vende Jony de Pitzujim.</div>
+  <br>
+  <div class="subsection">
+    <h3>Login con 2 identidades</h3>
+    <table>
+      <thead><tr><th>Quién</th><th>Cuenta Supabase</th><th>Qué ve</th></tr></thead>
+      <tbody>
+        <tr><td>Jony</td><td>admin@shukmamtakim.com</td><td>Todo + toggle "Todo / Solo Miri"</td></tr>
+        <tr><td>Myri</td><td>myri@shukmamtakim.com</td><td>Solo su vista (forzada, sin toggle)</td></tr>
+      </tbody>
+    </table>
+    <div class="nota">El login prueba ambas cuentas con la clave tipeada y detecta quién es. Botón "Salir" en la barra superior.</div>
+  </div>
+  <div class="subsection">
+    <h3>Qué filtra la vista de Myri</h3>
+    <div class="chips">
+      <span class="chip dorado">Dashboard: solo sus montos (oculta Jony)</span>
+      <span class="chip dorado">Pedidos: solo con monto suyo, oculta líneas y splits de Pitzujim</span>
+      <span class="chip dorado">Caja: solo sus columnas, oculta control de Jony</span>
+      <span class="chip dorado">Productos / stock: solo dueño Miri</span>
+      <span class="chip dorado">Clientes: solo los que le compraron</span>
+      <span class="chip dorado">Oculta la pestaña Ganancias y la cuenta de socios completa</span>
+    </div>
+  </div>
+  <div class="subsection">
+    <h3>Diezmo y ganancia Pitzujim<span class="badge-new">nuevo</span></h3>
+    <p>El campo <strong>Dueño</strong> (Miri / Jony) en cada producto define a quién pertenece. El diezmo (10%) se calcula sobre la suma de:</p>
+    <div class="chips">
+      <span class="chip verde">Comisión de Myri (15% de sus ventas)</span>
+      <span class="chip verde">Ganancia Pitzujim = (precio − costo promedio ponderado) × unidades</span>
+    </div>
+    <div class="nota">El costo promedio sale del formulario "Registrar compra de Pitzujim" (hoja GananciasJony).</div>
   </div>
 </div>
 
@@ -385,7 +453,7 @@
   <br>
 
   <div class="subsection">
-    <h3>Bot WhatsApp (vía Twilio + Cloudflare Workers)</h3>
+    <h3>Bot Telegram (vía Cloudflare Workers)<span class="badge-new">migrado</span></h3>
     <div class="cmd-grid">
       <div class="cmd-card"><div class="cmd">SPVE 2 Moshi</div><div class="desc">Venta de 2x Sopa Verde a Moshi, pago total</div></div>
       <div class="cmd-card"><div class="cmd">CEX1 Moshi debe</div><div class="desc">Venta a crédito — queda en cuenta corriente</div></div>
@@ -397,6 +465,7 @@
       <div class="cmd-card"><div class="cmd">ventas hoy</div><div class="desc">Resumen de ventas del día</div></div>
     </div>
     <div class="nota">También acepta mensajes de audio — Whisper (OpenAI) transcribe el audio automáticamente.</div>
+    <div class="nota">⚠️ El bot migró de WhatsApp (Twilio sandbox, límite 50 msg/día) a <strong>Telegram</strong> — gratis y sin límites. Mismos comandos y lógica.</div>
   </div>
 
   <div class="subsection">
@@ -450,6 +519,10 @@
       <tr><td>Rendiciones</td><td>Retiros/transferencias</td><td>Fecha, Descripción, Monto, Moneda, Columna</td></tr>
       <tr><td>Notificaciones</td><td>Lista de espera</td><td>Fecha, Producto ID, Nombre, Teléfono, Estado, Modo</td></tr>
       <tr><td>NotasClientes</td><td>Notas por cliente</td><td>Cliente, Nota, Actualizado</td></tr>
+      <tr><td>Clientes</td><td>Clientes registrados</td><td>Nombre, Teléfono, Tipo, Fecha</td></tr>
+      <tr><td>GananciasJony</td><td>Ganancia Pitzujim + comisión + compras (base del diezmo)</td><td>Fecha, Tipo, Descripción, Monto</td></tr>
+      <tr><td>Pagos</td><td>Pagos a cuenta (con reparto Pitzujim)</td><td>Fecha, Cliente, PedidoId, MontoARS, MontoUSD, Caja, Nota, MontoPitz</td></tr>
+      <tr><td>LiquidacionSocios</td><td>Saldados de la cuenta entre socios</td><td>Fecha, MontoARS, MontoUSD, Nota</td></tr>
       <tr><td>CatalogoHijos</td><td>Productos Candy Shop</td><td>Codigo, Nombre, PrecioVenta, Costo, Foto</td></tr>
       <tr><td>VentasHijos</td><td>Ventas de Meir e Iosi</td><td>Fecha, Hijo, Producto, Código, Cantidad, Precio, Total, Cliente, EsDebe, PagoParcial, Saldo</td></tr>
       <tr><td>CCHijos</td><td>Cuentas corrientes hijos</td><td>Fecha, Hijo, Cliente, Monto, Descripción</td></tr>
@@ -470,8 +543,8 @@
     <div class="tech-card"><span class="icon">📈</span><div class="name">Chart.js</div><div class="role">Gráficos del dashboard</div></div>
     <div class="tech-card"><span class="icon">💬</span><div class="name">WhatsApp</div><div class="role">Pedidos + notificaciones + remitos</div></div>
     <div class="tech-card"><span class="icon">🔒</span><div class="name">Supabase</div><div class="role">Autenticación admin + Candy Shop</div></div>
-    <div class="tech-card"><span class="icon">📞</span><div class="name">Twilio</div><div class="role">Sandbox WhatsApp bot hijos</div></div>
-    <div class="tech-card"><span class="icon">⚡</span><div class="name">Cloudflare Workers</div><div class="role">Bot WhatsApp + KV storage</div></div>
+    <div class="tech-card"><span class="icon">✈️</span><div class="name">Telegram</div><div class="role">Bot de ventas de los hijos</div></div>
+    <div class="tech-card"><span class="icon">⚡</span><div class="name">Cloudflare Workers</div><div class="role">Bot Telegram + KV storage</div></div>
     <div class="tech-card"><span class="icon">🎙️</span><div class="name">OpenAI Whisper</div><div class="role">Transcripción de audios del bot</div></div>
     <div class="tech-card"><span class="icon">🐙</span><div class="name">GitHub</div><div class="role">Control de versiones + CI/CD</div></div>
   </div>
@@ -483,6 +556,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v2.1</td><td>Jun 2026</td><td><strong>Release grande — socios y contabilidad.</strong> Acceso por socio Miri/Jony con vista filtrada (Myri no ve ventas de Jony) · Cuenta corriente entre socios con saldo neto y botón Saldar · Pago a cuenta con reparto editable Pitzujim/golosinas (alimenta la cuenta de socios) · Diezmo sobre comisión + ganancia Pitzujim · Campo Dueño y registro de compras Pitzujim con costo promedio · Bot de los hijos migrado de WhatsApp a Telegram · Historia en Candy Shop: borrar/editar ventas + fix fecha · Backup diario automático del spreadsheet a Drive · Fix deployments (3 puertas) + auto-deploy a las 3</td></tr>
       <tr><td>v2.02</td><td>Jun 2026</td><td>Estado "Preparando" en pedidos · Filtro de pedidos por estado · Dashboard con selector de período y desglose Mayorista/Minorista · Ofertas y packs con fecha de vencimiento y visibilidad por tipo · Cuenta corriente mayoristas · Historial de clientes expandible · Registro de clientes desde el panel · Contador de visitas /tienda y /mayorista · Rotación de fotos al hover (3s)</td></tr>
       <tr><td>v2.01</td><td>Jun 2026</td><td>URL /mayorista para catálogo mayorista · URL base redirige a minorista · Banner "¿Comprás para revender?" en catálogo minorista · Soporte video/GIF en productos · Docs integradas en panel admin · CSS de impresión para PDF · Fix nombre de producto en modal de edición</td></tr>
       <tr><td>v2.0</td><td>Jun 2026</td><td>Documentación completa. Login Supabase · Edición de pedidos (reprecio, descuentos, agregar/eliminar) · Remito PDF · Tipo de cambio automático · Auto-refresh inteligente (5 min) · URL /tienda limpia · Candy Shop completo con bot WhatsApp</td></tr>
@@ -494,7 +568,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v2.02 · Junio 2026 · Uso interno
+  Documentación v2.1 · Junio 2026 · Uso interno
 </div>
 
 </div>
