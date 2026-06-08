@@ -3661,12 +3661,12 @@ async function verificarAdmin() {
   const pass = document.getElementById('admin-pass-input').value;
   const btnEl = document.querySelector('#admin-login button[onclick*="verificarAdmin"]');
   if (btnEl) { btnEl.textContent = 'Verificando...'; btnEl.disabled = true; }
-  // Probar primero Jony (admin@), si falla probar Miri (miri@). La clave la tipea el usuario.
+  // Probar primero Jony (admin@), si falla probar Myri (myri@). La clave la tipea el usuario.
   let socio = null;
   let { error } = await _sb.auth.signInWithPassword({ email: 'admin@shukmamtakim.com', password: pass });
   if (!error) socio = 'jony';
   else {
-    const r2 = await _sb.auth.signInWithPassword({ email: 'miri@shukmamtakim.com', password: pass });
+    const r2 = await _sb.auth.signInWithPassword({ email: 'myri@shukmamtakim.com', password: pass });
     if (!r2.error) socio = 'miri';
   }
   if (btnEl) { btnEl.textContent = 'Entrar'; btnEl.disabled = false; }
