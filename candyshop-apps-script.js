@@ -181,25 +181,27 @@ function doGet(e) {
     }
     // Pago a cuenta: pago parcial de un cliente con deuda en cuenta corriente.
     if (accion === 'registrarPagoCuenta') {
-      const h = getOrCreate(ss, 'Pagos', ['Fecha','Cliente','PedidoId','MontoARS','MontoUSD','Caja','Nota']);
+      const h = getOrCreate(ss, 'Pagos', ['Fecha','Cliente','PedidoId','MontoARS','MontoUSD','Caja','Nota','MontoPitz']);
       const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
       const montoARS = parseFloat(e.parameter.montoARS||0) || 0;
       const montoUSD = parseFloat(e.parameter.montoUSD||0) || 0;
+      const montoPitz = parseFloat(e.parameter.montoPitz||0) || 0;  // parte ARS que es Pitzujim (resto = golosinas)
       if (montoARS === 0 && montoUSD === 0) return json({error:'monto vacío'});
       const row = h.getLastRow() + 1;
-      h.appendRow([fecha, dec(e.parameter.cliente||''), dec(e.parameter.pedidoId||''), montoARS, montoUSD, dec(e.parameter.caja||''), dec(e.parameter.nota||'Pago a cuenta')]);
+      h.appendRow([fecha, dec(e.parameter.cliente||''), dec(e.parameter.pedidoId||''), montoARS, montoUSD, dec(e.parameter.caja||''), dec(e.parameter.nota||'Pago a cuenta'), montoPitz]);
       h.getRange(row,1).setNumberFormat('@');
       return ok();
     }
     if (accion === 'getPagos') {
       const h = ss.getSheetByName('Pagos');
       if (!h || h.getLastRow() < 2) return json([]);
-      const rows = h.getRange(2,1,h.getLastRow()-1,7).getValues();
+      const rows = h.getRange(2,1,h.getLastRow()-1,8).getValues();
       return json(rows.map(r => ({
         fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
         cliente: (r[1]||'').toString(), pedidoId: (r[2]||'').toString(),
         montoARS: parseFloat(r[3])||0, montoUSD: parseFloat(r[4])||0,
-        caja: (r[5]||'').toString(), nota: (r[6]||'').toString()
+        caja: (r[5]||'').toString(), nota: (r[6]||'').toString(),
+        montoPitz: parseFloat(r[7])||0
       })));
     }
     if (accion === 'notificacion') {
