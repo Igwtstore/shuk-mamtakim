@@ -152,6 +152,33 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.desc), parseFloat(e.parameter.monto||0), dec(e.parameter.moneda||'ARS'), dec(e.parameter.columna||'')]);
       h.getRange(row,1).setNumberFormat('@'); return ok();
     }
+    // Liquidación entre socios (saldar la cuenta corriente Myri↔Jony). NO afecta el diezmo.
+    // Monto en convención "Myri le debe a Jony": positivo = Myri saldó deuda hacia Jony; negativo = Jony saldó hacia Myri.
+    if (accion === 'saldarSocios') {
+      const h = getOrCreate(ss, 'LiquidacionSocios', ['Fecha','MontoARS','MontoUSD','Nota']);
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const montoARS = parseFloat(e.parameter.montoARS||0) || 0;
+      const montoUSD = parseFloat(e.parameter.montoUSD||0) || 0;
+      if (montoARS === 0 && montoUSD === 0) return json({error:'nada para saldar'});
+      const row = h.getLastRow() + 1;
+      h.appendRow([fecha, montoARS, montoUSD, dec(e.parameter.nota||'Saldo entre socios')]);
+      h.getRange(row,1).setNumberFormat('@');
+      return ok();
+    }
+    if (accion === 'getLiquidaciones') {
+      const h = ss.getSheetByName('LiquidacionSocios');
+      if (!h || h.getLastRow() < 2) return json({totalARS:0, totalUSD:0, movimientos:[]});
+      const rows = h.getRange(2,1,h.getLastRow()-1,4).getValues();
+      const movimientos = rows.map(r => ({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+        montoARS: parseFloat(r[1])||0, montoUSD: parseFloat(r[2])||0, nota: (r[3]||'').toString()
+      }));
+      return json({
+        totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
+        totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
+        movimientos
+      });
+    }
     if (accion === 'notificacion') {
       const h = getOrCreate(ss, 'Notificaciones', ['Fecha','Producto ID','Producto','Nombre','Telefono','Estado','Modo']);
       if (h.getLastRow() > 1) {
