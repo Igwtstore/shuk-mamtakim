@@ -2083,8 +2083,8 @@ async function renderPedidos() {
       const productLines = v.productos
         ? v.productos.split(' || ').filter(l => {
             if (!soloMiri) return true;
-            const m = l.match(/^\s*\d+x\s+([^—·]+)/);
-            const nom = m ? m[1].trim() : '';
+            const m = l.match(/(\d+)x\s+([^—·]+)/);   // tolera viñeta "• " inicial
+            const nom = m ? m[2].trim() : '';
             return !nombresJony.has(nom);   // en vista Miri oculta líneas de productos de Jony
           }).map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
         : '';
