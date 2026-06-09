@@ -39,11 +39,14 @@ Es la decisión más importante. Cada tienda necesita guardar sus datos (product
 | Privacidad/escala | Datos mezclados; ojo con volumen | Cada cliente dueño de SUS datos; más pro |
 | Esfuerzo de build | Refactor grande (todo lleva `tienda_id`) | Menos refactor de datos, más trabajo de onboarding |
 
-**Recomendación:** arrancar **compartido** (onboarding instantáneo y Super Admin natural), con la
-opción de "graduar" una tienda grande a infra aislada más adelante. Es la vía que mejor encaja con
-la idea del Super Admin viendo todo.
-
-> ⚠️ Decisión abierta #A — confirmar compartido vs aislado antes de la Fase 3.
+### ✅ DECISIÓN (2026-06-09): aislado pero auto-provisionado
+**Cada tienda tiene su propia planilla** (datos aislados → si una se arruina, no afecta a las otras),
+pero **NO se crea a mano**: al dar de alta una tienda en el Super Admin, el sistema **copia sola una
+planilla-molde** (Apps Script puede crear/copiar spreadsheets con DriveApp/SpreadsheetApp) y guarda
+su ID en el registro maestro. **Un solo Apps Script** (código compartido) que abre la planilla de la
+tienda según su ID. **Backup automático por tienda** (el mismo mecanismo que ya existe, iterando
+tiendas). Lo eligió el usuario por seguridad: la comodidad del alta con un clic + el aislamiento de
+"cada uno su casa".
 
 ---
 
@@ -149,12 +152,12 @@ La app, al cargar, detecta la tienda → pide su config+flags al registro maestr
 
 ---
 
-## 11. Decisiones abiertas (para definir antes de codear)
-- **#A** Backend compartido vs aislado (sección 3). *Recomendado: compartido para arrancar.*
-- **#B** Identificación de tienda: subdominio vs path (sección 9).
-- **#C** ¿Dónde vive el registro maestro? (planilla Google + Apps Script, o Supabase).
-- **#D** ¿La plantilla es un repo NUEVO (copia de Shuk) o Shuk se convierte en la plantilla?
-  *Recomendado: repo nuevo, así Shuk-producción no corre riesgo.*
+## 11. Decisiones tomadas (2026-06-09)
+- **#A** Datos **aislados por tienda pero auto-creados** (planilla-molde copiada al alta). Un solo Apps Script.
+- **#B** Identificación por **ruta** (`/t/cliente`). Subdominio = upgrade futuro.
+- **#C** Registro maestro en **planilla Google**, código preparado para migrar a base de datos (Supabase) al crecer.
+- **#D** **Repo nuevo** (copia), Shuk-producción no se toca.
+- **Stack:** se mantiene el actual (Sheets + Apps Script + Vercel), diseñado para migrar el motor cuando despegue.
 
 ---
 
