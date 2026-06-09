@@ -148,7 +148,8 @@ function doGet(e) {
       for (let i = 1; i < datos.length; i++) {
         const cellId = datos[i][0] instanceof Date ? datos[i][0].toISOString() : datos[i][0].toString().trim();
         if (cellId === e.parameter.id) {
-          h.getRange(i+1,17).setValue(dec(e.parameter.cajaJony||''));
+          // soloMyri: vista de Myri — solo actualiza su caja, no toca la de Jony (col 17)
+          if (e.parameter.soloMyri !== '1') h.getRange(i+1,17).setValue(dec(e.parameter.cajaJony||''));
           h.getRange(i+1,18).setValue(dec(e.parameter.cajaMyri||''));
           h.getRange(i+1,19).setValue(parseFloat(e.parameter.tipoCambio||0));
           return ok();
