@@ -46,6 +46,10 @@ function doGet(e) {
     }
   }
   try {
+    if (accion === 'debugAuth') {
+      const tk = e.parameter.token || '';
+      return json({ tokenLen: tk.length, valid: sesionValida_(tk) });
+    }
     if (accion === 'venta') {
       const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
       const id = 'P' + Date.now().toString();
