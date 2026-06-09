@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
-const ENFORCE_HIJOS = false;   // Etapa A: verifica y loguea, pero PERMITE igual. Pasar a true en Etapa B.
+const ENFORCE_HIJOS = true;   // Etapa B: estricto — rechaza acciones de hijos sin sesión válida ni secreto.
 const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker del bot
 // 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
 const PROTECTED_HIJOS = [
