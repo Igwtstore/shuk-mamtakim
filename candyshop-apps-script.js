@@ -2,9 +2,48 @@ const SPREADSHEET_ID = '17uCcaoZ5TDZbiL4R3L881JQ8_-J94sWUP4KjUDqaV1c';
 const TZ = 'America/Argentina/Buenos_Aires';
 // v3
 
+// ─── AUTH (protección de acciones del admin de Shuk Mamtakim) ─────────────────
+const SUPA_URL = 'https://soarkknjewgcewryxqac.supabase.co';
+const SUPA_ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
+const ENFORCE_AUTH = false;   // Etapa A: verifica y loguea, pero PERMITE igual. Pasar a true en Etapa B.
+const PROTECTED_ACTIONS = [
+  'ventas','gastos','rendiciones','visitas','getClientes','getPagos','getLiquidaciones',
+  'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
+  'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
+  'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
+  'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
+  'eliminarNotificacion','marcarNotificado'
+];
+
+// Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
+// para no llamar a Supabase en cada request. Devuelve true si es válido.
+function sesionValida_(token) {
+  if (!token) return false;
+  const cache = CacheService.getScriptCache();
+  const key = 'auth_' + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token)
+  ).substring(0, 28);
+  if (cache.get(key) === '1') return true;
+  try {
+    const res = UrlFetchApp.fetch(SUPA_URL + '/auth/v1/user', {
+      headers: { 'Authorization': 'Bearer ' + token, 'apikey': SUPA_ANON },
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() === 200) { cache.put(key, '1', 300); return true; }
+    return false;
+  } catch (e) { return false; }
+}
+
 function doGet(e) {
   const accion = e.parameter.accion;
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  // Protección de acciones sensibles del admin. Etapa A: loguea pero permite.
+  if (PROTECTED_ACTIONS.indexOf(accion) !== -1) {
+    if (!sesionValida_(e.parameter.token)) {
+      Logger.log('[auth] acción protegida SIN sesión válida: ' + accion);
+      if (ENFORCE_AUTH) return json({ error: 'no autorizado — iniciá sesión de nuevo' });
+    }
+  }
   try {
     if (accion === 'venta') {
       const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);

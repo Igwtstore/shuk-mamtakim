@@ -1448,6 +1448,10 @@ const WA_NUM1 = '5491131754540';
 const WA_NUM2 = '972527596202';
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
 const _sb = supabase.createClient('https://soarkknjewgcewryxqac.supabase.co','sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2');
+// Token de sesión para autenticar las llamadas del admin contra el backend. Se mantiene fresco solo.
+let _authToken = '';
+_sb.auth.getSession().then(r => { _authToken = r.data.session?.access_token || ''; }).catch(() => {});
+_sb.auth.onAuthStateChange((_e, session) => { _authToken = session?.access_token || ''; });
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyW18FtDDS9sG3qcgS4h85tZrM4aWnP4NfvOKDYzV67nEt_kme8jPUiKVFJa1u7iG9-4Q/exec';
 
 // STORAGE
@@ -3971,7 +3975,8 @@ function apiGet(accion, ttl = 8000) {
   const now = Date.now();
   const c = _apiCache[accion];
   if (c && (now - c.t) < ttl) return c.p;
-  const p = fetch(APPS_SCRIPT_URL + '?accion=' + accion)
+  const tk = _authToken ? '&token=' + encodeURIComponent(_authToken) : '';
+  const p = fetch(APPS_SCRIPT_URL + '?accion=' + accion + tk)
     .then(r => r.json())
     .catch(e => { delete _apiCache[accion]; throw e; });
   _apiCache[accion] = { p, t: now };
@@ -3983,6 +3988,7 @@ function invalidarCache() { for (const k in _apiCache) delete _apiCache[k]; }
 // Devuelve {ok:true,...} o {error:...}. Invalida el cache para que el próximo render sea fresco.
 async function apiWrite(params, okMsg) {
   invalidarCache();
+  if (_authToken) params.set('token', _authToken);
   try {
     const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
     const data = await res.json().catch(() => ({}));
@@ -4001,11 +4007,11 @@ async function verificarAdmin() {
   if (btnEl) { btnEl.textContent = 'Verificando...'; btnEl.disabled = true; }
   // Probar primero Jony (admin@), si falla probar Myri (myri@). La clave la tipea el usuario.
   let socio = null;
-  let { error } = await _sb.auth.signInWithPassword({ email: 'admin@shukmamtakim.com', password: pass });
-  if (!error) socio = 'jony';
+  let r1 = await _sb.auth.signInWithPassword({ email: 'admin@shukmamtakim.com', password: pass });
+  if (!r1.error) { socio = 'jony'; _authToken = r1.data.session?.access_token || _authToken; }
   else {
     const r2 = await _sb.auth.signInWithPassword({ email: 'myri@shukmamtakim.com', password: pass });
-    if (!r2.error) socio = 'miri';
+    if (!r2.error) { socio = 'miri'; _authToken = r2.data.session?.access_token || _authToken; }
   }
   if (btnEl) { btnEl.textContent = 'Entrar'; btnEl.disabled = false; }
   if (socio) {
