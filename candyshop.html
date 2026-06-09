@@ -652,6 +652,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <script>
 const APPS_URL = 'https://script.google.com/macros/s/AKfycbzaxlnfpPqE1oU3onsSGHv9gcBiip4y9bNH4dJ0aCBYXMZAAkLhaL83itj9HsvrntvoCA/exec';
+let _kidsToken = '';   // token de sesión Supabase del panel, se manda al backend
 let usuario = null;
 let catalogoCache = [];
 let editandoCodigo = null;
@@ -696,6 +697,7 @@ function showTab(id, btn) {
 async function api(accion, extra = {}) {
   try {
     const p = new URLSearchParams({ accion, ...extra });
+    if (_kidsToken) p.set('token', _kidsToken);
     const res = await fetch(APPS_URL + '?' + p.toString());
     return await res.json();
   } catch { return null; }
@@ -2142,6 +2144,8 @@ const sb = createClient(
   'https://soarkknjewgcewryxqac.supabase.co',
   'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2'
 );
+sb.auth.getSession().then(r => { _kidsToken = r.data.session?.access_token || ''; }).catch(() => {});
+sb.auth.onAuthStateChange((_e, session) => { _kidsToken = session?.access_token || ''; });
 
 async function verificarClave() {
   const password = document.getElementById('input-clave').value.trim();

@@ -16,6 +16,17 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado'
 ];
 
+// ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
+const ENFORCE_HIJOS = false;   // Etapa A: verifica y loguea, pero PERMITE igual. Pasar a true en Etapa B.
+const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker del bot
+// 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
+const PROTECTED_HIJOS = [
+  'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto',
+  'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
+  'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
+  'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado'
+];
+
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
 // para no llamar a Supabase en cada request. Devuelve true si es válido.
 function sesionValida_(token) {
@@ -50,6 +61,14 @@ function doGet(e) {
     if (!sesionValida_(e.parameter.token)) {
       Logger.log('[auth] acción protegida SIN sesión válida: ' + accion);
       if (ENFORCE_AUTH) return json({ error: 'no autorizado — iniciá sesión de nuevo' });
+    }
+  }
+  // Protección de acciones del candyshop: panel (sesión Supabase) o bot (secreto).
+  if (PROTECTED_HIJOS.indexOf(accion) !== -1) {
+    const ok = sesionValida_(e.parameter.token) || (e.parameter.secret && e.parameter.secret === BOT_SECRET);
+    if (!ok) {
+      Logger.log('[auth] acción hijos SIN sesión/secret: ' + accion);
+      if (ENFORCE_HIJOS) return json({ error: 'no autorizado' });
     }
   }
   try {
