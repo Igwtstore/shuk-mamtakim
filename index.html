@@ -3240,36 +3240,55 @@ function renderStockTotal() {
   const totalU = lista.reduce((s,p) => s + (p.stock||0), 0);
   cont.innerHTML = `<div style="font-weight:700;margin-bottom:0.6rem;font-size:0.88rem">${lista.length} productos · ${totalU} unidades en total</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:0.6rem">
-      ${lista.map(p => `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center">
-        ${p.imagen ? `<img src="${p.imagen}" loading="lazy" style="width:100%;height:78px;object-fit:cover;border-radius:6px">` : `<div style="height:78px;background:var(--gris);border-radius:6px"></div>`}
-        <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
-        <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
-        <div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.</div>
-      </div>`).join('')}
+      ${lista.map(p => {
+        const imgs = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
+        let media;
+        if (imgs.length) {
+          const u = imgUrl(imgs[0]);
+          media = `<img src="${u[0]}" data-f1="${u[1]||''}" data-f2="${u[2]||''}" data-f3="${u[3]||''}" onerror="imgFallbackNext(this)" loading="lazy" style="width:100%;height:78px;object-fit:cover;border-radius:6px">
+            <div style="display:none;height:78px;background:var(--gris);border-radius:6px;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
+        } else {
+          media = `<div style="height:78px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
+        }
+        return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center">
+          ${media}
+          <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
+          <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
+          <div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.</div>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
 // ─── TRAZAR PRODUCTO (quién lo compró) ────────────────────────────────────────
+// Clave que identifica al producto en las líneas del pedido: "nombre · desc[0:45]" (mismo formato que se guarda).
+function _claveProducto(p) {
+  return (p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 45) : '')).trim();
+}
 function _llenarTrazarSelect() {
   const sel = document.getElementById('trazar-sel');
   if (!sel || !productos.length) return;
-  const nombres = [...new Set(productosVisibles().map(p => (p.nombre||'').trim()).filter(Boolean))].sort();
+  const lista = productosVisibles().slice().sort((a,b) => getCatIdx(a)-getCatIdx(b) || a.nombre.localeCompare(b.nombre));
   const actual = sel.value;
-  sel.innerHTML = '<option value="">Elegí un producto…</option>' + nombres.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.innerHTML = '<option value="">Elegí un producto…</option>' +
+    lista.map(p => `<option value="${p.id}">${esc(p.nombre)}${p.desc ? esc(' · ' + p.desc.substring(0,40)) : ''}</option>`).join('');
   if (actual) sel.value = actual;
 }
 async function trazarProducto() {
   const sel = document.getElementById('trazar-sel');
   const cont = document.getElementById('trazar-result');
-  const nombre = (sel.value || '').trim();
-  if (!nombre) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div>'; return; }
+  const id = sel.value;
+  if (!id) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div>'; return; }
+  const prod = productos.find(p => String(p.id) === String(id));
+  if (!prod) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Producto no encontrado.</div>'; return; }
+  const clave = _claveProducto(prod);
   cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Buscando…</div>';
   const ventas = await apiGet('ventas').catch(() => []);
   const filas = []; let totalU = 0;
   (Array.isArray(ventas) ? ventas : []).filter(v => v.estado !== 'cancelado').forEach(v => {
     (v.productos || '').split(' || ').forEach(l => {
-      const m = l.match(/(\d+)x\s+([^—·]+)/);
-      if (m && m[2].trim() === nombre) {
+      const m = l.match(/(\d+)x\s+(.+?)\s+—/);   // descriptor completo (nombre · desc) hasta el precio
+      if (m && m[2].trim() === clave) {
         const q = parseInt(m[1]) || 0; totalU += q;
         filas.push({ cliente: v.cliente, fecha: v.fecha || '', qty: q });
       }
