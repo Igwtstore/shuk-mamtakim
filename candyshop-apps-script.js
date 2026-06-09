@@ -5,7 +5,7 @@ const TZ = 'America/Argentina/Buenos_Aires';
 // ─── AUTH (protección de acciones del admin de Shuk Mamtakim) ─────────────────
 const SUPA_URL = 'https://soarkknjewgcewryxqac.supabase.co';
 const SUPA_ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
-const ENFORCE_AUTH = false;   // Etapa A: verifica y loguea, pero PERMITE igual. Pasar a true en Etapa B.
+const ENFORCE_AUTH = true;   // Etapa B: estricto — rechaza acciones sensibles sin sesión válida.
 // Nota: 'visitas' queda FUERA a propósito (candyshop también la usa y son solo contadores).
 const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
