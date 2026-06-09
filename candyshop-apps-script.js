@@ -810,7 +810,7 @@ const BACKUP_RETENTION_DAYS = 30;   // con backup horario = ~720 copias (~pocos 
 // La ejecuta el trigger horario (ver configurarBackup).
 function crearBackup() {
   const folder = getBackupFolder_();
-  const fecha = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
+  const fecha = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH'h'mm");
   const src = DriveApp.getFileById(SPREADSHEET_ID);
   src.makeCopy('Backup Shuk ' + fecha, folder);
   limpiarBackupsViejos_(folder);
