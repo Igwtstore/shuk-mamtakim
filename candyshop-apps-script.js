@@ -48,7 +48,13 @@ function doGet(e) {
   try {
     if (accion === 'debugAuth') {
       const tk = e.parameter.token || '';
-      return json({ tokenLen: tk.length, valid: sesionValida_(tk) });
+      try {
+        const res = UrlFetchApp.fetch(SUPA_URL + '/auth/v1/user', {
+          headers: { 'Authorization': 'Bearer ' + tk, 'apikey': SUPA_ANON },
+          muteHttpExceptions: true
+        });
+        return json({ tokenLen: tk.length, code: res.getResponseCode(), body: res.getContentText().substring(0, 200) });
+      } catch (err) { return json({ tokenLen: tk.length, err: err.toString() }); }
     }
     if (accion === 'venta') {
       const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
