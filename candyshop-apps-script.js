@@ -6,8 +6,9 @@ const TZ = 'America/Argentina/Buenos_Aires';
 const SUPA_URL = 'https://soarkknjewgcewryxqac.supabase.co';
 const SUPA_ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
 const ENFORCE_AUTH = false;   // Etapa A: verifica y loguea, pero PERMITE igual. Pasar a true en Etapa B.
+// Nota: 'visitas' queda FUERA a propósito (candyshop también la usa y son solo contadores).
 const PROTECTED_ACTIONS = [
-  'ventas','gastos','rendiciones','visitas','getClientes','getPagos','getLiquidaciones',
+  'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
