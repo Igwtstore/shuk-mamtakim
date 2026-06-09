@@ -3187,6 +3187,8 @@ function compartirProducto(id) {
 let _dashCharts = {}, _clientesData = [];
 let _adminTabActual = 'panel';
 function setAdminTab(tab) {
+  // Myri nunca accede a Ganancias ni Docs (revelan la lógica del split)
+  if (esVistaMiri() && (tab === 'docs' || tab === 'ganancias')) tab = 'panel';
   _adminTabActual = tab;
   ['panel','dashboard','clientes','ganancias','docs'].forEach(t => {
     const el = document.getElementById('admin-tab-' + t);
@@ -3332,9 +3334,11 @@ function renderSocioBar() {
     b.style.color = on ? '#fff' : 'var(--azul)';
     b.style.boxShadow = on ? 'none' : 'inset 0 0 0 1.5px var(--azul)';
   });
-  // El tab Ganancias (diezmo/Pitzujim de Jony) no aplica a la vista Miri
+  // Ganancias (diezmo/Pitzujim de Jony) y Docs (explican el split) NO se muestran en vista Miri
   const subGan = document.getElementById('subtab-ganancias');
   if (subGan) subGan.style.display = esVistaMiri() ? 'none' : '';
+  const subDocs = document.getElementById('subtab-docs');
+  if (subDocs) subDocs.style.display = esVistaMiri() ? 'none' : '';
   aplicarBloqueoDuenoMiri();
 }
 
@@ -3351,7 +3355,7 @@ function setVistaSocio(v) {
   vistaSocio = v;
   renderSocioBar();
   // Si estaba en Ganancias y pasa a vista Miri, lo saco a Panel
-  if (esVistaMiri() && _adminTabActual === 'ganancias') { setAdminTab('panel'); }
+  if (esVistaMiri() && (_adminTabActual === 'ganancias' || _adminTabActual === 'docs')) { setAdminTab('panel'); }
   // Re-render del panel (secciones siempre presentes)
   renderManualProductos(); verificarStockBajo(); renderOfertasAdmin();
   renderPedidos(); renderCuentaCorriente(); renderCaja(); renderCuentaSocios(); cargarProductosJonySelect();
