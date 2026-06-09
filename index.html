@@ -1452,6 +1452,15 @@ const _sb = supabase.createClient('https://soarkknjewgcewryxqac.supabase.co','sb
 let _authToken = '';
 _sb.auth.getSession().then(r => { _authToken = r.data.session?.access_token || ''; }).catch(() => {});
 _sb.auth.onAuthStateChange((_e, session) => { _authToken = session?.access_token || ''; });
+// Interceptor único: agrega el token a TODA llamada al Apps Script si hay sesión. Cubre todas las
+// llamadas del admin sin tener que tocarlas una por una. Público (sin sesión) → no agrega nada.
+const _origFetch = window.fetch.bind(window);
+window.fetch = function(url, opts) {
+  if (typeof url === 'string' && url.indexOf(APPS_SCRIPT_URL) === 0 && _authToken && url.indexOf('token=') === -1) {
+    url += (url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(_authToken);
+  }
+  return _origFetch(url, opts);
+};
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyW18FtDDS9sG3qcgS4h85tZrM4aWnP4NfvOKDYzV67nEt_kme8jPUiKVFJa1u7iG9-4Q/exec';
 
 // STORAGE
@@ -3975,8 +3984,7 @@ function apiGet(accion, ttl = 8000) {
   const now = Date.now();
   const c = _apiCache[accion];
   if (c && (now - c.t) < ttl) return c.p;
-  const tk = _authToken ? '&token=' + encodeURIComponent(_authToken) : '';
-  const p = fetch(APPS_SCRIPT_URL + '?accion=' + accion + tk)
+  const p = fetch(APPS_SCRIPT_URL + '?accion=' + accion)
     .then(r => r.json())
     .catch(e => { delete _apiCache[accion]; throw e; });
   _apiCache[accion] = { p, t: now };
@@ -3988,7 +3996,6 @@ function invalidarCache() { for (const k in _apiCache) delete _apiCache[k]; }
 // Devuelve {ok:true,...} o {error:...}. Invalida el cache para que el próximo render sea fresco.
 async function apiWrite(params, okMsg) {
   invalidarCache();
-  if (_authToken) params.set('token', _authToken);
   try {
     const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
     const data = await res.json().catch(() => ({}));
@@ -4053,7 +4060,10 @@ function init() {
       adminAuth = true;
       setSocio(sessionStorage.getItem('adminSocio') || 'jony');
       document.getElementById('modo-bar').style.display = '';
-      setModo('admin');
+      // Esperar a que el token de sesión esté listo antes de los primeros renders (clave para Etapa B)
+      _sb.auth.getSession()
+        .then(r => { _authToken = r.data.session?.access_token || ''; })
+        .finally(() => setModo('admin'));
     } else {
       document.getElementById('admin-login').style.display = 'flex';
     }
