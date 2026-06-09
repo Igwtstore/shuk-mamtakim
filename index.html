@@ -2385,7 +2385,7 @@ function filtrarStockDrawer(q) {
   renderStockDrawer(filtrados);
 }
 
-function guardarStock() {
+async function guardarStock() {
   productos.forEach(p => {
     const inp = document.getElementById('sinput-' + p.id);
     if (inp) {
@@ -2398,12 +2398,11 @@ function guardarStock() {
   });
   const updates = productos.map(p => `${p.id}:${p.stock}`).join(',');
   const params = new URLSearchParams({ accion: 'setStock', updates });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   renderCatalogo();
   renderStockAdmin();
   renderNotificaciones();
-  showToast('Stock guardado en planilla ✓');
-  if (_pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes en 45 seg'), 2800);
+  const r = await apiWrite(params, '✅ Stock guardado en planilla');
+  if (r.ok && _pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes en 45 seg'), 2800);
 }
 
 function renderManualProductos() {
@@ -3024,9 +3023,8 @@ async function saldarCuentaSocios() {
   const dir = ars > 0 || usd > 0 ? 'Myri te paga' : 'Le pagás a Myri';
   if (!confirm(`Saldar la cuenta entre socios?\n${dir}: ${partes.join(' + ')}\n\nQueda en cero y se registra con fecha.`)) return;
   const params = new URLSearchParams({ accion: 'saldarSocios', montoARS: ars, montoUSD: usd, nota: dir });
-  await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
-  showToast('Cuenta saldada ✓');
-  setTimeout(() => { invalidarCache(); renderCuentaSocios(); }, 2500);
+  const r = await apiWrite(params, '🤝 Cuenta saldada ✓');
+  if (r.ok) renderCuentaSocios();
 }
 
 function setModo(m) {
@@ -3923,7 +3921,7 @@ function cerrarPagoModal() {
   document.getElementById('pago-modal').style.display = 'none';
   _pagoCliente = ''; _pagoPedidoId = '';
 }
-function confirmarPagoCuenta() {
+async function confirmarPagoCuenta() {
   const esPedido = !!_pagoPedidoId;
   let ars, montoPitz;
   if (esPedido) {
@@ -3937,12 +3935,11 @@ function confirmarPagoCuenta() {
   if (ars <= 0 && usd <= 0) { showToast('Ingresá un monto'); return; }
   const caja = document.getElementById('pago-caja').value;
   const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pagoPedidoId, montoARS:ars, montoUSD:usd, montoPitz, caja, nota:'Pago a cuenta' });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode:'no-cors' }).catch(()=>{});
-  showToast('Pago registrado ✓');
   cerrarPagoModal();
-  setTimeout(refreshAdmin, 2500);
+  const r = await apiWrite(params, '💵 Pago registrado ✓');
+  if (r.ok) refreshAdmin();
 }
-function confirmarCobroModal() {
+async function confirmarCobroModal() {
   if (!_cobroId) return;
   const jw = document.getElementById('cobro-jony-wrap');
   const mw = document.getElementById('cobro-myri-wrap');
@@ -3950,10 +3947,9 @@ function confirmarCobroModal() {
   const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
-  showToast('Cobro confirmado ✓');
   cerrarModalCobro();
-  setTimeout(refreshAdmin, 2500);
+  const r = await apiWrite(params, '💰 Cobro confirmado ✓');
+  if (r.ok) refreshAdmin();
 }
 
 function showToast(msg) {
@@ -3982,6 +3978,22 @@ function apiGet(accion, ttl = 8000) {
   return p;
 }
 function invalidarCache() { for (const k in _apiCache) delete _apiCache[k]; }
+
+// Escritura con confirmación real (lee la respuesta del server). Avisa si falla.
+// Devuelve {ok:true,...} o {error:...}. Invalida el cache para que el próximo render sea fresco.
+async function apiWrite(params, okMsg) {
+  invalidarCache();
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+    const data = await res.json().catch(() => ({}));
+    if (data && data.error) { showToast('⚠️ ' + data.error); return { error: data.error }; }
+    if (okMsg) showToast(okMsg);
+    return Object.assign({ ok: true }, data);
+  } catch (e) {
+    showToast('⚠️ Sin conexión — no se guardó. Reintentá.');
+    return { error: 'network' };
+  }
+}
 
 async function verificarAdmin() {
   const pass = document.getElementById('admin-pass-input').value;
