@@ -804,10 +804,10 @@ function setupHojaHijos() {
 
 // ─── BACKUP AUTOMÁTICO ────────────────────────────────────────────────────────
 const BACKUP_FOLDER_NAME = 'Backups Shuk Mamtakim';
-const BACKUP_RETENTION_DAYS = 30;
+const BACKUP_RETENTION_DAYS = 30;   // con backup horario = ~720 copias (~pocos GB, hay 5 TB)
 
-// Copia toda la planilla a una carpeta en Drive y borra backups de más de 30 días.
-// La ejecuta el trigger diario (ver configurarBackupDiario).
+// Copia toda la planilla a una carpeta en Drive y borra backups más viejos que la retención.
+// La ejecuta el trigger horario (ver configurarBackup).
 function crearBackup() {
   const folder = getBackupFolder_();
   const fecha = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
@@ -831,17 +831,15 @@ function limpiarBackupsViejos_(folder) {
   }
 }
 
-// EJECUTAR UNA SOLA VEZ desde el editor para activar el backup diario (~3am).
-// Borra triggers previos de crearBackup para no duplicar.
-function configurarBackupDiario() {
+// EJECUTAR UNA SOLA VEZ desde el editor para activar el backup cada 60 minutos.
+// Borra triggers previos de crearBackup para no duplicar (seguro re-ejecutarla).
+function configurarBackup() {
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'crearBackup')
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('crearBackup')
     .timeBased()
-    .everyDays(1)
-    .atHour(3)
-    .inTimezone(TZ)
+    .everyHours(1)
     .create();
-  Logger.log('Backup diario configurado (~3am)');
+  Logger.log('Backup horario configurado (cada 60 min)');
 }
