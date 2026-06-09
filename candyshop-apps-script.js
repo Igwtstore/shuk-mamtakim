@@ -35,6 +35,13 @@ function sesionValida_(token) {
   } catch (e) { return false; }
 }
 
+// EJECUTAR UNA VEZ desde el editor para autorizar el acceso a servicios externos
+// (UrlFetchApp), necesario para validar el token de sesión contra Supabase.
+function autorizarPermisos() {
+  const res = UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
+  Logger.log('Permiso de servicios externos OK — código ' + res.getResponseCode());
+}
+
 function doGet(e) {
   const accion = e.parameter.accion;
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
