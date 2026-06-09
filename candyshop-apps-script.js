@@ -5,7 +5,7 @@ const TZ = 'America/Argentina/Buenos_Aires';
 // ─── AUTH (protección de acciones del admin de Shuk Mamtakim) ─────────────────
 const SUPA_URL = 'https://soarkknjewgcewryxqac.supabase.co';
 const SUPA_ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
-const ENFORCE_AUTH = false;   // Revertido a permisivo (Etapa A) — debug de validación de token.
+const ENFORCE_AUTH = true;   // Etapa B: estricto — rechaza acciones sensibles sin sesión válida.
 // Nota: 'visitas' queda FUERA a propósito (candyshop también la usa y son solo contadores).
 const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
@@ -53,16 +53,6 @@ function doGet(e) {
     }
   }
   try {
-    if (accion === 'debugAuth') {
-      const tk = e.parameter.token || '';
-      try {
-        const res = UrlFetchApp.fetch(SUPA_URL + '/auth/v1/user', {
-          headers: { 'Authorization': 'Bearer ' + tk, 'apikey': SUPA_ANON },
-          muteHttpExceptions: true
-        });
-        return json({ tokenLen: tk.length, code: res.getResponseCode(), body: res.getContentText().substring(0, 200) });
-      } catch (err) { return json({ tokenLen: tk.length, err: err.toString() }); }
-    }
     if (accion === 'venta') {
       const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
       const id = 'P' + Date.now().toString();
