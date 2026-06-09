@@ -2046,8 +2046,7 @@ function registrarPedido(nombre, items, tipo) {
 
 async function renderVisitas() {
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?accion=visitas');
-    const data = await res.json();
+    const data = await apiGet('visitas');
     const hoy = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
     const tiendaHoy = (data.filter(v => v.pagina==='tienda' && v.fecha.startsWith(hoy.split('/').reverse().join('/')))).length;
     const tiendaTotal = data.filter(v => v.pagina==='tienda').length;
@@ -2065,12 +2064,10 @@ async function renderCuentaCorriente() {
   const badge = document.getElementById('cc-total-badge');
   try {
     const soloMiri = esVistaMiri();
-    const [resV, resP] = await Promise.all([
-      fetch(APPS_SCRIPT_URL + '?accion=ventas'),
-      soloMiri ? Promise.resolve(null) : fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
+    const [ventas, pagos] = await Promise.all([
+      apiGet('ventas'),
+      soloMiri ? Promise.resolve([]) : apiGet('getPagos').catch(() => [])
     ]);
-    const ventas = await resV.json();
-    const pagos = resP ? await resP.json().catch(() => []) : [];
     let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony)
@@ -2136,16 +2133,14 @@ async function renderPedidos() {
   lista.innerHTML = '<div class="sinpedidos">Cargando pedidos...</div>';
   try {
     const soloMiri = esVistaMiri();
-    const [res, resP] = await Promise.all([
-      fetch(APPS_SCRIPT_URL + '?accion=ventas'),
-      soloMiri ? Promise.resolve(null) : fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
+    const [ventas, pagos] = await Promise.all([
+      apiGet('ventas'),
+      soloMiri ? Promise.resolve([]) : apiGet('getPagos').catch(() => [])
     ]);
-    const ventas = await res.json();
     if (!Array.isArray(ventas) || !ventas.length) {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
     }
-    const pagos = resP ? await resP.json().catch(() => []) : [];
     // Pagado por pedido, separado en Pitzujim / golosinas
     const pagadoPed = {};
     (pagos || []).forEach(p => {
@@ -2718,16 +2713,12 @@ async function renderCaja() {
   const MIRI_COLS = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI','CTA_CTE_ARS','CTA_CTE_USD'];
   const cols = soloMiri ? COLS.filter(c => MIRI_COLS.includes(c.key)) : COLS;
   try {
-    const [vR, gR, rR, pR] = await Promise.all([
-      fetch(APPS_SCRIPT_URL + '?accion=ventas'),
-      fetch(APPS_SCRIPT_URL + '?accion=gastos'),
-      fetch(APPS_SCRIPT_URL + '?accion=rendiciones').catch(() => null),
-      fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
+    const [ventas, gastos, rendiciones, pagosCuenta] = await Promise.all([
+      apiGet('ventas'),
+      apiGet('gastos'),
+      apiGet('rendiciones').catch(() => []),
+      apiGet('getPagos').catch(() => [])
     ]);
-    const ventas = await vR.json();
-    const gastos = await gR.json();
-    const rendiciones = rR ? await rR.json().catch(() => []) : [];
-    const pagosCuenta = pR ? await pR.json().catch(() => []) : [];
 
     const movs = [];
     ventas.filter(v => v.estado !== 'cancelado').forEach((v, idx) => {
@@ -2909,15 +2900,12 @@ const JONY_BOXES_CC = ['EFT_JONY','MP_JONY'];
 async function renderCuentaSocios() {
   const cont = document.getElementById('cuenta-socios-contenido');
   if (!cont) return;
-  const [vR, lR, pR] = await Promise.all([
-    fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null),
-    fetch(APPS_SCRIPT_URL + '?accion=getLiquidaciones').catch(() => null),
-    fetch(APPS_SCRIPT_URL + '?accion=getPagos').catch(() => null)
+  const [ventas, liq, pagos] = await Promise.all([
+    apiGet('ventas').catch(() => null),
+    apiGet('getLiquidaciones').catch(() => ({totalARS:0,totalUSD:0})),
+    apiGet('getPagos').catch(() => [])
   ]);
-  if (!vR) { cont.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
-  const ventas = await vR.json().catch(() => []);
-  const liq = lR ? await lR.json().catch(() => ({totalARS:0,totalUSD:0})) : {totalARS:0,totalUSD:0};
-  const pagos = pR ? await pR.json().catch(() => []) : [];
+  if (!ventas) { cont.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
   const pedidosConPago = new Set((pagos||[]).filter(p => p.pedidoId).map(p => String(p.pedidoId)));
 
   // Componentes (ARS)
@@ -3038,7 +3026,7 @@ async function saldarCuentaSocios() {
   const params = new URLSearchParams({ accion: 'saldarSocios', montoARS: ars, montoUSD: usd, nota: dir });
   await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   showToast('Cuenta saldada ✓');
-  setTimeout(renderCuentaSocios, 2500);
+  setTimeout(() => { invalidarCache(); renderCuentaSocios(); }, 2500);
 }
 
 function setModo(m) {
@@ -3198,13 +3186,11 @@ async function renderClientes() {
   await cargarNotasClientes();
   const lista = document.getElementById('clientes-lista');
   lista.innerHTML = '<div class="sinpedidos">Cargando...</div>';
-  const [resV, resC] = await Promise.all([
-    fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null),
-    fetch(APPS_SCRIPT_URL + '?accion=getClientes').catch(() => null)
+  const [ventas, clientesSheet] = await Promise.all([
+    apiGet('ventas').catch(() => null),
+    apiGet('getClientes').catch(() => [])
   ]);
-  if (!resV) { lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
-  const ventas = await resV.json().catch(() => []);
-  const clientesSheet = resC ? await resC.json().catch(() => []) : [];
+  if (!Array.isArray(ventas)) { lista.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
   const soloMiri = esVistaMiri();
   // Agrupar pedidos por cliente (en vista Miri solo sus pedidos y montos)
   const ventasMapa = {};
@@ -3239,10 +3225,9 @@ async function cargarClientesDatalist() {
   const dl = document.getElementById('clientes-datalist');
   if (!dl) return;
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
-    const ventas = await res.json();
+    const ventas = await apiGet('ventas');
     const nombres = [...new Set(ventas.map(v => v.cliente).filter(Boolean))].sort();
-    dl.innerHTML = nombres.map(n => `<option value="${n}">`).join('');
+    dl.innerHTML = nombres.map(n => `<option value="${esc(n)}">`).join('');
   } catch(e) {}
 }
 
@@ -3481,9 +3466,8 @@ function abrirSaldoInicialModal() {
 }
 
 async function renderDashboard() {
-  const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas').catch(() => null);
-  if (!res) return;
-  const ventas = await res.json().catch(() => []);
+  const ventas = await apiGet('ventas').catch(() => null);
+  if (!Array.isArray(ventas)) return;
   const todas = ventas.filter(v => v.estado !== 'cancelado');
 
   // En vista Miri se usan solo los montos de Miri (no totalARS/USD, que incluyen Jony)
@@ -3672,8 +3656,11 @@ async function exportarVentasCSV() {
 let _adminInterval = null;
 
 function refreshAdmin() {
+  invalidarCache();   // datos frescos tras un cambio o refresco manual
   renderPedidos();
   renderCaja();
+  renderCuentaCorriente();
+  renderCuentaSocios();
 }
 
 function startAdminPolling() {
@@ -3980,6 +3967,21 @@ function showToast(msg) {
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
+
+// Lectura cacheada + deduplicada de endpoints (?accion=X sin otros params).
+// Evita pedir lo mismo varias veces en la misma carga del panel.
+const _apiCache = {};
+function apiGet(accion, ttl = 8000) {
+  const now = Date.now();
+  const c = _apiCache[accion];
+  if (c && (now - c.t) < ttl) return c.p;
+  const p = fetch(APPS_SCRIPT_URL + '?accion=' + accion)
+    .then(r => r.json())
+    .catch(e => { delete _apiCache[accion]; throw e; });
+  _apiCache[accion] = { p, t: now };
+  return p;
+}
+function invalidarCache() { for (const k in _apiCache) delete _apiCache[k]; }
 
 async function verificarAdmin() {
   const pass = document.getElementById('admin-pass-input').value;
