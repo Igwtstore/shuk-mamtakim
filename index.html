@@ -2239,15 +2239,21 @@ async function renderPedidos() {
         const ultimo = (restan === 1);            // día 6 → mañana vence
         const fuerte = (diasPed >= 6);            // color rojo para últimas 24hs y vencido
         const moto = ' Si no podés acercarte, podemos coordinar moto (a tu cargo).';
+        // Total COMPLETO del pedido (golosinas + Pitzujim) para que el recordatorio diga el monto correcto.
+        const totReserva = [
+          parseFloat(v.totalARS) > 0 ? '$ ' + Math.round(v.totalARS).toLocaleString('es-AR') : '',
+          parseFloat(v.totalUSD) > 0 ? 'U$S ' + parseFloat(v.totalUSD).toFixed(2) : ''
+        ].filter(Boolean).join(' + ');
+        const montoTxt = totReserva ? ` de ${totReserva}` : '';
         let msg, label;
         if (vencido) {
-          msg = `Hola ${v.cliente}! Tu pedido en Shuk Mamtakim superó el plazo de reserva de 7 días. Avisanos si todavía lo querés 🍬`;
+          msg = `Hola ${v.cliente}! Tu pedido${montoTxt} en Shuk Mamtakim superó el plazo de reserva de 7 días. Avisanos si todavía lo querés 🍬`;
           label = '⛔ Venció la reserva (' + diasPed + ' días)';
         } else if (ultimo) {
-          msg = `Hola ${v.cliente}! Último recordatorio: mañana se vence la reserva de tu compra en Shuk Mamtakim, no la dejes pasar.${moto} 🍬`;
+          msg = `Hola ${v.cliente}! Último recordatorio: mañana se vence la reserva de tu pedido${montoTxt} en Shuk Mamtakim, no lo dejes pasar.${moto} 🍬`;
           label = '🔔 Último recordatorio · mañana vence';
         } else {
-          msg = `Hola ${v.cliente}! Te recordamos que tu pedido en Shuk Mamtakim queda reservado ${restan} días más, ¡no lo dejes pasar!${moto} 🍬`;
+          msg = `Hola ${v.cliente}! Te recordamos que tu pedido${montoTxt} en Shuk Mamtakim queda reservado ${restan} días más, ¡no lo dejes pasar!${moto} 🍬`;
           label = '⏰ Pasaron ' + diasPed + ' días · quedan ' + restan + ' para cancelar';
         }
         const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
