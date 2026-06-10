@@ -933,7 +933,15 @@ function editarProducto(p) {
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function cerrarModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function cerrarModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  // Si vinimos desde "Cargar compra", volver a la compra tal como estaba
+  if (_compraPendiente) {
+    _compraPendiente = false;
+    renderCpItems();
+    document.getElementById('compra-overlay').classList.add('open');
+  }
+}
 function cerrarModalSiAfuera(e) { if (e.target.id === 'modal-overlay') cerrarModal(); }
 
 let fotoUrl = '';
@@ -1010,12 +1018,18 @@ async function guardarProducto() {
   btn.disabled = false;
 
   if (res?.ok) {
-    cerrarModal();
     // Actualización instantánea con el dato local; el refresco completo va en segundo plano.
     const nuevo = { codigo, nombre, precioVenta: precio, costo, foto };
     const idx = catalogoCache.findIndex(p => p.codigo === (editandoCodigo || codigo));
     if (idx >= 0) catalogoCache[idx] = nuevo; else catalogoCache.push(nuevo);
     renderCatalogo(catalogoCache);
+    // Si el producto se creó desde "Cargar compra", dejarlo elegido en esa fila
+    if (_compraPendiente && cpNuevoIdx >= 0) {
+      cpItems[cpNuevoIdx].codigo = codigo;
+      if (!cpItems[cpNuevoIdx].costoUnit && costo) cpItems[cpNuevoIdx].costoUnit = costo;
+      cpNuevoIdx = -1;
+    }
+    cerrarModal();   // reabre la compra si estaba pendiente
     cargarDatos(true);
   } else {
     alert(res?.error === 'ya existe un producto con ese código'
@@ -1055,6 +1069,13 @@ async function cargarCompras() {
   renderProveedores(proveedoresCache);
 }
 
+function fotoMini(codigo, size) {
+  const p = catalogoCache.find(x => x.codigo === codigo);
+  return p?.foto
+    ? `<img src="${p.foto}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:cover;flex-shrink:0" onerror="this.outerHTML='📦'">`
+    : `<div style="width:${size}px;height:${size}px;border-radius:8px;background:#f0ebe3;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.55)}px;flex-shrink:0">📦</div>`;
+}
+
 function renderDeposito(deposito) {
   const el = document.getElementById('deposito-content');
   const items = deposito.filter(d => d.cantidad > 0);
@@ -1065,8 +1086,9 @@ function renderDeposito(deposito) {
   el.innerHTML = '<div class="stock-grid">' + items.map(d => {
     const p = catalogoCache.find(x => x.codigo === d.codigo);
     const nombre = p?.nombre || d.producto || d.codigo;
-    return `<div class="stock-chip">
-      <div class="stock-chip-nombre" title="${nombre}">${nombre}</div>
+    return `<div class="stock-chip" style="gap:8px">
+      ${fotoMini(d.codigo, 30)}
+      <div class="stock-chip-nombre" style="flex:1;max-width:none" title="${nombre}">${nombre}</div>
       <div class="stock-chip-nums"><div class="stock-chip-rest">${d.cantidad}</div><div class="stock-chip-sub">unidades</div></div>
     </div>`;
   }).join('') + '</div>';
@@ -1078,16 +1100,36 @@ function renderCompras(compras) {
     el.innerHTML = '<div class="empty">Todavía no cargaste ninguna compra</div>';
     return;
   }
-  el.innerHTML = compras.map(c => {
-    const resumen = c.items.map(it => `${it.cantidad}× ${it.nombre || it.codigo}`).join(', ');
-    return `<div class="item-row">
-      <div class="item-info">
-        <div class="item-name">🧾 ${c.proveedor || 'Sin proveedor'}</div>
-        <div class="item-sub">${c.fecha} · ${resumen}</div>
+  el.innerHTML = compras.map((c, i) => {
+    const det = c.items.map(it => `
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f5f1ea">
+        ${fotoMini(it.codigo, 34)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.85rem;font-weight:600;color:#2d1a0a">${it.nombre || it.codigo}</div>
+          <div style="font-size:0.75rem;color:#aaa">${it.cantidad} × ${fmt(it.costoUnit)}</div>
+        </div>
+        <div style="font-weight:700;font-size:0.85rem;color:#5c3d1e">${fmt(it.cantidad * it.costoUnit)}</div>
+      </div>`).join('');
+    const n = c.items.length;
+    return `<div>
+      <div class="item-row" style="cursor:pointer" onclick="toggleCompra(${i})">
+        <div class="item-info">
+          <div class="item-name">🧾 ${c.proveedor || 'Sin proveedor'}</div>
+          <div class="item-sub">${c.fecha} · ${n} producto${n === 1 ? '' : 's'} <span id="compra-flecha-${i}">▸</span></div>
+        </div>
+        <div class="item-right"><div class="item-price">${fmt(c.total)}</div></div>
       </div>
-      <div class="item-right"><div class="item-price">${fmt(c.total)}</div></div>
+      <div id="compra-det-${i}" style="display:none;padding:2px 0 10px 4px">${det}</div>
     </div>`;
   }).join('');
+}
+
+function toggleCompra(i) {
+  const d = document.getElementById('compra-det-' + i);
+  const f = document.getElementById('compra-flecha-' + i);
+  const abierto = d.style.display !== 'none';
+  d.style.display = abierto ? 'none' : 'block';
+  if (f) f.textContent = abierto ? '▸' : '▾';
 }
 
 function renderProveedores(provs) {
@@ -1154,6 +1196,8 @@ async function eliminarProveedorUI() {
 
 // — Modal cargar compra —
 let cpItems = [];
+let cpNuevoIdx = -1;        // fila de la compra que pidió crear un producto nuevo
+let _compraPendiente = false; // la compra quedó abierta esperando al modal de producto
 
 function abrirModalCompra() {
   if (!proveedoresCache.length) {
@@ -1176,7 +1220,7 @@ function renderCpItems() {
   document.getElementById('cp-items').innerHTML = cpItems.map((it, i) => `
     <div style="display:grid;grid-template-columns:1fr 62px 80px 26px;gap:6px;margin-bottom:8px;align-items:center">
       <select class="form-input" style="background:#fff;padding:9px 6px;font-size:0.82rem" onchange="cpSet(${i},'codigo',this.value)">
-        <option value="">Producto...</option>${opciones}
+        <option value="">Producto...</option><option value="__nuevo__">➕ Crear nuevo producto…</option>${opciones}
       </select>
       <input class="form-input" type="number" min="1" placeholder="Cant." value="${it.cantidad}" style="padding:9px 6px;font-size:0.82rem" oninput="cpSet(${i},'cantidad',this.value)">
       <input class="form-input" type="number" min="0" placeholder="Costo u." value="${it.costoUnit}" style="padding:9px 6px;font-size:0.82rem" oninput="cpSet(${i},'costoUnit',this.value)">
@@ -1188,6 +1232,14 @@ function renderCpItems() {
 }
 
 function cpSet(i, campo, valor) {
+  // "➕ Crear nuevo producto…": abre el modal de producto y al guardarlo vuelve a la compra
+  if (campo === 'codigo' && valor === '__nuevo__') {
+    cpNuevoIdx = i;
+    _compraPendiente = true;
+    document.getElementById('compra-overlay').classList.remove('open');
+    abrirModal();
+    return;
+  }
   cpItems[i][campo] = valor;
   // Al elegir producto, sugerir su costo actual si el campo está vacío
   if (campo === 'codigo' && !cpItems[i].costoUnit) {
