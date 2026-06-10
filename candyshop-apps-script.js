@@ -61,7 +61,10 @@ function doGet(e) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   // Protección de acciones sensibles del admin. Etapa A: loguea pero permite.
   if (PROTECTED_ACTIONS.indexOf(accion) !== -1) {
-    if (!sesionValida_(e.parameter.token)) {
+    // Excepción: el bot (worker) puede consultar la IA con su secreto — para
+    // preguntarle al negocio por WhatsApp/Telegram sin sesión de navegador.
+    const esBotIA = accion === 'preguntarIA' && e.parameter.secret === BOT_SECRET;
+    if (!esBotIA && !sesionValida_(e.parameter.token)) {
       Logger.log('[auth] acción protegida SIN sesión válida: ' + accion);
       if (ENFORCE_AUTH) return json({ error: 'no autorizado — iniciá sesión de nuevo' });
     }
