@@ -799,6 +799,10 @@
   <div class="filtros-wrap" id="filtros-wrap"></div>
   <div class="catalogo" id="catalogo"></div>
 
+  <div id="cookie-aviso" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#2d1a0a;color:#fff;font-size:0.74rem;padding:10px 14px;display:flex;align-items:center;justify-content:center;gap:12px;z-index:800">
+    <span>🍪 Usamos cookies para mejorar tu experiencia y entender cómo se usa la tienda.</span>
+    <button onclick="aceptarCookies()" style="background:#fff;color:#2d1a0a;border:none;border-radius:8px;padding:5px 14px;font-weight:700;font-size:0.74rem;cursor:pointer;flex-shrink:0">Entendido</button>
+  </div>
 </div>
 
 <!-- ADMIN -->
@@ -814,9 +818,23 @@
     <button class="admin-subtab activo" id="subtab-panel" onclick="setAdminTab('panel')">Panel</button>
     <button class="admin-subtab" id="subtab-dashboard" onclick="setAdminTab('dashboard')">📊 Dashboard</button>
     <button class="admin-subtab" id="subtab-clientes" onclick="setAdminTab('clientes')">👥 Clientes</button>
+    <button class="admin-subtab" id="subtab-analitica" onclick="setAdminTab('analitica')">📈 Analítica</button>
     <button class="admin-subtab" id="subtab-ganancias" onclick="setAdminTab('ganancias')">💰 Ganancias</button>
     <button class="admin-subtab" id="subtab-docs" onclick="setAdminTab('docs')">📖 Docs</button>
   </div>
+  <!-- ANALÍTICA TAB -->
+  <div id="admin-tab-analitica" style="display:none">
+    <div class="admin-card">
+      <div class="admin-titulo">📈 Analítica de visitantes</div>
+      <div style="display:flex;gap:6px;margin:0.5rem 0 0.25rem">
+        <button class="psec-btn activo" id="ana-p-7" onclick="setAnaPeriodo(7,this)">7 días</button>
+        <button class="psec-btn" id="ana-p-30" onclick="setAnaPeriodo(30,this)">30 días</button>
+        <button class="psec-btn" id="ana-p-0" onclick="setAnaPeriodo(0,this)">Todo</button>
+      </div>
+    </div>
+    <div id="analitica-contenido"><div class="sinpedidos">Cargando...</div></div>
+  </div>
+
   <!-- GANANCIAS TAB -->
   <div id="admin-tab-ganancias" style="display:none">
     <!-- Balance acumulado -->
@@ -1843,6 +1861,7 @@ function agregarAlCarrito(id) {
   actualizarBadge();
   renderCatalogo();
   showToast(`${p.nombre} agregado ✓`);
+  track('carrito', { producto: p.nombre });
 }
 
 function actualizarBadge() {
@@ -1947,6 +1966,7 @@ function enviarPedido() {
   if (!formaPago) { showToast('Seleccioná la forma de cobro'); document.getElementById('forma-pago').focus(); return; }
   const items = Object.values(carrito);
   if (!items.length) return;
+  track('checkout');
   // Si no está registrado, pedir datos antes de enviar
   const telGuardado = localStorage.getItem('shuk_may_tel');
   if (!telGuardado || telGuardado.length !== 10) {
@@ -1998,6 +2018,7 @@ function enviarPedido() {
   const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
   const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
 
+  track('pedido', { nombre });
   registrarPedido(nombre, items, tipoCliente);
   enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido);
 
@@ -3195,7 +3216,7 @@ function setAdminTab(tab) {
   // Myri nunca accede a Ganancias ni Docs (revelan la lógica del split)
   if (esVistaMiri() && (tab === 'docs' || tab === 'ganancias')) tab = 'panel';
   _adminTabActual = tab;
-  ['panel','dashboard','clientes','ganancias','docs'].forEach(t => {
+  ['panel','dashboard','clientes','analitica','ganancias','docs'].forEach(t => {
     const el = document.getElementById('admin-tab-' + t);
     if (el) el.style.display = t === tab ? '' : 'none';
     const btn = document.getElementById('subtab-' + t);
@@ -3203,6 +3224,7 @@ function setAdminTab(tab) {
   });
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'clientes') renderClientes();
+  if (tab === 'analitica') renderAnalitica();
   if (tab === 'ganancias') renderGanancias();
   if (tab === 'panel') setPanelSeccion(_panelSeccion);
 }
@@ -3563,6 +3585,124 @@ function contactarCliente(nombre, tipo, tel) {
   const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
   const waBase = tel ? `https://wa.me/549${tel}` : `https://wa.me/`;
   window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+// ─── ANALÍTICA DE VISITANTES (panel admin) ──────────────────────────────────
+let _anaPeriodo = 7;
+function setAnaPeriodo(dias, btn) {
+  _anaPeriodo = dias;
+  document.querySelectorAll('#admin-tab-analitica .psec-btn').forEach(b => b.classList.remove('activo'));
+  if (btn) btn.classList.add('activo');
+  renderAnalitica();
+}
+
+async function renderAnalitica() {
+  const cont = document.getElementById('analitica-contenido');
+  cont.innerHTML = '<div class="sinpedidos">Cargando...</div>';
+  let d;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=getAnalitica&dias=' + _anaPeriodo);
+    d = await res.json();
+  } catch { cont.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕</div>'; return; }
+  if (!d || d.error) { cont.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕</div>'; return; }
+  if (d.vacio) { cont.innerHTML = '<div class="admin-card"><div class="sinpedidos">Todavía no hay datos de tráfico. Se empiezan a registrar a medida que entren visitantes a la tienda. 👀</div></div>'; return; }
+
+  const r = d.resumen;
+  const pct = (a,b) => b > 0 ? Math.round(a/b*100) : 0;
+  const card = (inner, style='') => `<div class="admin-card" style="${style}">${inner}</div>`;
+  const kpi = (num, lbl, color='var(--azul)') => `<div style="flex:1;min-width:0;text-align:center">
+    <div style="font-size:1.5rem;font-weight:800;color:${color}">${num}</div>
+    <div style="font-size:0.68rem;color:var(--texto-suave);font-weight:600">${lbl}</div></div>`;
+
+  // KPIs
+  let html = card(`<div class="admin-titulo">Resumen</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${kpi(r.unicos, 'Visitantes únicos')}
+      ${kpi(r.visitas, 'Visitas totales', '#5c3d1e')}
+      ${kpi(r.nuevos, 'Nuevos', 'var(--verde)')}
+      ${kpi(r.recurrentes, 'Que vuelven', '#c0392b')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--gris-medio);padding-top:10px">
+      ${kpi(r.tienda, '🛍️ Minorista')}
+      ${kpi(r.mayorista, '📦 Mayorista')}
+    </div>`);
+
+  // Embudo
+  const e = d.embudo;
+  const etapas = [['Entraron', e.visita, '#5c3d1e'], ['Agregaron al carrito', e.carrito, '#2c6fad'],
+                  ['Iniciaron pedido', e.checkout, '#e08a2a'], ['✅ Enviaron pedido', e.pedido, 'var(--verde)']];
+  const base = e.visita || 1;
+  html += card(`<div class="admin-titulo">Embudo de conversión</div>` +
+    etapas.map(([lbl, n, col]) => `
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:3px">
+          <span style="font-weight:600">${lbl}</span><span style="color:var(--texto-suave)">${n} · ${pct(n,base)}%</span>
+        </div>
+        <div style="background:var(--gris-medio);border-radius:6px;height:14px;overflow:hidden">
+          <div style="width:${pct(n,base)}%;height:100%;background:${col};border-radius:6px"></div>
+        </div>
+      </div>`).join('') +
+    `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:4px">Conversión final: <b>${pct(e.pedido,base)}%</b> de los que entran terminan pidiendo.</div>`);
+
+  // Origen
+  const totOrigen = Object.values(d.porOrigen).reduce((s,n)=>s+n,0) || 1;
+  const iconoOrigen = { whatsapp:'🟢 WhatsApp', instagram:'📸 Instagram', facebook:'🔵 Facebook', google:'🔍 Google', directo:'🔗 Directo', interno:'↩️ Interno', otro:'🌐 Otro' };
+  const origenRows = Object.entries(d.porOrigen).sort((a,b)=>b[1]-a[1]).map(([k,n]) => `
+    <div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px">
+        <span>${iconoOrigen[k]||k}</span><span style="color:var(--texto-suave)">${n} · ${pct(n,totOrigen)}%</span>
+      </div>
+      <div style="background:var(--gris-medio);border-radius:5px;height:10px;overflow:hidden">
+        <div style="width:${pct(n,totOrigen)}%;height:100%;background:#2c6fad;border-radius:5px"></div>
+      </div>
+    </div>`).join('');
+  html += card(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
+
+  // Dispositivo + ciudades (lado a lado)
+  const dispRows = Object.entries(d.porDispositivo).sort((a,b)=>b[1]-a[1])
+    .map(([k,n]) => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
+      <span>${k==='celular'?'📱 Celular':'💻 Compu'}</span><b>${n}</b></div>`).join('') || '<div class="sinpedidos">Sin datos</div>';
+  const ciudadRows = d.topCiudades.length
+    ? d.topCiudades.map(c => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
+        <span>📍 ${esc(c.nombre)}</span><b>${c.n}</b></div>`).join('')
+    : '<div class="sinpedidos">Sin datos</div>';
+  html += `<div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+    ${card(`<div class="admin-titulo">Dispositivo</div>${dispRows}`, 'flex:1;min-width:140px')}
+    ${card(`<div class="admin-titulo">Ciudades top</div>${ciudadRows}`, 'flex:1;min-width:140px')}
+  </div>`;
+
+  // Horarios pico
+  const maxHora = Math.max(...d.porHora, 1);
+  html += card(`<div class="admin-titulo">🕐 Horarios de mayor tráfico</div>
+    <div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:6px">
+      ${d.porHora.map((n,h) => `<div title="${h}:00 — ${n} visitas" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">
+        <div style="width:100%;background:${n?'#5c3d1e':'var(--gris-medio)'};border-radius:3px 3px 0 0;height:${Math.max(2,Math.round(n/maxHora*70))}px"></div>
+      </div>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--texto-suave);margin-top:3px">
+      <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>`);
+
+  // Leads identificados
+  const leadRows = d.leads.length
+    ? d.leads.map(l => `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-weight:700;color:var(--azul);font-size:0.88rem">${esc(l.nombre)}</div>
+            <div style="font-size:0.7rem;color:var(--texto-suave)">${l.telefono?('📞 '+esc(l.telefono)+' · '):''}${esc(iconoOrigen[l.origen]||l.origen)}${l.ciudad?(' · 📍 '+esc(l.ciudad)):''}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:0.82rem;font-weight:700">${l.visitas} visita${l.visitas!==1?'s':''}</div>
+            <div style="font-size:0.66rem;color:var(--texto-suave)">últ. ${esc(l.ultima)}</div>
+            ${l.telefono?`<button onclick="window.open('https://wa.me/549${l.telefono}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:2px 8px;font-size:0.7rem;font-weight:600;cursor:pointer;margin-top:3px">💬 Escribir</button>`:''}
+          </div>
+        </div>
+      </div>`).join('')
+    : '<div class="sinpedidos">Todavía nadie se identificó. Aparecen acá cuando alguien hace un pedido o se registra.</div>';
+  html += card(`<div class="admin-titulo">🧑 Visitantes identificados (${d.leads.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Personas que dejaron sus datos al registrarse o pedir, con su historial de visitas atado.</div>
+    ${leadRows}`);
+
+  cont.innerHTML = html;
 }
 
 let _dashPeriodo = 7;
@@ -4277,8 +4417,68 @@ function init() {
   cargarProductos();
 }
 
+// ─── ANALÍTICA DE VISITANTES ──────────────────────────────────────────────────
+// ID anónimo por dispositivo (no es dato personal: no dice quién es, solo permite
+// reconocer al mismo navegador cuando vuelve). La identidad se ata SOLO si el
+// visitante deja su nombre/teléfono (pedido o registro). No guardamos la IP cruda.
+function _vid() {
+  let v = localStorage.getItem('shuk_vid');
+  if (!v) { v = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('shuk_vid', v); }
+  return v;
+}
+function _origen() {
+  const r = (document.referrer || '').toLowerCase();
+  if (!r) return 'directo';
+  if (r.includes('whatsapp') || r.includes('wa.me')) return 'whatsapp';
+  if (r.includes('instagram') || r.includes('ig.')) return 'instagram';
+  if (r.includes('facebook') || r.includes('fb.')) return 'facebook';
+  if (r.includes('google')) return 'google';
+  if (r.includes(location.host)) return 'interno';
+  return 'otro';
+}
+function _dispositivo() {
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'celular' : 'compu';
+}
+// Ciudad aproximada vía servicio gratuito, UNA vez por visitante (cacheada). Best-effort.
+let _geoCache = null;
+async function _geo() {
+  if (_geoCache) return _geoCache;
+  try {
+    const c = localStorage.getItem('shuk_geo');
+    if (c) { _geoCache = JSON.parse(c); return _geoCache; }
+    const r = await fetch('https://ipapi.co/json/');
+    const d = await r.json();
+    _geoCache = { ciudad: d.city || '', region: d.region || '', pais: d.country_name || '' };
+    localStorage.setItem('shuk_geo', JSON.stringify(_geoCache));
+  } catch { _geoCache = { ciudad:'', region:'', pais:'' }; }
+  return _geoCache;
+}
+async function track(evento, extra = {}) {
+  try {
+    const g = await _geo();
+    const params = new URLSearchParams({
+      accion: 'track', vid: _vid(),
+      pagina: (modo === 'mayorista' ? 'mayorista' : 'tienda'),
+      evento, origen: _origen(), dispositivo: _dispositivo(),
+      ciudad: g.ciudad, region: g.region, pais: g.pais,
+      nombre: localStorage.getItem('shuk_may_nombre') || '',
+      telefono: localStorage.getItem('shuk_may_tel') || '',
+      ...extra
+    });
+    fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
+  } catch {}
+}
 function registrarVisita(pagina) {
-  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarVisita', pagina }), { mode: 'no-cors' }).catch(() => {});
+  track('visita');
+  if (!localStorage.getItem('shuk_cookies_ok')) {
+    const el = document.getElementById('cookie-aviso');
+    if (el) el.style.display = 'flex';
+  }
+}
+function aceptarCookies() {
+  localStorage.setItem('shuk_cookies_ok', '1');
+  const el = document.getElementById('cookie-aviso');
+  if (el) el.style.display = 'none';
 }
 
 function mostrarRegistroModal() {
@@ -4311,6 +4511,7 @@ async function submitRegistro() {
     const data = await r.json();
     localStorage.setItem('shuk_may_nombre', data.nombre || nombre);
     localStorage.setItem('shuk_may_tel', tel);
+    track('registro', { nombre: data.nombre || nombre });
     cerrarRegistroModal();
     if (!data.nuevo) showToast('Bienvenido de nuevo, ' + (data.nombre || nombre).split(' ')[0] + ' 👋');
   } catch(e) {

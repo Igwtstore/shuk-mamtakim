@@ -13,7 +13,7 @@ const PROTECTED_ACTIONS = [
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
-  'eliminarNotificacion','marcarNotificado'
+  'eliminarNotificacion','marcarNotificado','getAnalitica'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -505,6 +505,8 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.pagina||'tienda')]);
       return ok();
     }
+    if (accion === 'track')      { return registrarTrack(ss, e.parameter); }
+    if (accion === 'getAnalitica') { return json(getAnalitica(ss, e.parameter)); }
     if (accion === 'visitas') {
       const h = ss.getSheetByName('Visitas');
       if (!h || h.getLastRow() < 2) return json([]);
@@ -917,6 +919,93 @@ function visitasHijoResumen_(ss, pagina) {
     if (f === hoyStr) hoy++;
   });
   return { hoy, total };
+}
+
+// ─── ANALÍTICA DE TRÁFICO (anónima; identidad solo si el visitante la deja) ───
+// Cada visitante tiene un ID anónimo (vid) generado en su navegador. Eso permite
+// reconocer al MISMO dispositivo cuando vuelve, sin saber quién es. Si en algún
+// momento hace un pedido o se registra, el nombre/teléfono se atan a su vid.
+// NO se guarda la IP cruda: la ciudad aproximada la calcula el navegador.
+function registrarTrack(ss, p) {
+  const h = getOrCreate(ss, 'Trafico',
+    ['Fecha','VID','Pagina','Evento','Origen','Dispositivo','Ciudad','Region','Pais','Nombre','Telefono']);
+  h.appendRow([new Date(), dec(p.vid||''), dec(p.pagina||'tienda'), dec(p.evento||'visita'),
+    dec(p.origen||'directo'), dec(p.dispositivo||''), dec(p.ciudad||''), dec(p.region||''),
+    dec(p.pais||''), dec(p.nombre||''), dec(p.telefono||'')]);
+  // Compatibilidad con el contador simple de visitas existente
+  if ((p.evento||'visita') === 'visita') {
+    const v = getOrCreate(ss, 'Visitas', ['Fecha','Pagina']);
+    v.appendRow([Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), dec(p.pagina||'tienda')]);
+  }
+  return ok();
+}
+
+function getAnalitica(ss, p) {
+  const h = ss.getSheetByName('Trafico');
+  if (!h || h.getLastRow() < 2) return { vacio: true };
+  const dias = parseInt(p.dias) || 0;   // 0 = todo
+  const desde = dias > 0 ? new Date(Date.now() - dias * 86400000) : null;
+  const filas = h.getRange(2,1,h.getLastRow()-1,11).getValues()
+    .filter(r => r[0] instanceof Date && (!desde || r[0] >= desde));
+
+  const resumen = { visitas:0, unicos:0, nuevos:0, recurrentes:0, tienda:0, mayorista:0 };
+  const porOrigen = {}, porDispositivo = {}, porCiudad = {}, porHora = new Array(24).fill(0), porDia = {};
+  const embudoVids = { visita:{}, carrito:{}, checkout:{}, pedido:{} };
+  const vids = {};            // vid -> { visitas, fechas:Set, nombre, telefono, ciudad, origen, pagina, primera, ultima }
+
+  filas.forEach(r => {
+    const [fecha, vid, pagina, evento, origen, disp, ciudad, region, pais, nombre, tel] = r;
+    if (evento === 'visita') {
+      resumen.visitas++;
+      resumen[pagina === 'mayorista' ? 'mayorista' : 'tienda']++;
+      porOrigen[origen||'directo'] = (porOrigen[origen||'directo']||0) + 1;
+      if (disp) porDispositivo[disp] = (porDispositivo[disp]||0) + 1;
+      if (ciudad) porCiudad[ciudad] = (porCiudad[ciudad]||0) + 1;
+      porHora[fecha.getHours()]++;
+      const dk = Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd');
+      porDia[dk] = (porDia[dk]||0) + 1;
+    }
+    if (embudoVids[evento] && vid) embudoVids[evento][vid] = 1;
+    if (vid) {
+      if (!vids[vid]) vids[vid] = { visitas:0, fechas:{}, nombre:'', telefono:'', ciudad:'', origen:origen, pagina:pagina, primera:fecha, ultima:fecha };
+      const o = vids[vid];
+      if (evento === 'visita') o.visitas++;
+      o.fechas[Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd')] = 1;
+      if (nombre && !o.nombre) o.nombre = nombre;
+      if (tel && !o.telefono) o.telefono = tel;
+      if (ciudad && !o.ciudad) o.ciudad = ciudad;
+      if (fecha < o.primera) o.primera = fecha;
+      if (fecha > o.ultima) o.ultima = fecha;
+    }
+  });
+
+  const listaVids = Object.keys(vids);
+  resumen.unicos = listaVids.length;
+  listaVids.forEach(v => {
+    if (Object.keys(vids[v].fechas).length >= 2) resumen.recurrentes++; else resumen.nuevos++;
+  });
+
+  // Leads: visitantes que en algún momento dejaron nombre o teléfono
+  const leads = listaVids.filter(v => vids[v].nombre || vids[v].telefono)
+    .map(v => ({
+      nombre: vids[v].nombre || '(sin nombre)', telefono: vids[v].telefono || '',
+      ciudad: vids[v].ciudad, origen: vids[v].origen, pagina: vids[v].pagina,
+      visitas: vids[v].visitas,
+      ultima: Utilities.formatDate(vids[v].ultima, TZ, 'dd/MM/yyyy HH:mm')
+    }))
+    .sort((a,b) => b.visitas - a.visitas);
+
+  const topCiudades = Object.entries(porCiudad).sort((a,b)=>b[1]-a[1]).slice(0,8)
+    .map(([nombre,n]) => ({ nombre, n }));
+  const dias30 = Object.entries(porDia).sort((a,b)=>a[0]<b[0]?-1:1).map(([fecha,n]) => ({ fecha, n }));
+  const embudo = {
+    visita: Object.keys(embudoVids.visita).length,
+    carrito: Object.keys(embudoVids.carrito).length,
+    checkout: Object.keys(embudoVids.checkout).length,
+    pedido: Object.keys(embudoVids.pedido).length
+  };
+
+  return { resumen, porOrigen, porDispositivo, topCiudades, porHora, dias30, embudo, leads };
 }
 
 // ─── PROVEEDORES Y COMPRAS (depósito compartido de los hijos) ─────────────────
