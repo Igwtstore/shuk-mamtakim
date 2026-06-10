@@ -1088,7 +1088,7 @@ function renderDeposito(deposito) {
     const nombre = p?.nombre || d.producto || d.codigo;
     return `<div class="stock-chip" style="gap:8px">
       ${fotoMini(d.codigo, 30)}
-      <div class="stock-chip-nombre" style="flex:1;max-width:none" title="${nombre}">${nombre}</div>
+      <div class="stock-chip-nombre" style="flex:1;min-width:0;max-width:none" title="${nombre}">${nombre}</div>
       <div class="stock-chip-nums"><div class="stock-chip-rest">${d.cantidad}</div><div class="stock-chip-sub">unidades</div></div>
     </div>`;
   }).join('') + '</div>';
