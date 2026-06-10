@@ -2494,7 +2494,13 @@ async function preguntarIAUI() {
     const res = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'preguntarIA', q }));
     const d = await res.json();
     if (d.error === 'sin_clave') {
-      out.textContent = '🔑 ' + d.mensaje;
+      out.innerHTML = `🔑 <b>Falta activar la IA (una sola vez):</b><br>
+        1. Entrá a <a href="https://console.anthropic.com" target="_blank" style="color:var(--azul);font-weight:700">console.anthropic.com</a>, creá una cuenta y generá una <b>API key</b>.<br>
+        2. Pegala acá abajo y listo:<br>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap">
+          <input id="ia-clave" type="password" placeholder="sk-ant-..." style="flex:1;min-width:180px;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.82rem">
+          <button onclick="guardarClaveIA()" style="padding:0.5rem 1rem;background:var(--verde);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer">Guardar clave</button>
+        </div>`;
     } else if (d.error) {
       out.textContent = '😕 ' + d.error;
     } else {
@@ -2504,6 +2510,13 @@ async function preguntarIAUI() {
     out.textContent = '😕 No se pudo consultar. Revisá la conexión e intentá de nuevo.';
   }
   btn.disabled = false; btn.textContent = 'Preguntar';
+}
+
+async function guardarClaveIA() {
+  const clave = (document.getElementById('ia-clave')?.value || '').trim();
+  if (!clave) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'guardarClaveIA', clave }), '🔑 Clave guardada ✓');
+  if (!r.error) preguntarIAUI();   // reintenta la pregunta que quedó pendiente
 }
 
 // ─── PRODUCTOS DORMIDOS + DIFUSIÓN DE OFERTAS ───────────────────────────────

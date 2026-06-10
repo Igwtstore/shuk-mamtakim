@@ -13,7 +13,8 @@ const PROTECTED_ACTIONS = [
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
-  'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA'
+  'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA',
+  'guardarClaveIA'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -520,6 +521,12 @@ function doGet(e) {
     if (accion === 'getAnalitica') { return json(getAnalitica(ss, e.parameter)); }
     if (accion === 'getProductosDormidos') { return json(getProductosDormidos(ss, e.parameter)); }
     if (accion === 'preguntarIA') { return json(preguntarIA(ss, e.parameter)); }
+    if (accion === 'guardarClaveIA') {
+      const clave = dec(e.parameter.clave || '').trim();
+      if (!clave.startsWith('sk-ant-')) return json({ error: 'Esa no parece una clave de Anthropic (empiezan con sk-ant-)' });
+      PropertiesService.getScriptProperties().setProperty('ANTHROPIC_API_KEY', clave);
+      return ok();
+    }
     if (accion === 'visitas') {
       const h = ss.getSheetByName('Visitas');
       if (!h || h.getLastRow() < 2) return json([]);
@@ -1453,6 +1460,12 @@ function resumenHijoHoy_(ss, hijo) {
 }
 
 function cierreDiario() {
+  // Idempotente: si ya se mandó hoy (p. ej. trigger propio + enganche del backup), no repite.
+  const props = PropertiesService.getScriptProperties();
+  const hoyKey = 'cierre_' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  if (props.getProperty(hoyKey)) return;
+  props.setProperty(hoyKey, '1');
+  props.deleteProperty('cierre_' + Utilities.formatDate(new Date(Date.now() - 86400000), TZ, 'yyyy-MM-dd'));
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
   const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
@@ -1516,6 +1529,13 @@ function crearBackup() {
   src.makeCopy('Backup Shuk ' + fecha, folder);
   limpiarBackupsViejos_(folder);
   Logger.log('Backup creado: Backup Shuk ' + fecha);
+  // Enganche del cierre diario: el trigger horario del backup ya corre cada hora,
+  // así que a partir de las 21hs aprovecha y manda el cierre del día (idempotente,
+  // cierreDiario se protege solo contra duplicados). Sin trigger extra que configurar.
+  try {
+    const hora = parseInt(Utilities.formatDate(new Date(), TZ, 'H'), 10);
+    if (hora >= 21) cierreDiario();
+  } catch (err) { Logger.log('[cierre] ' + err); }
 }
 
 function getBackupFolder_() {
