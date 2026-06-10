@@ -777,24 +777,32 @@ async function recargarTodo(btn) {
 }
 
 // ─── CARGAR DATOS ─────────────────────────────────────────────────
-async function cargarDatos() {
-  ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
-    document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
-  });
+// silent=true refresca en segundo plano sin borrar lo que ya está en pantalla.
+async function cargarDatos(silent = false) {
+  if (!silent) {
+    ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
+      document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
+    });
+  }
 
-  const [ventas, deudores, catalogo, visitas, stockDia] = await Promise.all([
+  // El catálogo se pinta apenas llega, sin esperar a las llamadas lentas (visitas).
+  const pCatalogo = api('getCatalogoHijos').then(c => {
+    catalogoCache = c || [];
+    renderCatalogo(catalogoCache);
+    return catalogoCache;
+  });
+  // Las visitas son solo para su card: tampoco bloquean al resto.
+  api('visitas').then(v => renderVisitasKid(v || [], usuario));
+
+  const [ventas, deudores, , stockDia] = await Promise.all([
     api('ventasHoy', { hijo: usuario }),
     api('consultarDeudores', { hijo: usuario }),
-    api('getCatalogoHijos'),
-    api('visitas'),
+    pCatalogo,
     api('getStockDia', { hijo: usuario })
   ]);
 
-  catalogoCache = catalogo || [];
   renderDashboard(ventas || [], catalogoCache, deudores || []);
   renderDeudores(deudores || []);
-  renderCatalogo(catalogoCache);
-  renderVisitasKid(visitas || [], usuario);
   renderStockRestante(stockDia || {}, ventas || [], catalogoCache);
 }
 
@@ -989,7 +997,12 @@ async function guardarProducto() {
 
   if (res?.ok) {
     cerrarModal();
-    cargarDatos();
+    // Actualización instantánea con el dato local; el refresco completo va en segundo plano.
+    const nuevo = { codigo, nombre, precioVenta: precio, costo, foto };
+    const idx = catalogoCache.findIndex(p => p.codigo === codigo);
+    if (idx >= 0) catalogoCache[idx] = nuevo; else catalogoCache.push(nuevo);
+    renderCatalogo(catalogoCache);
+    cargarDatos(true);
   } else {
     alert('Error al guardar. Intentá de nuevo.');
   }
@@ -999,7 +1012,12 @@ async function eliminarProducto() {
   if (!confirm('¿Eliminar este producto?')) return;
   const codigo = document.getElementById('f-codigo').value;
   const res = await api('eliminarProductoHijo', { codigo });
-  if (res?.ok) { cerrarModal(); cargarDatos(); }
+  if (res?.ok) {
+    cerrarModal();
+    catalogoCache = catalogoCache.filter(p => p.codigo !== codigo);
+    renderCatalogo(catalogoCache);
+    cargarDatos(true);
+  }
 }
 
 // ─── COMPRAS / PROVEEDORES / DEPÓSITO ────────────────────────────
@@ -1195,7 +1213,7 @@ async function guardarCompra() {
   if (res?.ok) {
     cerrarModalCompra();
     cargarCompras();
-    cargarDatos();   // el costo promedio pudo cambiar el catálogo
+    cargarDatos(true);   // el costo promedio pudo cambiar el catálogo
   } else {
     alert('Error al guardar la compra. Intentá de nuevo.');
   }
