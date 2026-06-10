@@ -1069,6 +1069,27 @@
   <div class="admin-card">
     <div class="admin-titulo">🎁 Ofertas y packs</div>
     <div id="ofertas-lista" style="display:flex;flex-direction:column;gap:0.5rem;max-height:320px;overflow-y:auto"></div>
+    <button class="guardar-stock-btn" onclick="difundirOfertas()" style="margin-top:0.6rem">📣 Difundir ofertas por WhatsApp</button>
+  </div>
+  <div class="admin-card" id="card-ia">
+    <div class="admin-titulo">🤖 Preguntale a tu negocio</div>
+    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">Escribí en criollo y la IA responde leyendo tus datos reales: ventas, clientes, stock, gastos, Candy Shop.</div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <input id="ia-pregunta" type="text" placeholder="¿Cuánto le vendí a López este año?" style="flex:1;min-width:200px;padding:0.65rem 0.9rem;border:1.5px solid var(--gris-medio);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.88rem" onkeydown="if(event.key==='Enter')preguntarIAUI()">
+      <button onclick="preguntarIAUI()" id="ia-btn" style="padding:0.65rem 1.2rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.88rem;cursor:pointer">Preguntar</button>
+    </div>
+    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:0.5rem">
+      <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Quién es mi mejor cliente?</button>
+      <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo viene este mes vs el anterior?</button>
+      <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cuánto diezmo acumulé?</button>
+      <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo les va a los chicos?</button>
+    </div>
+    <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-titulo">💤 Productos dormidos (sugerencia de ofertas)</div>
+    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">Con stock pero sin ventas en los últimos 30 días. Despertalos con una oferta de un clic.</div>
+    <div id="dormidos-lista"><button class="guardar-stock-btn" onclick="buscarDormidos()" style="margin-top:0">🔍 Analizar catálogo</button></div>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">✏️ Cargar pedido manual</div>
@@ -1966,6 +1987,13 @@ function enviarPedido() {
   if (!formaPago) { showToast('Seleccioná la forma de cobro'); document.getElementById('forma-pago').focus(); return; }
   const items = Object.values(carrito);
   if (!items.length) return;
+  // Anti pedidos falsos: 90s entre pedidos y máx 4 por hora desde este dispositivo
+  const _ahora = Date.now();
+  const _ultimo = parseInt(localStorage.getItem('shuk_pedido_ts') || '0');
+  let _hist = [];
+  try { _hist = JSON.parse(localStorage.getItem('shuk_pedido_hist') || '[]').filter(t => _ahora - t < 3600000); } catch {}
+  if (_ahora - _ultimo < 90000) { showToast('Esperá un momentito antes de enviar otro pedido 🙏'); return; }
+  if (_hist.length >= 4) { showToast('Llegaste al límite de pedidos por ahora. Escribinos por WhatsApp 🙏'); return; }
   track('checkout');
   // Si no está registrado, pedir datos antes de enviar
   const telGuardado = localStorage.getItem('shuk_may_tel');
@@ -2018,6 +2046,8 @@ function enviarPedido() {
   const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
   const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
 
+  localStorage.setItem('shuk_pedido_ts', String(_ahora));
+  try { _hist.push(_ahora); localStorage.setItem('shuk_pedido_hist', JSON.stringify(_hist)); } catch {}
   track('pedido', { nombre });
   registrarPedido(nombre, items, tipoCliente);
   enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido);
@@ -2082,7 +2112,8 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
     usdMyri: (usdMyri || 0).toFixed(2),
     comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
-    notas: notaPedido || ''
+    notas: notaPedido || '',
+    vid: _vid()
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
 }
@@ -2448,6 +2479,79 @@ async function quitarOferta() {
   await cargarProductos();
   renderOfertasAdmin();
   showToast('Oferta eliminada ✓');
+}
+
+// ─── IA: PREGUNTALE A TU NEGOCIO ────────────────────────────────────────────
+async function preguntarIAUI() {
+  const q = document.getElementById('ia-pregunta').value.trim();
+  if (!q) { document.getElementById('ia-pregunta').focus(); return; }
+  const btn = document.getElementById('ia-btn');
+  const out = document.getElementById('ia-respuesta');
+  btn.disabled = true; btn.textContent = 'Pensando...';
+  out.style.display = 'block';
+  out.textContent = '🤔 Analizando tus datos...';
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'preguntarIA', q }));
+    const d = await res.json();
+    if (d.error === 'sin_clave') {
+      out.textContent = '🔑 ' + d.mensaje;
+    } else if (d.error) {
+      out.textContent = '😕 ' + d.error;
+    } else {
+      out.textContent = d.respuesta;
+    }
+  } catch {
+    out.textContent = '😕 No se pudo consultar. Revisá la conexión e intentá de nuevo.';
+  }
+  btn.disabled = false; btn.textContent = 'Preguntar';
+}
+
+// ─── PRODUCTOS DORMIDOS + DIFUSIÓN DE OFERTAS ───────────────────────────────
+async function buscarDormidos() {
+  const el = document.getElementById('dormidos-lista');
+  el.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Analizando ventas de 30 días...</div>';
+  let lista;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=getProductosDormidos&dias=30');
+    lista = await res.json();
+  } catch { el.innerHTML = '<div class="sinpedidos">No se pudo analizar 😕</div>'; return; }
+  if (!Array.isArray(lista)) { el.innerHTML = '<div class="sinpedidos">No se pudo analizar 😕</div>'; return; }
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--verde);font-size:0.85rem;padding:0.4rem 0">🎉 Todo el catálogo con stock tuvo ventas este mes. Nada dormido.</div>'; return; }
+  el.innerHTML = lista.map(p => {
+    const base = p.precioMin || p.precioMay || 0;
+    const sugerido = Math.round(base * 0.85);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:10px;margin-bottom:0.45rem">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${esc(p.nombre)}</div>
+        <div style="font-size:0.72rem;color:var(--texto-suave)">${p.stock} en stock · sin ventas en 30 días${base ? ' · ' + fmtASRS(base) + ' → <b style="color:#c0392b">' + fmtASRS(sugerido) + '</b>' : ''}</div>
+      </div>
+      <div style="display:flex;gap:0.3rem;flex-shrink:0">
+        ${base ? `<button onclick="crearOfertaRapida('${p.id}',${sugerido})" style="padding:0.35rem 0.7rem;background:#fde8e8;color:#c0392b;border:1.5px solid #f5c6c6;border-radius:7px;font-size:0.74rem;font-weight:700;cursor:pointer;white-space:nowrap">🔥 Oferta -15%</button>` : ''}
+        <button onclick="abrirOfertaModal(${parseInt(p.id)})" style="padding:0.35rem 0.6rem;background:var(--gris);color:var(--texto-suave);border:1.5px solid var(--gris-medio);border-radius:7px;font-size:0.74rem;font-weight:600;cursor:pointer">✏️</button>
+      </div>
+    </div>`;
+  }).join('') + `<button class="guardar-stock-btn" onclick="buscarDormidos()" style="margin-top:0.4rem">🔄 Volver a analizar</button>`;
+}
+
+const fmtASRS = n => '$' + Math.round(n).toLocaleString('es-AR');
+
+async function crearOfertaRapida(id, precio) {
+  const hasta = new Date(Date.now() + 7 * 86400000);
+  const fechaOferta = `${hasta.getFullYear()}-${String(hasta.getMonth()+1).padStart(2,'0')}-${String(hasta.getDate()).padStart(2,'0')}`;
+  showToast('Creando oferta...');
+  const r = await apiWrite(new URLSearchParams({ accion: 'actualizarOferta', id, precioOferta: precio, fechaOferta, cantPack: '0', precioPack: '0', visibleOferta: 'Ambos' }), '🔥 Oferta creada por 7 días ✓');
+  if (!r.error) { await cargarProductos(); renderOfertasAdmin(); buscarDormidos(); }
+}
+
+function difundirOfertas() {
+  const enOferta = productosVisibles().filter(p => ofertaActiva(p) || packActivo(p));
+  if (!enOferta.length) { showToast('No hay ofertas activas para difundir'); return; }
+  const lineas = enOferta.map(p => {
+    if (ofertaActiva(p)) return `🔥 *${p.nombre}* — ahora $${Math.round(p.precioOferta).toLocaleString('es-AR')}`;
+    return `🎁 *${p.nombre}* — pack x${p.cantPack} por $${Math.round(p.precioPack).toLocaleString('es-AR')}`;
+  });
+  const msg = `🍬 *¡Ofertas de Shuk Mamtakim!*\n\n${lineas.join('\n')}\n\n👉 Pedí acá: https://shuk-mamtakim.vercel.app/tienda\nVálido por tiempo limitado 🏃`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
 function abrirStockDrawer() {
@@ -3259,6 +3363,9 @@ function setPanelSeccion(s, btn) {
   document.querySelectorAll('#admin-tab-panel > .admin-card').forEach(card => {
     card.style.display = (card.dataset.seccion === s) ? '' : 'none';
   });
+  // La IA lee TODOS los datos (incluye números de Jony) → no se muestra en vista Myri
+  const cardIA = document.getElementById('card-ia');
+  if (cardIA && esVistaMiri()) cardIA.style.display = 'none';
   document.querySelectorAll('.psec-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
@@ -3643,6 +3750,28 @@ async function renderAnalitica() {
         </div>
       </div>`).join('') +
     `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:4px">Conversión final: <b>${pct(e.pedido,base)}%</b> de los que entran terminan pidiendo.</div>`);
+
+  // Carritos abandonados — ventas casi cerradas para recuperar
+  const ab = d.abandonados || [];
+  const abRows = ab.length ? ab.map(a => {
+    const quien = a.nombre ? esc(a.nombre) : '👤 Visitante anónimo';
+    const prods = a.productos.length ? esc(a.productos.join(', ')) : 'productos sin detalle';
+    const msgRec = `¡Hola${a.nombre ? ' ' + a.nombre.split(' ')[0] : ''}! 👋 Vi que te quedó un pedido armado en *Shuk Mamtakim* 🍬 ¿Te lo preparo? Cualquier duda escribime.`;
+    return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem;flex-wrap:wrap">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700;color:${a.etapa==='checkout'?'#c0392b':'var(--azul)'};font-size:0.85rem">${quien}
+            <span style="font-size:0.62rem;background:${a.etapa==='checkout'?'#fdeaea':'#eef4fb'};color:${a.etapa==='checkout'?'#c0392b':'#2c6fad'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${a.etapa==='checkout'?'🔥 llegó al checkout':'🛒 armó carrito'}</span>
+          </div>
+          <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">${prods} · ${esc(a.cuando)}${a.ciudad?(' · 📍 '+esc(a.ciudad)):''}</div>
+        </div>
+        ${a.telefono ? `<button onclick="window.open('https://wa.me/549${a.telefono}?text=${encodeURIComponent(msgRec)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;flex-shrink:0">💬 Recuperar</button>` : ''}
+      </div>
+    </div>`;
+  }).join('') : '<div class="sinpedidos">Sin carritos abandonados en el período ✓</div>';
+  html += card(`<div class="admin-titulo">🛒 Carritos abandonados (${ab.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Agregaron productos y no terminaron el pedido. Si dejaron su teléfono, recuperalos con un clic.</div>
+    ${abRows}`);
 
   // Origen
   const totOrigen = Object.values(d.porOrigen).reduce((s,n)=>s+n,0) || 1;

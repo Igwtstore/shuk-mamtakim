@@ -13,7 +13,7 @@ const PROTECTED_ACTIONS = [
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
-  'eliminarNotificacion','marcarNotificado','getAnalitica'
+  'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -75,17 +75,28 @@ function doGet(e) {
   }
   try {
     if (accion === 'venta') {
+      // Anti pedidos falsos: límite por dispositivo (vid). 90s entre pedidos, máx 4/hora.
+      const vidVenta = dec(e.parameter.vid || '');
+      if (vidVenta) {
+        const rlCache = CacheService.getScriptCache();
+        if (rlCache.get('rlv_' + vidVenta)) return json({ error: 'rate' });
+        const nPedidos = parseInt(rlCache.get('rlh_' + vidVenta) || '0', 10);
+        if (nPedidos >= 4) return json({ error: 'rate' });
+        rlCache.put('rlv_' + vidVenta, '1', 90);
+        rlCache.put('rlh_' + vidVenta, String(nPedidos + 1), 3600);
+      }
       const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
       const id = 'P' + Date.now().toString();
       const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
       const row = h.getLastRow() + 1;
       const nVenta = row - 1;
       const stockUpdates = dec(e.parameter.stockUpdates||'');
+      if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
       h.appendRow([id, fecha, dec(e.parameter.cliente), dec(e.parameter.tipo), dec(e.parameter.productos), dec(e.parameter.formaPago), dec(e.parameter.notas||''), 'pendiente',
         parseFloat(e.parameter.totalARS||0), parseFloat(e.parameter.totalUSD||0), nVenta,
         parseFloat(e.parameter.arsJONY||0), parseFloat(e.parameter.arsMyri||0),
         parseFloat(e.parameter.usdMyri||0), parseFloat(e.parameter.comiARS||0), parseFloat(e.parameter.comiUSD||0),
-        '', '', 0, stockUpdates]);
+        '', '', 0, stockUpdates, vidVenta]);
       h.getRange(row, 1, 1, 2).setNumberFormat('@');
       if (stockUpdates) {
         var sh = ss.getSheetByName('Stock');
@@ -507,6 +518,8 @@ function doGet(e) {
     }
     if (accion === 'track')      { return registrarTrack(ss, e.parameter); }
     if (accion === 'getAnalitica') { return json(getAnalitica(ss, e.parameter)); }
+    if (accion === 'getProductosDormidos') { return json(getProductosDormidos(ss, e.parameter)); }
+    if (accion === 'preguntarIA') { return json(preguntarIA(ss, e.parameter)); }
     if (accion === 'visitas') {
       const h = ss.getSheetByName('Visitas');
       if (!h || h.getLastRow() < 2) return json([]);
@@ -928,10 +941,11 @@ function visitasHijoResumen_(ss, pagina) {
 // NO se guarda la IP cruda: la ciudad aproximada la calcula el navegador.
 function registrarTrack(ss, p) {
   const h = getOrCreate(ss, 'Trafico',
-    ['Fecha','VID','Pagina','Evento','Origen','Dispositivo','Ciudad','Region','Pais','Nombre','Telefono']);
+    ['Fecha','VID','Pagina','Evento','Origen','Dispositivo','Ciudad','Region','Pais','Nombre','Telefono','Detalle']);
+  if (h.getRange(1, 12).getValue() !== 'Detalle') h.getRange(1, 12).setValue('Detalle');
   h.appendRow([new Date(), dec(p.vid||''), dec(p.pagina||'tienda'), dec(p.evento||'visita'),
     dec(p.origen||'directo'), dec(p.dispositivo||''), dec(p.ciudad||''), dec(p.region||''),
-    dec(p.pais||''), dec(p.nombre||''), dec(p.telefono||'')]);
+    dec(p.pais||''), dec(p.nombre||''), dec(p.telefono||''), dec(p.producto||'')]);
   // Compatibilidad con el contador simple de visitas existente
   if ((p.evento||'visita') === 'visita') {
     const v = getOrCreate(ss, 'Visitas', ['Fecha','Pagina']);
@@ -945,7 +959,8 @@ function getAnalitica(ss, p) {
   if (!h || h.getLastRow() < 2) return { vacio: true };
   const dias = parseInt(p.dias) || 0;   // 0 = todo
   const desde = dias > 0 ? new Date(Date.now() - dias * 86400000) : null;
-  const filas = h.getRange(2,1,h.getLastRow()-1,11).getValues()
+  const nCols = Math.max(h.getLastColumn(), 11);
+  const filas = h.getRange(2,1,h.getLastRow()-1,nCols).getValues()
     .filter(r => r[0] instanceof Date && (!desde || r[0] >= desde));
 
   const resumen = { visitas:0, unicos:0, nuevos:0, recurrentes:0, tienda:0, mayorista:0 };
@@ -953,8 +968,20 @@ function getAnalitica(ss, p) {
   const embudoVids = { visita:{}, carrito:{}, checkout:{}, pedido:{} };
   const vids = {};            // vid -> { visitas, fechas:Set, nombre, telefono, ciudad, origen, pagina, primera, ultima }
 
+  const carritosPorVid = {};   // vid -> { productos:{}, ultimaCarrito, ultimoPedido, etapa }
   filas.forEach(r => {
     const [fecha, vid, pagina, evento, origen, disp, ciudad, region, pais, nombre, tel] = r;
+    const detalle = r[11] ? r[11].toString() : '';
+    if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
+      if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos:{}, ultimaCarrito:null, ultimoPedido:null, etapa:'carrito' };
+      const c = carritosPorVid[vid];
+      if (evento === 'pedido') { c.ultimoPedido = fecha; }
+      else {
+        if (!c.ultimaCarrito || fecha > c.ultimaCarrito) c.ultimaCarrito = fecha;
+        if (evento === 'checkout') c.etapa = 'checkout';
+        if (detalle) c.productos[detalle] = 1;
+      }
+    }
     if (evento === 'visita') {
       resumen.visitas++;
       resumen[pagina === 'mayorista' ? 'mayorista' : 'tienda']++;
@@ -1005,7 +1032,28 @@ function getAnalitica(ss, p) {
     pedido: Object.keys(embudoVids.pedido).length
   };
 
-  return { resumen, porOrigen, porDispositivo, topCiudades, porHora, dias30, embudo, leads };
+  // Carritos abandonados: agregó al carrito (o llegó al checkout) y no hay
+  // pedido posterior. Ventas casi cerradas para recuperar por WhatsApp.
+  const abandonados = Object.keys(carritosPorVid)
+    .filter(v => {
+      const c = carritosPorVid[v];
+      return c.ultimaCarrito && (!c.ultimoPedido || c.ultimoPedido < c.ultimaCarrito);
+    })
+    .map(v => {
+      const c = carritosPorVid[v];
+      const info = vids[v] || {};
+      return {
+        nombre: info.nombre || '', telefono: info.telefono || '',
+        ciudad: info.ciudad || '', etapa: c.etapa,
+        productos: Object.keys(c.productos).slice(0, 6),
+        cuando: Utilities.formatDate(c.ultimaCarrito, TZ, 'dd/MM HH:mm'),
+        ts: c.ultimaCarrito.getTime()
+      };
+    })
+    .sort((a,b) => b.ts - a.ts)
+    .slice(0, 30);
+
+  return { resumen, porOrigen, porDispositivo, topCiudades, porHora, dias30, embudo, leads, abandonados };
 }
 
 // ─── PROVEEDORES Y COMPRAS (depósito compartido de los hijos) ─────────────────
@@ -1152,6 +1200,307 @@ function setupHojaHijos() {
   cc.clearContents();
   cc.getRange(1,1,1,6).setValues([['Fecha','Hijo','Cliente','Monto','Descripcion','Producto']]);
   Logger.log('Hojas creadas OK');
+}
+
+// ─── IA: "PREGUNTALE A TU NEGOCIO" ────────────────────────────────────────────
+// Responde preguntas en lenguaje natural sobre los datos del negocio usando la
+// API de Claude. La clave se configura UNA vez: editor de Apps Script →
+// Configuración del proyecto → Propiedades del script → ANTHROPIC_API_KEY.
+
+// Resumen compacto y agregado de todo el negocio (lo que ve la IA).
+function resumenNegocio_(ss) {
+  const cache = CacheService.getScriptCache();
+  const cacheado = cache.get('resumen_negocio');
+  if (cacheado) return cacheado;
+
+  const r = { hoy: Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy') };
+
+  // Ventas Shuk: por mes + por cliente
+  const hv = ss.getSheetByName('Ventas');
+  if (hv && hv.getLastRow() > 1) {
+    const porMes = {}, porCliente = {};
+    hv.getRange(2, 1, hv.getLastRow() - 1, 11).getValues().forEach(row => {
+      if (row[7] === 'cancelado') return;
+      const m = (row[1] || '').toString().match(/\d{2}\/(\d{2})\/(\d{4})/);
+      const mes = m ? m[2] + '-' + m[1] : 's/f';
+      if (!porMes[mes]) porMes[mes] = { pedidos: 0, ars: 0, usd: 0 };
+      porMes[mes].pedidos++; porMes[mes].ars += parseFloat(row[8]) || 0; porMes[mes].usd += parseFloat(row[9]) || 0;
+      const cli = (row[2] || '').toString();
+      if (cli) {
+        if (!porCliente[cli]) porCliente[cli] = { pedidos: 0, ars: 0, usd: 0, tipo: row[3], ultima: row[1], pendientes: 0 };
+        porCliente[cli].pedidos++; porCliente[cli].ars += parseFloat(row[8]) || 0; porCliente[cli].usd += parseFloat(row[9]) || 0;
+        porCliente[cli].ultima = row[1];
+        if (row[7] === 'pendiente') porCliente[cli].pendientes++;
+      }
+    });
+    r.ventasShukPorMes = porMes;
+    r.clientesShukTop = Object.entries(porCliente).sort((a, b) => b[1].ars - a[1].ars).slice(0, 30)
+      .map(e => ({ nombre: e[0], pedidos: e[1].pedidos, totalARS: Math.round(e[1].ars), totalUSD: Math.round(e[1].usd * 100) / 100, tipo: e[1].tipo, ultimaCompra: e[1].ultima, pedidosPendientes: e[1].pendientes }));
+  }
+
+  // Gastos por mes
+  const hg = ss.getSheetByName('Gastos');
+  if (hg && hg.getLastRow() > 1) {
+    const gm = {};
+    hg.getRange(2, 1, hg.getLastRow() - 1, 4).getValues().forEach(row => {
+      const m = (row[0] || '').toString().match(/\d{2}\/(\d{2})\/(\d{4})/);
+      const mes = m ? m[2] + '-' + m[1] : 's/f';
+      gm[mes] = (gm[mes] || 0) + (parseFloat(row[2]) || 0);
+    });
+    r.gastosShukPorMes = gm;
+  }
+
+  // Stock actual
+  const hs = ss.getSheetByName('Stock');
+  if (hs && hs.getLastRow() > 1) {
+    r.stockShuk = hs.getRange(2, 1, hs.getLastRow() - 1, 8).getValues()
+      .filter(row => row[1] && (row[7] || '').toString().toUpperCase() !== 'NO')
+      .map(row => ({ nombre: row[1].toString(), stock: parseInt(row[5]) || 0, precioMay: (row[3] || '').toString(), precioMin: (row[4] || '').toString() }));
+  }
+
+  // Diezmo / ganancias Jony (agregado)
+  const hgj = ss.getSheetByName('GananciasJony');
+  if (hgj && hgj.getLastRow() > 1) {
+    let total = 0;
+    hgj.getRange(2, 1, hgj.getLastRow() - 1, 4).getValues().forEach(row => { total += parseFloat(row[3]) || 0; });
+    r.gananciasJonyAcumulado = Math.round(total);
+  }
+
+  // Candy Shop: ventas por mes/hijo + deudores + depósito
+  const hvh = ss.getSheetByName('VentasHijos');
+  if (hvh && hvh.getLastRow() > 1) {
+    const vh = {};
+    hvh.getRange(2, 1, hvh.getLastRow() - 1, 7).getValues().forEach(row => {
+      const f = row[0] instanceof Date ? Utilities.formatDate(row[0], TZ, 'yyyy-MM') : (row[0] || '').toString().substring(3, 10).split('/').reverse().join('-');
+      const k = row[1] + ' ' + f;
+      if (!vh[k]) vh[k] = { ventas: 0, total: 0 };
+      vh[k].ventas++; vh[k].total += parseFloat(row[6]) || 0;
+    });
+    r.candyVentasPorMes = vh;
+  }
+  r.candyDeudores = { Meir: consultarDeudores(ss, { hijo: 'Meir' }), Iosi: consultarDeudores(ss, { hijo: 'Iosi' }) };
+  r.candyDeposito = getDepositoHijos(ss).filter(d => d.cantidad > 0);
+
+  const json = JSON.stringify(r);
+  cache.put('resumen_negocio', json, 300);   // 5 min
+  return json;
+}
+
+function preguntarIA(ss, p) {
+  const pregunta = dec(p.q || '').trim();
+  if (!pregunta) return { error: 'pregunta vacía' };
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return { error: 'sin_clave', mensaje: 'Falta configurar ANTHROPIC_API_KEY en Propiedades del script (editor de Apps Script → ⚙️ Configuración del proyecto).' };
+
+  const datos = resumenNegocio_(ss);
+  const system = 'Sos el analista de datos de Shuk Mamtakim, un negocio familiar argentino de golosinas y productos kosher ' +
+    '(venta mayorista y minorista). También existe "Candy Shop", el mini-negocio de los hijos Meir e Iosi. ' +
+    'Te paso un resumen JSON con los datos reales del negocio y una pregunta del dueño. ' +
+    'Respondé en español rioplatense, breve y concreto, con los números formateados (ej: $1.234.567). ' +
+    'Si la pregunta no se puede responder con los datos disponibles, decilo claramente y sugerí dónde podría mirar. ' +
+    'No inventes datos. Montos en ARS salvo que se indique USD.';
+
+  try {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 4096,
+        system: system,
+        messages: [{ role: 'user', content: 'DATOS DEL NEGOCIO (JSON):\n' + datos + '\n\nPREGUNTA: ' + pregunta }]
+      }),
+      muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    const body = JSON.parse(res.getContentText());
+    if (code !== 200) {
+      Logger.log('[ia] error ' + code + ': ' + res.getContentText().substring(0, 300));
+      return { error: 'La IA respondió con error ' + code + (body.error ? ': ' + body.error.message : '') };
+    }
+    let texto = '';
+    (body.content || []).forEach(b => { if (b.type === 'text') texto += b.text; });
+    return { ok: true, respuesta: texto || '(sin respuesta)' };
+  } catch (err) {
+    return { error: 'No se pudo consultar la IA: ' + err };
+  }
+}
+
+// ─── PRODUCTOS DORMIDOS (sugerencias de oferta) ───────────────────────────────
+// Productos activos con stock que no aparecen en ninguna venta de los últimos
+// N días (default 30) y no tienen oferta vigente. Candidatos a oferta.
+function getProductosDormidos(ss, p) {
+  const dias = parseInt(p.dias) || 30;
+  const desde = new Date(Date.now() - dias * 86400000);
+  const hv = ss.getSheetByName('Ventas');
+  let vendidos = '';
+  if (hv && hv.getLastRow() > 1) {
+    hv.getRange(2, 1, hv.getLastRow() - 1, 8).getValues().forEach(row => {
+      let f = null;
+      if (row[1] instanceof Date) f = row[1];
+      else {
+        const m = (row[1] || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m) f = new Date(m[3] + '-' + m[2] + '-' + m[1] + 'T12:00:00');
+      }
+      if (f && f >= desde && row[7] !== 'cancelado') vendidos += '||' + (row[4] || '').toString().toLowerCase();
+    });
+  }
+  const hs = ss.getSheetByName('Stock');
+  if (!hs || hs.getLastRow() < 2) return [];
+  const hoy = new Date();
+  return hs.getRange(2, 1, hs.getLastRow() - 1, 14).getValues()
+    .filter(r => {
+      if (!r[0] || !r[1]) return false;
+      const stock = parseInt(r[5]); const activo = (r[7] || '').toString().toUpperCase() !== 'NO';
+      if (!activo || isNaN(stock) || stock <= 0) return false;
+      // con oferta vigente no se sugiere
+      const precioOf = parseFloat(r[10]) || 0;
+      const fechaOf = r[11] ? new Date(r[11] + 'T23:59:59') : null;
+      if (precioOf > 0 && (!fechaOf || isNaN(fechaOf.getTime()) || fechaOf >= hoy)) return false;
+      return vendidos.indexOf(r[1].toString().toLowerCase()) === -1;
+    })
+    .map(r => ({
+      id: r[0].toString(), nombre: r[1].toString(), desc: (r[2] || '').toString(),
+      stock: parseInt(r[5]) || 0,
+      precioMay: parseFloat((r[3] || '0').toString().replace(',', '.')) || 0,
+      precioMin: parseFloat((r[4] || '0').toString().replace(',', '.')) || 0
+    }));
+}
+
+// ─── CIERRE DIARIO AUTOMÁTICO (Telegram vía worker) ──────────────────────────
+// Cada noche manda a papá un resumen del día por Telegram, sin abrir el panel.
+// El mensaje viaja por el worker del bot (que tiene el token TG como secret).
+const WORKER_RELAY_URL = 'https://shuk-hijos-bot.ingodwetrustsrl.workers.dev';
+
+function enviarTelegram_(dest, texto) {
+  try {
+    UrlFetchApp.fetch(WORKER_RELAY_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ relay: true, secret: BOT_SECRET, dest: dest, text: texto }),
+      muteHttpExceptions: true
+    });
+  } catch (err) { Logger.log('[cierre] error relay: ' + err); }
+}
+
+function _esHoy_(valor) {
+  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  if (valor instanceof Date) return Utilities.formatDate(valor, TZ, 'dd/MM/yyyy') === hoyStr;
+  return (valor || '').toString().trim().substring(0, 10) === hoyStr;
+}
+
+function resumenShukHoy_(ss) {
+  const r = { n: 0, ars: 0, usd: 0, gastos: 0, visitas: 0, abandonados: 0, stockBajo: [] };
+  const hv = ss.getSheetByName('Ventas');
+  if (hv && hv.getLastRow() > 1) {
+    hv.getRange(2, 1, hv.getLastRow() - 1, 10).getValues().forEach(row => {
+      if (_esHoy_(row[1]) && row[7] !== 'cancelado') {
+        r.n++; r.ars += parseFloat(row[8]) || 0; r.usd += parseFloat(row[9]) || 0;
+      }
+    });
+  }
+  const hg = ss.getSheetByName('Gastos');
+  if (hg && hg.getLastRow() > 1) {
+    hg.getRange(2, 1, hg.getLastRow() - 1, 3).getValues().forEach(row => {
+      if (_esHoy_(row[0])) r.gastos += parseFloat(row[2]) || 0;
+    });
+  }
+  const ht = ss.getSheetByName('Trafico');
+  if (ht && ht.getLastRow() > 1) {
+    const porVid = {};
+    ht.getRange(2, 1, ht.getLastRow() - 1, 4).getValues().forEach(row => {
+      if (!_esHoy_(row[0])) return;
+      if (row[3] === 'visita') r.visitas++;
+      if (row[1]) {
+        if (!porVid[row[1]]) porVid[row[1]] = {};
+        porVid[row[1]][row[3]] = true;
+      }
+    });
+    r.abandonados = Object.values(porVid).filter(ev => (ev.carrito || ev.checkout) && !ev.pedido).length;
+  }
+  const hs = ss.getSheetByName('Stock');
+  if (hs && hs.getLastRow() > 1) {
+    hs.getRange(2, 1, hs.getLastRow() - 1, 8).getValues().forEach(row => {
+      const stock = parseInt(row[5]);
+      const activo = (row[7] || '').toString().toUpperCase() !== 'NO';
+      if (row[1] && activo && !isNaN(stock) && stock > 0 && stock <= 3) r.stockBajo.push(row[1] + ' (' + stock + ')');
+    });
+  }
+  return r;
+}
+
+function resumenHijoHoy_(ss, hijo) {
+  const r = { n: 0, total: 0, ganancia: 0, deudasNuevas: 0 };
+  const costos = {};
+  (getCatalogoHijos(ss) || []).forEach(p => { costos[p.codigo.toLowerCase()] = p.costo || 0; });
+  const hv = ss.getSheetByName('VentasHijos');
+  if (hv && hv.getLastRow() > 1) {
+    hv.getRange(2, 1, hv.getLastRow() - 1, 11).getValues().forEach(row => {
+      if (row[1] !== hijo || !_esHoy_(row[0])) return;
+      r.n++; r.total += parseFloat(row[6]) || 0;
+      const costo = costos[(row[3] || '').toString().toLowerCase()] || 0;
+      r.ganancia += ((parseFloat(row[5]) || 0) - costo) * (parseInt(row[4]) || 1);
+    });
+  }
+  const hc = ss.getSheetByName('CCHijos');
+  if (hc && hc.getLastRow() > 1) {
+    hc.getRange(2, 1, hc.getLastRow() - 1, 5).getValues().forEach(row => {
+      if (row[1] === hijo && _esHoy_(row[0]) && parseFloat(row[3]) > 0) r.deudasNuevas += parseFloat(row[3]) || 0;
+    });
+  }
+  return r;
+}
+
+function cierreDiario() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
+  const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  const shuk = resumenShukHoy_(ss);
+  const meir = resumenHijoHoy_(ss, 'Meir');
+  const iosi = resumenHijoHoy_(ss, 'Iosi');
+
+  let msg = '🌙 *Cierre del día — ' + fecha + '*\n\n';
+  msg += '🏪 *Shuk Mamtakim*\n';
+  msg += '• Pedidos: ' + shuk.n;
+  if (shuk.ars > 0) msg += ' · ' + fmt(shuk.ars);
+  if (shuk.usd > 0) msg += ' + U$S ' + shuk.usd.toFixed(2);
+  msg += '\n';
+  if (shuk.gastos > 0) msg += '• Gastos: ' + fmt(shuk.gastos) + '\n';
+  msg += '• Visitas a la web: ' + shuk.visitas + '\n';
+  if (shuk.abandonados > 0) msg += '• 🛒 Carritos sin terminar: ' + shuk.abandonados + ' (ver Analítica)\n';
+  if (shuk.stockBajo.length) msg += '• ⚠️ Stock bajo: ' + shuk.stockBajo.slice(0, 5).join(', ') + '\n';
+
+  msg += '\n🍬 *Candy Shop*\n';
+  [['Meir', meir], ['Iosi', iosi]].forEach(par => {
+    const nombre = par[0], d = par[1];
+    msg += '• ' + nombre + ': ' + d.n + ' venta' + (d.n !== 1 ? 's' : '');
+    if (d.total > 0) msg += ' · ' + fmt(d.total) + ' (ganancia ' + fmt(d.ganancia) + ', diezmo ' + fmt(d.ganancia * 0.1) + ')';
+    if (d.deudasNuevas > 0) msg += ' · deudas nuevas ' + fmt(d.deudasNuevas);
+    msg += '\n';
+  });
+
+  enviarTelegram_('papa', msg);
+
+  // Mini-resumen a cada chico, solo si vendió algo hoy
+  [['meir', meir], ['iosi', iosi]].forEach(par => {
+    const dest = par[0], d = par[1];
+    if (d.n > 0) {
+      enviarTelegram_(dest, '🌙 *Tu día de hoy*\n• Ventas: ' + d.n + ' · ' + fmt(d.total) +
+        '\n• Ganancia: ' + fmt(d.ganancia) + '\n• Diezmo (10%): ' + fmt(d.ganancia * 0.1) + '\n¡Buen trabajo! 💪');
+    }
+  });
+  Logger.log('Cierre diario enviado');
+}
+
+// EJECUTAR UNA SOLA VEZ desde el editor para activar el cierre diario a las 21hs.
+// Re-ejecutarla es seguro (borra triggers previos).
+function configurarCierreDiario() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'cierreDiario')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('cierreDiario').timeBased().atHour(21).everyDays(1).inTimezone(TZ).create();
+  Logger.log('Cierre diario configurado (21hs)');
 }
 
 // ─── BACKUP AUTOMÁTICO ────────────────────────────────────────────────────────
