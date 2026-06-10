@@ -389,6 +389,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="card-title">Mis productos</div>
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
     </div>
   </div>
 
@@ -669,6 +670,47 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
     <button class="btn-save" onclick="guardarProducto()">Guardar</button>
     <button class="btn-del" id="btn-del" onclick="eliminarProducto()" style="display:none">Eliminar producto</button>
+  </div>
+</div>
+
+<!-- FLYER CON IA -->
+<div class="wizard-overlay" id="flyer-overlay">
+  <div class="wizard-header">
+    <button class="wizard-back" onclick="flyerBack()">←</button>
+    <div class="wizard-title" id="flyer-title">🎨 Tu flyer</div>
+    <div class="wizard-steps">
+      <div class="wizard-dot active" id="fdot-0"></div>
+      <div class="wizard-dot" id="fdot-1"></div>
+      <div class="wizard-dot" id="fdot-2"></div>
+    </div>
+  </div>
+  <div class="wizard-body">
+    <!-- PASO 1: PRODUCTOS -->
+    <div class="wizard-step active" id="fs-0">
+      <div class="wizard-label">¿Qué productos van en el flyer? (hasta 6)</div>
+      <div id="flyer-prod-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"></div>
+    </div>
+    <!-- PASO 2: IDEA -->
+    <div class="wizard-step" id="fs-1">
+      <div class="wizard-label">Escribí tu idea y la IA la mejora ✨</div>
+      <textarea id="flyer-idea" placeholder="Ej: vendo chocolates riquísimos, precios de amigo, traigo al cole" style="width:100%;min-height:110px;padding:14px;border:2px solid #e0d5c9;border-radius:14px;font-family:inherit;font-size:1rem;resize:vertical;box-sizing:border-box"></textarea>
+      <div style="font-size:0.8rem;color:#aaa;margin-top:8px">Si lo dejás vacío, la IA inventa algo con onda.</div>
+    </div>
+    <!-- PASO 3: PREVIEW -->
+    <div class="wizard-step" id="fs-2" style="text-align:center">
+      <div id="flyer-status" class="wizard-label" style="text-align:center">Armando tu flyer...</div>
+      <canvas id="flyer-canvas" width="1080" height="1350" style="width:100%;max-width:320px;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,0.25);display:none"></canvas>
+      <div id="flyer-acciones" style="display:none;flex-direction:column;gap:8px;margin-top:14px">
+        <button class="btn-add" style="margin:0" onclick="compartirFlyer()">📤 Compartir</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-add" style="margin:0;background:#f0ebe3;color:#5c3d1e;flex:1" onclick="generarTextoFlyer()">🔄 Otro texto</button>
+          <button class="btn-add" style="margin:0;background:#f0ebe3;color:#5c3d1e;flex:1" onclick="descargarFlyer()">⬇️ Descargar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="wizard-footer">
+    <button class="btn-wizard" id="flyer-next" onclick="flyerNext()">Siguiente →</button>
   </div>
 </div>
 
@@ -1066,6 +1108,246 @@ async function eliminarProducto() {
     renderCatalogo(catalogoCache);
     cargarDatos(true);
   }
+}
+
+// ─── FLYER CON IA ─────────────────────────────────────────────────
+let fStep = 0, fSel = {}, fTextos = null;
+
+function abrirFlyer() {
+  if (!catalogoCache.length) { alert('Primero cargá productos al catálogo'); return; }
+  fStep = 0; fSel = {}; fTextos = null;
+  document.getElementById('flyer-idea').value = '';
+  renderFlyerGrid();
+  flyerStep(0);
+  document.getElementById('flyer-overlay').classList.add('open');
+}
+function cerrarFlyer() { document.getElementById('flyer-overlay').classList.remove('open'); }
+
+function renderFlyerGrid() {
+  document.getElementById('flyer-prod-grid').innerHTML = catalogoCache.map(p => {
+    const sel = !!fSel[p.codigo];
+    const img = p.foto
+      ? `<img src="${p.foto}" style="width:100%;height:72px;object-fit:cover;border-radius:10px">`
+      : `<div style="height:72px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;background:#f0ebe3;border-radius:10px">🍬</div>`;
+    return `<div onclick="toggleFlyerProd('${p.codigo}')" style="cursor:pointer;border:2.5px solid ${sel ? '#7b2ff7' : '#eee4d8'};border-radius:14px;padding:6px;background:${sel ? '#f6efff' : '#fff'};position:relative">
+      ${sel ? '<div style="position:absolute;top:4px;right:4px;background:#7b2ff7;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;z-index:1">✓</div>' : ''}
+      ${img}
+      <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${p.nombre}</div>
+      <div style="font-size:0.68rem;color:#8b5e3c;font-weight:700">${fmt(p.precioVenta)}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleFlyerProd(codigo) {
+  if (fSel[codigo]) delete fSel[codigo];
+  else {
+    if (Object.keys(fSel).length >= 6) { mostrarToast('Máximo 6 productos 🙏'); return; }
+    fSel[codigo] = true;
+  }
+  renderFlyerGrid();
+}
+
+function flyerStep(n) {
+  fStep = n;
+  [0, 1, 2].forEach(i => {
+    document.getElementById('fs-' + i).classList.toggle('active', i === n);
+    document.getElementById('fdot-' + i).classList.toggle('active', i <= n);
+  });
+  const next = document.getElementById('flyer-next');
+  next.style.display = n === 2 ? 'none' : '';
+  next.textContent = n === 1 ? '✨ Generar flyer' : 'Siguiente →';
+  document.getElementById('flyer-title').textContent = ['¿Qué vendés?', 'Tu idea', '🎨 Tu flyer'][n];
+}
+
+function flyerNext() {
+  if (fStep === 0) {
+    if (!Object.keys(fSel).length) { mostrarToast('Elegí al menos un producto'); return; }
+    flyerStep(1);
+  } else if (fStep === 1) {
+    flyerStep(2);
+    generarTextoFlyer();
+  }
+}
+function flyerBack() { if (fStep === 0) cerrarFlyer(); else flyerStep(fStep - 1); }
+
+async function generarTextoFlyer() {
+  const prods = catalogoCache.filter(p => fSel[p.codigo]);
+  const status = document.getElementById('flyer-status');
+  status.textContent = '✨ La IA está escribiendo tu flyer...';
+  document.getElementById('flyer-canvas').style.display = 'none';
+  document.getElementById('flyer-acciones').style.display = 'none';
+  const lista = prods.map(p => `${p.nombre} ($${p.precioVenta || 0})`).join(', ');
+  const d = await api('flyerTexto', { hijo: usuario, productos: lista, idea: document.getElementById('flyer-idea').value.trim() });
+  if (!d || d.error) {
+    status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
+    return;
+  }
+  fTextos = d;
+  status.textContent = '🎨 Dibujando...';
+  try {
+    await dibujarFlyer(prods, d);
+    status.textContent = '¡Listo! 🎉 Si no te convence, pedile otro texto.';
+    document.getElementById('flyer-canvas').style.display = 'block';
+    document.getElementById('flyer-acciones').style.display = 'flex';
+  } catch (e) {
+    status.textContent = '😕 No pude dibujar el flyer: ' + e.message;
+  }
+}
+
+function _cargarImgFlyer(url) {
+  return new Promise(res => {
+    if (!url) return res(null);
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => res(im);
+    im.onerror = () => res(null);
+    im.src = url.indexOf('res.cloudinary.com') !== -1 ? url.replace('/upload/', '/upload/w_600,h_600,c_fill/') : url;
+  });
+}
+
+function _rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function _wrap(ctx, texto, maxW, maxLineas) {
+  const palabras = (texto || '').split(/\s+/).filter(Boolean);
+  const lineas = [];
+  let actual = '';
+  palabras.forEach(p => {
+    const prueba = actual ? actual + ' ' + p : p;
+    if (ctx.measureText(prueba).width <= maxW) actual = prueba;
+    else { if (actual) lineas.push(actual); actual = p; }
+  });
+  if (actual) lineas.push(actual);
+  if (lineas.length > maxLineas) {
+    const corte = lineas.slice(0, maxLineas);
+    corte[maxLineas - 1] = corte[maxLineas - 1].replace(/\s+\S*$/, '') + '…';
+    return corte;
+  }
+  return lineas;
+}
+
+async function dibujarFlyer(prods, t) {
+  const cv = document.getElementById('flyer-canvas');
+  const ctx = cv.getContext('2d');
+  const W = 1080, H = 1350;
+  const tema = usuario === 'Iosi'
+    ? { a: '#0e6b34', b: '#2fb45e', accent: '#ffd24a' }
+    : { a: '#163f6e', b: '#2c8fd6', accent: '#ffd24a' };
+
+  // Fondo degradé + burbujas decorativas
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, tema.a); g.addColorStop(1, tema.b);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.08; ctx.fillStyle = '#ffffff';
+  [[100, 160, 130], [980, 90, 90], [60, 1240, 110], [1010, 1280, 140], [930, 700, 70]].forEach(c => {
+    ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Título (achica la letra hasta que entre)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
+  let fs = 92;
+  do { ctx.font = '900 ' + fs + 'px -apple-system, system-ui, sans-serif'; fs -= 4; }
+  while (ctx.measureText(t.titulo).width > 960 && fs > 40);
+  ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+  ctx.fillText(t.titulo, W / 2, 150);
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+  // Frase
+  ctx.font = '600 42px -apple-system, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  _wrap(ctx, t.frase, 920, 2).forEach((l, i) => ctx.fillText(l, W / 2, 225 + i * 54));
+
+  // Grilla de productos
+  const n = prods.length;
+  const cols = n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 2 : 3;
+  const filas = Math.ceil(n / cols);
+  const margen = 56, gap = 26, topArea = 350, altoArea = 760;
+  const cw = (W - margen * 2 - gap * (cols - 1)) / cols;
+  const chMax = (altoArea - gap * (filas - 1)) / filas;
+  const ch = Math.min(chMax, cw + 110);
+  const imgs = await Promise.all(prods.map(p => _cargarImgFlyer(p.foto)));
+  const offsetY = topArea + (altoArea - (ch * filas + gap * (filas - 1))) / 2;
+
+  prods.forEach((p, i) => {
+    const col = i % cols, fila = Math.floor(i / cols);
+    // centrar la última fila si quedó incompleta
+    const enFila = (fila === filas - 1) ? (n - fila * cols) : cols;
+    const xBase = margen + (W - margen * 2 - (cw * enFila + gap * (enFila - 1))) / 2;
+    const x = xBase + col * (cw + gap);
+    const y = offsetY + fila * (ch + gap);
+    ctx.fillStyle = '#ffffff';
+    _rr(ctx, x, y, cw, ch, 24); ctx.fill();
+    const imgH = ch - 96;
+    if (imgs[i]) {
+      ctx.save(); _rr(ctx, x + 10, y + 10, cw - 20, imgH - 10, 18); ctx.clip();
+      ctx.drawImage(imgs[i], x + 10, y + 10, cw - 20, imgH - 10);
+      ctx.restore();
+    } else {
+      ctx.font = (imgH * 0.45) + 'px sans-serif'; ctx.fillStyle = '#f0ebe3';
+      _rr(ctx, x + 10, y + 10, cw - 20, imgH - 10, 18); ctx.fill();
+      ctx.fillStyle = '#c9a36b'; ctx.fillText('🍬', x + cw / 2, y + imgH / 2 + imgH * 0.15);
+    }
+    // Nombre
+    ctx.fillStyle = '#2d1a0a';
+    let nf = 30;
+    do { ctx.font = '800 ' + nf + 'px -apple-system, system-ui, sans-serif'; nf -= 2; }
+    while (ctx.measureText(p.nombre).width > cw - 30 && nf > 16);
+    ctx.fillText(p.nombre, x + cw / 2, y + imgH + 36);
+    // Precio
+    ctx.font = '900 34px -apple-system, system-ui, sans-serif';
+    const precioTxt = fmt(p.precioVenta);
+    const pw = ctx.measureText(precioTxt).width + 36;
+    ctx.fillStyle = tema.accent;
+    _rr(ctx, x + (cw - pw) / 2, y + imgH + 50, pw, 46, 23); ctx.fill();
+    ctx.fillStyle = '#2d1a0a';
+    ctx.fillText(precioTxt, x + cw / 2, y + imgH + 84);
+  });
+
+  // Cierre (pill grande)
+  ctx.font = '900 46px -apple-system, system-ui, sans-serif';
+  const cw2 = ctx.measureText(t.cierre).width + 80;
+  ctx.fillStyle = tema.accent;
+  _rr(ctx, (W - cw2) / 2, 1158, cw2, 78, 39); ctx.fill();
+  ctx.fillStyle = '#2d1a0a';
+  ctx.fillText(t.cierre, W / 2, 1212);
+
+  // Pie
+  ctx.font = '700 34px -apple-system, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillText('📲 Pedile a ' + usuario + ' · Candy Shop', W / 2, 1296);
+}
+
+function _flyerBlob() {
+  return new Promise(r => document.getElementById('flyer-canvas').toBlob(r, 'image/jpeg', 0.92));
+}
+
+async function compartirFlyer() {
+  const blob = await _flyerBlob();
+  if (!blob) { mostrarToast('Generá el flyer primero'); return; }
+  const file = new File([blob], 'flyer-candyshop.jpg', { type: 'image/jpeg' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Candy Shop' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  await descargarFlyer();
+  mostrarToast('Se descargó la imagen: compartila desde tu galería 📤');
+}
+
+async function descargarFlyer() {
+  const blob = await _flyerBlob();
+  if (!blob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flyer-candyshop.jpg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 // ─── COMPRAS / PROVEEDORES / DEPÓSITO ────────────────────────────

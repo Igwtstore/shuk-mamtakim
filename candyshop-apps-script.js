@@ -27,7 +27,8 @@ const PROTECTED_HIJOS = [
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
-  'registrarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos'
+  'registrarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
+  'flyerTexto'
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -579,6 +580,7 @@ function doGet(e) {
     if (accion === 'getDepositoHijos')     { return json(getDepositoHijos(ss)); }
     if (accion === 'panelHijos')           { return json(panelHijos(ss, e.parameter)); }
     if (accion === 'comprasTabHijos')      { return json({ proveedores: getProveedoresHijos(ss), compras: getComprasHijos(ss), deposito: getDepositoHijos(ss) }); }
+    if (accion === 'flyerTexto')           { return json(flyerTexto(e.parameter)); }
 
   } catch(err) { return json({error:err.toString()}); }
 }
@@ -1356,6 +1358,59 @@ function preguntarIA(ss, p) {
     return { ok: true, respuesta: texto || '(sin respuesta)' };
   } catch (err) {
     return { error: 'No se pudo consultar la IA: ' + err };
+  }
+}
+
+// ─── FLYER CON IA (Candy Shop) ────────────────────────────────────────────────
+// Los chicos eligen productos y escriben una idea; la IA devuelve título, frase
+// y cierre para el flyer. JSON garantizado por schema (output_config.format).
+function flyerTexto(p) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return { error: 'sin_clave', mensaje: 'Falta configurar la clave de IA (se carga desde el panel de Shuk).' };
+  const hijo = dec(p.hijo || 'el vendedor');
+  const productos = dec(p.productos || '');
+  const idea = dec(p.idea || '').substring(0, 300);
+
+  const system = 'Sos el creativo publicitario del Candy Shop de ' + hijo + ', un chico argentino que vende ' +
+    'golosinas a amigos, compañeros y vecinos. Escribís textos para flyers: cortos, divertidos, vendedores, ' +
+    'en español rioplatense, con onda pero sin grosería. Respetá los límites de caracteres a rajatabla.';
+  const user = 'Productos del flyer: ' + productos + '\n' +
+    (idea ? 'Idea/texto que escribió ' + hijo + ' (mejorala manteniendo su espíritu): "' + idea + '"'
+          : 'No dejó texto: inventá algo corto y tentador.') +
+    '\nGenerá los textos del flyer.';
+
+  try {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 1000,
+        system: system,
+        output_config: { format: { type: 'json_schema', schema: {
+          type: 'object',
+          properties: {
+            titulo: { type: 'string', description: 'Título grande y pegadizo, MÁXIMO 22 caracteres' },
+            frase:  { type: 'string', description: 'Frase vendedora corta, MÁXIMO 80 caracteres' },
+            cierre: { type: 'string', description: 'Llamado a la acción, MÁXIMO 30 caracteres, ej: ¡Pedime ya!' }
+          },
+          required: ['titulo', 'frase', 'cierre'],
+          additionalProperties: false
+        } } },
+        messages: [{ role: 'user', content: user }]
+      }),
+      muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    const body = JSON.parse(res.getContentText());
+    if (code !== 200) return { error: 'IA error ' + code + (body.error ? ': ' + body.error.message : '') };
+    let texto = '';
+    (body.content || []).forEach(b => { if (b.type === 'text') texto += b.text; });
+    const t = JSON.parse(texto);
+    return { ok: true, titulo: t.titulo || '¡Golosinas!', frase: t.frase || '', cierre: t.cierre || '¡Pedime ya!' };
+  } catch (err) {
+    return { error: 'No se pudo generar el texto: ' + err };
   }
 }
 
