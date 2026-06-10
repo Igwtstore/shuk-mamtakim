@@ -761,10 +761,20 @@ function showTab(id, btn) {
 // ─── API ──────────────────────────────────────────────────────────
 async function api(accion, extra = {}) {
   try {
-    const p = new URLSearchParams({ accion, ...extra });
-    if (_kidsToken) p.set('token', _kidsToken);
-    const res = await fetch(APPS_URL + '?' + p.toString());
-    return await res.json();
+    const call = async () => {
+      const p = new URLSearchParams({ accion, ...extra });
+      if (_kidsToken) p.set('token', _kidsToken);
+      const res = await fetch(APPS_URL + '?' + p.toString());
+      return await res.json();
+    };
+    let data = await call();
+    // Token vencido o todavía no cargado → refrescar sesión y reintentar una vez
+    if (data && data.error === 'no autorizado') {
+      const { data: s } = await sb.auth.getSession();
+      const nuevoToken = s?.session?.access_token || '';
+      if (nuevoToken && nuevoToken !== _kidsToken) { _kidsToken = nuevoToken; data = await call(); }
+    }
+    return data;
   } catch { return null; }
 }
 
@@ -2449,7 +2459,6 @@ async function verificarClave() {
     document.getElementById('input-clave').value = '';
     document.getElementById('input-clave').focus();
   } else {
-    localStorage.setItem('cs_auth', Date.now().toString());
     document.getElementById('pantalla-clave').style.display = 'none';
     document.getElementById('login').style.display = 'flex';
     document.getElementById('clave-error').style.display = 'none';
@@ -2470,26 +2479,29 @@ function logout() {
 // ─── INIT ─────────────────────────────────────────────────────────
 (async () => {
   const savedUser = sessionStorage.getItem('cs_usuario') || localStorage.getItem('cs_usuario');
-  const authTs = parseInt(localStorage.getItem('cs_auth') || '0');
-  const yaAutenticado = authTs > 0 && (Date.now() - authTs) < 24 * 60 * 60 * 1000;
+  // Esperar a que Supabase recupere la sesión guardada ANTES de pedir datos,
+  // si no las primeras llamadas salen sin token y el backend las rechaza.
+  const { data: { session } } = await sb.auth.getSession();
+  _kidsToken = session?.access_token || '';
 
-  if (savedUser && yaAutenticado) {
-    // Ya autenticado y sabe quién es → directo al panel
+  if (session && savedUser) {
+    // Sesión viva y sabe quién es → directo al panel, sin pedir clave
     login(savedUser);
-  } else if (yaAutenticado) {
-    // Ya autenticado pero no sabe quién es → elegir usuario
+  } else if (session) {
+    // Sesión viva pero no sabe quién es → elegir usuario
     document.getElementById('pantalla-clave').style.display = 'none';
     document.getElementById('login').style.display = 'flex';
-  } else {
-    // Primera vez → pedir clave
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      localStorage.setItem('cs_auth', Date.now().toString());
-      document.getElementById('pantalla-clave').style.display = 'none';
-      document.getElementById('login').style.display = 'flex';
-    }
   }
+  // Sin sesión → queda la pantalla de clave
 })();
+
+// Si la app estuvo en segundo plano más de 30 min, recargar la página para
+// traer la última versión publicada (la sesión se mantiene, entra directo).
+let _enFondoDesde = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') _enFondoDesde = Date.now();
+  else if (_enFondoDesde && Date.now() - _enFondoDesde > 30 * 60 * 1000) location.reload();
+});
 </script>
 </body>
 </html>
