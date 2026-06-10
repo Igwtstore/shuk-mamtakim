@@ -1082,21 +1082,27 @@ function renderDeposito(deposito) {
   const items = deposito.filter(d => d.cantidad > 0)
     .map(d => {
       const p = catalogoCache.find(x => x.codigo === d.codigo);
-      return { ...d, nombre: p?.nombre || d.producto || d.codigo };
+      return { ...d, nombre: p?.nombre || d.producto || d.codigo, valor: d.cantidad * (p?.costo || 0) };
     })
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   if (!items.length) {
     el.innerHTML = '<div class="empty">Depósito vacío. Cargá una compra para dar de alta mercadería 📦</div>';
     return;
   }
+  const valorTotal = items.reduce((s, d) => s + d.valor, 0);
   el.innerHTML = '<div class="stock-grid">' + items.map(d => {
     const nombre = d.nombre;
     return `<div class="stock-chip" style="gap:8px">
       ${fotoMini(d.codigo, 30)}
       <div class="stock-chip-nombre" style="flex:1;min-width:0;max-width:none" title="${nombre}">${nombre}</div>
-      <div class="stock-chip-nums"><div class="stock-chip-rest">${d.cantidad}</div><div class="stock-chip-sub">unidades</div></div>
+      <div class="stock-chip-nums">
+        <div class="stock-chip-rest">${d.cantidad}</div>
+        <div class="stock-chip-sub">unidades</div>
+        ${d.valor > 0 ? `<div class="stock-chip-sub" style="color:#8b5e3c;font-weight:700">${fmt(d.valor)}</div>` : ''}
+      </div>
     </div>`;
-  }).join('') + '</div>';
+  }).join('') + '</div>' +
+  `<div style="text-align:right;margin-top:12px;font-size:0.88rem;color:#555">Valor total del depósito (a costo): <strong style="color:#5c3d1e">${fmt(valorTotal)}</strong></div>`;
 }
 
 function renderCompras(compras) {
