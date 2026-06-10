@@ -788,44 +788,43 @@ async function recargarTodo(btn) {
 }
 
 // ─── CARGAR DATOS ─────────────────────────────────────────────────
-// silent=true refresca en segundo plano sin borrar lo que ya está en pantalla.
+function renderPanel(d) {
+  catalogoCache = d.catalogo || [];
+  renderDashboard(d.ventas || [], catalogoCache, d.deudores || []);
+  renderDeudores(d.deudores || []);
+  renderCatalogo(catalogoCache);
+  renderVisitasKid(d.visitas || {});
+  renderStockRestante(d.stockDia || {}, d.ventas || [], catalogoCache);
+}
+
+// 1) Pinta al instante lo último guardado en el teléfono, 2) trae todo el panel
+// en UNA llamada (panelHijos) y refresca pantalla + cache. silent=true salta el
+// pintado inicial (la pantalla ya tiene contenido).
 async function cargarDatos(silent = false) {
+  const cacheKey = 'cs_panel_' + usuario;
   if (!silent) {
-    ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
-      document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
-    });
+    let pintado = false;
+    try {
+      const c = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (c) { renderPanel(c); pintado = true; }
+    } catch {}
+    if (!pintado) {
+      ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
+        document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
+      });
+    }
   }
-
-  // El catálogo se pinta apenas llega, sin esperar a las llamadas lentas (visitas).
-  const pCatalogo = api('getCatalogoHijos').then(c => {
-    catalogoCache = c || [];
-    renderCatalogo(catalogoCache);
-    return catalogoCache;
-  });
-  // Las visitas son solo para su card: tampoco bloquean al resto.
-  api('visitas').then(v => renderVisitasKid(v || [], usuario));
-
-  const [ventas, deudores, , stockDia] = await Promise.all([
-    api('ventasHoy', { hijo: usuario }),
-    api('consultarDeudores', { hijo: usuario }),
-    pCatalogo,
-    api('getStockDia', { hijo: usuario })
-  ]);
-
-  renderDashboard(ventas || [], catalogoCache, deudores || []);
-  renderDeudores(deudores || []);
-  renderStockRestante(stockDia || {}, ventas || [], catalogoCache);
+  const d = await api('panelHijos', { hijo: usuario });
+  if (d && !d.error) {
+    renderPanel(d);
+    try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
+  }
 }
 
 // ─── VISITAS ──────────────────────────────────────────────────────
-function renderVisitasKid(visitas, hijo) {
-  const pagina = hijo.toLowerCase();
-  const hoy = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
-  const fechaHoy = hoy.split('/').reverse().join('/');
-  const total = visitas.filter(v => v.pagina === pagina).length;
-  const hoyCount = visitas.filter(v => v.pagina === pagina && v.fecha && v.fecha.startsWith(fechaHoy.substring(0,5))).length;
-  document.getElementById('s-vis-hoy').textContent = hoyCount;
-  document.getElementById('s-vis-total').textContent = total;
+function renderVisitasKid(v) {
+  document.getElementById('s-vis-hoy').textContent = v.hoy || 0;
+  document.getElementById('s-vis-total').textContent = v.total || 0;
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
@@ -1055,19 +1054,29 @@ async function eliminarProducto() {
 let proveedoresCache = [];
 let editandoProveedorId = null;
 
-async function cargarCompras() {
-  ['deposito-content','compras-list','proveedores-list'].forEach(id => {
-    document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
-  });
-  const [provs, compras, deposito] = await Promise.all([
-    api('getProveedoresHijos'),
-    api('getComprasHijos'),
-    api('getDepositoHijos')
-  ]);
-  proveedoresCache = provs || [];
-  renderDeposito(deposito || []);
-  renderCompras(compras || []);
+function renderComprasTab(d) {
+  proveedoresCache = d.proveedores || [];
+  renderDeposito(d.deposito || []);
+  renderCompras(d.compras || []);
   renderProveedores(proveedoresCache);
+}
+
+async function cargarCompras() {
+  let pintado = false;
+  try {
+    const c = JSON.parse(localStorage.getItem('cs_compras') || 'null');
+    if (c) { renderComprasTab(c); pintado = true; }
+  } catch {}
+  if (!pintado) {
+    ['deposito-content','compras-list','proveedores-list'].forEach(id => {
+      document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
+    });
+  }
+  const d = await api('comprasTabHijos');
+  if (d && !d.error) {
+    renderComprasTab(d);
+    try { localStorage.setItem('cs_compras', JSON.stringify(d)); } catch {}
+  }
 }
 
 function fotoMini(codigo, size) {
@@ -1777,9 +1786,10 @@ function renderFechas() {
   // Usa fecha local, NO toISOString() que convierte a UTC y puede cambiar el día
   const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const hoyISO = localISO(hoy);
+  // Desde el 1° del mes actual hasta hoy
   const dias = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(hoy); d.setDate(hoy.getDate() - i); dias.push(d);
+  for (let i = 1; i <= hoy.getDate(); i++) {
+    dias.push(new Date(hoy.getFullYear(), hoy.getMonth(), i));
   }
   document.getElementById('rw-fecha-grid').innerHTML = dias.map(d => {
     const iso = localISO(d);
@@ -2545,6 +2555,8 @@ function logout() {
   sessionStorage.removeItem('cs_usuario');
   localStorage.removeItem('cs_usuario');
   localStorage.removeItem('cs_auth');
+  Object.keys(localStorage).filter(k => k.startsWith('cs_panel_') || k === 'cs_compras')
+    .forEach(k => localStorage.removeItem(k));
   usuario = null;
   document.getElementById('fab-venta').style.display = 'none';
   document.getElementById('login').style.display = 'flex';

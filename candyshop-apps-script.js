@@ -26,7 +26,7 @@ const PROTECTED_HIJOS = [
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
-  'registrarCompraHijos','getComprasHijos','getDepositoHijos'
+  'registrarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos'
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -552,6 +552,8 @@ function doGet(e) {
     if (accion === 'registrarCompraHijos') { return json(registrarCompraHijos(ss, e.parameter)); }
     if (accion === 'getComprasHijos')      { return json(getComprasHijos(ss)); }
     if (accion === 'getDepositoHijos')     { return json(getDepositoHijos(ss)); }
+    if (accion === 'panelHijos')           { return json(panelHijos(ss, e.parameter)); }
+    if (accion === 'comprasTabHijos')      { return json({ proveedores: getProveedoresHijos(ss), compras: getComprasHijos(ss), deposito: getDepositoHijos(ss) }); }
 
   } catch(err) { return json({error:err.toString()}); }
 }
@@ -887,6 +889,34 @@ function resetearStockDia(ss, p) {
     }
   }
   return { ok: true };
+}
+
+// Batch: todo lo que necesita el panel de los chicos en UNA sola llamada
+// (antes eran 5 requests; cada request a Apps Script cuesta 1-4 segundos).
+function panelHijos(ss, p) {
+  return {
+    ventas: ventasHoyHijos(ss, p),
+    deudores: consultarDeudores(ss, p),
+    catalogo: getCatalogoHijos(ss),
+    stockDia: getStockDia(ss, p),
+    visitas: visitasHijoResumen_(ss, (p.hijo || '').toLowerCase())
+  };
+}
+
+// Cuenta las visitas en el servidor: antes viajaba la lista completa de visitas
+// al browser (crece sin límite) solo para contar hoy y total.
+function visitasHijoResumen_(ss, pagina) {
+  const h = ss.getSheetByName('Visitas');
+  if (!h || h.getLastRow() < 2) return { hoy: 0, total: 0 };
+  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  let hoy = 0, total = 0;
+  h.getRange(2,1,h.getLastRow()-1,2).getValues().forEach(r => {
+    if ((r[1] || '').toString() !== pagina) return;
+    total++;
+    const f = r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') : r[0].toString().substring(0,10);
+    if (f === hoyStr) hoy++;
+  });
+  return { hoy, total };
 }
 
 // ─── PROVEEDORES Y COMPRAS (depósito compartido de los hijos) ─────────────────

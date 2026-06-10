@@ -2104,10 +2104,15 @@ async function renderCuentaCorriente() {
   const badge = document.getElementById('cc-total-badge');
   try {
     const soloMiri = esVistaMiri();
-    const [ventas, pagos] = await Promise.all([
+    const [ventas, pagos, clientesTel] = await Promise.all([
       apiGet('ventas'),
-      soloMiri ? Promise.resolve([]) : apiGet('getPagos').catch(() => [])
+      soloMiri ? Promise.resolve([]) : apiGet('getPagos').catch(() => []),
+      apiGet('getClientes').catch(() => [])
     ]);
+    const telPorCliente = {};
+    (clientesTel || []).forEach(c => {
+      if (c.telefono) telPorCliente[c.nombre] = c.telefono.toString().replace(/\D/g, '');
+    });
     let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony)
@@ -2157,7 +2162,7 @@ async function renderCuentaCorriente() {
           <div style="text-align:right">
             <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
             ${btnPago}
-            <button onclick="window.open('https://wa.me/${WA_NUM1}?text='+encodeURIComponent('Hola '+\`${cliente}\`+'! Te recordamos que tenés deuda pendiente de '+\`${totStr}\`+' en Shuk Mamtakim 🍬'),'_blank')"
+            <button onclick="recordarDeudaWA('${cliEsc}','${totStr}','${telPorCliente[cliente] || ''}')"
               style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px">💬 Recordar</button>
           </div>
         </div>
@@ -3543,6 +3548,14 @@ function mostrarClientes(arr) {
 function toggleClienteHistorial(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// Recordatorio de deuda directo AL CLIENTE: si está registrado con teléfono abre
+// su chat; si no, abre WhatsApp para elegir el contacto, con el mensaje ya armado.
+function recordarDeudaWA(cliente, totStr, tel) {
+  const msg = `¡Hola ${cliente}! 👋 Te escribimos de *Shuk Mamtakim* 🍬\nTe recordamos que tenés un saldo pendiente de *${totStr}*.\n¡Muchas gracias!`;
+  const waBase = tel ? `https://wa.me/${tel.startsWith('549') ? tel : '549' + tel}` : 'https://wa.me/';
+  window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 function contactarCliente(nombre, tipo, tel) {
