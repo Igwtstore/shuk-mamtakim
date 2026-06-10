@@ -921,7 +921,7 @@ function editarProducto(p) {
   fotoUrl = p.foto || '';
   document.getElementById('modal-titulo').textContent = 'Editar producto';
   document.getElementById('f-codigo').value = p.codigo;
-  document.getElementById('f-codigo').readOnly = true;
+  document.getElementById('f-codigo').readOnly = false;
   document.getElementById('f-nombre').value = p.nombre;
   document.getElementById('f-precio').value = p.precioVenta || '';
   document.getElementById('f-costo').value = p.costo || '';
@@ -1000,7 +1000,11 @@ async function guardarProducto() {
   btn.disabled = true;
 
   const accion = editandoCodigo ? 'editarProductoHijo' : 'agregarProductoHijo';
-  const res = await api(accion, { codigo, nombre, precioVenta: precio, costo, foto });
+  // Al editar, el código original es la llave; si lo cambiaron va aparte como nuevoCodigo
+  const params = editandoCodigo
+    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto }
+    : { codigo, nombre, precioVenta: precio, costo, foto };
+  const res = await api(accion, params);
 
   btn.textContent = 'Guardar';
   btn.disabled = false;
@@ -1009,18 +1013,20 @@ async function guardarProducto() {
     cerrarModal();
     // Actualización instantánea con el dato local; el refresco completo va en segundo plano.
     const nuevo = { codigo, nombre, precioVenta: precio, costo, foto };
-    const idx = catalogoCache.findIndex(p => p.codigo === codigo);
+    const idx = catalogoCache.findIndex(p => p.codigo === (editandoCodigo || codigo));
     if (idx >= 0) catalogoCache[idx] = nuevo; else catalogoCache.push(nuevo);
     renderCatalogo(catalogoCache);
     cargarDatos(true);
   } else {
-    alert('Error al guardar. Intentá de nuevo.');
+    alert(res?.error === 'ya existe un producto con ese código'
+      ? 'Ya hay otro producto con ese código. Elegí uno distinto.'
+      : 'Error al guardar. Intentá de nuevo.');
   }
 }
 
 async function eliminarProducto() {
   if (!confirm('¿Eliminar este producto?')) return;
-  const codigo = document.getElementById('f-codigo').value;
+  const codigo = editandoCodigo || document.getElementById('f-codigo').value;
   const res = await api('eliminarProductoHijo', { codigo });
   if (res?.ok) {
     cerrarModal();

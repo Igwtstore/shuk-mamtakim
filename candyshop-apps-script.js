@@ -607,17 +607,40 @@ function agregarProductoHijo(ss, p) {
 
 function editarProductoHijo(ss, p) {
   const h = ss.getSheetByName('CatalogoHijos'); if (!h) return { error:'sin hoja' };
+  const codigo = dec(p.codigo);
+  const nuevoCodigo = dec(p.nuevoCodigo || '') || codigo;
   const datos = h.getDataRange().getValues();
+  if (nuevoCodigo !== codigo) {
+    for (let i = 1; i < datos.length; i++) {
+      if (datos[i][0].toString() === nuevoCodigo) return { error:'ya existe un producto con ese código' };
+    }
+  }
   for (let i = 1; i < datos.length; i++) {
-    if (datos[i][0].toString() === dec(p.codigo)) {
+    if (datos[i][0].toString() === codigo) {
+      h.getRange(i+1,1).setValue(nuevoCodigo);
       h.getRange(i+1,2).setValue(dec(p.nombre));
       h.getRange(i+1,3).setValue(parseFloat(p.precioVenta)||0);
       h.getRange(i+1,4).setValue(parseFloat(p.costo)||0);
       h.getRange(i+1,5).setValue(dec(p.foto||''));
+      if (nuevoCodigo !== codigo) renombrarCodigoHijos_(ss, codigo, nuevoCodigo);
       return { ok: true };
     }
   }
   return { error:'no encontrado' };
+}
+
+// El código es la llave que une todo: al cambiarlo hay que propagarlo a las
+// hojas que lo referencian para no dejar huérfanos ventas/stock/compras/depósito.
+function renombrarCodigoHijos_(ss, viejo, nuevo) {
+  [['VentasHijos',4],['StockDiario',3],['ComprasHijos',5],['DepositoHijos',1]].forEach(par => {
+    const h = ss.getSheetByName(par[0]);
+    if (!h || h.getLastRow() < 2) return;
+    const col = par[1];
+    const vals = h.getRange(2,col,h.getLastRow()-1,1).getValues();
+    vals.forEach((r,i) => {
+      if (r[0] && r[0].toString() === viejo) h.getRange(i+2,col).setValue(nuevo);
+    });
+  });
 }
 
 function eliminarProductoHijo(ss, p) {
