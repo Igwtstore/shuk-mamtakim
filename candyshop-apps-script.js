@@ -24,7 +24,9 @@ const PROTECTED_HIJOS = [
   'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
-  'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado'
+  'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
+  'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
+  'registrarCompraHijos','getComprasHijos','getDepositoHijos'
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -543,6 +545,13 @@ function doGet(e) {
     if (accion === 'eliminarProductoHijo') { return json(eliminarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarVentaHijos')   { return json(eliminarVentaHijos(ss, e.parameter)); }
     if (accion === 'editarVentaHijos')     { return json(editarVentaHijos(ss, e.parameter)); }
+    if (accion === 'getProveedoresHijos')  { return json(getProveedoresHijos(ss)); }
+    if (accion === 'agregarProveedorHijos'){ return json(agregarProveedorHijos(ss, e.parameter)); }
+    if (accion === 'editarProveedorHijos') { return json(editarProveedorHijos(ss, e.parameter)); }
+    if (accion === 'eliminarProveedorHijos'){ return json(eliminarProveedorHijos(ss, e.parameter)); }
+    if (accion === 'registrarCompraHijos') { return json(registrarCompraHijos(ss, e.parameter)); }
+    if (accion === 'getComprasHijos')      { return json(getComprasHijos(ss)); }
+    if (accion === 'getDepositoHijos')     { return json(getDepositoHijos(ss)); }
 
   } catch(err) { return json({error:err.toString()}); }
 }
@@ -814,7 +823,10 @@ function cargarStock(ss, p) {
   const fecha = new Date();
   items.forEach(item => {
     if (item.codigo && item.cantidad > 0) {
-      h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', parseInt(item.cantidad) || 0]);
+      const cant = parseInt(item.cantidad) || 0;
+      h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', cant]);
+      // Lo que se lleva para vender sale del depósito compartido.
+      ajustarDeposito_(ss, item.codigo, item.nombre || '', -cant);
     }
   });
   return { ok: true };
@@ -846,10 +858,141 @@ function resetearStockDia(ss, p) {
     if (r[0] && typeof r[0].getTime === 'function' &&
         Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr &&
         r[1] === p.hijo) {
+      // Al borrar la carga del día, la mercadería vuelve al depósito.
+      ajustarDeposito_(ss, r[2].toString(), r[3] ? r[3].toString() : '', parseInt(r[4]) || 0);
       h.deleteRow(i + 2);
     }
   }
   return { ok: true };
+}
+
+// ─── PROVEEDORES Y COMPRAS (depósito compartido de los hijos) ─────────────────
+
+function getProveedoresHijos(ss) {
+  const h = ss.getSheetByName('ProveedoresHijos');
+  if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,4).getValues()
+    .filter(r => r[0])
+    .map(r => ({ id:r[0].toString(), nombre:r[1].toString(), telefono:r[2]?.toString()||'', notas:r[3]?.toString()||'' }));
+}
+
+function agregarProveedorHijos(ss, p) {
+  if (!p.nombre) return { error:'falta nombre' };
+  const h = getOrCreate(ss, 'ProveedoresHijos', ['ID','Nombre','Telefono','Notas']);
+  const id = 'PR' + Date.now();
+  h.appendRow([id, dec(p.nombre), dec(p.telefono||''), dec(p.notas||'')]);
+  return { ok:true, id };
+}
+
+function editarProveedorHijos(ss, p) {
+  const h = ss.getSheetByName('ProveedoresHijos'); if (!h) return { error:'sin hoja' };
+  const datos = h.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][0].toString() === p.id) {
+      h.getRange(i+1,2,1,3).setValues([[dec(p.nombre), dec(p.telefono||''), dec(p.notas||'')]]);
+      return { ok:true };
+    }
+  }
+  return { error:'no encontrado' };
+}
+
+function eliminarProveedorHijos(ss, p) {
+  const h = ss.getSheetByName('ProveedoresHijos'); if (!h) return { error:'sin hoja' };
+  const datos = h.getDataRange().getValues();
+  for (let i = datos.length - 1; i >= 1; i--) {
+    if (datos[i][0].toString() === p.id) { h.deleteRow(i+1); return { ok:true }; }
+  }
+  return { error:'no encontrado' };
+}
+
+// Registra una compra a proveedor: suma cada item al depósito compartido y
+// recalcula el costo del producto como promedio ponderado de todas sus compras.
+function registrarCompraHijos(ss, p) {
+  const items = JSON.parse(dec(p.items || '[]'));
+  if (!items.length) return { error:'sin items' };
+  const h = getOrCreate(ss, 'ComprasHijos',
+    ['CompraID','Fecha','ProveedorID','Proveedor','Codigo','Producto','Cantidad','CostoUnit','CostoTotal','RegistradoPor']);
+  const id = 'C' + Date.now();
+  const fecha = p.fecha ? new Date(p.fecha + 'T12:00:00') : new Date();
+  items.forEach(it => {
+    const cant = parseInt(it.cantidad) || 0;
+    const costo = parseFloat(it.costoUnit) || 0;
+    if (!it.codigo || cant <= 0) return;
+    h.appendRow([id, fecha, dec(p.proveedorId||''), dec(p.proveedor||''), it.codigo, it.nombre||'', cant, costo, cant*costo, p.hijo||'']);
+    ajustarDeposito_(ss, it.codigo, it.nombre||'', cant);
+    actualizarCostoPromedio_(ss, it.codigo);
+  });
+  return { ok:true, id };
+}
+
+function getComprasHijos(ss) {
+  const h = ss.getSheetByName('ComprasHijos');
+  if (!h || h.getLastRow() < 2) return [];
+  const compras = {};
+  const orden = [];
+  h.getRange(2,1,h.getLastRow()-1,10).getValues().forEach(r => {
+    if (!r[0]) return;
+    const id = r[0].toString();
+    if (!compras[id]) {
+      compras[id] = {
+        id,
+        fecha: r[1] instanceof Date ? Utilities.formatDate(r[1], TZ, 'dd/MM/yyyy') : r[1].toString(),
+        proveedor: r[3] ? r[3].toString() : '',
+        items: [], total: 0
+      };
+      orden.push(id);
+    }
+    compras[id].items.push({ codigo:r[4].toString(), nombre:r[5]?.toString()||'', cantidad:parseInt(r[6])||0, costoUnit:parseFloat(r[7])||0 });
+    compras[id].total += parseFloat(r[8]) || 0;
+  });
+  return orden.reverse().slice(0, 30).map(id => compras[id]);
+}
+
+function getDepositoHijos(ss) {
+  const h = ss.getSheetByName('DepositoHijos');
+  if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,3).getValues()
+    .filter(r => r[0])
+    .map(r => ({ codigo:r[0].toString(), producto:r[1]?.toString()||'', cantidad:parseInt(r[2])||0 }));
+}
+
+// Suma (compra) o resta (carga del stock del día) unidades del depósito compartido.
+// Puede quedar negativo si se carga mercadería que nunca entró por una compra
+// (stock viejo sin registrar) — el panel lo muestra como 0.
+function ajustarDeposito_(ss, codigo, producto, delta) {
+  const h = getOrCreate(ss, 'DepositoHijos', ['Codigo','Producto','Cantidad']);
+  const datos = h.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][0].toString() === codigo.toString()) {
+      h.getRange(i+1,3).setValue((parseInt(datos[i][2])||0) + delta);
+      if (producto) h.getRange(i+1,2).setValue(producto);
+      return;
+    }
+  }
+  h.appendRow([codigo, producto || '', delta]);
+}
+
+// Costo promedio ponderado de todas las compras del producto → columna Costo del catálogo.
+function actualizarCostoPromedio_(ss, codigo) {
+  const hc = ss.getSheetByName('ComprasHijos');
+  if (!hc || hc.getLastRow() < 2) return;
+  let unidades = 0, total = 0;
+  hc.getRange(2,1,hc.getLastRow()-1,9).getValues().forEach(r => {
+    if (r[4] && r[4].toString() === codigo.toString()) {
+      unidades += parseInt(r[6]) || 0;
+      total += parseFloat(r[8]) || 0;
+    }
+  });
+  if (unidades <= 0) return;
+  const cat = ss.getSheetByName('CatalogoHijos');
+  if (!cat || cat.getLastRow() < 2) return;
+  const datos = cat.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][0].toString() === codigo.toString()) {
+      cat.getRange(i+1,4).setValue(Math.round((total/unidades)*100)/100);
+      return;
+    }
+  }
 }
 
 function setupHojaHijos() {

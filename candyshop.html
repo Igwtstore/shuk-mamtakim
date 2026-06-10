@@ -335,6 +335,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <button class="tab" onclick="showTab('catalogo', this)">
       <span class="tab-icon">📦</span>Catálogo
     </button>
+    <button class="tab" onclick="showTab('compras', this)">
+      <span class="tab-icon">🚚</span>Compras
+    </button>
     <button class="tab" onclick="showTab('historia', this)">
       <span class="tab-icon">🗓️</span>Historia
     </button>
@@ -385,6 +388,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="card-title">Mis productos</div>
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
+    </div>
+  </div>
+
+  <!-- COMPRAS -->
+  <div class="tab-content" id="tab-compras">
+    <div class="card">
+      <div class="card-title">🏠 Depósito (mercadería en casa)</div>
+      <div id="deposito-content"><div class="spinner">Cargando...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🧾 Compras de mercadería</div>
+      <div id="compras-list"><div class="spinner">Cargando...</div></div>
+      <button class="btn-add" onclick="abrirModalCompra()">+ Cargar compra</button>
+    </div>
+    <div class="card">
+      <div class="card-title">🚚 Proveedores</div>
+      <div id="proveedores-list"><div class="spinner">Cargando...</div></div>
+      <button class="btn-add" style="background:#f0ebe3;color:#5c3d1e" onclick="abrirModalProveedor()">+ Agregar proveedor</button>
     </div>
   </div>
 
@@ -650,6 +671,49 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 </div>
 
+<!-- MODAL PROVEEDOR -->
+<div class="modal-overlay" id="prov-overlay" onclick="if(event.target.id==='prov-overlay')cerrarModalProveedor()">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="prov-titulo">Nuevo proveedor</span>
+      <button class="modal-close" onclick="cerrarModalProveedor()">✕</button>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Nombre</label>
+      <input class="form-input" id="pv-nombre" type="text" placeholder="Kiosco mayorista Golo">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Teléfono (opcional)</label>
+      <input class="form-input" id="pv-telefono" type="tel" placeholder="11 5555-5555">
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label">Notas (opcional)</label>
+      <input class="form-input" id="pv-notas" type="text" placeholder="Tiene los caramelos más baratos">
+    </div>
+    <button class="btn-save" onclick="guardarProveedor()">Guardar</button>
+    <button class="btn-del" id="pv-del" onclick="eliminarProveedorUI()" style="display:none">Eliminar proveedor</button>
+  </div>
+</div>
+
+<!-- MODAL CARGAR COMPRA -->
+<div class="modal-overlay" id="compra-overlay" onclick="if(event.target.id==='compra-overlay')cerrarModalCompra()">
+  <div class="modal">
+    <div class="modal-title">
+      <span>🧾 Cargar compra</span>
+      <button class="modal-close" onclick="cerrarModalCompra()">✕</button>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Proveedor</label>
+      <select class="form-input" id="cp-proveedor" style="background:#fff"></select>
+    </div>
+    <label class="form-label" style="display:block;margin-bottom:6px">Productos comprados</label>
+    <div id="cp-items"></div>
+    <button onclick="agregarItemCompra()" style="width:100%;padding:10px;background:none;border:1.5px dashed #d0c4b4;border-radius:10px;color:#8b5e3c;font-size:0.85rem;font-weight:600;cursor:pointer;margin-bottom:12px">+ Agregar producto</button>
+    <div style="text-align:right;font-size:0.95rem;color:#555;margin-bottom:14px">Total compra: <strong id="cp-total" style="color:#5c3d1e">$0</strong></div>
+    <button class="btn-save" onclick="guardarCompra()">Guardar compra</button>
+  </div>
+</div>
+
 <script>
 const APPS_URL = 'https://script.google.com/macros/s/AKfycbzaxlnfpPqE1oU3onsSGHv9gcBiip4y9bNH4dJ0aCBYXMZAAkLhaL83itj9HsvrntvoCA/exec';
 let _kidsToken = '';   // token de sesión Supabase del panel, se manda al backend
@@ -691,6 +755,7 @@ function showTab(id, btn) {
   btn.classList.add('active');
   if (id === 'historia') cargarHistoria();
   if (id === 'total') cargarTotal();
+  if (id === 'compras') cargarCompras();
 }
 
 // ─── API ──────────────────────────────────────────────────────────
@@ -935,6 +1000,205 @@ async function eliminarProducto() {
   const codigo = document.getElementById('f-codigo').value;
   const res = await api('eliminarProductoHijo', { codigo });
   if (res?.ok) { cerrarModal(); cargarDatos(); }
+}
+
+// ─── COMPRAS / PROVEEDORES / DEPÓSITO ────────────────────────────
+let proveedoresCache = [];
+let editandoProveedorId = null;
+
+async function cargarCompras() {
+  ['deposito-content','compras-list','proveedores-list'].forEach(id => {
+    document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
+  });
+  const [provs, compras, deposito] = await Promise.all([
+    api('getProveedoresHijos'),
+    api('getComprasHijos'),
+    api('getDepositoHijos')
+  ]);
+  proveedoresCache = provs || [];
+  renderDeposito(deposito || []);
+  renderCompras(compras || []);
+  renderProveedores(proveedoresCache);
+}
+
+function renderDeposito(deposito) {
+  const el = document.getElementById('deposito-content');
+  const items = deposito.filter(d => d.cantidad > 0);
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">Depósito vacío. Cargá una compra para dar de alta mercadería 📦</div>';
+    return;
+  }
+  el.innerHTML = '<div class="stock-grid">' + items.map(d => {
+    const p = catalogoCache.find(x => x.codigo === d.codigo);
+    const nombre = p?.nombre || d.producto || d.codigo;
+    return `<div class="stock-chip">
+      <div class="stock-chip-nombre" title="${nombre}">${nombre}</div>
+      <div class="stock-chip-nums"><div class="stock-chip-rest">${d.cantidad}</div><div class="stock-chip-sub">unidades</div></div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function renderCompras(compras) {
+  const el = document.getElementById('compras-list');
+  if (!compras.length) {
+    el.innerHTML = '<div class="empty">Todavía no cargaste ninguna compra</div>';
+    return;
+  }
+  el.innerHTML = compras.map(c => {
+    const resumen = c.items.map(it => `${it.cantidad}× ${it.nombre || it.codigo}`).join(', ');
+    return `<div class="item-row">
+      <div class="item-info">
+        <div class="item-name">🧾 ${c.proveedor || 'Sin proveedor'}</div>
+        <div class="item-sub">${c.fecha} · ${resumen}</div>
+      </div>
+      <div class="item-right"><div class="item-price">${fmt(c.total)}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderProveedores(provs) {
+  const el = document.getElementById('proveedores-list');
+  if (!provs.length) {
+    el.innerHTML = '<div class="empty">Sin proveedores. Agregá el primero 🚚</div>';
+    return;
+  }
+  el.innerHTML = provs.map(pv => `<div class="item-row">
+    <div class="item-info">
+      <div class="item-name">${pv.nombre}</div>
+      ${pv.telefono || pv.notas ? `<div class="item-sub">${[pv.telefono, pv.notas].filter(Boolean).join(' · ')}</div>` : ''}
+    </div>
+    <button class="btn-edit" onclick='editarProveedor(${JSON.stringify(pv)})'>✏️</button>
+  </div>`).join('');
+}
+
+// — Modal proveedor —
+function abrirModalProveedor() {
+  editandoProveedorId = null;
+  document.getElementById('prov-titulo').textContent = 'Nuevo proveedor';
+  document.getElementById('pv-nombre').value = '';
+  document.getElementById('pv-telefono').value = '';
+  document.getElementById('pv-notas').value = '';
+  document.getElementById('pv-del').style.display = 'none';
+  document.getElementById('prov-overlay').classList.add('open');
+}
+
+function editarProveedor(pv) {
+  editandoProveedorId = pv.id;
+  document.getElementById('prov-titulo').textContent = 'Editar proveedor';
+  document.getElementById('pv-nombre').value = pv.nombre;
+  document.getElementById('pv-telefono').value = pv.telefono || '';
+  document.getElementById('pv-notas').value = pv.notas || '';
+  document.getElementById('pv-del').style.display = 'block';
+  document.getElementById('prov-overlay').classList.add('open');
+}
+
+function cerrarModalProveedor() { document.getElementById('prov-overlay').classList.remove('open'); }
+
+async function guardarProveedor() {
+  const nombre = document.getElementById('pv-nombre').value.trim();
+  if (!nombre) { alert('Poné el nombre del proveedor'); return; }
+  const params = {
+    nombre,
+    telefono: document.getElementById('pv-telefono').value.trim(),
+    notas: document.getElementById('pv-notas').value.trim()
+  };
+  const btn = document.querySelector('#prov-overlay .btn-save');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+  const res = editandoProveedorId
+    ? await api('editarProveedorHijos', { id: editandoProveedorId, ...params })
+    : await api('agregarProveedorHijos', params);
+  btn.textContent = 'Guardar'; btn.disabled = false;
+  if (res?.ok) { cerrarModalProveedor(); cargarCompras(); }
+  else alert('Error al guardar. Intentá de nuevo.');
+}
+
+async function eliminarProveedorUI() {
+  if (!confirm('¿Eliminar este proveedor? (las compras ya cargadas no se borran)')) return;
+  const res = await api('eliminarProveedorHijos', { id: editandoProveedorId });
+  if (res?.ok) { cerrarModalProveedor(); cargarCompras(); }
+}
+
+// — Modal cargar compra —
+let cpItems = [];
+
+function abrirModalCompra() {
+  if (!proveedoresCache.length) {
+    alert('Primero agregá un proveedor 🚚');
+    abrirModalProveedor();
+    return;
+  }
+  if (!catalogoCache.length) { alert('Primero agregá productos al catálogo'); return; }
+  document.getElementById('cp-proveedor').innerHTML =
+    proveedoresCache.map(pv => `<option value="${pv.id}">${pv.nombre}</option>`).join('');
+  cpItems = [{ codigo:'', cantidad:'', costoUnit:'' }];
+  renderCpItems();
+  document.getElementById('compra-overlay').classList.add('open');
+}
+
+function cerrarModalCompra() { document.getElementById('compra-overlay').classList.remove('open'); }
+
+function renderCpItems() {
+  const opciones = catalogoCache.map(p => `<option value="${p.codigo}">${p.nombre}</option>`).join('');
+  document.getElementById('cp-items').innerHTML = cpItems.map((it, i) => `
+    <div style="display:grid;grid-template-columns:1fr 62px 80px 26px;gap:6px;margin-bottom:8px;align-items:center">
+      <select class="form-input" style="background:#fff;padding:9px 6px;font-size:0.82rem" onchange="cpSet(${i},'codigo',this.value)">
+        <option value="">Producto...</option>${opciones}
+      </select>
+      <input class="form-input" type="number" min="1" placeholder="Cant." value="${it.cantidad}" style="padding:9px 6px;font-size:0.82rem" oninput="cpSet(${i},'cantidad',this.value)">
+      <input class="form-input" type="number" min="0" placeholder="Costo u." value="${it.costoUnit}" style="padding:9px 6px;font-size:0.82rem" oninput="cpSet(${i},'costoUnit',this.value)">
+      <button onclick="quitarItemCompra(${i})" style="background:none;border:none;color:#ccc;font-size:1rem;cursor:pointer;padding:0">✕</button>
+    </div>`).join('');
+  // Restaurar selección de producto (el innerHTML resetea los selects)
+  document.querySelectorAll('#cp-items select').forEach((sel, i) => { sel.value = cpItems[i].codigo; });
+  cpActualizarTotal();
+}
+
+function cpSet(i, campo, valor) {
+  cpItems[i][campo] = valor;
+  // Al elegir producto, sugerir su costo actual si el campo está vacío
+  if (campo === 'codigo' && !cpItems[i].costoUnit) {
+    const p = catalogoCache.find(x => x.codigo === valor);
+    if (p?.costo) { cpItems[i].costoUnit = p.costo; renderCpItems(); return; }
+  }
+  cpActualizarTotal();
+}
+
+function agregarItemCompra() { cpItems.push({ codigo:'', cantidad:'', costoUnit:'' }); renderCpItems(); }
+function quitarItemCompra(i) { cpItems.splice(i, 1); if (!cpItems.length) cpItems = [{ codigo:'', cantidad:'', costoUnit:'' }]; renderCpItems(); }
+
+function cpActualizarTotal() {
+  const total = cpItems.reduce((s, it) => s + (parseInt(it.cantidad)||0) * (parseFloat(it.costoUnit)||0), 0);
+  document.getElementById('cp-total').textContent = fmt(total);
+}
+
+async function guardarCompra() {
+  const provSel = document.getElementById('cp-proveedor');
+  const items = cpItems
+    .filter(it => it.codigo && (parseInt(it.cantidad)||0) > 0)
+    .map(it => {
+      const p = catalogoCache.find(x => x.codigo === it.codigo);
+      return { codigo: it.codigo, nombre: p?.nombre || '', cantidad: parseInt(it.cantidad), costoUnit: parseFloat(it.costoUnit)||0 };
+    });
+  if (!provSel.value) { alert('Elegí un proveedor'); return; }
+  if (!items.length) { alert('Agregá al menos un producto con cantidad'); return; }
+  if (items.some(it => !it.costoUnit) && !confirm('Hay productos sin costo. ¿Guardar igual?')) return;
+
+  const btn = document.querySelector('#compra-overlay .btn-save');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+  const res = await api('registrarCompraHijos', {
+    hijo: usuario,
+    proveedorId: provSel.value,
+    proveedor: provSel.selectedOptions[0].textContent,
+    items: JSON.stringify(items)
+  });
+  btn.textContent = 'Guardar compra'; btn.disabled = false;
+  if (res?.ok) {
+    cerrarModalCompra();
+    cargarCompras();
+    cargarDatos();   // el costo promedio pudo cambiar el catálogo
+  } else {
+    alert('Error al guardar la compra. Intentá de nuevo.');
+  }
 }
 
 // ─── WIZARD NUEVA VENTA ──────────────────────────────────────────
