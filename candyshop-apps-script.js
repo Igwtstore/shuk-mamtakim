@@ -1240,8 +1240,9 @@ function resumenNegocio_(ss) {
         if (row[7] === 'pendiente') porCliente[cli].pendientes++;
       }
       // Desglose de productos: el campo Productos guarda líneas "• 2x Nombre · desc — $ ..."
+      // Se conserva la descripción (variedad): los Pitzujim se distinguen por ella.
       (row[4] || '').toString().split('||').forEach(seg => {
-        const pm = seg.match(/(\d+)\s*x\s*([^—·]+)/);
+        const pm = seg.match(/(\d+)\s*x\s*([^—]+)/);
         if (pm) {
           const nom = pm[2].replace(/^[•\s]+/, '').trim();
           if (nom) {
@@ -1276,7 +1277,10 @@ function resumenNegocio_(ss) {
   if (hs && hs.getLastRow() > 1) {
     r.stockShuk = hs.getRange(2, 1, hs.getLastRow() - 1, 8).getValues()
       .filter(row => row[1] && (row[7] || '').toString().toUpperCase() !== 'NO')
-      .map(row => ({ nombre: row[1].toString(), stock: parseInt(row[5]) || 0, precioMay: (row[3] || '').toString(), precioMin: (row[4] || '').toString() }));
+      .map(row => ({
+        nombre: row[1].toString() + (row[2] ? ' · ' + row[2].toString() : ''),
+        stock: parseInt(row[5]) || 0, precioMay: (row[3] || '').toString(), precioMin: (row[4] || '').toString()
+      }));
   }
 
   // Diezmo / ganancias Jony (agregado)
