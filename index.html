@@ -2504,7 +2504,9 @@ async function preguntarIAUI() {
     } else if (d.error) {
       out.textContent = '😕 ' + d.error;
     } else {
-      out.textContent = d.respuesta;
+      // Render liviano: escapar HTML y convertir **negrita** del markdown
+      const seguro = (d.respuesta || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      out.innerHTML = seguro.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     }
   } catch {
     out.textContent = '😕 No se pudo consultar. Revisá la conexión e intentá de nuevo.';

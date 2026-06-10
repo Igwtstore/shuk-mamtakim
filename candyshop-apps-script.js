@@ -1222,10 +1222,10 @@ function resumenNegocio_(ss) {
 
   const r = { hoy: Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy') };
 
-  // Ventas Shuk: por mes + por cliente
+  // Ventas Shuk: por mes + por cliente + por producto (qué se vende más)
   const hv = ss.getSheetByName('Ventas');
   if (hv && hv.getLastRow() > 1) {
-    const porMes = {}, porCliente = {};
+    const porMes = {}, porCliente = {}, porProducto = {};
     hv.getRange(2, 1, hv.getLastRow() - 1, 11).getValues().forEach(row => {
       if (row[7] === 'cancelado') return;
       const m = (row[1] || '').toString().match(/\d{2}\/(\d{2})\/(\d{4})/);
@@ -1239,10 +1239,24 @@ function resumenNegocio_(ss) {
         porCliente[cli].ultima = row[1];
         if (row[7] === 'pendiente') porCliente[cli].pendientes++;
       }
+      // Desglose de productos: el campo Productos guarda líneas "• 2x Nombre · desc — $ ..."
+      (row[4] || '').toString().split('||').forEach(seg => {
+        const pm = seg.match(/(\d+)\s*x\s*([^—·]+)/);
+        if (pm) {
+          const nom = pm[2].replace(/^[•\s]+/, '').trim();
+          if (nom) {
+            if (!porProducto[nom]) porProducto[nom] = { unidades: 0, pedidos: 0 };
+            porProducto[nom].unidades += parseInt(pm[1]) || 0;
+            porProducto[nom].pedidos++;
+          }
+        }
+      });
     });
     r.ventasShukPorMes = porMes;
     r.clientesShukTop = Object.entries(porCliente).sort((a, b) => b[1].ars - a[1].ars).slice(0, 30)
       .map(e => ({ nombre: e[0], pedidos: e[1].pedidos, totalARS: Math.round(e[1].ars), totalUSD: Math.round(e[1].usd * 100) / 100, tipo: e[1].tipo, ultimaCompra: e[1].ultima, pedidosPendientes: e[1].pendientes }));
+    r.productosShukTop = Object.entries(porProducto).sort((a, b) => b[1].unidades - a[1].unidades).slice(0, 30)
+      .map(e => ({ producto: e[0], unidadesVendidas: e[1].unidades, apareceEnPedidos: e[1].pedidos }));
   }
 
   // Gastos por mes
@@ -1276,14 +1290,18 @@ function resumenNegocio_(ss) {
   // Candy Shop: ventas por mes/hijo + deudores + depósito
   const hvh = ss.getSheetByName('VentasHijos');
   if (hvh && hvh.getLastRow() > 1) {
-    const vh = {};
+    const vh = {}, prodH = {};
     hvh.getRange(2, 1, hvh.getLastRow() - 1, 7).getValues().forEach(row => {
       const f = row[0] instanceof Date ? Utilities.formatDate(row[0], TZ, 'yyyy-MM') : (row[0] || '').toString().substring(3, 10).split('/').reverse().join('-');
       const k = row[1] + ' ' + f;
       if (!vh[k]) vh[k] = { ventas: 0, total: 0 };
       vh[k].ventas++; vh[k].total += parseFloat(row[6]) || 0;
+      const prod = (row[2] || '').toString();
+      if (prod) prodH[prod] = (prodH[prod] || 0) + (parseInt(row[4]) || 1);
     });
     r.candyVentasPorMes = vh;
+    r.candyProductosTop = Object.entries(prodH).sort((a, b) => b[1] - a[1]).slice(0, 20)
+      .map(e => ({ producto: e[0], unidadesVendidas: e[1] }));
   }
   r.candyDeudores = { Meir: consultarDeudores(ss, { hijo: 'Meir' }), Iosi: consultarDeudores(ss, { hijo: 'Iosi' }) };
   r.candyDeposito = getDepositoHijos(ss).filter(d => d.cantidad > 0);
