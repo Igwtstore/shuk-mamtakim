@@ -788,13 +788,15 @@ async function recargarTodo(btn) {
 }
 
 // ─── CARGAR DATOS ─────────────────────────────────────────────────
+const arr = x => Array.isArray(x) ? x : [];
+
 function renderPanel(d) {
-  catalogoCache = d.catalogo || [];
-  renderDashboard(d.ventas || [], catalogoCache, d.deudores || []);
-  renderDeudores(d.deudores || []);
+  catalogoCache = arr(d.catalogo);
+  renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores));
+  renderDeudores(arr(d.deudores));
   renderCatalogo(catalogoCache);
   renderVisitasKid(d.visitas || {});
-  renderStockRestante(d.stockDia || {}, d.ventas || [], catalogoCache);
+  renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache);
 }
 
 // 1) Pinta al instante lo último guardado en el teléfono, 2) trae todo el panel
@@ -814,10 +816,26 @@ async function cargarDatos(silent = false) {
       });
     }
   }
-  const d = await api('panelHijos', { hijo: usuario });
+  let d = await api('panelHijos', { hijo: usuario });
+  // Plan B: si el batch falla (deploy a medias, error puntual), llamadas individuales
+  if (!d || d.error) {
+    const [ventas, deudores, catalogo, stockDia] = await Promise.all([
+      api('ventasHoy', { hijo: usuario }),
+      api('consultarDeudores', { hijo: usuario }),
+      api('getCatalogoHijos'),
+      api('getStockDia', { hijo: usuario })
+    ]);
+    if (catalogo && !catalogo.error) d = { ventas, deudores, catalogo, stockDia, visitas: null };
+  }
   if (d && !d.error) {
     renderPanel(d);
     try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
+  } else if (!silent) {
+    const msg = '<div class="empty">No se pudo cargar 😕 <a onclick="cargarDatos()" style="color:#5c3d1e;font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
+    ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el.querySelector('.spinner')) el.innerHTML = msg;
+    });
   }
 }
 
@@ -1055,9 +1073,9 @@ let proveedoresCache = [];
 let editandoProveedorId = null;
 
 function renderComprasTab(d) {
-  proveedoresCache = d.proveedores || [];
-  renderDeposito(d.deposito || []);
-  renderCompras(d.compras || []);
+  proveedoresCache = arr(d.proveedores);
+  renderDeposito(arr(d.deposito));
+  renderCompras(arr(d.compras));
   renderProveedores(proveedoresCache);
 }
 
@@ -1072,10 +1090,22 @@ async function cargarCompras() {
       document.getElementById(id).innerHTML = '<div class="spinner">Cargando...</div>';
     });
   }
-  const d = await api('comprasTabHijos');
+  let d = await api('comprasTabHijos');
+  // Plan B: llamadas individuales si el batch no responde
+  if (!d || d.error) {
+    const [proveedores, compras, deposito] = await Promise.all([
+      api('getProveedoresHijos'), api('getComprasHijos'), api('getDepositoHijos')
+    ]);
+    if (proveedores && !proveedores.error) d = { proveedores, compras, deposito };
+  }
   if (d && !d.error) {
     renderComprasTab(d);
     try { localStorage.setItem('cs_compras', JSON.stringify(d)); } catch {}
+  } else if (!pintado) {
+    const msg = '<div class="empty">No se pudo cargar 😕 <a onclick="cargarCompras()" style="color:#5c3d1e;font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
+    ['deposito-content','compras-list','proveedores-list'].forEach(id => {
+      document.getElementById(id).innerHTML = msg;
+    });
   }
 }
 
