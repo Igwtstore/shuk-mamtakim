@@ -28,7 +28,7 @@ const PROTECTED_HIJOS = [
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
-  'flyerTexto'
+  'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer'
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -581,6 +581,10 @@ function doGet(e) {
     if (accion === 'panelHijos')           { return json(panelHijos(ss, e.parameter)); }
     if (accion === 'comprasTabHijos')      { return json({ proveedores: getProveedoresHijos(ss), compras: getComprasHijos(ss), deposito: getDepositoHijos(ss) }); }
     if (accion === 'flyerTexto')           { return json(flyerTexto(e.parameter)); }
+    if (accion === 'fondoFlyer')           { return json(fondoFlyer(e.parameter)); }
+    if (accion === 'guardarFlyer')         { return json(guardarFlyer(ss, e.parameter)); }
+    if (accion === 'getFlyersHijos')       { return json(getFlyersHijos(ss, e.parameter)); }
+    if (accion === 'archivarFlyer')        { return json(archivarFlyer(ss, e.parameter)); }
 
   } catch(err) { return json({error:err.toString()}); }
 }
@@ -1412,6 +1416,54 @@ function flyerTexto(p) {
   } catch (err) {
     return { error: 'No se pudo generar el texto: ' + err };
   }
+}
+
+// Fondo del flyer generado con IA: el worker tiene la clave de imágenes,
+// así que esto solo hace de puente autenticado.
+function fondoFlyer(p) {
+  try {
+    const res = UrlFetchApp.fetch(WORKER_RELAY_URL, {
+      method: 'post', contentType: 'application/json',
+      payload: JSON.stringify({ fondoIA: true, secret: BOT_SECRET, tema: dec(p.tema || '') }),
+      muteHttpExceptions: true
+    });
+    return JSON.parse(res.getContentText());
+  } catch (err) { return { error: 'fondo: ' + err }; }
+}
+
+// ─── HISTORIAL DE FLYERS ──────────────────────────────────────────────────────
+function guardarFlyer(ss, p) {
+  const h = getOrCreate(ss, 'FlyersHijos', ['ID','Fecha','Hijo','URL','Titulo','Codigos','Idea','FondoIA','Estado']);
+  const id = 'F' + Date.now();
+  h.appendRow([id, new Date(), dec(p.hijo || ''), dec(p.url || ''), dec(p.titulo || ''),
+    dec(p.codigos || ''), dec(p.idea || ''), p.fondo === '1' ? 'SI' : 'NO', 'activo']);
+  return { ok: true, id };
+}
+
+function getFlyersHijos(ss, p) {
+  const h = ss.getSheetByName('FlyersHijos');
+  if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2, 1, h.getLastRow() - 1, 9).getValues()
+    .filter(r => r[0] && r[2] === p.hijo)
+    .map(r => ({
+      id: r[0].toString(),
+      fecha: r[1] instanceof Date ? Utilities.formatDate(r[1], TZ, 'dd/MM HH:mm') : r[1].toString(),
+      url: r[3].toString(), titulo: (r[4] || '').toString(), codigos: (r[5] || '').toString(),
+      idea: (r[6] || '').toString(), fondo: r[7] === 'SI', estado: (r[8] || 'activo').toString()
+    }))
+    .reverse().slice(0, 60);
+}
+
+function archivarFlyer(ss, p) {
+  const h = ss.getSheetByName('FlyersHijos'); if (!h) return { error: 'sin hoja' };
+  const datos = h.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][0].toString() === p.id) {
+      h.getRange(i + 1, 9).setValue(dec(p.estado || 'archivado'));
+      return { ok: true };
+    }
+  }
+  return { error: 'no encontrado' };
 }
 
 // ─── PRODUCTOS DORMIDOS (sugerencias de oferta) ───────────────────────────────

@@ -391,6 +391,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
     </div>
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🖼️ Mis flyers</span>
+        <button class="btn-edit" id="btn-flyers-arch" onclick="toggleFlyersArchivados()">Ver archivados</button>
+      </div>
+      <div id="flyers-list"><div class="empty">Todavía no armaste ninguno 🎨</div></div>
+    </div>
   </div>
 
   <!-- COMPRAS -->
@@ -695,6 +702,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="wizard-label">Escribí tu idea y la IA la mejora ✨</div>
       <textarea id="flyer-idea" placeholder="Ej: vendo chocolates riquísimos, precios de amigo, traigo al cole" style="width:100%;min-height:110px;padding:14px;border:2px solid #e0d5c9;border-radius:14px;font-family:inherit;font-size:1rem;resize:vertical;box-sizing:border-box"></textarea>
       <div style="font-size:0.8rem;color:#aaa;margin-top:8px">Si lo dejás vacío, la IA inventa algo con onda.</div>
+      <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;background:#f6efff;border:2px solid #d9c2f7;border-radius:14px;cursor:pointer">
+        <input type="checkbox" id="flyer-fondo" style="width:20px;height:20px;accent-color:#7b2ff7">
+        <span style="font-size:0.92rem;font-weight:700;color:#5a1ec0">🪄 Crear fondo con IA <span style="font-weight:500;color:#9a7ac9">(un dibujo único para tu flyer, tarda ~30 seg más)</span></span>
+      </label>
     </div>
     <!-- PASO 3: PREVIEW -->
     <div class="wizard-step" id="fs-2" style="text-align:center">
@@ -799,6 +810,7 @@ function showTab(id, btn) {
   if (id === 'historia') cargarHistoria();
   if (id === 'total') cargarTotal();
   if (id === 'compras') cargarCompras();
+  if (id === 'catalogo') cargarFlyers();
 }
 
 // ─── API ──────────────────────────────────────────────────────────
@@ -1111,12 +1123,21 @@ async function eliminarProducto() {
 }
 
 // ─── FLYER CON IA ─────────────────────────────────────────────────
-let fStep = 0, fSel = {}, fTextos = null;
+let fStep = 0, fSel = {}, fTextos = null, fFondoImg = null;
+const esIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
-function abrirFlyer() {
+function abrirFlyer(prefill) {
   if (!catalogoCache.length) { alert('Primero cargá productos al catálogo'); return; }
-  fStep = 0; fSel = {}; fTextos = null;
+  fStep = 0; fSel = {}; fTextos = null; fFondoImg = null;
   document.getElementById('flyer-idea').value = '';
+  document.getElementById('flyer-fondo').checked = false;
+  if (prefill) {
+    (prefill.codigos || '').split(',').forEach(c => {
+      if (catalogoCache.find(p => p.codigo === c)) fSel[c] = true;
+    });
+    document.getElementById('flyer-idea').value = prefill.idea || '';
+    document.getElementById('flyer-fondo').checked = !!prefill.fondo;
+  }
   renderFlyerGrid();
   flyerStep(0);
   document.getElementById('flyer-overlay').classList.add('open');
@@ -1173,11 +1194,33 @@ function flyerBack() { if (fStep === 0) cerrarFlyer(); else flyerStep(fStep - 1)
 async function generarTextoFlyer() {
   const prods = catalogoCache.filter(p => fSel[p.codigo]);
   const status = document.getElementById('flyer-status');
-  status.textContent = '✨ La IA está escribiendo tu flyer...';
+  const quiereFondo = document.getElementById('flyer-fondo').checked;
+  status.textContent = quiereFondo && !fFondoImg
+    ? '🪄 La IA está pintando el fondo y escribiendo (~30 seg)...'
+    : '✨ La IA está escribiendo tu flyer...';
   document.getElementById('flyer-canvas').style.display = 'none';
   document.getElementById('flyer-acciones').style.display = 'none';
   const lista = prods.map(p => `${p.nombre} ($${p.precioVenta || 0})`).join(', ');
-  const d = await api('flyerTexto', { hijo: usuario, productos: lista, idea: document.getElementById('flyer-idea').value.trim() });
+  const idea = document.getElementById('flyer-idea').value.trim();
+
+  // Texto y fondo en paralelo. El fondo se reusa al pedir "otro texto" (no se re-paga).
+  const pTexto = api('flyerTexto', { hijo: usuario, productos: lista, idea });
+  let pFondo = null;
+  if (quiereFondo && !fFondoImg) pFondo = api('fondoFlyer', { tema: lista });
+  const d = await pTexto;
+  if (pFondo) {
+    const f = await pFondo;
+    if (f?.b64) {
+      fFondoImg = await new Promise(res => {
+        const im = new Image();
+        im.onload = () => res(im); im.onerror = () => res(null);
+        im.src = 'data:image/png;base64,' + f.b64;
+      });
+    }
+    if (!fFondoImg) mostrarToast('No salió el fondo con IA, va el clásico 🎨');
+  }
+  if (!quiereFondo) fFondoImg = null;
+
   if (!d || d.error) {
     status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
     return;
@@ -1189,9 +1232,31 @@ async function generarTextoFlyer() {
     status.textContent = '¡Listo! 🎉 Si no te convence, pedile otro texto.';
     document.getElementById('flyer-canvas').style.display = 'block';
     document.getElementById('flyer-acciones').style.display = 'flex';
+    guardarFlyerHistorial(d, quiereFondo);   // guardado silencioso en segundo plano
   } catch (e) {
     status.textContent = '😕 No pude dibujar el flyer: ' + e.message;
   }
+}
+
+// Sube el flyer terminado a Cloudinary y lo registra en el historial.
+async function guardarFlyerHistorial(t, conFondo) {
+  try {
+    const blob = await _flyerBlob();
+    if (!blob) return;
+    const form = new FormData();
+    form.append('file', blob);
+    form.append('upload_preset', 'candyshop');
+    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.secure_url) return;
+    await api('guardarFlyer', {
+      hijo: usuario, url: data.secure_url, titulo: t.titulo || '',
+      codigos: Object.keys(fSel).join(','),
+      idea: document.getElementById('flyer-idea').value.trim(),
+      fondo: conFondo ? '1' : '0'
+    });
+    flyersCargados = false;   // para que el historial se refresque
+  } catch (e) {}
 }
 
 function _cargarImgFlyer(url) {
@@ -1201,8 +1266,17 @@ function _cargarImgFlyer(url) {
     im.crossOrigin = 'anonymous';
     im.onload = () => res(im);
     im.onerror = () => res(null);
-    im.src = url.indexOf('res.cloudinary.com') !== -1 ? url.replace('/upload/', '/upload/w_600,h_600,c_fill/') : url;
+    im.src = url.indexOf('res.cloudinary.com') !== -1 ? url.replace('/upload/', '/upload/w_800/') : url;
   });
+}
+
+// Dibuja una imagen cubriendo el rectángulo SIN deformarla (recorta el sobrante).
+function _coverImg(ctx, im, x, y, w, h) {
+  const ir = im.width / im.height, dr = w / h;
+  let sx, sy, sw, sh;
+  if (ir > dr) { sh = im.height; sw = sh * dr; sx = (im.width - sw) / 2; sy = 0; }
+  else { sw = im.width; sh = sw / dr; sx = 0; sy = (im.height - sh) / 2; }
+  ctx.drawImage(im, sx, sy, sw, sh, x, y, w, h);
 }
 
 function _rr(ctx, x, y, w, h, r) {
@@ -1241,15 +1315,26 @@ async function dibujarFlyer(prods, t) {
     ? { a: '#0e6b34', b: '#2fb45e', accent: '#ffd24a' }
     : { a: '#163f6e', b: '#2c8fd6', accent: '#ffd24a' };
 
-  // Fondo degradé + burbujas decorativas
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, tema.a); g.addColorStop(1, tema.b);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  ctx.globalAlpha = 0.08; ctx.fillStyle = '#ffffff';
-  [[100, 160, 130], [980, 90, 90], [60, 1240, 110], [1010, 1280, 140], [930, 700, 70]].forEach(c => {
-    ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
-  });
-  ctx.globalAlpha = 1;
+  // Fondo: dibujo de IA (con velo para que el texto se lea) o degradé clásico
+  if (fFondoImg) {
+    _coverImg(ctx, fFondoImg, 0, 0, W, H);
+    ctx.fillStyle = 'rgba(15,20,40,0.30)'; ctx.fillRect(0, 0, W, H);
+    const gt = ctx.createLinearGradient(0, 0, 0, 330);
+    gt.addColorStop(0, 'rgba(0,0,0,0.45)'); gt.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, 330);
+    const gb = ctx.createLinearGradient(0, 1110, 0, H);
+    gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = gb; ctx.fillRect(0, 1110, W, H - 1110);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, tema.a); g.addColorStop(1, tema.b);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 0.08; ctx.fillStyle = '#ffffff';
+    [[100, 160, 130], [980, 90, 90], [60, 1240, 110], [1010, 1280, 140], [930, 700, 70]].forEach(c => {
+      ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
 
   // Título (achica la letra hasta que entre)
   ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
@@ -1288,7 +1373,7 @@ async function dibujarFlyer(prods, t) {
     const imgH = ch - 96;
     if (imgs[i]) {
       ctx.save(); _rr(ctx, x + 10, y + 10, cw - 20, imgH - 10, 18); ctx.clip();
-      ctx.drawImage(imgs[i], x + 10, y + 10, cw - 20, imgH - 10);
+      _coverImg(ctx, imgs[i], x + 10, y + 10, cw - 20, imgH - 10);
       ctx.restore();
     } else {
       ctx.font = (imgH * 0.45) + 'px sans-serif'; ctx.fillStyle = '#f0ebe3';
@@ -1340,14 +1425,85 @@ async function compartirFlyer() {
   mostrarToast('Se descargó la imagen: compartila desde tu galería 📤');
 }
 
-async function descargarFlyer() {
-  const blob = await _flyerBlob();
+// En iPhone el <a download> manda el archivo a Archivos/Drive; el menú nativo
+// de compartir sí tiene "Guardar imagen" → galería. En el resto, descarga normal.
+async function guardarImagenBlob(blob, nombre) {
   if (!blob) return;
+  const file = new File([blob], nombre, { type: blob.type || 'image/jpeg' });
+  if (esIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+    mostrarToast('Tocá "Guardar imagen" y va a tu galería 📸');
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'flyer-candyshop.jpg';
+  a.download = nombre;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+async function descargarFlyer() {
+  guardarImagenBlob(await _flyerBlob(), 'flyer-candyshop.jpg');
+}
+
+// ─── HISTORIAL DE FLYERS ──────────────────────────────────────────
+let flyersCache = [], flyersVerArchivados = false, flyersCargados = false;
+
+async function cargarFlyers(forzar) {
+  if (flyersCargados && !forzar) return;
+  const d = await api('getFlyersHijos', { hijo: usuario });
+  flyersCache = Array.isArray(d) ? d : [];
+  flyersCargados = true;
+  renderFlyers();
+}
+
+function toggleFlyersArchivados() {
+  flyersVerArchivados = !flyersVerArchivados;
+  document.getElementById('btn-flyers-arch').textContent = flyersVerArchivados ? 'Ver activos' : 'Ver archivados';
+  renderFlyers();
+}
+
+function renderFlyers() {
+  const el = document.getElementById('flyers-list');
+  const lista = flyersCache.filter(f => flyersVerArchivados ? f.estado === 'archivado' : f.estado !== 'archivado');
+  if (!lista.length) {
+    el.innerHTML = `<div class="empty">${flyersVerArchivados ? 'Nada archivado todavía' : 'Todavía no armaste ninguno 🎨'}</div>`;
+    return;
+  }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">' + lista.map(f => `
+    <div style="border:1.5px solid #eee4d8;border-radius:14px;overflow:hidden;background:#fff">
+      <img src="${f.url.replace('/upload/', '/upload/w_400/')}" style="width:100%;display:block;cursor:pointer" onclick="window.open('${f.url}','_blank')">
+      <div style="padding:8px 10px">
+        <div style="font-size:0.74rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo || 'Flyer'}</div>
+        <div style="font-size:0.66rem;color:#aaa">${f.fecha}${f.fondo ? ' · 🪄' : ''}</div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button onclick="descargarFlyerUrl('${f.url}')" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
+          <button onclick="regenerarFlyer('${f.id}')" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
+          <button onclick="archivarFlyerUI('${f.id}','${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
+        </div>
+      </div>
+    </div>`).join('') + '</div>';
+}
+
+async function descargarFlyerUrl(url) {
+  try {
+    const r = await fetch(url);
+    guardarImagenBlob(await r.blob(), 'flyer-candyshop.jpg');
+  } catch { window.open(url, '_blank'); }
+}
+
+async function archivarFlyerUI(id, estado) {
+  const f = flyersCache.find(x => x.id === id);
+  if (f) f.estado = estado;
+  renderFlyers();
+  await api('archivarFlyer', { id, estado });
+}
+
+function regenerarFlyer(id) {
+  const f = flyersCache.find(x => x.id === id);
+  if (!f) return;
+  abrirFlyer({ codigos: f.codigos, idea: f.idea, fondo: f.fondo });
+  if (Object.keys(fSel).length) flyerStep(1);   // productos ya elegidos → directo a la idea
+  mostrarToast('Mismos productos e idea: tocá ✨ Generar 🎨');
 }
 
 // ─── COMPRAS / PROVEEDORES / DEPÓSITO ────────────────────────────
