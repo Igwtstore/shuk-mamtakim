@@ -1983,6 +1983,10 @@ function agregarAlCarrito(id) {
   if (qty === 0) { showToast('Elegí una cantidad primero'); return; }
   const p = productos.find(x => x.id === id);
   if (!p) return;
+  const _precioModo = modo === 'mayorista'
+    ? parseFloat((p.precioMay || '0').toString().replace(',', '.'))
+    : (parseFloat(p.precioMin) || 0);
+  if (!(_precioModo > 0)) { showToast('Este producto no tiene precio cargado — consultanos por WhatsApp 🙏'); return; }
   carrito[id] = { ...p, qty };
   cantidades[id] = 0;
   actualizarBadge();
@@ -2372,14 +2376,18 @@ async function renderPedidos() {
             v.totalARS > 0 ? `$ ${Math.round(v.totalARS).toLocaleString('es-AR')}` : '',
             v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : ''
           ].filter(Boolean).join(' + ');
+      const _esLineaCero = l => /—\s*(?:\$|U\$S)\s*0(?:[.,]0+)?\s*c\/u/.test(l);
       const productLines = v.productos
         ? v.productos.split(' || ').filter(l => {
             if (!soloMiri) return true;
             const m = l.match(/(\d+)x\s+([^—·]+)/);   // tolera viñeta "• " inicial
             const nom = m ? m[2].trim() : '';
             return !nombresJony.has(nom);   // en vista Miri oculta líneas de productos de Jony
-          }).map(l => `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
+          }).map(l => _esLineaCero(l)
+            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${l} ⚠️</div>`
+            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
         : '';
+      const _nCeros = v.productos ? v.productos.split(' || ').filter(_esLineaCero).length : 0;
       const arsJ = parseFloat(v.arsJONY || 0);
       const arsM = parseFloat(v.arsMyri || 0);
       const usdM = parseFloat(v.usdMyri || 0);
@@ -2439,6 +2447,7 @@ async function renderPedidos() {
           </div>
         </div>
         ${avisoVenc}
+        ${_nCeros && (estado === 'pendiente' || estado === 'preparando') && !soloMiri ? `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:10px;padding:0.5rem 0.8rem;margin:0.5rem 0;font-size:0.85rem;font-weight:800;color:#c0392b">⚠️ ${_nCeros === 1 ? 'Hay un producto a precio $0' : 'Hay ' + _nCeros + ' productos a precio $0'} — tocá ✏️ Editar para corregirlo</div>` : ''}
         <div style="margin:0.4rem 0">${productLines || (soloMiri ? '' : v.productos)}</div>
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
         ${_notasClientes[v.cliente] ? `<div style="font-size:0.75rem;background:#fdf3e3;border-left:3px solid var(--dorado);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.3rem;color:#7a5a1a">👤 ${esc(_notasClientes[v.cliente])}</div>` : ''}
@@ -3470,6 +3479,20 @@ function cargarPedidoManual() {
   _enviandoManual = true;
   setTimeout(() => { _enviandoManual = false; }, 10000);
 
+  // Guardia: ningún ítem puede ir a precio 0
+  const _aCero = _manualElegibles().filter(p => {
+    const qty = _manualQtys[p.id] || 0;
+    if (!qty) return false;
+    const precio = tipo === 'Mayorista'
+      ? parseFloat((p.precioMay || '0').toString().replace(',', '.'))
+      : (parseFloat(p.precioMin) || 0);
+    return !(precio > 0);
+  });
+  if (_aCero.length) {
+    showToast('⚠️ Sin precio ' + tipo.toLowerCase() + ': ' + _aCero.map(p => p.nombre).join(', ') + ' — cargalo en ✏️ Editar producto');
+    _enviandoManual = false;
+    return;
+  }
   let arsJ = 0, arsM = 0, usdM = 0;
   const selectedItems = [];
   const lineas = [];
@@ -6145,7 +6168,8 @@ function renderEditLineas() {
           oninput="_editLineas[${i}].qty = parseInt(this.value)||1; recalcularEditTotal()">
         <label style="font-size:0.7rem;color:var(--texto-suave);min-width:28px">${l.moneda}</label>
         <input class="edit-price-input" type="number" value="${l.precio}" min="0" step="${l.moneda === 'U$S' ? '0.01' : '1'}" placeholder="Precio"
-          oninput="_editLineas[${i}].precio = parseFloat(this.value)||0; recalcularEditTotal()">
+          style="${!(parseFloat(l.precio) > 0) ? 'border:2px solid #c0392b;background:#fde0e0' : ''}"
+          oninput="_editLineas[${i}].precio = parseFloat(this.value)||0; this.style.border = (parseFloat(this.value)>0) ? '' : '2px solid #c0392b'; this.style.background = (parseFloat(this.value)>0) ? '' : '#fde0e0'; recalcularEditTotal()">
         <label style="font-size:0.7rem;color:var(--texto-suave)">Desc%</label>
         <input class="edit-price-input" type="number" value="${l.desc||0}" min="0" max="100" step="1" style="width:60px"
           oninput="_editLineas[${i}].desc = parseFloat(this.value)||0; recalcularEditTotal()">
@@ -6259,6 +6283,11 @@ function recalcularEditTotal() {
 
 async function guardarEditPedido() {
   if (!_editPedidoActual) return;
+  const _lineasCero = _editLineas.filter(l => (l.qty || 0) > 0 && !((parseFloat(l.precio) || 0) > 0));
+  if (_lineasCero.length) {
+    const sigue = confirm('⚠️ Hay productos a precio 0:\n• ' + _lineasCero.map(l => l.nombre).join('\n• ') + '\n\n¿Guardar igual? (Cancelar para corregirlos)');
+    if (!sigue) return;
+  }
   const btn = document.getElementById('ep-btn-save');
   btn.textContent = 'Guardando...'; btn.disabled = true;
 
