@@ -1113,6 +1113,41 @@
     <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
   </div>
   <div class="admin-card">
+    <div class="admin-titulo">✏️ Editar producto</div>
+    <div class="nombre-campo" style="margin:0 0 0.6rem">
+      <label>Elegí el producto</label>
+      <select id="ep-select" onchange="cargarProductoEditor(this.value)" style="width:100%;padding:0.65rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;background:#fff">
+        <option value="">— Elegir —</option>
+      </select>
+    </div>
+    <div id="ep-form" style="display:none">
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <div class="nombre-campo" style="margin:0;flex:2;min-width:160px"><label>Nombre</label><input type="text" id="ep-nombre" /></div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Categoría</label><input type="text" id="ep-categoria" list="categorias-productos-list" onfocus="this.select()" /></div>
+      </div>
+      <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Descripción</label><input type="text" id="ep-desc" /></div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label>P. Mayorista (U$S)</label><input type="text" id="ep-pmay" /></div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label>P. Minorista ($)</label><input type="number" id="ep-pmin" /></div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:80px"><label>Stock</label><input type="number" id="ep-stock" /></div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Dueño</label>
+          <select id="ep-dueno" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Miri</option><option>Jony</option></select>
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:160px"><label>Visible para</label>
+          <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option></select>
+        </div>
+      </div>
+      <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (⭐ = portada · ✕ = quitar)</label></div>
+      <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
+      <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
+      <div id="ep-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
+      <button class="guardar-stock-btn" style="margin-top:0.75rem" onclick="guardarEdicionProducto()">💾 Guardar cambios</button>
+      <button class="guardar-stock-btn" style="margin-top:0.5rem;background:#fde8e8;color:#c0392b" onclick="eliminarProductoEditor()">🗑️ Eliminar producto (se oculta de todos lados)</button>
+    </div>
+  </div>
+  <div class="admin-card">
     <div class="admin-titulo">📥 Bandeja de fotos (la IA las describe sola)</div>
     <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">Tirá acá todas las fotos juntas. La IA las analiza y deja listos nombre, descripción y categoría con el estilo del catálogo. Después, al dar de alta, elegís de acá y viene todo pre-pensado.</div>
     <input type="file" id="bandeja-files" accept="image/*" multiple onchange="subirABandeja(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
@@ -1654,6 +1689,7 @@ async function cargarProductos() {
     }
     renderCatalogo();
     renderFiltros();
+    poblarEditorProductos();
     renderStockAdmin();
     renderManualProductos();
     renderOfertasAdmin();
@@ -3603,6 +3639,133 @@ async function subirArchivosCloudinary() {
   return ids.join(',');
 }
 
+// ─── EDITOR DE PRODUCTO ───────────────────────────────────────────
+let _epId = null, _epFotos = [], _epNuevas = [];
+
+function poblarEditorProductos() {
+  const sel = document.getElementById('ep-select');
+  if (!sel) return;
+  const actual = sel.value;
+  const lista = productos.slice().sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre));
+  const porCat = {};
+  lista.forEach(p => { const c = p.categoria || 'Varios'; (porCat[c] = porCat[c] || []).push(p); });
+  sel.innerHTML = '<option value="">— Elegir —</option>' + Object.keys(porCat).map(c =>
+    `<optgroup label="${esc(c)}">` + porCat[c].map(p =>
+      `<option value="${p.id}">${esc(p.nombre)}${p.desc ? ' · ' + esc(p.desc.substring(0, 40)) : ''}</option>`).join('') + '</optgroup>').join('');
+  if (actual) sel.value = actual;
+}
+
+function cargarProductoEditor(id) {
+  const p = productos.find(x => String(x.id) === String(id));
+  const form = document.getElementById('ep-form');
+  if (!p) { form.style.display = 'none'; _epId = null; return; }
+  _epId = p.id;
+  _epFotos = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+  _epNuevas = [];
+  document.getElementById('ep-nombre').value = p.nombre || '';
+  document.getElementById('ep-desc').value = p.desc || '';
+  document.getElementById('ep-categoria').value = p.categoria || '';
+  document.getElementById('ep-pmay').value = p.precioMay || '';
+  document.getElementById('ep-pmin').value = p.precioMin || '';
+  document.getElementById('ep-stock').value = p.stock || 0;
+  document.getElementById('ep-dueno').value = p.dueno || 'Miri';
+  document.getElementById('ep-visible').value = p.visible || 'Ambos';
+  document.getElementById('ep-nuevas').value = '';
+  document.getElementById('ep-status').textContent = '';
+  renderFotosEditor();
+  form.style.display = 'block';
+}
+
+function renderFotosEditor() {
+  const cont = document.getElementById('ep-fotos');
+  let html = _epFotos.map((f, i) => {
+    const esVid = esVideo(f);
+    const media = esVid
+      ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem">🎬</div>`
+      : `<img src="${imgUrl(f)[0]}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onerror="this.style.opacity=0.3">`;
+    return `<div style="position:relative">${media}
+      ${i === 0 ? '<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(0,0,0,0.5);color:#fff;border-radius:0 0 8px 8px">portada</div>'
+                : `<button type="button" onclick="portadaFotoEditor(${i})" title="Hacer portada" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c9954a;color:#fff;font-size:0.65rem;cursor:pointer;line-height:1">⭐</button>`}
+      <button type="button" onclick="quitarFotoEditor(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
+    </div>`;
+  }).join('');
+  html += _epNuevas.map((f, i) => {
+    const esVid = f.type.startsWith('video/');
+    const media = esVid
+      ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem">🎬</div>`
+      : `<img src="${URL.createObjectURL(f)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onload="URL.revokeObjectURL(this.src)">`;
+    return `<div style="position:relative">${media}
+      <div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(26,122,60,0.75);color:#fff;border-radius:0 0 8px 8px">nueva</div>
+      <button type="button" onclick="quitarNuevaEditor(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
+    </div>`;
+  }).join('');
+  cont.innerHTML = html || '<div class="sinpedidos" style="grid-column:1/-1">Sin fotos — agregá abajo</div>';
+}
+
+function portadaFotoEditor(i) { _epFotos.unshift(_epFotos.splice(i, 1)[0]); renderFotosEditor(); }
+function quitarFotoEditor(i) { _epFotos.splice(i, 1); renderFotosEditor(); }
+function quitarNuevaEditor(i) { _epNuevas.splice(i, 1); renderFotosEditor(); }
+
+function agregarFotosEditor(input) {
+  const nuevos = Array.from(input.files || []);
+  input.value = '';
+  for (const f of nuevos) {
+    if (_epFotos.length + _epNuevas.length >= 5) { showToast('Máximo 5 archivos por producto'); break; }
+    _epNuevas.push(f);
+  }
+  renderFotosEditor();
+}
+
+async function guardarEdicionProducto() {
+  if (!_epId) return;
+  const status = document.getElementById('ep-status');
+  // Subir las fotos nuevas
+  for (let i = 0; i < _epNuevas.length; i++) {
+    const f = _epNuevas[i];
+    const esVid = f.type.startsWith('video/');
+    status.textContent = `Subiendo ${i + 1}/${_epNuevas.length}...`;
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    fd.append('folder', 'shuk-mamtakim');
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${esVid ? 'video' : 'image'}/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.secure_url) _epFotos.push(esVid ? data.secure_url : data.public_id);
+    } catch (e) {}
+  }
+  _epNuevas = [];
+  status.textContent = 'Guardando...';
+  const r = await apiWrite(new URLSearchParams({
+    accion: 'editarProducto', id: _epId,
+    nombre: document.getElementById('ep-nombre').value.trim(),
+    desc: document.getElementById('ep-desc').value.trim() || '__VACIO__',
+    categoria: document.getElementById('ep-categoria').value.trim() || 'Varios',
+    precioMay: document.getElementById('ep-pmay').value.trim() || '0',
+    precioMin: document.getElementById('ep-pmin').value.trim() || '0',
+    stock: document.getElementById('ep-stock').value || '0',
+    dueno: document.getElementById('ep-dueno').value,
+    visible: document.getElementById('ep-visible').value,
+    imagen: _epFotos.join(',') || '__VACIO__'
+  }), '💾 Producto actualizado ✓');
+  status.textContent = '';
+  if (!r.error) { await cargarProductos(); poblarEditorProductos(); cargarProductoEditor(_epId); }
+}
+
+async function eliminarProductoEditor() {
+  if (!_epId) return;
+  const p = productos.find(x => String(x.id) === String(_epId));
+  if (!confirm(`¿Eliminar "${p?.nombre}"? Se oculta de la tienda y el panel (el historial de ventas se conserva).`)) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: _epId, activo: 'NO' }), '🗑️ Producto eliminado');
+  if (!r.error) {
+    document.getElementById('ep-form').style.display = 'none';
+    document.getElementById('ep-select').value = '';
+    _epId = null;
+    await cargarProductos();
+    poblarEditorProductos();
+  }
+}
+
 // ─── IA EN EL ALTA: analizar foto + bandeja ───────────────────────
 let _npPreSubida = '';   // public_id ya subido (análisis o bandeja) → no re-subir
 let _npBandejaId = '';   // si vino de la bandeja, para marcarla usada al guardar
@@ -4277,6 +4440,7 @@ function _tagPanelCards() {
     else if (t.includes('stock')) s = 'stock';
     else if (t.includes('flyer')) s = 'catalogo';
     else if (t.includes('bandeja')) s = 'catalogo';
+    else if (t.includes('editar producto')) s = 'catalogo';
     else if (t.includes('agregar nuevo producto')) s = 'catalogo';
     else if (t.includes('ofertas')) s = 'catalogo';
     else if (t.includes('qr')) s = 'inicio';

@@ -539,7 +539,8 @@ function doGet(e) {
         if (datos[i][0].toString() === e.parameter.id) {
           Object.keys(campos).forEach(k => {
             if (e.parameter[k] !== undefined && e.parameter[k] !== null && e.parameter[k] !== '') {
-              h.getRange(i + 1, campos[k]).setValue(dec(e.parameter[k]));
+              const v = dec(e.parameter[k]);
+              h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : v);
             }
           });
           return json({ ok: true });
