@@ -1027,7 +1027,7 @@
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Categoría</label>
-          <input type="text" id="np-categoria" list="categorias-productos-list" placeholder="Chocolate..." />
+          <input type="text" id="np-categoria" list="categorias-productos-list" placeholder="Chocolate..." onfocus="this.select()" />
           <datalist id="categorias-productos-list"></datalist>
         </div>
       </div>
@@ -3582,6 +3582,7 @@ async function guardarNuevoProducto() {
         document.getElementById('np-pmay').value = '';
         document.getElementById('np-pmin').value = '';
         document.getElementById('np-stock').value = '';
+        document.getElementById('np-categoria').value = '';
         document.getElementById('np-foto').value = '';
         document.getElementById('np-preview').style.display = 'none';
         _npCloudinaryId = '';
