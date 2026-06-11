@@ -1069,6 +1069,7 @@
       <div class="nombre-campo" style="margin:0">
         <label>Fotos y/o video del producto (hasta 5 — podés seleccionar varios juntos)</label>
         <input type="file" id="np-foto" accept="image/*,video/*" multiple onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
+        <div id="np-multi-prev" style="display:none;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.5rem"></div>
         <button type="button" onclick="analizarFotoAlta()" style="margin-top:0.5rem;width:100%;padding:0.7rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.85rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y escriba nombre + descripción</button>
         <div id="np-preview" style="margin-top:0.5rem;display:none">
           <img id="np-preview-img" style="max-height:120px;border-radius:8px;object-fit:contain;background:var(--gris);padding:0.5rem;display:none" />
@@ -1601,6 +1602,18 @@ function pedidoEsDeMiri(v) {
 }
 
 const CATEGORIA_ORDEN = ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Varios'];
+// Líneas/marcas conocidas: agrupa visualmente los productos de una misma línea
+// dentro de su categoría (Elite con Elite, Klik con Klik...). Detecta por
+// nombre+descripción, así "Mini Pezezman · Elite" también cae con los Elite.
+const MARCAS_LINEA = ['elite', 'klik', 'kinder', 'gefen', 'tomer', 'bisli', 'yumi', 'wow', 'lolly', 'taami', 'osem'];
+function getMarcaIdx(p) {
+  const t = ((p.nombre || '') + ' ' + (p.desc || '')).toLowerCase();
+  for (let i = 0; i < MARCAS_LINEA.length; i++) {
+    if (t.includes(MARCAS_LINEA[i])) return i;
+  }
+  return MARCAS_LINEA.length;
+}
+
 function getCatIdx(p) {
   const i = CATEGORIA_ORDEN.indexOf(p.categoria || 'Varios');
   return i === -1 ? CATEGORIA_ORDEN.length : i;
@@ -1745,7 +1758,7 @@ function renderCatalogo() {
     const aOut = a.stock <= 0 ? 1 : 0;
     const bOut = b.stock <= 0 ? 1 : 0;
     if (aOut !== bOut) return aOut - bOut;
-    return getCatIdx(a) - getCatIdx(b);
+    return getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre);
   });
   if (!filtrados.length) {
     catalogo.innerHTML = '<div class="loading">Sin resultados</div>';
@@ -2580,7 +2593,7 @@ function _syncCatalogoFlyer() {
   const publico = fPrecioModo === 'may' ? 'Mayorista' : 'Minorista';
   catalogoCache = productosVisibles()
     .filter(p => (parseInt(p.stock) || 0) > 0 && (!p.visible || p.visible === 'Ambos' || p.visible === publico))
-    .sort((a, b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre))
+    .sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre))
     .map(p => {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
     const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/e_trim:10/w_800,') : '';
@@ -3506,28 +3519,63 @@ function registrarGasto() {
 // NUEVO PRODUCTO
 let _npCloudinaryId = '';
 
+let _npArchivos = [];   // archivos acumulados (elegir varias veces SUMA, no reemplaza)
+
 function previewNuevoProducto(input) {
-  const files = Array.from(input.files || []);
-  const img = document.getElementById('np-preview');
-  const vid = document.getElementById('np-preview-video');
+  const nuevos = Array.from(input.files || []);
+  input.value = '';   // permite volver a elegir (incluso el mismo archivo)
+  const max = 5 - (_npPreSubida ? 1 : 0);
+  for (const f of nuevos) {
+    if (_npArchivos.length >= max) { showToast('Máximo 5 archivos por producto'); break; }
+    _npArchivos.push(f);
+  }
+  renderNpArchivos();
+}
+
+function renderNpArchivos() {
+  const cont = document.getElementById('np-multi-prev');
   const status = document.getElementById('np-upload-status');
-  if (!files.length) { img.style.display = 'none'; vid.style.display = 'none'; status.textContent = ''; return; }
-  if (files.length > 5) { showToast('Máximo 5 archivos — tomo los primeros 5'); }
-  const file = files[0];
-  const esVid = file.type.startsWith('video/');
-  img.style.display = esVid ? 'none' : 'block';
-  vid.style.display = esVid ? 'block' : 'none';
-  if (esVid) { vid.src = URL.createObjectURL(file); }
-  else { img.src = URL.createObjectURL(file); }
-  const nImg = files.filter(f => !f.type.startsWith('video/')).length;
-  const nVid = files.length - nImg;
-  status.textContent = [nImg ? nImg + ' foto' + (nImg > 1 ? 's' : '') : '', nVid ? nVid + ' video' + (nVid > 1 ? 's' : '') : '']
+  const wrap = document.getElementById('np-preview');
+  document.getElementById('np-preview-img').style.display = 'none';
+  document.getElementById('np-preview-vid').style.display = 'none';
+  if (!_npArchivos.length && !_npPreSubida) {
+    cont.style.display = 'none'; cont.innerHTML = '';
+    wrap.style.display = 'none';
+    if (status) status.textContent = '';
+    return;
+  }
+  cont.style.display = 'grid';
+  let html = '';
+  if (_npPreSubida) {
+    html += `<div style="position:relative">
+      <img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_200,f_auto,q_auto/${_npPreSubida}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px">
+      <div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(0,0,0,0.5);color:#fff;border-radius:0 0 8px 8px">ya subida ✓</div>
+    </div>`;
+  }
+  html += _npArchivos.map((f, i) => {
+    const esVid = f.type.startsWith('video/');
+    const media = esVid
+      ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem">🎬</div>`
+      : `<img src="${URL.createObjectURL(f)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onload="URL.revokeObjectURL(this.src)">`;
+    return `<div style="position:relative">${media}
+      <button type="button" onclick="quitarNpArchivo(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
+    </div>`;
+  }).join('');
+  cont.innerHTML = html;
+  wrap.style.display = 'block';
+  const nImg = _npArchivos.filter(f => !f.type.startsWith('video/')).length + (_npPreSubida ? 1 : 0);
+  const nVid = _npArchivos.length - (_npArchivos.filter(f => !f.type.startsWith('video/')).length);
+  if (status) status.textContent = [nImg ? nImg + ' foto' + (nImg > 1 ? 's' : '') : '', nVid ? nVid + ' video' + (nVid > 1 ? 's' : '') : '']
     .filter(Boolean).join(' + ') + ' — se suben al guardar. En la tienda van a rotar solas 🎠';
-  _npCloudinaryId = '';
+}
+
+function quitarNpArchivo(i) {
+  _npArchivos.splice(i, 1);
+  renderNpArchivos();
 }
 
 async function subirArchivosCloudinary() {
-  const files = Array.from(document.getElementById('np-foto').files || []).slice(0, 5);
+  const files = _npArchivos.slice(0, 5);
   if (!files.length) return '';
   // Imágenes primero (la primera es la portada y el carrusel rota imágenes), videos al final
   files.sort((a, b) => (a.type.startsWith('video/') ? 1 : 0) - (b.type.startsWith('video/') ? 1 : 0));
@@ -3560,11 +3608,10 @@ let _npPreSubida = '';   // public_id ya subido (análisis o bandeja) → no re-
 let _npBandejaId = '';   // si vino de la bandeja, para marcarla usada al guardar
 
 async function analizarFotoAlta() {
-  const files = document.getElementById('np-foto').files;
   const status = document.getElementById('np-upload-status');
   let publicId = _npPreSubida;
   if (!publicId) {
-    const img = Array.from(files || []).find(f => f.type.startsWith('image/'));
+    const img = _npArchivos.find(f => f.type.startsWith('image/'));
     if (!img) { showToast('Elegí primero una foto del producto'); return; }
     status.textContent = 'Subiendo la foto...';
     const formData = new FormData();
@@ -3578,6 +3625,9 @@ async function analizarFotoAlta() {
     } catch (e) {}
     if (!publicId) { status.textContent = 'No se pudo subir la foto'; return; }
     _npPreSubida = publicId;
+    const idxImg = _npArchivos.findIndex(f => f.type.startsWith('image/'));
+    if (idxImg !== -1) _npArchivos.splice(idxImg, 1);
+    renderNpArchivos();
   }
   status.textContent = '✨ La IA está mirando la foto...';
   try {
@@ -3668,11 +3718,10 @@ function usarDeBandeja(id) {
   document.getElementById('np-categoria').value = b.categoria || '';
   _npPreSubida = b.publicId;
   _npBandejaId = b.id;
+  _npArchivos = [];
   document.getElementById('np-foto').value = '';
+  renderNpArchivos();
   document.getElementById('np-upload-status').textContent = '📥 Foto y ficha tomadas de la bandeja — completá precios y stock';
-  document.getElementById('np-preview').src = 'https://res.cloudinary.com/dq2boloyp/image/upload/w_300,f_auto,q_auto/' + b.publicId;
-  document.getElementById('np-preview').style.display = 'block';
-  document.getElementById('np-preview-video').style.display = 'none';
   document.getElementById('np-nombre').scrollIntoView({ behavior: 'smooth', block: 'center' });
   showToast('📥 Ficha cargada — faltan precios y stock');
 }
@@ -3694,7 +3743,7 @@ async function guardarNuevoProducto() {
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
   // Subir foto si hay una seleccionada
   let imagenId = '';
-  if (document.getElementById('np-foto').files.length) {
+  if (_npArchivos.length) {
     imagenId = await subirArchivosCloudinary();
     if (_npPreSubida && imagenId) imagenId = _npPreSubida + ',' + imagenId;
     else if (_npPreSubida) imagenId = _npPreSubida;
@@ -3719,6 +3768,8 @@ async function guardarNuevoProducto() {
         document.getElementById('np-categoria').value = '';
         document.getElementById('np-foto').value = '';
         document.getElementById('np-preview').style.display = 'none';
+        _npArchivos = [];
+        renderNpArchivos();
         _npCloudinaryId = '';
         if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
         _npPreSubida = ''; _npBandejaId = '';
