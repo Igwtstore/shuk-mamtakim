@@ -1399,9 +1399,14 @@ function flyerTexto(p) {
   const idea = dec(p.idea || '').substring(0, 300);
 
   const ocasion = dec(p.ocasion || '');
-  const system = 'Sos el creativo publicitario Y director de arte del Candy Shop de ' + hijo + ', un chico argentino que vende ' +
-    'golosinas a amigos, compañeros y vecinos. Escribís textos para flyers: cortos, divertidos, vendedores, ' +
-    'en español rioplatense, con onda pero sin grosería. Respetá los límites de caracteres a rajatabla. ' +
+  const intro = (p.negocio === 'shuk')
+    ? 'Sos el creativo publicitario Y director de arte de "Shuk Mamtakim", un almacén familiar argentino de golosinas ' +
+      'y productos kosher importados de Israel (venta mayorista y minorista). Escribís textos para flyers: cortos, ' +
+      'tentadores, profesionales pero cercanos, en español rioplatense. '
+    : 'Sos el creativo publicitario Y director de arte del Candy Shop de ' + hijo + ', un chico argentino que vende ' +
+      'golosinas a amigos, compañeros y vecinos. Escribís textos para flyers: cortos, divertidos, vendedores, ' +
+      'en español rioplatense, con onda pero sin grosería. ';
+  const system = intro + 'Respetá los límites de caracteres a rajatabla. ' +
     'Además escribís el prompt (en inglés) para generar el FONDO del flyer con un modelo de imágenes: ' +
     'tiene que ser detallado y profesional — estilo visual concreto (ej: vibrant candy-pop 3D render, soft gradient studio backdrop, ' +
     'playful flat illustration), motivos inspirados en los productos (vapor de sopa, trozos de chocolate, caramelos flotando), ' +

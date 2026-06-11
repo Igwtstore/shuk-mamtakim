@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shuk Mamtakim 🍬</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 <meta property="og:title" content="Shuk Mamtakim 🍬">
 <meta property="og:description" content="¡Hacé tu pedido online! Golosinas mayoristas y minoristas. Entrá y elegí.">
 <meta property="og:image" content="https://res.cloudinary.com/dq2boloyp/image/upload/w_1200,h_630,c_pad,b_rgb:fdf3e3/website_banner_rhyfih.png">
@@ -739,6 +741,27 @@
     .producto-img-wrap, .producto-img, .producto-img-placeholder { height: 180px; }
     .logo { font-size: 1.15rem; }
   }
+
+  /* ─── Wizard del flyer (portado del Candy Shop) ─── */
+  .wizard-overlay { display: none; position: fixed; inset: 0; background: #f5f0e8; z-index: 200; flex-direction: column; }
+  .wizard-overlay.open { display: flex; }
+  .wizard-header { padding: 16px 20px 12px; display: flex; align-items: center; gap: 12px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06); flex-shrink: 0; }
+  .wizard-back { background: #f0ebe3; border: none; border-radius: 10px; width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .wizard-title { font-size: 1rem; font-weight: 700; color: #2d1a0a; flex: 1; }
+  .wizard-steps { display: flex; gap: 6px; flex-shrink: 0; }
+  .wizard-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5e0d8; transition: background 0.2s; }
+  .wizard-dot.active { background: #5c3d1e; }
+  .wizard-dot.done { background: #2e8b57; }
+  .wizard-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .wizard-footer { padding: 16px 20px 32px; background: white; box-shadow: 0 -2px 8px rgba(0,0,0,0.06); flex-shrink: 0; }
+  .wizard-step { display: none; }
+  .wizard-step.active { display: block; }
+  .wizard-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #bbb; margin-bottom: 8px; }
+  .btn-wizard { width: 100%; padding: 16px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 14px; font-size: 1rem; font-weight: 800; cursor: pointer; }
+  .btn-wizard.verde { background: linear-gradient(135deg, #2e8b57, #1a6b3c); }
+  .empty { color:#ccc; font-size:0.88rem; text-align:center; padding:20px 0; }
+  #flyer-overlay .btn-add { width:100%; padding:14px; background:linear-gradient(135deg,#1a1a2e,#3d3d77); color:#fff; border:none; border-radius:12px; font-size:0.95rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; }
+
 </style>
 </head>
 <body>
@@ -1086,6 +1109,17 @@
       <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo les va a los chicos?</button>
     </div>
     <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-titulo">🎨 Flyers con IA</div>
+    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">Elegí productos, contá tu idea (o grabala 🎙️) y la IA arma el flyer con tus fotos reales, listo para difundir.</div>
+    <button class="guardar-stock-btn" style="margin-top:0;background:linear-gradient(135deg,#7b2ff7,#f107a3)" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
+    <button class="guardar-stock-btn" style="margin-top:0.5rem;background:linear-gradient(135deg,#ff8f00,#f4511e)" onclick="flyerDelDia()">⚡ Flyer del día (se arma solo)</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem">
+      <div class="admin-titulo" style="margin:0">🖼️ Mis flyers</div>
+      <button class="btn-edit" id="btn-flyers-arch" onclick="toggleFlyersArchivados()">Ver archivados</button>
+    </div>
+    <div id="flyers-list" style="margin-top:0.5rem"><div class="sinpedidos">Todavía no armaste ninguno 🎨</div></div>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">💤 Productos dormidos (sugerencia de ofertas)</div>
@@ -2528,6 +2562,671 @@ async function guardarClaveIA() {
   if (!r.error) preguntarIAUI();   // reintenta la pregunta que quedó pendiente
 }
 
+// ─── FLYER CON IA (Shuk) — espejo del motor del Candy Shop ───────
+function flyerApi(accion, extra = {}) {
+  return fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion, ...extra }))
+    .then(r => r.json()).catch(() => null);
+}
+let catalogoCache = [];   // productos en formato flyer (codigo/nombre/precioVenta/foto)
+function _syncCatalogoFlyer() {
+  catalogoCache = productosVisibles().map(p => {
+    const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+    const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/e_trim:10/w_800,') : '';
+    return {
+      codigo: String(p.id), nombre: p.nombre,
+      precioVenta: fPrecioModo === 'may'
+        ? (parseFloat((p.precioMay || '0').toString().replace(',', '.')) || 0)
+        : (Math.round(p.precioMin) || 0),
+      foto
+    };
+  });
+}
+function fmtFlyer(n) {
+  return fPrecioModo === 'may'
+    ? 'U$S ' + (parseFloat(n) || 0).toFixed(2).replace('.', ',')
+    : '$' + (parseFloat(n) || 0).toLocaleString('es-AR');
+}
+
+let fStep = 0, fSel = {}, fTextos = null, fFondoImg = null;
+let fFormato = 'post', fTema = 'clasico', fPlantilla = 'grilla', fExtras = {};
+let fUltimaURL = '', fGuardando = null;
+const esIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+let fPrecioModo = 'min';
+const FORMATOS = { post: { W: 1080, H: 1350, label: '📄 Clásico' }, cuadrado: { W: 1080, H: 1080, label: '⬛ Cuadrado' }, historia: { W: 1080, H: 1920, label: '📱 Historia' } };
+const TEMAS = {
+  clasico:  { label: '🎨 Clásico', prompt: '' },
+  acorde:   { label: '🍬 Según productos', prompt: '' },
+  cumple:   { label: '🎂 Cumple',   a: '#7b2ff7', b: '#f107a3', accent: '#ffd24a', prompt: 'birthday party with balloons and confetti' },
+  invierno: { label: '❄️ Invierno', a: '#0f3057', b: '#1d9bd1', accent: '#ffd24a', prompt: 'cozy winter, snowflakes and hot chocolate' },
+  januca:   { label: '🕎 Janucá',   a: '#0d2b6b', b: '#2e6fd8', accent: '#ffd24a', prompt: 'Hanukkah festive glow, dreidels and golden sparkles' },
+  purim:    { label: '🎭 Purim',    a: '#d81b60', b: '#8e24aa', accent: '#ffe082', prompt: 'Purim carnival, masks and confetti' },
+  pesaj:    { label: '🍷 Pésaj',    a: '#1a7a3c', b: '#66bb6a', accent: '#ffe082', prompt: 'Passover spring festive abstract' },
+  verano:   { label: '☀️ Verano',   a: '#ff8f00', b: '#f4511e', accent: '#fff59d', prompt: 'summer beach popsicle vibes' }
+};
+const PLANTILLAS = { grilla: '🧇 Grilla', heroe: '⭐ Héroe', lista: '📋 Lista' };
+const BADGES = ['', '🔥 OFERTA', '✨ NUEVO', '⏳ ÚLTIMOS'];
+
+function abrirFlyer(prefill) {
+  _syncCatalogoFlyer();
+  if (!catalogoCache.length) { alert('No hay productos en el catálogo'); return; }
+  fStep = 0; fSel = {}; fTextos = null; fFondoImg = null; fExtras = {};
+  fFormato = 'post'; fTema = 'clasico'; fPlantilla = 'grilla';
+  fUltimaURL = ''; fGuardando = null;
+  document.getElementById('flyer-idea').value = '';
+  document.getElementById('flyer-fondo').checked = false;
+  if (prefill) {
+    (prefill.codigos || '').split(',').forEach(c => {
+      if (catalogoCache.find(p => p.codigo === c)) fSel[c] = true;
+    });
+    document.getElementById('flyer-idea').value = prefill.idea || '';
+    document.getElementById('flyer-fondo').checked = !!prefill.fondo;
+    if (prefill.config) {
+      try {
+        const cfg = JSON.parse(prefill.config);
+        if (FORMATOS[cfg.formato]) fFormato = cfg.formato;
+        if (TEMAS[cfg.tema]) fTema = cfg.tema;
+        if (PLANTILLAS[cfg.plantilla]) fPlantilla = cfg.plantilla;
+        if (cfg.extras) fExtras = cfg.extras;
+      } catch (e) {}
+    }
+  }
+  renderFlyerGrid();
+  flyerStep(0);
+  document.getElementById('flyer-overlay').classList.add('open');
+}
+function cerrarFlyer() { document.getElementById('flyer-overlay').classList.remove('open'); }
+
+function renderFlyerGrid() {
+  document.getElementById('flyer-prod-grid').innerHTML = catalogoCache.map(p => {
+    const sel = !!fSel[p.codigo];
+    const img = p.foto
+      ? `<img src="${p.foto}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
+      : `<div style="height:110px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:#f0ebe3;border-radius:10px">🍬</div>`;
+    return `<div onclick="toggleFlyerProd('${p.codigo}')" style="cursor:pointer;border:2.5px solid ${sel ? '#7b2ff7' : '#eee4d8'};border-radius:14px;padding:6px;background:${sel ? '#f6efff' : '#fff'};position:relative">
+      ${sel ? '<div style="position:absolute;top:4px;right:4px;background:#7b2ff7;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;z-index:1">✓</div>' : ''}
+      ${img}
+      <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${p.nombre}</div>
+      <div style="font-size:0.68rem;color:#8b5e3c;font-weight:700">${fmtFlyer(p.precioVenta)}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleFlyerProd(codigo) {
+  if (fSel[codigo]) delete fSel[codigo];
+  else {
+    if (Object.keys(fSel).length >= 6) { showToast('Máximo 6 productos 🙏'); return; }
+    fSel[codigo] = true;
+  }
+  renderFlyerGrid();
+}
+
+function flyerStep(n) {
+  fStep = n;
+  [0, 1, 2].forEach(i => {
+    document.getElementById('fs-' + i).classList.toggle('active', i === n);
+    document.getElementById('fdot-' + i).classList.toggle('active', i <= n);
+  });
+  const next = document.getElementById('flyer-next');
+  next.style.display = n === 2 ? 'none' : '';
+  next.textContent = n === 1 ? '✨ Generar flyer' : 'Siguiente →';
+  document.getElementById('flyer-title').textContent = ['¿Qué vendés?', 'Tu idea', '🎨 Tu flyer'][n];
+}
+
+function flyerNext() {
+  if (fStep === 0) {
+    if (!Object.keys(fSel).length) { showToast('Elegí al menos un producto'); return; }
+    renderFlyerOpciones();
+    flyerStep(1);
+  } else if (fStep === 1) {
+    flyerStep(2);
+    generarTextoFlyer();
+  }
+}
+function flyerBack() { if (fStep === 0) cerrarFlyer(); else flyerStep(fStep - 1); }
+
+// ─── IDEA POR VOZ (micrófono → Whisper) ──────────────────────────
+let _grabador = null, _grabChunks = [];
+
+async function grabarIdea() {
+  const btn = document.getElementById('flyer-mic');
+  if (_grabador && _grabador.state === 'recording') { _grabador.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+               : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+    _grabChunks = [];
+    _grabador = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    _grabador.ondataavailable = ev => { if (ev.data.size) _grabChunks.push(ev.data); };
+    _grabador.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      btn.textContent = '✨ Escuchando lo que dijiste...';
+      btn.disabled = true;
+      try {
+        const blob = new Blob(_grabChunks, { type: _grabador.mimeType || 'audio/mp4' });
+        if (blob.size > 4 * 1024 * 1024) { showToast('El audio es muy largo, probá con uno más corto 🙏'); return; }
+        const b64 = await new Promise(res => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result.split(',')[1]);
+          fr.readAsDataURL(blob);
+        });
+        const r = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ accion: 'transcribirIdea', token: _authToken, audio: b64, mime: blob.type })
+        });
+        const d = await r.json();
+        if (d?.texto) {
+          const ta = document.getElementById('flyer-idea');
+          ta.value = (ta.value ? ta.value + ' ' : '') + d.texto;
+          showToast('🎙️ ¡Listo! Revisá el texto y generá');
+        } else {
+          showToast('😕 ' + (d?.error || 'No pude entender el audio, probá de nuevo'));
+        }
+      } catch (e) {
+        showToast('😕 No se pudo transcribir. Probá de nuevo.');
+      }
+      btn.textContent = '🎙️ O contala con tu voz';
+      btn.disabled = false;
+      btn.style.background = '#fff'; btn.style.color = '#7b2ff7'; btn.style.borderColor = '#d9c2f7';
+    };
+    _grabador.start();
+    btn.textContent = '⏹️ Grabando... tocá para terminar';
+    btn.style.background = '#e3173d'; btn.style.color = '#fff'; btn.style.borderColor = '#e3173d';
+  } catch (e) {
+    showToast('🎙️ Necesito permiso para usar el micrófono');
+  }
+}
+
+function _chip(activo) {
+  return 'padding:8px 14px;border-radius:20px;border:2px solid ' + (activo ? '#7b2ff7' : '#e0d5c9') +
+    ';background:' + (activo ? '#f6efff' : '#fff') + ';color:' + (activo ? '#5a1ec0' : '#666') +
+    ';font-weight:700;font-size:0.82rem;cursor:pointer';
+}
+
+function renderFlyerOpciones() {
+  document.getElementById('flyer-formatos').innerHTML = Object.keys(FORMATOS).map(k =>
+    `<button style="${_chip(fFormato === k)}" onclick="fFormato='${k}';renderFlyerOpciones()">${FORMATOS[k].label}</button>`).join('');
+  document.getElementById('flyer-temas').innerHTML = Object.keys(TEMAS).map(k =>
+    `<button style="${_chip(fTema === k)}" onclick="fTema='${k}';fFondoImg=null;renderFlyerOpciones()">${TEMAS[k].label}</button>`).join('');
+  document.getElementById('flyer-plantillas').innerHTML = Object.keys(PLANTILLAS).map(k =>
+    `<button style="${_chip(fPlantilla === k)}" onclick="fPlantilla='${k}';renderFlyerOpciones()">${PLANTILLAS[k]}</button>`).join('');
+  document.getElementById('flyer-precios').innerHTML = [['min', '🛍️ Minorista ($)'], ['may', '📦 Mayorista (U$S)']].map(par =>
+    `<button style="${_chip(fPrecioModo === par[0])}" onclick="fPrecioModo='${par[0]}';_syncCatalogoFlyer();renderFlyerOpciones()">${par[1]}</button>`).join('');
+  const prods = catalogoCache.filter(p => fSel[p.codigo]);
+  document.getElementById('flyer-extras').innerHTML = prods.map(p => {
+    const ex = fExtras[p.codigo] || {};
+    return `<div style="display:grid;grid-template-columns:1fr 110px 96px;gap:6px;align-items:center;margin-bottom:6px">
+      <div style="font-size:0.8rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div>
+      <select onchange="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].badge=this.value" style="padding:8px 4px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem;background:#fff">
+        ${BADGES.map(b => `<option value="${b}" ${ex.badge === b ? 'selected' : ''}>${b || 'Etiqueta...'}</option>`).join('')}
+      </select>
+      <input type="number" placeholder="$ promo" value="${ex.promo || ''}" oninput="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].promo=parseFloat(this.value)||0" style="padding:8px 6px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem">
+    </div>`;
+  }).join('');
+}
+
+async function generarTextoFlyer() {
+  const prods = catalogoCache.filter(p => fSel[p.codigo]);
+  const status = document.getElementById('flyer-status');
+  const quiereFondo = document.getElementById('flyer-fondo').checked;
+  status.textContent = quiereFondo && !fFondoImg
+    ? '🪄 La IA está pintando el fondo y escribiendo (~30 seg)...'
+    : '✨ La IA está escribiendo tu flyer...';
+  document.getElementById('flyer-canvas').style.display = 'none';
+  document.getElementById('flyer-acciones').style.display = 'none';
+  const lista = prods.map(p => `${p.nombre} (${fmtFlyer(p.precioVenta)})`).join(', ');
+  const idea = document.getElementById('flyer-idea').value.trim();
+
+  // Texto y fondo en paralelo. El fondo se reusa al pedir "otro texto" (no se re-paga).
+  fUltimaURL = ''; fGuardando = null;
+  try { await document.fonts.load('800 90px "Baloo 2"'); } catch (e) {}
+  // 1) Claude escribe los textos Y el prompt del fondo (dirección de arte)
+  const d = await flyerApi('flyerTexto', { negocio: 'shuk', hijo: 'Shuk', productos: lista, idea, ocasion: TEMAS[fTema]?.prompt || '' });
+  if (!d || d.error) {
+    status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
+    return;
+  }
+  fTextos = d;
+  // 2) Con esa dirección de arte se pinta el fondo (calidad alta)
+  if (quiereFondo && !fFondoImg) {
+    status.textContent = '🪄 La IA está pintando el fondo (~30 seg)...';
+    const f = await flyerApi('fondoFlyer', { prompt: d.fondoPrompt || '', tema: lista });
+    if (f?.b64) {
+      fFondoImg = await new Promise(res => {
+        const im = new Image();
+        im.onload = () => res(im); im.onerror = () => res(null);
+        im.src = 'data:image/png;base64,' + f.b64;
+      });
+    }
+    if (!fFondoImg) showToast('No salió el fondo con IA, va el clásico 🎨');
+  }
+  if (!quiereFondo) fFondoImg = null;
+  status.textContent = '🎨 Dibujando...';
+  try {
+    await dibujarFlyer(prods, d);
+    status.textContent = '¡Listo! 🎉 Si no te convence, pedile otro texto.';
+    document.getElementById('flyer-canvas').style.display = 'block';
+    document.getElementById('flyer-acciones').style.display = 'flex';
+    guardarFlyerHistorial(d, quiereFondo);   // guardado silencioso en segundo plano
+  } catch (e) {
+    status.textContent = '😕 No pude dibujar el flyer: ' + e.message;
+  }
+}
+
+// Sube el flyer terminado a Cloudinary y lo registra en el historial.
+function guardarFlyerHistorial(t, conFondo) {
+  fGuardando = (async () => {
+    try {
+      const blob = await _flyerBlob();
+      if (!blob) return;
+      const form = new FormData();
+      form.append('file', blob);
+      form.append('upload_preset', 'candyshop');
+      const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!data.secure_url) return;
+      fUltimaURL = data.secure_url;
+      await flyerApi('guardarFlyer', {
+        hijo: 'Shuk', url: data.secure_url, titulo: t.titulo || '',
+        codigos: Object.keys(fSel).join(','),
+        idea: document.getElementById('flyer-idea').value.trim(),
+        fondo: conFondo ? '1' : '0',
+        config: JSON.stringify({ formato: fFormato, tema: fTema, plantilla: fPlantilla, extras: fExtras })
+      });
+      flyersCargados = false;   // para que el historial se refresque
+    } catch (e) {}
+  })();
+}
+
+function _cargarImgFlyer(url) {
+  return new Promise(res => {
+    if (!url) return res(null);
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => res(im);
+    im.onerror = () => res(null);
+    im.src = url;
+  });
+}
+
+// Dibuja una imagen cubriendo el rectángulo SIN deformarla (recorta el sobrante).
+// Para FONDOS: llena todo el espacio.
+function _coverImg(ctx, im, x, y, w, h) {
+  const ir = im.width / im.height, dr = w / h;
+  let sx, sy, sw, sh;
+  if (ir > dr) { sh = im.height; sw = sh * dr; sx = (im.width - sw) / 2; sy = 0; }
+  else { sw = im.width; sh = sw / dr; sx = 0; sy = (im.height - sh) / 2; }
+  ctx.drawImage(im, sx, sy, sw, sh, x, y, w, h);
+}
+
+// Dibuja una imagen ENTERA dentro del rectángulo, centrada (sin recorte ni
+// deformación). Para FOTOS DE PRODUCTOS: se tiene que ver el producto completo.
+function _containImg(ctx, im, x, y, w, h) {
+  const s = Math.min(w / im.width, h / im.height);
+  const dw = im.width * s, dh = im.height * s;
+  ctx.drawImage(im, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+}
+
+function _rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function _wrap(ctx, texto, maxW, maxLineas) {
+  const palabras = (texto || '').split(/\s+/).filter(Boolean);
+  const lineas = [];
+  let actual = '';
+  palabras.forEach(p => {
+    const prueba = actual ? actual + ' ' + p : p;
+    if (ctx.measureText(prueba).width <= maxW) actual = prueba;
+    else { if (actual) lineas.push(actual); actual = p; }
+  });
+  if (actual) lineas.push(actual);
+  if (lineas.length > maxLineas) {
+    const corte = lineas.slice(0, maxLineas);
+    corte[maxLineas - 1] = corte[maxLineas - 1].replace(/\s+\S*$/, '') + '…';
+    return corte;
+  }
+  return lineas;
+}
+
+async function dibujarFlyer(prods, t) {
+  const cv = document.getElementById('flyer-canvas');
+  const ctx = cv.getContext('2d');
+  const F = FORMATOS[fFormato] || FORMATOS.post;
+  const W = F.W, H = F.H;
+  cv.width = W; cv.height = H;
+  const temaSel = TEMAS[fTema];
+  const esHex = c => /^#[0-9a-fA-F]{6}$/.test(c || '');
+  const tema = (fTema === 'acorde' && esHex(t.paletaA) && esHex(t.paletaB) && esHex(t.paletaAccent))
+    ? { a: t.paletaA, b: t.paletaB, accent: t.paletaAccent }
+    : (fTema !== 'clasico' && temaSel.a)
+    ? { a: temaSel.a, b: temaSel.b, accent: temaSel.accent }
+    : { a: '#141432', b: '#3d3d77', accent: '#e8c97a' };
+  const FT = '"Baloo 2", -apple-system, system-ui, sans-serif';
+
+  // Fondo: dibujo de IA (con velo para que el texto se lea) o degradé del tema
+  if (fFondoImg) {
+    _coverImg(ctx, fFondoImg, 0, 0, W, H);
+    ctx.fillStyle = 'rgba(15,20,40,0.30)'; ctx.fillRect(0, 0, W, H);
+    const gt = ctx.createLinearGradient(0, 0, 0, 330);
+    gt.addColorStop(0, 'rgba(0,0,0,0.45)'); gt.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, 330);
+    const gb = ctx.createLinearGradient(0, H - 240, 0, H);
+    gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = gb; ctx.fillRect(0, H - 240, W, 240);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, tema.a); g.addColorStop(1, tema.b);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 0.08; ctx.fillStyle = '#ffffff';
+    [[100, 160, 130], [W - 100, 90, 90], [60, H - 110, 110], [W - 70, H - 70, 140], [W - 150, H * 0.5, 70]].forEach(c => {
+      ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Título con contorno (tipografía con onda)
+  ctx.textAlign = 'center';
+  let fs = 96;
+  do { ctx.font = '800 ' + fs + 'px ' + FT; fs -= 4; }
+  while (ctx.measureText(t.titulo).width > 950 && fs > 40);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 14; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.strokeText(t.titulo, W / 2, 150);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(t.titulo, W / 2, 150);
+
+  // Frase
+  ctx.font = '700 40px ' + FT;
+  ctx.fillStyle = 'rgba(255,255,255,0.96)';
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
+  _wrap(ctx, t.frase, 920, 2).forEach((l, i) => ctx.fillText(l, W / 2, 222 + i * 52));
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+  // Área de productos
+  const areaTop = 330, areaBottom = H - 230, areaH = areaBottom - areaTop;
+  const imgs = await Promise.all(prods.map(p => _cargarImgFlyer(p.foto)));
+
+  if (fPlantilla === 'lista') {
+    const n = prods.length;
+    const gap = 16;
+    const rh = Math.min(180, (areaH - gap * (n - 1)) / n);
+    const y0 = areaTop + (areaH - (rh * n + gap * (n - 1))) / 2;
+    prods.forEach((p, i) => {
+      const y = y0 + i * (rh + gap), x = 56, w = W - 112;
+      ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, w, rh, 22); ctx.fill();
+      const fw = rh - 20;
+      if (imgs[i]) _containImg(ctx, imgs[i], x + 12, y + 10, fw, rh - 20);
+      else { ctx.font = (fw * 0.5) + 'px sans-serif'; ctx.fillText('🍬', x + 12 + fw / 2, y + rh / 2 + fw * 0.18); }
+      ctx.textAlign = 'left'; ctx.fillStyle = '#2d1a0a';
+      let nf = 36;
+      do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
+      while (ctx.measureText(p.nombre).width > w - fw - 280 && nf > 18);
+      ctx.fillText(p.nombre, x + fw + 30, y + rh / 2 + 12);
+      _precio(ctx, p, x + w - 24, y + rh / 2, tema, FT, 'der');
+      ctx.textAlign = 'center';
+      const ex = fExtras[p.codigo];
+      if (ex?.badge) _badge(ctx, x + 6, y + 14, ex.badge, FT);
+    });
+  } else if (fPlantilla === 'heroe') {
+    const heroe = prods[0];
+    const resto = prods.slice(1, 5);
+    const heroH = resto.length ? Math.min(areaH * 0.62, 640) : Math.min(areaH, 760);
+    const hw = Math.min(W - 200, 720), hx = (W - hw) / 2, hy = areaTop + 6;
+    ctx.fillStyle = '#ffffff'; _rr(ctx, hx, hy, hw, heroH, 28); ctx.fill();
+    if (imgs[0]) _containImg(ctx, imgs[0], hx + 20, hy + 16, hw - 40, heroH - 130);
+    ctx.fillStyle = '#2d1a0a';
+    let nf = 42;
+    do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
+    while (ctx.measureText(heroe.nombre).width > hw - 60 && nf > 22);
+    ctx.fillText(heroe.nombre, hx + hw / 2, hy + heroH - 72);
+    _precio(ctx, heroe, hx + hw / 2, hy + heroH - 36, tema, FT, 'centro');
+    const exH = fExtras[heroe.codigo];
+    if (exH?.badge) _badge(ctx, hx + 8, hy + 22, exH.badge, FT);
+    if (resto.length) {
+      const gap = 18, k = resto.length;
+      const mw = Math.min((W - 112 - gap * (k - 1)) / k, 250);
+      const x0 = (W - (mw * k + gap * (k - 1))) / 2;
+      const my = hy + heroH + 22;
+      const mh = Math.min(areaBottom - my, mw + 70);
+      resto.forEach((p, j) => {
+        const x = x0 + j * (mw + gap);
+        ctx.fillStyle = '#ffffff'; _rr(ctx, x, my, mw, mh, 18); ctx.fill();
+        if (imgs[j + 1]) _containImg(ctx, imgs[j + 1], x + 10, my + 8, mw - 20, mh - 60);
+        _precio(ctx, p, x + mw / 2, my + mh - 22, tema, FT, 'centro-chico');
+        const ex = fExtras[p.codigo];
+        if (ex?.badge) _badge(ctx, x + 2, my + 14, ex.badge, FT, 0.8);
+      });
+    }
+  } else {
+    // GRILLA (clásica)
+    const n = prods.length;
+    const cols = n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 2 : 3;
+    const filas = Math.ceil(n / cols);
+    const margen = 56, gap = 26;
+    const cw = (W - margen * 2 - gap * (cols - 1)) / cols;
+    const chMax = (areaH - gap * (filas - 1)) / filas;
+    const ch = Math.min(chMax, cw + 120);
+    const offsetY = areaTop + (areaH - (ch * filas + gap * (filas - 1))) / 2;
+    prods.forEach((p, i) => {
+      const col = i % cols, fila = Math.floor(i / cols);
+      const enFila = (fila === filas - 1) ? (n - fila * cols) : cols;
+      const xBase = margen + (W - margen * 2 - (cw * enFila + gap * (enFila - 1))) / 2;
+      const x = xBase + col * (cw + gap);
+      const y = offsetY + fila * (ch + gap);
+      ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, cw, ch, 24); ctx.fill();
+      const imgH = ch - 96;
+      if (imgs[i]) _containImg(ctx, imgs[i], x + 16, y + 14, cw - 32, imgH - 22);
+      else { ctx.font = (imgH * 0.45) + 'px sans-serif'; ctx.fillText('🍬', x + cw / 2, y + imgH / 2 + imgH * 0.15); }
+      ctx.fillStyle = '#2d1a0a';
+      let nf = 30;
+      do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
+      while (ctx.measureText(p.nombre).width > cw - 30 && nf > 16);
+      ctx.fillText(p.nombre, x + cw / 2, y + imgH + 34);
+      _precio(ctx, p, x + cw / 2, y + imgH + 76, tema, FT, 'centro');
+      const ex = fExtras[p.codigo];
+      if (ex?.badge) _badge(ctx, x + 4, y + 18, ex.badge, FT);
+    });
+  }
+
+  // Cierre (pill grande) y pie
+  ctx.font = '800 46px ' + FT;
+  const cw2 = Math.min(ctx.measureText(t.cierre).width + 80, W - 80);
+  ctx.fillStyle = tema.accent;
+  _rr(ctx, (W - cw2) / 2, H - 192, cw2, 78, 39); ctx.fill();
+  ctx.fillStyle = '#2d1a0a';
+  ctx.fillText(t.cierre, W / 2, H - 138);
+  ctx.font = '700 34px ' + FT;
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  ctx.fillText('📲 11 3175-4540 · Shuk Mamtakim 🍬', W / 2, H - 54);
+}
+
+// Precio: pill con el valor (y si hay promo, el precio viejo tachado al lado)
+function _precio(ctx, p, x, yCentro, tema, FT, modo) {
+  const ex = fExtras[p.codigo] || {};
+  const principal = ex.promo > 0 ? fmtFlyer(ex.promo) : fmtFlyer(p.precioVenta);
+  const fsPill = modo === 'centro-chico' ? 26 : 34;
+  ctx.font = '800 ' + fsPill + 'px ' + FT;
+  const pw = ctx.measureText(principal).width + 34;
+  let px;
+  if (modo === 'der') { ctx.textAlign = 'left'; px = x - pw; }
+  else px = x - pw / 2;
+  ctx.fillStyle = tema.accent;
+  _rr(ctx, px, yCentro - fsPill * 0.72, pw, fsPill * 1.42, fsPill * 0.71); ctx.fill();
+  ctx.fillStyle = '#2d1a0a'; ctx.textAlign = 'center';
+  ctx.fillText(principal, px + pw / 2, yCentro + fsPill * 0.36);
+  if (ex.promo > 0) {
+    const viejo = fmtFlyer(p.precioVenta);
+    ctx.font = '700 ' + Math.round(fsPill * 0.72) + 'px ' + FT;
+    const vw = ctx.measureText(viejo).width;
+    const vx = px - vw / 2 - 16, vy = yCentro + fsPill * 0.2;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 5;
+    ctx.fillText(viejo, vx, vy);
+    ctx.restore();
+    ctx.strokeStyle = '#e3173d'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(vx - vw / 2 - 4, vy - fsPill * 0.22); ctx.lineTo(vx + vw / 2 + 4, vy - fsPill * 0.22 + 6); ctx.stroke();
+  }
+}
+
+// Etiqueta tipo cinta ("🔥 OFERTA") inclinada sobre la tarjeta
+function _badge(ctx, x, y, texto, FT, escala) {
+  const e = escala || 1;
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(-0.16);
+  ctx.font = '800 ' + Math.round(26 * e) + 'px ' + FT;
+  const w = ctx.measureText(texto).width + 26 * e;
+  ctx.fillStyle = '#e3173d';
+  _rr(ctx, -6, -22 * e, w, 40 * e, 12 * e); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left';
+  ctx.fillText(texto, 7 * e, 7 * e);
+  ctx.restore();
+  ctx.textAlign = 'center';
+}
+
+function _flyerBlob() {
+  return new Promise(r => document.getElementById('flyer-canvas').toBlob(r, 'image/jpeg', 0.92));
+}
+
+async function compartirFlyer() {
+  const blob = await _flyerBlob();
+  if (!blob) { showToast('Generá el flyer primero'); return; }
+  const file = new File([blob], 'flyer-shuk.jpg', { type: 'image/jpeg' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Shuk Mamtakim' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  await descargarFlyer();
+  showToast('Se descargó la imagen: compartila desde tu galería 📤');
+}
+
+// En iPhone el <a download> manda el archivo a Archivos/Drive; el menú nativo
+// de compartir sí tiene "Guardar imagen" → galería. En el resto, descarga normal.
+async function guardarImagenBlob(blob, nombre) {
+  if (!blob) return;
+  const file = new File([blob], nombre, { type: blob.type || 'image/jpeg' });
+  if (esIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+    showToast('Tocá "Guardar imagen" y va a tu galería 📸');
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+async function descargarFlyer() {
+  guardarImagenBlob(await _flyerBlob(), 'flyer-shuk.jpg');
+}
+
+// ─── HISTORIAL DE FLYERS ──────────────────────────────────────────
+let flyersCache = [], flyersVerArchivados = false, flyersCargados = false;
+
+async function cargarFlyers(forzar) {
+  if (flyersCargados && !forzar) return;
+  const d = await flyerApi('getFlyersHijos', { hijo: 'Shuk' });
+  flyersCache = Array.isArray(d) ? d : [];
+  flyersCargados = true;
+  renderFlyers();
+}
+
+function toggleFlyersArchivados() {
+  flyersVerArchivados = !flyersVerArchivados;
+  document.getElementById('btn-flyers-arch').textContent = flyersVerArchivados ? 'Ver activos' : 'Ver archivados';
+  renderFlyers();
+}
+
+function renderFlyers() {
+  const el = document.getElementById('flyers-list');
+  const lista = flyersCache.filter(f => flyersVerArchivados ? f.estado === 'archivado' : f.estado !== 'archivado');
+  if (!lista.length) {
+    el.innerHTML = `<div class="empty">${flyersVerArchivados ? 'Nada archivado todavía' : 'Todavía no armaste ninguno 🎨'}</div>`;
+    return;
+  }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">' + lista.map(f => `
+    <div style="border:1.5px solid #eee4d8;border-radius:14px;overflow:hidden;background:#fff">
+      <img src="${f.url.replace('/upload/', '/upload/w_400/')}" style="width:100%;display:block;cursor:pointer" onclick="window.open('${f.url}','_blank')">
+      <div style="padding:8px 10px">
+        <div style="font-size:0.74rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo || 'Flyer'}</div>
+        <div style="font-size:0.66rem;color:#aaa">${f.fecha}${f.fondo ? ' · 🪄' : ''}</div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button onclick="descargarFlyerUrl('${f.url}')" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
+          <button onclick="regenerarFlyer('${f.id}')" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
+          <button onclick="archivarFlyerUI('${f.id}','${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
+          <button onclick="eliminarFlyerUI('${f.id}')" title="Eliminar" style="flex:1;padding:6px 0;background:#fde8e8;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🗑️</button>
+        </div>
+      </div>
+    </div>`).join('') + '</div>';
+}
+
+async function descargarFlyerUrl(url) {
+  try {
+    const r = await fetch(url);
+    guardarImagenBlob(await r.blob(), 'flyer-shuk.jpg');
+  } catch { window.open(url, '_blank'); }
+}
+
+async function archivarFlyerUI(id, estado) {
+  const f = flyersCache.find(x => x.id === id);
+  if (f) f.estado = estado;
+  renderFlyers();
+  await flyerApi('archivarFlyer', { id, estado });
+}
+
+function regenerarFlyer(id) {
+  const f = flyersCache.find(x => x.id === id);
+  if (!f) return;
+  abrirFlyer({ codigos: f.codigos, idea: f.idea, fondo: f.fondo, config: f.config });
+  if (Object.keys(fSel).length) { renderFlyerOpciones(); flyerStep(1); }   // productos ya elegidos → directo a la idea
+  showToast('Mismos productos e idea: tocá ✨ Generar 🎨');
+}
+
+async function eliminarFlyerUI(id) {
+  if (!confirm('¿Eliminar este flyer para siempre?')) return;
+  flyersCache = flyersCache.filter(x => x.id !== id);
+  renderFlyers();
+  await flyerApi('eliminarFlyer', { id });
+}
+
+// Manda el flyer terminado al WhatsApp del chico (para reenviar o subir al estado)
+async function enviarFlyerWAUI() {
+  showToast('Enviando a tu WhatsApp...');
+  if (fGuardando) await fGuardando;
+  if (!fUltimaURL) { showToast('Esperá un segundo y probá de nuevo'); return; }
+  const r = await flyerApi('enviarFlyerWA', { hijo: 'papa', url: fUltimaURL });
+  showToast(r?.ok ? '📲 ¡Te llegó a tu WhatsApp!' : '😕 No se pudo enviar');
+}
+
+// ⚡ Flyer del día: elige solo qué promocionar (productos dormidos = hay que moverlos)
+async function flyerDelDia() {
+  _syncCatalogoFlyer();
+  if (!catalogoCache.length) { alert('No hay productos en el catálogo'); return; }
+  showToast('⚡ Eligiendo productos...');
+  let codigos = [];
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=getProductosDormidos&dias=30');
+    const dor = await res.json();
+    if (Array.isArray(dor)) codigos = dor.map(d => String(d.id)).filter(c => catalogoCache.find(p => p.codigo === c));
+  } catch (e) {}
+  if (!codigos.length) codigos = catalogoCache.map(p => p.codigo);
+  abrirFlyer({
+    codigos: codigos.slice(0, 4).join(','),
+    idea: 'Promo del día: precios especiales, aprovechá hoy',
+    fondo: true
+  });
+  renderFlyerOpciones();
+  flyerStep(2);
+  generarTextoFlyer();
+}
+
+
 // ─── PRODUCTOS DORMIDOS + DIFUSIÓN DE OFERTAS ───────────────────────────────
 async function buscarDormidos() {
   const el = document.getElementById('dormidos-lista');
@@ -3372,6 +4071,7 @@ function _tagPanelCards() {
     else if (t.includes('rendici')) s = 'dinero';
     else if (t.includes('lista de espera')) s = 'stock';
     else if (t.includes('stock')) s = 'stock';
+    else if (t.includes('flyer')) s = 'catalogo';
     else if (t.includes('agregar nuevo producto')) s = 'catalogo';
     else if (t.includes('ofertas')) s = 'catalogo';
     else if (t.includes('qr')) s = 'inicio';
@@ -3391,6 +4091,7 @@ function setPanelSeccion(s, btn) {
   document.querySelectorAll('.psec-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
+  if (s === 'catalogo' && typeof cargarFlyers === 'function') cargarFlyers();
 }
 
 // ─── STOCK DISPONIBLE (sección Stock) ─────────────────────────────────────────
@@ -5199,6 +5900,64 @@ function cerrarEditPedido() {
 </div>
 
 <!-- MODAL REGISTRO MAYORISTA -->
+<!-- FLYER CON IA -->
+<div class="wizard-overlay" id="flyer-overlay">
+  <div class="wizard-header">
+    <button class="wizard-back" onclick="flyerBack()">←</button>
+    <div class="wizard-title" id="flyer-title">🎨 Tu flyer</div>
+    <div class="wizard-steps">
+      <div class="wizard-dot active" id="fdot-0"></div>
+      <div class="wizard-dot" id="fdot-1"></div>
+      <div class="wizard-dot" id="fdot-2"></div>
+    </div>
+  </div>
+  <div class="wizard-body">
+    <!-- PASO 1: PRODUCTOS -->
+    <div class="wizard-step active" id="fs-0">
+      <div class="wizard-label">¿Qué productos van en el flyer? (hasta 6)</div>
+      <div id="flyer-prod-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px"></div>
+    </div>
+    <!-- PASO 2: IDEA -->
+    <div class="wizard-step" id="fs-1">
+      <div class="wizard-label">Escribí tu idea y la IA la mejora ✨</div>
+      <textarea id="flyer-idea" placeholder="Ej: vendo chocolates riquísimos, precios de amigo, traigo al cole" style="width:100%;min-height:110px;padding:14px;border:2px solid #e0d5c9;border-radius:14px;font-family:inherit;font-size:1rem;resize:vertical;box-sizing:border-box"></textarea>
+      <button id="flyer-mic" onclick="grabarIdea()" style="width:100%;margin-top:10px;padding:13px;background:#fff;border:2px dashed #d9c2f7;border-radius:14px;color:#7b2ff7;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit">🎙️ O contala con tu voz</button>
+      <div style="font-size:0.8rem;color:#aaa;margin-top:8px">Si lo dejás vacío, la IA inventa algo con onda.</div>
+      <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;background:#f6efff;border:2px solid #d9c2f7;border-radius:14px;cursor:pointer">
+        <input type="checkbox" id="flyer-fondo" style="width:20px;height:20px;accent-color:#7b2ff7">
+        <span style="font-size:0.92rem;font-weight:700;color:#5a1ec0">🪄 Crear fondo con IA <span style="font-weight:500;color:#9a7ac9">(un dibujo único para tu flyer, tarda ~30 seg más)</span></span>
+      </label>
+      <div class="wizard-label" style="margin-top:18px">Precios</div>
+      <div id="flyer-precios" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Formato</div>
+      <div id="flyer-formatos" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Tema</div>
+      <div id="flyer-temas" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Diseño</div>
+      <div id="flyer-plantillas" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Etiquetas y precio promo (opcional)</div>
+      <div id="flyer-extras"></div>
+    </div>
+    <!-- PASO 3: PREVIEW -->
+    <div class="wizard-step" id="fs-2" style="text-align:center">
+      <div id="flyer-status" class="wizard-label" style="text-align:center">Armando tu flyer...</div>
+      <canvas id="flyer-canvas" width="1080" height="1350" style="width:100%;max-width:320px;margin:0 auto;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,0.25);display:none"></canvas>
+      <div id="flyer-acciones" style="display:none;flex-direction:column;gap:8px;margin-top:14px">
+        <button class="btn-add" style="margin:0" onclick="compartirFlyer()">📤 Compartir</button>
+        <button class="btn-add" style="margin:0;background:#1faa59" onclick="enviarFlyerWAUI()">📲 Mandarlo a mi WhatsApp</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-add" style="margin:0;background:#f0ebe3;color:#5c3d1e;flex:1" onclick="generarTextoFlyer()">🔄 Otro texto</button>
+          <button class="btn-add" style="margin:0;background:#f0ebe3;color:#5c3d1e;flex:1" onclick="descargarFlyer()">⬇️ Descargar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="wizard-footer">
+    <button class="btn-wizard" id="flyer-next" onclick="flyerNext()">Siguiente →</button>
+  </div>
+</div>
+
+
 <div id="registro-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:900;align-items:center;justify-content:center;padding:1rem;" onclick="if(event.target===this)cerrarRegistroModal()">
   <div style="background:white;border-radius:16px;padding:1.75rem 1.5rem;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:700;color:#1a1a2e;margin-bottom:0.25rem">👋 Bienvenido</div>
