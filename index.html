@@ -1038,7 +1038,7 @@
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px">
           <label>Precio Mayorista (U$S)</label>
-          <input type="number" id="np-pmay" placeholder="5.80" step="0.01" min="0" />
+          <input type="text" inputmode="decimal" id="np-pmay" placeholder="5.80" />
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px">
           <label>Precio Minorista ($)</label>
@@ -3695,8 +3695,8 @@ function filtrarEditor() {
 }
 
 async function guardarRapidoEditor(id) {
-  const may = document.getElementById('epq-may-' + id).value.trim();
-  const min = document.getElementById('epq-min-' + id).value.trim();
+  const may = document.getElementById('epq-may-' + id).value.trim().replace(',', '.');
+  const min = document.getElementById('epq-min-' + id).value.trim().replace(',', '.');
   const stock = document.getElementById('epq-stock-' + id).value.trim();
   const r = await apiWrite(new URLSearchParams({
     accion: 'editarProducto', id,
@@ -3814,8 +3814,8 @@ async function guardarEdicionProducto() {
     nombre: document.getElementById('ep-nombre').value.trim(),
     desc: document.getElementById('ep-desc').value.trim() || '__VACIO__',
     categoria: document.getElementById('ep-categoria').value.trim() || 'Varios',
-    precioMay: document.getElementById('ep-pmay').value.trim() || '0',
-    precioMin: document.getElementById('ep-pmin').value.trim() || '0',
+    precioMay: document.getElementById('ep-pmay').value.trim().replace(',', '.') || '0',
+    precioMin: document.getElementById('ep-pmin').value.trim().replace(',', '.') || '0',
     stock: document.getElementById('ep-stock').value || '0',
     dueno: document.getElementById('ep-dueno').value,
     visible: document.getElementById('ep-visible').value,
@@ -3965,8 +3965,13 @@ function usarDeBandeja(id) {
 async function guardarNuevoProducto() {
   const nombre = document.getElementById('np-nombre').value.trim();
   const desc = document.getElementById('np-desc').value.trim();
-  const pMay = document.getElementById('np-pmay').value.trim();
-  const pMin = document.getElementById('np-pmin').value.trim();
+  const pMay = document.getElementById('np-pmay').value.trim().replace(',', '.');
+  const pMin = document.getElementById('np-pmin').value.trim().replace(',', '.');
+  if (!(parseFloat(pMay) > 0) && !(parseFloat(pMin) > 0)) {
+    showToast('Cargale al menos un precio (mayorista o minorista) mayor a 0');
+    document.getElementById('np-pmay').focus();
+    return;
+  }
   const stock = parseInt(document.getElementById('np-stock').value) || 0;
   const categoria = document.getElementById('np-categoria').value.trim();
   if (!categoria) {
