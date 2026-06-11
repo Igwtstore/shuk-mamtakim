@@ -10,6 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="Candy Shop">
 <link rel="manifest" href="/candyshop-manifest.json">
 <title>Candy Shop</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -390,6 +392,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#ff8f00,#f4511e);margin-top:8px" onclick="flyerDelDia()">⚡ Flyer del día (se arma solo)</button>
     </div>
     <div class="card">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -706,6 +709,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <input type="checkbox" id="flyer-fondo" style="width:20px;height:20px;accent-color:#7b2ff7">
         <span style="font-size:0.92rem;font-weight:700;color:#5a1ec0">🪄 Crear fondo con IA <span style="font-weight:500;color:#9a7ac9">(un dibujo único para tu flyer, tarda ~30 seg más)</span></span>
       </label>
+      <div class="wizard-label" style="margin-top:18px">Formato</div>
+      <div id="flyer-formatos" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Tema</div>
+      <div id="flyer-temas" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Diseño</div>
+      <div id="flyer-plantillas" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Etiquetas y precio promo (opcional)</div>
+      <div id="flyer-extras"></div>
     </div>
     <!-- PASO 3: PREVIEW -->
     <div class="wizard-step" id="fs-2" style="text-align:center">
@@ -713,6 +724,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <canvas id="flyer-canvas" width="1080" height="1350" style="width:100%;max-width:320px;margin:0 auto;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,0.25);display:none"></canvas>
       <div id="flyer-acciones" style="display:none;flex-direction:column;gap:8px;margin-top:14px">
         <button class="btn-add" style="margin:0" onclick="compartirFlyer()">📤 Compartir</button>
+        <button class="btn-add" style="margin:0;background:#1faa59" onclick="enviarFlyerWAUI()">📲 Mandarlo a mi WhatsApp</button>
         <div style="display:flex;gap:8px">
           <button class="btn-add" style="margin:0;background:#f0ebe3;color:#5c3d1e;flex:1" onclick="generarTextoFlyer()">🔄 Otro texto</button>
           <button class="btn-add" style="margin:0;background:#f0ebe3;color:#5c3d1e;flex:1" onclick="descargarFlyer()">⬇️ Descargar</button>
@@ -953,7 +965,7 @@ function renderCatalogo(catalogo) {
   el.innerHTML = catalogo.map(p => {
     const gan = (p.precioVenta || 0) - (p.costo || 0);
     const fotoHtml = p.foto
-      ? `<div class="cat-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='📦'"></div>`
+      ? `<div class="cat-foto"><img src="${fotoCS(p.foto, 200)}" style="object-fit:contain;background:#fff" onerror="this.parentElement.innerHTML='📦'"></div>`
       : `<div class="cat-foto">📦</div>`;
     return `<div class="cat-item">
       ${fotoHtml}
@@ -1124,11 +1136,28 @@ async function eliminarProducto() {
 
 // ─── FLYER CON IA ─────────────────────────────────────────────────
 let fStep = 0, fSel = {}, fTextos = null, fFondoImg = null;
+let fFormato = 'post', fTema = 'clasico', fPlantilla = 'grilla', fExtras = {};
+let fUltimaURL = '', fGuardando = null;
 const esIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+const FORMATOS = { post: { W: 1080, H: 1350, label: '📄 Clásico' }, cuadrado: { W: 1080, H: 1080, label: '⬛ Cuadrado' }, historia: { W: 1080, H: 1920, label: '📱 Historia' } };
+const TEMAS = {
+  clasico:  { label: '🎨 Clásico', prompt: '' },
+  cumple:   { label: '🎂 Cumple',   a: '#7b2ff7', b: '#f107a3', accent: '#ffd24a', prompt: 'birthday party with balloons and confetti' },
+  invierno: { label: '❄️ Invierno', a: '#0f3057', b: '#1d9bd1', accent: '#ffd24a', prompt: 'cozy winter, snowflakes and hot chocolate' },
+  januca:   { label: '🕎 Janucá',   a: '#0d2b6b', b: '#2e6fd8', accent: '#ffd24a', prompt: 'Hanukkah festive glow, dreidels and golden sparkles' },
+  purim:    { label: '🎭 Purim',    a: '#d81b60', b: '#8e24aa', accent: '#ffe082', prompt: 'Purim carnival, masks and confetti' },
+  pesaj:    { label: '🍷 Pésaj',    a: '#1a7a3c', b: '#66bb6a', accent: '#ffe082', prompt: 'Passover spring festive abstract' },
+  verano:   { label: '☀️ Verano',   a: '#ff8f00', b: '#f4511e', accent: '#fff59d', prompt: 'summer beach popsicle vibes' }
+};
+const PLANTILLAS = { grilla: '🧇 Grilla', heroe: '⭐ Héroe', lista: '📋 Lista' };
+const BADGES = ['', '🔥 OFERTA', '✨ NUEVO', '⏳ ÚLTIMOS'];
 
 function abrirFlyer(prefill) {
   if (!catalogoCache.length) { alert('Primero cargá productos al catálogo'); return; }
-  fStep = 0; fSel = {}; fTextos = null; fFondoImg = null;
+  fStep = 0; fSel = {}; fTextos = null; fFondoImg = null; fExtras = {};
+  fFormato = 'post'; fTema = 'clasico'; fPlantilla = 'grilla';
+  fUltimaURL = ''; fGuardando = null;
   document.getElementById('flyer-idea').value = '';
   document.getElementById('flyer-fondo').checked = false;
   if (prefill) {
@@ -1137,6 +1166,15 @@ function abrirFlyer(prefill) {
     });
     document.getElementById('flyer-idea').value = prefill.idea || '';
     document.getElementById('flyer-fondo').checked = !!prefill.fondo;
+    if (prefill.config) {
+      try {
+        const cfg = JSON.parse(prefill.config);
+        if (FORMATOS[cfg.formato]) fFormato = cfg.formato;
+        if (TEMAS[cfg.tema]) fTema = cfg.tema;
+        if (PLANTILLAS[cfg.plantilla]) fPlantilla = cfg.plantilla;
+        if (cfg.extras) fExtras = cfg.extras;
+      } catch (e) {}
+    }
   }
   renderFlyerGrid();
   flyerStep(0);
@@ -1148,7 +1186,7 @@ function renderFlyerGrid() {
   document.getElementById('flyer-prod-grid').innerHTML = catalogoCache.map(p => {
     const sel = !!fSel[p.codigo];
     const img = p.foto
-      ? `<img src="${p.foto}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
+      ? `<img src="${fotoCS(p.foto, 400)}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
       : `<div style="height:110px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:#f0ebe3;border-radius:10px">🍬</div>`;
     return `<div onclick="toggleFlyerProd('${p.codigo}')" style="cursor:pointer;border:2.5px solid ${sel ? '#7b2ff7' : '#eee4d8'};border-radius:14px;padding:6px;background:${sel ? '#f6efff' : '#fff'};position:relative">
       ${sel ? '<div style="position:absolute;top:4px;right:4px;background:#7b2ff7;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;z-index:1">✓</div>' : ''}
@@ -1183,6 +1221,7 @@ function flyerStep(n) {
 function flyerNext() {
   if (fStep === 0) {
     if (!Object.keys(fSel).length) { mostrarToast('Elegí al menos un producto'); return; }
+    renderFlyerOpciones();
     flyerStep(1);
   } else if (fStep === 1) {
     flyerStep(2);
@@ -1190,6 +1229,32 @@ function flyerNext() {
   }
 }
 function flyerBack() { if (fStep === 0) cerrarFlyer(); else flyerStep(fStep - 1); }
+
+function _chip(activo) {
+  return 'padding:8px 14px;border-radius:20px;border:2px solid ' + (activo ? '#7b2ff7' : '#e0d5c9') +
+    ';background:' + (activo ? '#f6efff' : '#fff') + ';color:' + (activo ? '#5a1ec0' : '#666') +
+    ';font-weight:700;font-size:0.82rem;cursor:pointer';
+}
+
+function renderFlyerOpciones() {
+  document.getElementById('flyer-formatos').innerHTML = Object.keys(FORMATOS).map(k =>
+    `<button style="${_chip(fFormato === k)}" onclick="fFormato='${k}';renderFlyerOpciones()">${FORMATOS[k].label}</button>`).join('');
+  document.getElementById('flyer-temas').innerHTML = Object.keys(TEMAS).map(k =>
+    `<button style="${_chip(fTema === k)}" onclick="fTema='${k}';fFondoImg=null;renderFlyerOpciones()">${TEMAS[k].label}</button>`).join('');
+  document.getElementById('flyer-plantillas').innerHTML = Object.keys(PLANTILLAS).map(k =>
+    `<button style="${_chip(fPlantilla === k)}" onclick="fPlantilla='${k}';renderFlyerOpciones()">${PLANTILLAS[k]}</button>`).join('');
+  const prods = catalogoCache.filter(p => fSel[p.codigo]);
+  document.getElementById('flyer-extras').innerHTML = prods.map(p => {
+    const ex = fExtras[p.codigo] || {};
+    return `<div style="display:grid;grid-template-columns:1fr 110px 96px;gap:6px;align-items:center;margin-bottom:6px">
+      <div style="font-size:0.8rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div>
+      <select onchange="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].badge=this.value" style="padding:8px 4px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem;background:#fff">
+        ${BADGES.map(b => `<option value="${b}" ${ex.badge === b ? 'selected' : ''}>${b || 'Etiqueta...'}</option>`).join('')}
+      </select>
+      <input type="number" placeholder="$ promo" value="${ex.promo || ''}" oninput="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].promo=parseFloat(this.value)||0" style="padding:8px 6px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem">
+    </div>`;
+  }).join('');
+}
 
 async function generarTextoFlyer() {
   const prods = catalogoCache.filter(p => fSel[p.codigo]);
@@ -1204,9 +1269,12 @@ async function generarTextoFlyer() {
   const idea = document.getElementById('flyer-idea').value.trim();
 
   // Texto y fondo en paralelo. El fondo se reusa al pedir "otro texto" (no se re-paga).
+  fUltimaURL = ''; fGuardando = null;
+  try { await document.fonts.load('800 90px "Baloo 2"'); } catch (e) {}
+  const temaPrompt = TEMAS[fTema]?.prompt ? lista + '. Style/occasion: ' + TEMAS[fTema].prompt : lista;
   const pTexto = api('flyerTexto', { hijo: usuario, productos: lista, idea });
   let pFondo = null;
-  if (quiereFondo && !fFondoImg) pFondo = api('fondoFlyer', { tema: lista });
+  if (quiereFondo && !fFondoImg) pFondo = api('fondoFlyer', { tema: temaPrompt });
   const d = await pTexto;
   if (pFondo) {
     const f = await pFondo;
@@ -1239,24 +1307,28 @@ async function generarTextoFlyer() {
 }
 
 // Sube el flyer terminado a Cloudinary y lo registra en el historial.
-async function guardarFlyerHistorial(t, conFondo) {
-  try {
-    const blob = await _flyerBlob();
-    if (!blob) return;
-    const form = new FormData();
-    form.append('file', blob);
-    form.append('upload_preset', 'candyshop');
-    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
-    const data = await res.json();
-    if (!data.secure_url) return;
-    await api('guardarFlyer', {
-      hijo: usuario, url: data.secure_url, titulo: t.titulo || '',
-      codigos: Object.keys(fSel).join(','),
-      idea: document.getElementById('flyer-idea').value.trim(),
-      fondo: conFondo ? '1' : '0'
-    });
-    flyersCargados = false;   // para que el historial se refresque
-  } catch (e) {}
+function guardarFlyerHistorial(t, conFondo) {
+  fGuardando = (async () => {
+    try {
+      const blob = await _flyerBlob();
+      if (!blob) return;
+      const form = new FormData();
+      form.append('file', blob);
+      form.append('upload_preset', 'candyshop');
+      const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!data.secure_url) return;
+      fUltimaURL = data.secure_url;
+      await api('guardarFlyer', {
+        hijo: usuario, url: data.secure_url, titulo: t.titulo || '',
+        codigos: Object.keys(fSel).join(','),
+        idea: document.getElementById('flyer-idea').value.trim(),
+        fondo: conFondo ? '1' : '0',
+        config: JSON.stringify({ formato: fFormato, tema: fTema, plantilla: fPlantilla, extras: fExtras })
+      });
+      flyersCargados = false;   // para que el historial se refresque
+    } catch (e) {}
+  })();
 }
 
 function _cargarImgFlyer(url) {
@@ -1266,7 +1338,7 @@ function _cargarImgFlyer(url) {
     im.crossOrigin = 'anonymous';
     im.onload = () => res(im);
     im.onerror = () => res(null);
-    im.src = url.indexOf('res.cloudinary.com') !== -1 ? url.replace('/upload/', '/upload/w_800/') : url;
+    im.src = url.indexOf('res.cloudinary.com') !== -1 ? url.replace('/upload/', '/upload/e_trim:10/w_800/') : url;
   });
 }
 
@@ -1319,103 +1391,196 @@ function _wrap(ctx, texto, maxW, maxLineas) {
 async function dibujarFlyer(prods, t) {
   const cv = document.getElementById('flyer-canvas');
   const ctx = cv.getContext('2d');
-  const W = 1080, H = 1350;
-  const tema = usuario === 'Iosi'
-    ? { a: '#0e6b34', b: '#2fb45e', accent: '#ffd24a' }
-    : { a: '#163f6e', b: '#2c8fd6', accent: '#ffd24a' };
+  const F = FORMATOS[fFormato] || FORMATOS.post;
+  const W = F.W, H = F.H;
+  cv.width = W; cv.height = H;
+  const temaSel = TEMAS[fTema];
+  const tema = (fTema !== 'clasico' && temaSel.a)
+    ? { a: temaSel.a, b: temaSel.b, accent: temaSel.accent }
+    : (usuario === 'Iosi'
+      ? { a: '#0e6b34', b: '#2fb45e', accent: '#ffd24a' }
+      : { a: '#163f6e', b: '#2c8fd6', accent: '#ffd24a' });
+  const FT = '"Baloo 2", -apple-system, system-ui, sans-serif';
 
-  // Fondo: dibujo de IA (con velo para que el texto se lea) o degradé clásico
+  // Fondo: dibujo de IA (con velo para que el texto se lea) o degradé del tema
   if (fFondoImg) {
     _coverImg(ctx, fFondoImg, 0, 0, W, H);
     ctx.fillStyle = 'rgba(15,20,40,0.30)'; ctx.fillRect(0, 0, W, H);
     const gt = ctx.createLinearGradient(0, 0, 0, 330);
     gt.addColorStop(0, 'rgba(0,0,0,0.45)'); gt.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = gt; ctx.fillRect(0, 0, W, 330);
-    const gb = ctx.createLinearGradient(0, 1110, 0, H);
+    const gb = ctx.createLinearGradient(0, H - 240, 0, H);
     gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,0.45)');
-    ctx.fillStyle = gb; ctx.fillRect(0, 1110, W, H - 1110);
+    ctx.fillStyle = gb; ctx.fillRect(0, H - 240, W, 240);
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, tema.a); g.addColorStop(1, tema.b);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 0.08; ctx.fillStyle = '#ffffff';
-    [[100, 160, 130], [980, 90, 90], [60, 1240, 110], [1010, 1280, 140], [930, 700, 70]].forEach(c => {
+    [[100, 160, 130], [W - 100, 90, 90], [60, H - 110, 110], [W - 70, H - 70, 140], [W - 150, H * 0.5, 70]].forEach(c => {
       ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
     });
     ctx.globalAlpha = 1;
   }
 
-  // Título (achica la letra hasta que entre)
-  ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
-  let fs = 92;
-  do { ctx.font = '900 ' + fs + 'px -apple-system, system-ui, sans-serif'; fs -= 4; }
-  while (ctx.measureText(t.titulo).width > 960 && fs > 40);
-  ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+  // Título con contorno (tipografía con onda)
+  ctx.textAlign = 'center';
+  let fs = 96;
+  do { ctx.font = '800 ' + fs + 'px ' + FT; fs -= 4; }
+  while (ctx.measureText(t.titulo).width > 950 && fs > 40);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 14; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.strokeText(t.titulo, W / 2, 150);
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(t.titulo, W / 2, 150);
-  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
   // Frase
-  ctx.font = '600 42px -apple-system, system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.95)';
-  _wrap(ctx, t.frase, 920, 2).forEach((l, i) => ctx.fillText(l, W / 2, 225 + i * 54));
+  ctx.font = '700 40px ' + FT;
+  ctx.fillStyle = 'rgba(255,255,255,0.96)';
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
+  _wrap(ctx, t.frase, 920, 2).forEach((l, i) => ctx.fillText(l, W / 2, 222 + i * 52));
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-  // Grilla de productos
-  const n = prods.length;
-  const cols = n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 2 : 3;
-  const filas = Math.ceil(n / cols);
-  const margen = 56, gap = 26, topArea = 350, altoArea = 760;
-  const cw = (W - margen * 2 - gap * (cols - 1)) / cols;
-  const chMax = (altoArea - gap * (filas - 1)) / filas;
-  const ch = Math.min(chMax, cw + 110);
+  // Área de productos
+  const areaTop = 330, areaBottom = H - 230, areaH = areaBottom - areaTop;
   const imgs = await Promise.all(prods.map(p => _cargarImgFlyer(p.foto)));
-  const offsetY = topArea + (altoArea - (ch * filas + gap * (filas - 1))) / 2;
 
-  prods.forEach((p, i) => {
-    const col = i % cols, fila = Math.floor(i / cols);
-    // centrar la última fila si quedó incompleta
-    const enFila = (fila === filas - 1) ? (n - fila * cols) : cols;
-    const xBase = margen + (W - margen * 2 - (cw * enFila + gap * (enFila - 1))) / 2;
-    const x = xBase + col * (cw + gap);
-    const y = offsetY + fila * (ch + gap);
-    ctx.fillStyle = '#ffffff';
-    _rr(ctx, x, y, cw, ch, 24); ctx.fill();
-    const imgH = ch - 96;
-    if (imgs[i]) {
-      // Producto entero, centrado en la tarjeta blanca (sin recortes)
-      _containImg(ctx, imgs[i], x + 16, y + 14, cw - 32, imgH - 22);
-    } else {
-      ctx.font = (imgH * 0.45) + 'px sans-serif'; ctx.fillStyle = '#f0ebe3';
-      _rr(ctx, x + 10, y + 10, cw - 20, imgH - 10, 18); ctx.fill();
-      ctx.fillStyle = '#c9a36b'; ctx.fillText('🍬', x + cw / 2, y + imgH / 2 + imgH * 0.15);
+  if (fPlantilla === 'lista') {
+    const n = prods.length;
+    const gap = 16;
+    const rh = Math.min(180, (areaH - gap * (n - 1)) / n);
+    const y0 = areaTop + (areaH - (rh * n + gap * (n - 1))) / 2;
+    prods.forEach((p, i) => {
+      const y = y0 + i * (rh + gap), x = 56, w = W - 112;
+      ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, w, rh, 22); ctx.fill();
+      const fw = rh - 20;
+      if (imgs[i]) _containImg(ctx, imgs[i], x + 12, y + 10, fw, rh - 20);
+      else { ctx.font = (fw * 0.5) + 'px sans-serif'; ctx.fillText('🍬', x + 12 + fw / 2, y + rh / 2 + fw * 0.18); }
+      ctx.textAlign = 'left'; ctx.fillStyle = '#2d1a0a';
+      let nf = 36;
+      do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
+      while (ctx.measureText(p.nombre).width > w - fw - 280 && nf > 18);
+      ctx.fillText(p.nombre, x + fw + 30, y + rh / 2 + 12);
+      _precio(ctx, p, x + w - 24, y + rh / 2, tema, FT, 'der');
+      ctx.textAlign = 'center';
+      const ex = fExtras[p.codigo];
+      if (ex?.badge) _badge(ctx, x + 6, y + 14, ex.badge, FT);
+    });
+  } else if (fPlantilla === 'heroe') {
+    const heroe = prods[0];
+    const resto = prods.slice(1, 5);
+    const heroH = resto.length ? Math.min(areaH * 0.62, 640) : Math.min(areaH, 760);
+    const hw = Math.min(W - 200, 720), hx = (W - hw) / 2, hy = areaTop + 6;
+    ctx.fillStyle = '#ffffff'; _rr(ctx, hx, hy, hw, heroH, 28); ctx.fill();
+    if (imgs[0]) _containImg(ctx, imgs[0], hx + 20, hy + 16, hw - 40, heroH - 130);
+    ctx.fillStyle = '#2d1a0a';
+    let nf = 42;
+    do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
+    while (ctx.measureText(heroe.nombre).width > hw - 60 && nf > 22);
+    ctx.fillText(heroe.nombre, hx + hw / 2, hy + heroH - 72);
+    _precio(ctx, heroe, hx + hw / 2, hy + heroH - 36, tema, FT, 'centro');
+    const exH = fExtras[heroe.codigo];
+    if (exH?.badge) _badge(ctx, hx + 8, hy + 22, exH.badge, FT);
+    if (resto.length) {
+      const gap = 18, k = resto.length;
+      const mw = Math.min((W - 112 - gap * (k - 1)) / k, 250);
+      const x0 = (W - (mw * k + gap * (k - 1))) / 2;
+      const my = hy + heroH + 22;
+      const mh = Math.min(areaBottom - my, mw + 70);
+      resto.forEach((p, j) => {
+        const x = x0 + j * (mw + gap);
+        ctx.fillStyle = '#ffffff'; _rr(ctx, x, my, mw, mh, 18); ctx.fill();
+        if (imgs[j + 1]) _containImg(ctx, imgs[j + 1], x + 10, my + 8, mw - 20, mh - 60);
+        _precio(ctx, p, x + mw / 2, my + mh - 22, tema, FT, 'centro-chico');
+        const ex = fExtras[p.codigo];
+        if (ex?.badge) _badge(ctx, x + 2, my + 14, ex.badge, FT, 0.8);
+      });
     }
-    // Nombre
-    ctx.fillStyle = '#2d1a0a';
-    let nf = 30;
-    do { ctx.font = '800 ' + nf + 'px -apple-system, system-ui, sans-serif'; nf -= 2; }
-    while (ctx.measureText(p.nombre).width > cw - 30 && nf > 16);
-    ctx.fillText(p.nombre, x + cw / 2, y + imgH + 36);
-    // Precio
-    ctx.font = '900 34px -apple-system, system-ui, sans-serif';
-    const precioTxt = fmt(p.precioVenta);
-    const pw = ctx.measureText(precioTxt).width + 36;
-    ctx.fillStyle = tema.accent;
-    _rr(ctx, x + (cw - pw) / 2, y + imgH + 50, pw, 46, 23); ctx.fill();
-    ctx.fillStyle = '#2d1a0a';
-    ctx.fillText(precioTxt, x + cw / 2, y + imgH + 84);
-  });
+  } else {
+    // GRILLA (clásica)
+    const n = prods.length;
+    const cols = n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 2 : 3;
+    const filas = Math.ceil(n / cols);
+    const margen = 56, gap = 26;
+    const cw = (W - margen * 2 - gap * (cols - 1)) / cols;
+    const chMax = (areaH - gap * (filas - 1)) / filas;
+    const ch = Math.min(chMax, cw + 120);
+    const offsetY = areaTop + (areaH - (ch * filas + gap * (filas - 1))) / 2;
+    prods.forEach((p, i) => {
+      const col = i % cols, fila = Math.floor(i / cols);
+      const enFila = (fila === filas - 1) ? (n - fila * cols) : cols;
+      const xBase = margen + (W - margen * 2 - (cw * enFila + gap * (enFila - 1))) / 2;
+      const x = xBase + col * (cw + gap);
+      const y = offsetY + fila * (ch + gap);
+      ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, cw, ch, 24); ctx.fill();
+      const imgH = ch - 96;
+      if (imgs[i]) _containImg(ctx, imgs[i], x + 16, y + 14, cw - 32, imgH - 22);
+      else { ctx.font = (imgH * 0.45) + 'px sans-serif'; ctx.fillText('🍬', x + cw / 2, y + imgH / 2 + imgH * 0.15); }
+      ctx.fillStyle = '#2d1a0a';
+      let nf = 30;
+      do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
+      while (ctx.measureText(p.nombre).width > cw - 30 && nf > 16);
+      ctx.fillText(p.nombre, x + cw / 2, y + imgH + 34);
+      _precio(ctx, p, x + cw / 2, y + imgH + 76, tema, FT, 'centro');
+      const ex = fExtras[p.codigo];
+      if (ex?.badge) _badge(ctx, x + 4, y + 18, ex.badge, FT);
+    });
+  }
 
-  // Cierre (pill grande)
-  ctx.font = '900 46px -apple-system, system-ui, sans-serif';
-  const cw2 = ctx.measureText(t.cierre).width + 80;
+  // Cierre (pill grande) y pie
+  ctx.font = '800 46px ' + FT;
+  const cw2 = Math.min(ctx.measureText(t.cierre).width + 80, W - 80);
   ctx.fillStyle = tema.accent;
-  _rr(ctx, (W - cw2) / 2, 1158, cw2, 78, 39); ctx.fill();
+  _rr(ctx, (W - cw2) / 2, H - 192, cw2, 78, 39); ctx.fill();
   ctx.fillStyle = '#2d1a0a';
-  ctx.fillText(t.cierre, W / 2, 1212);
+  ctx.fillText(t.cierre, W / 2, H - 138);
+  ctx.font = '700 34px ' + FT;
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  ctx.fillText('📲 Pedile a ' + usuario + ' · Candy Shop', W / 2, H - 54);
+}
 
-  // Pie
-  ctx.font = '700 34px -apple-system, system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.fillText('📲 Pedile a ' + usuario + ' · Candy Shop', W / 2, 1296);
+// Precio: pill con el valor (y si hay promo, el precio viejo tachado al lado)
+function _precio(ctx, p, x, yCentro, tema, FT, modo) {
+  const ex = fExtras[p.codigo] || {};
+  const principal = ex.promo > 0 ? fmt(ex.promo) : fmt(p.precioVenta);
+  const fsPill = modo === 'centro-chico' ? 26 : 34;
+  ctx.font = '800 ' + fsPill + 'px ' + FT;
+  const pw = ctx.measureText(principal).width + 34;
+  let px;
+  if (modo === 'der') { ctx.textAlign = 'left'; px = x - pw; }
+  else px = x - pw / 2;
+  ctx.fillStyle = tema.accent;
+  _rr(ctx, px, yCentro - fsPill * 0.72, pw, fsPill * 1.42, fsPill * 0.71); ctx.fill();
+  ctx.fillStyle = '#2d1a0a'; ctx.textAlign = 'center';
+  ctx.fillText(principal, px + pw / 2, yCentro + fsPill * 0.36);
+  if (ex.promo > 0) {
+    const viejo = fmt(p.precioVenta);
+    ctx.font = '700 ' + Math.round(fsPill * 0.72) + 'px ' + FT;
+    const vw = ctx.measureText(viejo).width;
+    const vx = px - vw / 2 - 16, vy = yCentro + fsPill * 0.2;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 5;
+    ctx.fillText(viejo, vx, vy);
+    ctx.restore();
+    ctx.strokeStyle = '#e3173d'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(vx - vw / 2 - 4, vy - fsPill * 0.22); ctx.lineTo(vx + vw / 2 + 4, vy - fsPill * 0.22 + 6); ctx.stroke();
+  }
+}
+
+// Etiqueta tipo cinta ("🔥 OFERTA") inclinada sobre la tarjeta
+function _badge(ctx, x, y, texto, FT, escala) {
+  const e = escala || 1;
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(-0.16);
+  ctx.font = '800 ' + Math.round(26 * e) + 'px ' + FT;
+  const w = ctx.measureText(texto).width + 26 * e;
+  ctx.fillStyle = '#e3173d';
+  _rr(ctx, -6, -22 * e, w, 40 * e, 12 * e); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left';
+  ctx.fillText(texto, 7 * e, 7 * e);
+  ctx.restore();
+  ctx.textAlign = 'center';
 }
 
 function _flyerBlob() {
@@ -1487,6 +1652,7 @@ function renderFlyers() {
           <button onclick="descargarFlyerUrl('${f.url}')" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
           <button onclick="regenerarFlyer('${f.id}')" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
           <button onclick="archivarFlyerUI('${f.id}','${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
+          <button onclick="eliminarFlyerUI('${f.id}')" title="Eliminar" style="flex:1;padding:6px 0;background:#fde8e8;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🗑️</button>
         </div>
       </div>
     </div>`).join('') + '</div>';
@@ -1509,9 +1675,48 @@ async function archivarFlyerUI(id, estado) {
 function regenerarFlyer(id) {
   const f = flyersCache.find(x => x.id === id);
   if (!f) return;
-  abrirFlyer({ codigos: f.codigos, idea: f.idea, fondo: f.fondo });
-  if (Object.keys(fSel).length) flyerStep(1);   // productos ya elegidos → directo a la idea
+  abrirFlyer({ codigos: f.codigos, idea: f.idea, fondo: f.fondo, config: f.config });
+  if (Object.keys(fSel).length) { renderFlyerOpciones(); flyerStep(1); }   // productos ya elegidos → directo a la idea
   mostrarToast('Mismos productos e idea: tocá ✨ Generar 🎨');
+}
+
+async function eliminarFlyerUI(id) {
+  if (!confirm('¿Eliminar este flyer para siempre?')) return;
+  flyersCache = flyersCache.filter(x => x.id !== id);
+  renderFlyers();
+  await api('eliminarFlyer', { id });
+}
+
+// Manda el flyer terminado al WhatsApp del chico (para reenviar o subir al estado)
+async function enviarFlyerWAUI() {
+  mostrarToast('Enviando a tu WhatsApp...');
+  if (fGuardando) await fGuardando;
+  if (!fUltimaURL) { mostrarToast('Esperá un segundo y probá de nuevo'); return; }
+  const r = await api('enviarFlyerWA', { hijo: usuario, url: fUltimaURL });
+  mostrarToast(r?.ok ? '📲 ¡Te llegó al WhatsApp! Si no aparece, mandá el join al bot' : '😕 No se pudo enviar');
+}
+
+// ⚡ Flyer del día: elige solo qué promocionar (lo que más hay en el depósito)
+async function flyerDelDia() {
+  if (!catalogoCache.length) { alert('Primero cargá productos al catálogo'); return; }
+  mostrarToast('⚡ Eligiendo productos...');
+  let codigos = [];
+  try {
+    const dep = await api('getDepositoHijos');
+    if (Array.isArray(dep)) {
+      codigos = dep.filter(d => d.cantidad > 0).sort((a, b) => b.cantidad - a.cantidad)
+        .map(d => d.codigo).filter(c => catalogoCache.find(p => p.codigo === c));
+    }
+  } catch (e) {}
+  if (!codigos.length) codigos = catalogoCache.map(p => p.codigo);
+  abrirFlyer({
+    codigos: codigos.slice(0, 4).join(','),
+    idea: 'Promo del día: precios de amigo, aprovechá hoy que hay stock',
+    fondo: true
+  });
+  renderFlyerOpciones();
+  flyerStep(2);
+  generarTextoFlyer();
 }
 
 // ─── COMPRAS / PROVEEDORES / DEPÓSITO ────────────────────────────
@@ -1555,10 +1760,17 @@ async function cargarCompras() {
   }
 }
 
+// Auto-encuadre: e_trim recorta los bordes lisos (fondo blanco desparejo,
+// producto descentrado) para que la foto aproveche todo el lugar disponible.
+function fotoCS(url, w) {
+  if (!url || url.indexOf('res.cloudinary.com') === -1) return url;
+  return url.replace('/upload/', '/upload/e_trim:10/' + (w ? 'w_' + w + '/' : ''));
+}
+
 function fotoMini(codigo, size) {
   const p = catalogoCache.find(x => x.codigo === codigo);
   return p?.foto
-    ? `<img src="${p.foto}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:cover;flex-shrink:0" onerror="this.outerHTML='📦'">`
+    ? `<img src="${fotoCS(p.foto, 200)}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0" onerror="this.outerHTML='📦'">`
     : `<div style="width:${size}px;height:${size}px;border-radius:8px;background:#f0ebe3;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.55)}px;flex-shrink:0">📦</div>`;
 }
 

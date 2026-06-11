@@ -181,6 +181,10 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #f5f0e8; m
 </div>
 
 <script>
+function fotoTienda(url, w) {
+  if (!url || url.indexOf('res.cloudinary.com') === -1) return url;
+  return url.replace('/upload/', '/upload/e_trim:10/' + (w ? 'w_' + w + '/' : ''));
+}
 const APPS_URL = 'https://script.google.com/macros/s/AKfycbxdAaSjGfBQoMz_38kHvTvUNswM94BdQexq5IDAINgTbvgpNOcOdyu8TXIHsbAZWAJ-hA/exec';
 const PHONES = { meir: '5491171046383', iosi: '5491150987261' };
 const NOMBRES = { meir: 'Meir', iosi: 'Iosi' };
@@ -232,7 +236,7 @@ function renderCatalogo(productos, esFiltered) {
     const enCarrito = carrito[p.codigo];
     const cant = enCarrito?.cantidad || 0;
     const fotoEl = p.foto
-      ? `<img src="${p.foto}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      ? `<img src="${fotoTienda(p.foto, 600)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';
     const placeholder = `<div class="producto-foto-placeholder" style="${p.foto ? 'display:none' : ''}">${emojiKid}</div>`;
     return `<div class="producto-card" onclick="seleccionarProducto('${p.codigo}')">
@@ -257,7 +261,7 @@ function seleccionarProducto(codigo) {
   if (!productoSeleccionado) return;
   qtyTmp = carrito[codigo]?.cantidad || 1;
   const fotoEl = document.getElementById('qty-foto');
-  if (productoSeleccionado.foto) { fotoEl.src = productoSeleccionado.foto; fotoEl.style.display = 'block'; }
+  if (productoSeleccionado.foto) { fotoEl.src = fotoTienda(productoSeleccionado.foto, 900); fotoEl.style.display = 'block'; }
   else { fotoEl.style.display = 'none'; }
   document.getElementById('qty-nombre').textContent = productoSeleccionado.nombre;
   document.getElementById('qty-precio').textContent = fmt(productoSeleccionado.precioVenta) + ' c/u';
@@ -318,7 +322,7 @@ function renderCarrito() {
   body.innerHTML = items.map(item => {
     const subtotal = item.precioVenta * item.cantidad;
     total += subtotal;
-    const foto = item.foto ? `<img class="cart-item-foto" src="${item.foto}" onerror="this.style.display='none'">` : '';
+    const foto = item.foto ? `<img class="cart-item-foto" src="${fotoTienda(item.foto, 200)}" onerror="this.style.display='none'">` : '';
     return `<div class="cart-item">
       ${foto}
       <div class="cart-item-info">
