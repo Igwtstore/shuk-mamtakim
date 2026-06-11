@@ -3698,6 +3698,9 @@ async function guardarRapidoEditor(id) {
   const may = document.getElementById('epq-may-' + id).value.trim().replace(',', '.');
   const min = document.getElementById('epq-min-' + id).value.trim().replace(',', '.');
   const stock = document.getElementById('epq-stock-' + id).value.trim();
+  const _p = productos.find(x => String(x.id) === String(id));
+  const _err = validarPreciosProducto((_p?.visible || 'Ambos').trim(), may, min);
+  if (_err) { showToast(_err); return; }
   const r = await apiWrite(new URLSearchParams({
     accion: 'editarProducto', id,
     precioMay: may || '0', precioMin: min || '0', stock: stock || '0'
@@ -3808,6 +3811,9 @@ async function guardarEdicionProducto() {
     } catch (e) {}
   }
   _epNuevas = [];
+  const _errF = validarPreciosProducto(document.getElementById('ep-visible').value || 'Ambos',
+    document.getElementById('ep-pmay').value, document.getElementById('ep-pmin').value);
+  if (_errF) { showToast(_errF); status.textContent = ''; return; }
   status.textContent = 'Guardando...';
   const r = await apiWrite(new URLSearchParams({
     accion: 'editarProducto', id: _epId,
@@ -3962,13 +3968,25 @@ function usarDeBandeja(id) {
   showToast('📥 Ficha cargada — faltan precios y stock');
 }
 
+// Valida que el producto tenga los precios que su visibilidad exige.
+function validarPreciosProducto(visible, pMay, pMin) {
+  const may = parseFloat(String(pMay).replace(',', '.')) > 0;
+  const min = parseFloat(String(pMin).replace(',', '.')) > 0;
+  if (visible === 'Ambos' && (!may || !min)) return 'Va a estar en los dos catálogos: necesita precio mayorista Y minorista (mayores a 0)';
+  if (visible === 'Mayorista' && !may) return 'Va al catálogo mayorista: necesita precio mayorista mayor a 0';
+  if (visible === 'Minorista' && !min) return 'Va a la tienda minorista: necesita precio minorista mayor a 0';
+  if (visible === 'Oculto' && !may && !min) return 'Aunque esté oculto, cargale al menos un precio para poder venderlo';
+  return '';
+}
+
 async function guardarNuevoProducto() {
   const nombre = document.getElementById('np-nombre').value.trim();
   const desc = document.getElementById('np-desc').value.trim();
   const pMay = document.getElementById('np-pmay').value.trim().replace(',', '.');
   const pMin = document.getElementById('np-pmin').value.trim().replace(',', '.');
-  if (!(parseFloat(pMay) > 0) && !(parseFloat(pMin) > 0)) {
-    showToast('Cargale al menos un precio (mayorista o minorista) mayor a 0');
+  const _errPrecio = validarPreciosProducto(document.getElementById('np-visible').value || 'Ambos', pMay, pMin);
+  if (_errPrecio) {
+    showToast(_errPrecio);
     document.getElementById('np-pmay').focus();
     return;
   }
