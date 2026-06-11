@@ -591,6 +591,27 @@ function doGet(e) {
   } catch(err) { return json({error:err.toString()}); }
 }
 
+// POST: solo para subir audio (idea del flyer por voz) — el audio no entra en una URL.
+// Auth: sesión del panel o secreto del bot, igual que las acciones protegidas.
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents);
+    if (body.accion === 'transcribirIdea') {
+      const ok = sesionValida_(body.token) || body.secret === BOT_SECRET;
+      if (!ok) return json({ error: 'no autorizado' });
+      const res = UrlFetchApp.fetch(WORKER_RELAY_URL, {
+        method: 'post', contentType: 'application/json',
+        payload: JSON.stringify({ transcribir: true, secret: BOT_SECRET, b64: body.audio || '', mime: body.mime || '' }),
+        muteHttpExceptions: true
+      });
+      return json(JSON.parse(res.getContentText()));
+    }
+    return json({ error: 'acción desconocida' });
+  } catch (err) {
+    return json({ error: 'doPost: ' + err });
+  }
+}
+
 function dec(v){try{return decodeURIComponent(v||'');}catch(e){return v||'';}}
 function ok(){return json({ok:true});}
 function json(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}

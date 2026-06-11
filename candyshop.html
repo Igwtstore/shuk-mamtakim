@@ -704,6 +704,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="wizard-step" id="fs-1">
       <div class="wizard-label">Escribí tu idea y la IA la mejora ✨</div>
       <textarea id="flyer-idea" placeholder="Ej: vendo chocolates riquísimos, precios de amigo, traigo al cole" style="width:100%;min-height:110px;padding:14px;border:2px solid #e0d5c9;border-radius:14px;font-family:inherit;font-size:1rem;resize:vertical;box-sizing:border-box"></textarea>
+      <button id="flyer-mic" onclick="grabarIdea()" style="width:100%;margin-top:10px;padding:13px;background:#fff;border:2px dashed #d9c2f7;border-radius:14px;color:#7b2ff7;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit">🎙️ O contala con tu voz</button>
       <div style="font-size:0.8rem;color:#aaa;margin-top:8px">Si lo dejás vacío, la IA inventa algo con onda.</div>
       <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;background:#f6efff;border:2px solid #d9c2f7;border-radius:14px;cursor:pointer">
         <input type="checkbox" id="flyer-fondo" style="width:20px;height:20px;accent-color:#7b2ff7">
@@ -1229,6 +1230,58 @@ function flyerNext() {
   }
 }
 function flyerBack() { if (fStep === 0) cerrarFlyer(); else flyerStep(fStep - 1); }
+
+// ─── IDEA POR VOZ (micrófono → Whisper) ──────────────────────────
+let _grabador = null, _grabChunks = [];
+
+async function grabarIdea() {
+  const btn = document.getElementById('flyer-mic');
+  if (_grabador && _grabador.state === 'recording') { _grabador.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+               : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+    _grabChunks = [];
+    _grabador = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    _grabador.ondataavailable = ev => { if (ev.data.size) _grabChunks.push(ev.data); };
+    _grabador.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      btn.textContent = '✨ Escuchando lo que dijiste...';
+      btn.disabled = true;
+      try {
+        const blob = new Blob(_grabChunks, { type: _grabador.mimeType || 'audio/mp4' });
+        if (blob.size > 4 * 1024 * 1024) { mostrarToast('El audio es muy largo, probá con uno más corto 🙏'); return; }
+        const b64 = await new Promise(res => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result.split(',')[1]);
+          fr.readAsDataURL(blob);
+        });
+        const r = await fetch(APPS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ accion: 'transcribirIdea', token: _kidsToken, audio: b64, mime: blob.type })
+        });
+        const d = await r.json();
+        if (d?.texto) {
+          const ta = document.getElementById('flyer-idea');
+          ta.value = (ta.value ? ta.value + ' ' : '') + d.texto;
+          mostrarToast('🎙️ ¡Listo! Revisá el texto y generá');
+        } else {
+          mostrarToast('😕 ' + (d?.error || 'No pude entender el audio, probá de nuevo'));
+        }
+      } catch (e) {
+        mostrarToast('😕 No se pudo transcribir. Probá de nuevo.');
+      }
+      btn.textContent = '🎙️ O contala con tu voz';
+      btn.disabled = false;
+      btn.style.background = '#fff'; btn.style.color = '#7b2ff7'; btn.style.borderColor = '#d9c2f7';
+    };
+    _grabador.start();
+    btn.textContent = '⏹️ Grabando... tocá para terminar';
+    btn.style.background = '#e3173d'; btn.style.color = '#fff'; btn.style.borderColor = '#e3173d';
+  } catch (e) {
+    mostrarToast('🎙️ Necesito permiso para usar el micrófono');
+  }
+}
 
 function _chip(activo) {
   return 'padding:8px 14px;border-radius:20px;border:2px solid ' + (activo ? '#7b2ff7' : '#e0d5c9') +
