@@ -2572,6 +2572,7 @@ function _syncCatalogoFlyer() {
   const publico = fPrecioModo === 'may' ? 'Mayorista' : 'Minorista';
   catalogoCache = productosVisibles()
     .filter(p => (parseInt(p.stock) || 0) > 0 && (!p.visible || p.visible === 'Ambos' || p.visible === publico))
+    .sort((a, b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre))
     .map(p => {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
     const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/e_trim:10/w_800,') : '';
@@ -3546,7 +3547,12 @@ async function guardarNuevoProducto() {
   const pMay = document.getElementById('np-pmay').value.trim();
   const pMin = document.getElementById('np-pmin').value.trim();
   const stock = parseInt(document.getElementById('np-stock').value) || 0;
-  const categoria = document.getElementById('np-categoria').value.trim() || 'Varios';
+  const categoria = document.getElementById('np-categoria').value.trim();
+  if (!categoria) {
+    showToast('Elegí una categoría (o escribí "Varios") para que se acomode en el catálogo');
+    document.getElementById('np-categoria').focus();
+    return;
+  }
   const visible = document.getElementById('np-visible').value || 'Ambos';
   const dueno = document.getElementById('np-dueno').value || 'Miri';
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }

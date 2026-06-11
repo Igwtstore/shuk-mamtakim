@@ -13,7 +13,7 @@ const PROTECTED_ACTIONS = [
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
-  'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA',
+  'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'guardarClaveIA'
 ];
 
@@ -524,6 +524,23 @@ function doGet(e) {
     if (accion === 'track')      { return registrarTrack(ss, e.parameter); }
     if (accion === 'getAnalitica') { return json(getAnalitica(ss, e.parameter)); }
     if (accion === 'getProductosDormidos') { return json(getProductosDormidos(ss, e.parameter)); }
+    if (accion === 'editarProducto') {
+      // Edita campos puntuales de un producto del Stock de Shuk (solo los que vengan)
+      const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
+      const datos = h.getDataRange().getValues();
+      const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15 };
+      for (let i = 1; i < datos.length; i++) {
+        if (datos[i][0].toString() === e.parameter.id) {
+          Object.keys(campos).forEach(k => {
+            if (e.parameter[k] !== undefined && e.parameter[k] !== null && e.parameter[k] !== '') {
+              h.getRange(i + 1, campos[k]).setValue(dec(e.parameter[k]));
+            }
+          });
+          return json({ ok: true });
+        }
+      }
+      return json({ error: 'producto no encontrado' });
+    }
     if (accion === 'preguntarIA') { return json(preguntarIA(ss, e.parameter)); }
     if (accion === 'guardarClaveIA') {
       const clave = dec(e.parameter.clave || '').trim();
