@@ -1708,6 +1708,7 @@ function getProductosDormidos(ss, p) {
       if (!r[0] || !r[1]) return false;
       const stock = parseInt(r[5]); const activo = (r[7] || '').toString().toUpperCase() !== 'NO';
       if (!activo || isNaN(stock) || stock <= 0) return false;
+      if ((r[9] || '').toString() === 'Oculto') return false;   // internos: no se promocionan
       // con oferta vigente no se sugiere
       const precioOf = parseFloat(r[10]) || 0;
       const fechaOf = r[11] ? new Date(r[11] + 'T23:59:59') : null;

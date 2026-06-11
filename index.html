@@ -1063,6 +1063,7 @@
             <option value="Ambos">Ambos (mayorista y minorista)</option>
             <option value="Mayorista">Solo Mayorista</option>
             <option value="Minorista">Solo Minorista</option>
+            <option value="Oculto">🙈 Oculto (no se ve en la tienda — solo para ventas internas)</option>
           </select>
         </div>
       </div>
@@ -1115,10 +1116,10 @@
   <div class="admin-card">
     <div class="admin-titulo">✏️ Editar producto</div>
     <div class="nombre-campo" style="margin:0 0 0.6rem">
-      <label>Elegí el producto</label>
-      <select id="ep-select" onchange="cargarProductoEditor(this.value)" style="width:100%;padding:0.65rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;background:#fff">
-        <option value="">— Elegir —</option>
-      </select>
+      <label>Buscá el producto</label>
+      <input type="text" id="ep-buscar" placeholder="Escribí: elite, klik, sopa..." oninput="filtrarEditor()" onfocus="filtrarEditor()" autocomplete="off"
+        style="width:100%;padding:0.65rem 0.9rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
+      <div id="ep-resultados" style="display:none;max-height:280px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-top:0.4rem"></div>
     </div>
     <div id="ep-form" style="display:none">
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
@@ -1136,7 +1137,7 @@
           <select id="ep-dueno" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Miri</option><option>Jony</option></select>
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:160px"><label>Visible para</label>
-          <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option></select>
+          <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option><option value="Oculto">🙈 Oculto (solo ventas internas)</option></select>
         </div>
       </div>
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (⭐ = portada · ✕ = quitar)</label></div>
@@ -3399,7 +3400,7 @@ function renderManualProductos() {
   lista.innerHTML = productosVisibles().filter(p => {
     if (p.stock <= 0) return false;
     const vis = (p.visible||'Ambos').trim();
-    return vis === 'Ambos' || vis === _tipoM;
+    return vis === 'Ambos' || vis === _tipoM || vis === 'Oculto';
   }).map(p => {
     const esPitz = p.dueno === 'Jony';
     let precioUnit, moneda;
@@ -3643,16 +3644,47 @@ async function subirArchivosCloudinary() {
 let _epId = null, _epFotos = [], _epNuevas = [];
 
 function poblarEditorProductos() {
-  const sel = document.getElementById('ep-select');
-  if (!sel) return;
-  const actual = sel.value;
-  const lista = productos.slice().sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre));
-  const porCat = {};
-  lista.forEach(p => { const c = p.categoria || 'Varios'; (porCat[c] = porCat[c] || []).push(p); });
-  sel.innerHTML = '<option value="">— Elegir —</option>' + Object.keys(porCat).map(c =>
-    `<optgroup label="${esc(c)}">` + porCat[c].map(p =>
-      `<option value="${p.id}">${esc(p.nombre)}${p.desc ? ' · ' + esc(p.desc.substring(0, 40)) : ''}</option>`).join('') + '</optgroup>').join('');
-  if (actual) sel.value = actual;
+  // El buscador lee de `productos` en vivo; si está abierto, refresca resultados
+  if (document.getElementById('ep-resultados')?.style.display !== 'none') filtrarEditor();
+}
+
+function filtrarEditor() {
+  const q = (document.getElementById('ep-buscar')?.value || '').toLowerCase().trim();
+  const cont = document.getElementById('ep-resultados');
+  if (!cont) return;
+  let lista = productos.filter(p =>
+    !q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
+  lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 30);
+  cont.style.display = 'block';
+  if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.75rem">Sin resultados</div>'; return; }
+  cont.innerHTML = lista.map(p => {
+    const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+    const thumb = imgs.length
+      ? `<img src="${imgUrl(imgs[0])[0]}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
+      : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const oculto = (p.visible || '') === 'Oculto' ? ' <span style="font-size:0.6rem;background:#f0ebe3;border-radius:4px;padding:1px 5px">🙈 oculto</span>' : '';
+    return `<div onclick="elegirProductoEditor(${p.id})" style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)" onmouseover="this.style.background='var(--gris)'" onmouseout="this.style.background=''">
+      ${thumb}
+      <div style="min-width:0;flex:1">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}${oculto}</div>
+        <div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc || '')} · stock ${p.stock}</div>
+      </div>
+      <span style="color:var(--dorado);font-size:0.85rem">✏️</span>
+    </div>`;
+  }).join('');
+}
+
+function irAEditarProducto(id) {
+  setPanelSeccion('catalogo');
+  elegirProductoEditor(id);
+  setTimeout(() => document.getElementById('ep-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+function elegirProductoEditor(id) {
+  const p = productos.find(x => String(x.id) === String(id));
+  document.getElementById('ep-buscar').value = p ? p.nombre : '';
+  document.getElementById('ep-resultados').style.display = 'none';
+  cargarProductoEditor(id);
 }
 
 function cargarProductoEditor(id) {
@@ -3759,7 +3791,7 @@ async function eliminarProductoEditor() {
   const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: _epId, activo: 'NO' }), '🗑️ Producto eliminado');
   if (!r.error) {
     document.getElementById('ep-form').style.display = 'none';
-    document.getElementById('ep-select').value = '';
+    document.getElementById('ep-buscar').value = '';
     _epId = null;
     await cargarProductos();
     poblarEditorProductos();
@@ -4485,7 +4517,8 @@ function renderStockTotal() {
         } else {
           media = `<div style="height:78px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
         }
-        return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center">
+        return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center;position:relative">
+          <button onclick="irAEditarProducto(${p.id})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
           ${media}
           <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
           <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
