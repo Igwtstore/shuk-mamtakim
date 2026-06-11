@@ -2089,7 +2089,7 @@ function eliminarDelCarrito(id) {
 
 let _enviando = false, _enviandoManual = false;
 let _registroCallback = null;
-function enviarPedido() {
+function enviarPedido(_stockVerificado) {
   if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
   if (!nombre) { showToast('Ingresá tu nombre'); document.getElementById('nombre-cliente').focus(); return; }
@@ -2104,7 +2104,7 @@ function enviarPedido() {
   try { _hist = JSON.parse(localStorage.getItem('shuk_pedido_hist') || '[]').filter(t => _ahora - t < 3600000); } catch {}
   if (_ahora - _ultimo < 90000) { showToast('Esperá un momentito antes de enviar otro pedido 🙏'); return; }
   if (_hist.length >= 4) { showToast('Llegaste al límite de pedidos por ahora. Escribinos por WhatsApp 🙏'); return; }
-  track('checkout');
+  if (!_stockVerificado) track('checkout');
   // Si no está registrado, pedir datos antes de enviar
   const telGuardado = localStorage.getItem('shuk_may_tel');
   if (!telGuardado || telGuardado.length !== 10) {
@@ -2117,8 +2117,35 @@ function enviarPedido() {
   const notaPedido = document.getElementById('nota-pedido')?.value.trim() || '';
   _enviando = true;
   const btnPedido = document.querySelector('.pedido-btn');
+  const _btnTxt = btnPedido ? btnPedido.textContent : '';
   if (btnPedido) { btnPedido.disabled = true; btnPedido.textContent = 'Enviando...'; }
   setTimeout(() => { _enviando = false; if (btnPedido) { btnPedido.disabled = false; } }, 10000);
+
+  // El catálogo del navegador puede estar viejo (la página abierta hace rato): antes de
+  // mandar el pedido se relee el stock real de la planilla. Evita sobreventas.
+  if (!_stockVerificado) {
+    fetch(SHEET_URL + '&t=' + Date.now()).then(r => r.text()).then(csv => {
+      const frescos = {};
+      parseCSV(csv).slice(1).forEach(r => { frescos[parseInt(r[0])] = parseInt(r[5]||'0') || 0; });
+      const cortos = items.filter(it => frescos[it.id] !== undefined && it.qty > frescos[it.id]);
+      if (cortos.length) {
+        cortos.forEach(it => {
+          const disp = frescos[it.id];
+          const pl = productos.find(x => x.id === it.id);
+          if (pl) pl.stock = disp;
+          if (disp > 0) carrito[it.id].qty = disp; else delete carrito[it.id];
+        });
+        actualizarBadge(); renderCarrito(); renderCatalogo();
+        _enviando = false;
+        if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
+        showToast('⚠️ Justo se vendió: ' + cortos.map(it => `${it.nombre} (quedan ${frescos[it.id]})`).join(', ') + '. Ajustamos tu carrito, revisalo 🙏');
+        return;
+      }
+      _enviando = false;
+      enviarPedido(true);
+    }).catch(() => { _enviando = false; enviarPedido(true); });   // si falla la verificación, no trabar la venta
+    return;
+  }
 
   let arsJONY = 0, arsMyri = 0, usdMyri = 0;
   const lineas = items.map(item => {
