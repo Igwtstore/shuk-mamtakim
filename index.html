@@ -1203,6 +1203,8 @@
       </div>
       <div>
         <label style="font-size:0.85rem;font-weight:600;color:var(--azul)">Productos</label>
+        <input type="text" id="manual-buscar" placeholder="🔍 Buscar producto (elite, sopa, pitzujim...)" oninput="renderManualProductos()" autocomplete="off"
+          style="margin-top:0.4rem;width:100%;padding:0.6rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box" />
         <div id="manual-productos-lista" style="margin-top:0.4rem;max-height:300px;overflow-y:auto;border:1.5px solid #e8e6e0;border-radius:8px;"></div>
       </div>
       <div id="manual-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul)">Total: $ 0</div>
@@ -3396,16 +3398,26 @@ async function guardarStock() {
   if (r.ok && _pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes en 45 seg'), 2800);
 }
 
+let _manualQtys = {};   // cantidades del pedido manual (sobreviven al buscador)
+function setManualQty(id, v) { _manualQtys[id] = parseInt(v) || 0; actualizarTotalManual(); }
+function _manualElegibles() {
+  const _tipoM = document.getElementById('manual-tipo')?.value || 'Mayorista';
+  return productosVisibles().filter(p => {
+    if (p.stock <= 0) return false;
+    const vis = (p.visible||'Ambos').trim();
+    return vis === 'Ambos' || vis === _tipoM || vis === 'Oculto';
+  });
+}
+
 function renderManualProductos() {
   const lista = document.getElementById('manual-productos-lista');
   if (!lista || !productos.length) return;
   const tipo = document.getElementById('manual-tipo').value;
-  const _tipoM = document.getElementById('manual-tipo')?.value || 'Mayorista';
-  lista.innerHTML = productosVisibles().filter(p => {
-    if (p.stock <= 0) return false;
-    const vis = (p.visible||'Ambos').trim();
-    return vis === 'Ambos' || vis === _tipoM || vis === 'Oculto';
-  }).map(p => {
+  const q = (document.getElementById('manual-buscar')?.value || '').toLowerCase().trim();
+  const elegibles = _manualElegibles().filter(p =>
+    !q || p.nombre.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q) || (p.categoria||'').toLowerCase().includes(q));
+  if (!elegibles.length) { lista.innerHTML = '<div class="sinpedidos" style="padding:0.75rem">Sin resultados para esa búsqueda</div>'; return; }
+  lista.innerHTML = elegibles.map(p => {
     const esPitz = p.dueno === 'Jony';
     let precioUnit, moneda;
     if (tipo === 'Mayorista') {
@@ -3414,9 +3426,9 @@ function renderManualProductos() {
     } else { precioUnit = Math.round(p.precioMin); moneda = '$'; }
     const precioStr = moneda === 'U$S' ? `U$S ${precioUnit.toFixed(2)}` : `$ ${precioUnit.toLocaleString('es-AR')}`;
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--gris-medio)">
-      <input type="number" id="mq-${p.id}" min="0" max="${p.stock}" value="0"
-        style="width:55px;padding:0.3rem 0.4rem;border:1.5px solid #e8e6e0;border-radius:6px;text-align:center;font-size:0.85rem"
-        onchange="actualizarTotalManual()" oninput="actualizarTotalManual()" />
+      <input type="number" id="mq-${p.id}" min="0" max="${p.stock}" value="${_manualQtys[p.id] || 0}"
+        style="width:55px;padding:0.3rem 0.4rem;border:1.5px solid #e8e6e0;border-radius:6px;text-align:center;font-size:0.85rem;${(_manualQtys[p.id]||0) > 0 ? 'border-color:var(--verde);background:#e8f5ee;font-weight:700;' : ''}"
+        onchange="setManualQty(${p.id}, this.value)" oninput="setManualQty(${p.id}, this.value)" />
       <div style="flex:1;min-width:0">
         <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${p.nombre}</div>
         <div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,60)}</div>
@@ -3430,13 +3442,8 @@ function renderManualProductos() {
 function actualizarTotalManual() {
   const tipo = document.getElementById('manual-tipo').value;
   let arsJ = 0, arsM = 0, usdM = 0;
-  productos.filter(p => {
-    const vis = (p.visible||'Ambos').trim();
-    return p.stock > 0 && (vis === 'Ambos' || vis === tipo);
-  }).forEach(p => {
-    const inp = document.getElementById('mq-' + p.id);
-    if (!inp) return;
-    const qty = parseInt(inp.value) || 0;
+  _manualElegibles().forEach(p => {
+    const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
     const esPitz = p.dueno === 'Jony';
     if (tipo === 'Mayorista') {
@@ -3467,10 +3474,8 @@ function cargarPedidoManual() {
   const lineas = [];
   const stockUpdates = [];
 
-  productos.filter(p => p.stock > 0).forEach(p => {
-    const inp = document.getElementById('mq-' + p.id);
-    if (!inp) return;
-    const qty = parseInt(inp.value) || 0;
+  _manualElegibles().forEach(p => {
+    const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
     const esPitz = p.dueno === 'Jony';
     let precioUnit, moneda;
@@ -3525,12 +3530,14 @@ function cargarPedidoManual() {
       _enviandoManual = false;
     });
 
-  // Descontar stock local
+  // Descontar stock local y limpiar cantidades
   selectedItems.forEach(p => {
-    const inp = document.getElementById('mq-' + p.id);
-    const qty = parseInt(inp?.value) || 0;
+    const qty = _manualQtys[p.id] || 0;
     p.stock = Math.max(0, p.stock - qty);
   });
+  _manualQtys = {};
+  const mb = document.getElementById('manual-buscar'); if (mb) mb.value = '';
+  renderManualProductos();
 
   showToast('Pedido registrado ✓');
   document.getElementById('manual-cliente').value = '';
