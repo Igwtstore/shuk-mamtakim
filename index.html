@@ -4671,11 +4671,61 @@ async function trazarProducto() {
       }
     });
   });
-  if (!filas.length) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Nadie compró este producto todavía.</div>'; return; }
-  cont.innerHTML = `<div style="font-weight:700;margin-bottom:0.5rem;font-size:0.86rem">Total: ${totalU} u. · ${filas.length} compra${filas.length!==1?'s':''}</div>` +
-    filas.reverse().map(f => `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.82rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
-      <span>${esc(f.cliente)} <span style="color:var(--texto-suave);font-size:0.72rem">· ${esc(f.fecha)}</span></span>
-      <span style="font-weight:700;white-space:nowrap">${f.qty} u.</span></div>`).join('');
+  const comprasHtml = !filas.length
+    ? '<div style="color:var(--texto-suave);font-size:0.82rem">Nadie compró este producto todavía.</div>'
+    : `<div style="font-weight:700;margin-bottom:0.5rem;font-size:0.86rem">Total: ${totalU} u. · ${filas.length} compra${filas.length!==1?'s':''}</div>` +
+      filas.reverse().map(f => `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.82rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
+        <span>${esc(f.cliente)} <span style="color:var(--texto-suave);font-size:0.72rem">· ${esc(f.fecha)}</span></span>
+        <span style="font-weight:700;white-space:nowrap">${f.qty} u.</span></div>`).join('');
+  cont.innerHTML = comprasHtml + `
+    <div style="margin-top:0.9rem;border-top:2px solid var(--gris-medio);padding-top:0.6rem">
+      <div style="font-weight:800;font-size:0.86rem;margin-bottom:0.4rem">📜 Movimientos de stock <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· stock actual: ${prod.stock} u.</span></div>
+      <div id="trazar-movs" style="font-size:0.8rem;color:var(--texto-suave)">Cargando…</div>
+      <button id="trazar-audit-btn" onclick="auditarStockBackups('${id}')" style="margin-top:0.6rem;background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🕰️ Reconstruir últimas 24hs (lee los backups)</button>
+      <div id="trazar-audit" style="margin-top:0.4rem"></div>
+    </div>`;
+  apiGet('movimientosStock&id=' + id, 30000).then(movs => {
+    const el = document.getElementById('trazar-movs');
+    if (!el) return;
+    if (!Array.isArray(movs) || !movs.length) {
+      el.innerHTML = 'Sin movimientos registrados todavía. El registro arranca hoy: cada venta, edición manual, cancelación y alta queda anotada con antes → después.';
+      return;
+    }
+    el.innerHTML = movs.map(m => `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);${(m.origen||'').indexOf('SOBREVENTA') !== -1 ? 'color:#c0392b;font-weight:700' : 'color:var(--texto)'}">
+      <span style="font-size:0.78rem">${esc(m.fecha)} · ${esc(m.origen)}</span>
+      <span style="white-space:nowrap;font-weight:700;color:${m.cambio < 0 ? '#c0392b' : 'var(--verde)'}">${m.cambio > 0 ? '+' : ''}${m.cambio} <span style="font-weight:400;color:var(--texto-suave)">(${m.antes}→${m.despues})</span></span></div>`).join('');
+  }).catch(() => {
+    const el = document.getElementById('trazar-movs');
+    if (el) el.innerHTML = 'No se pudieron cargar los movimientos.';
+  });
+}
+
+// Lee los backups horarios de Drive y muestra cómo fue cambiando el stock del producto.
+async function auditarStockBackups(id) {
+  const btn = document.getElementById('trazar-audit-btn');
+  const out = document.getElementById('trazar-audit');
+  if (!btn || !out) return;
+  btn.disabled = true; btn.textContent = '🕰️ Leyendo backups… puede tardar medio minuto';
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?accion=auditoriaStock&id=' + encodeURIComponent(id) + '&max=24').then(x => x.json());
+    if (!Array.isArray(r) || !r.length) {
+      out.innerHTML = '<div style="font-size:0.8rem;color:var(--texto-suave)">No hay backups para leer todavía.</div>';
+    } else {
+      let html = '';
+      for (let i = 0; i < r.length; i++) {
+        const cur = r[i], ant = r[i + 1];   // ant = backup anterior en el tiempo
+        const cambio = (ant && ant.stock !== null && cur.stock !== null) ? cur.stock - ant.stock : null;
+        const salto = cambio !== null && cambio !== 0;
+        html += `<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:0.25rem 0.3rem;border-bottom:1px solid var(--gris-medio);${salto ? 'font-weight:800;background:#fdf3e3;border-radius:6px' : ''}">
+          <span>${esc(cur.backup)}</span>
+          <span>${cur.stock === null ? 'no existía' : cur.stock + ' u.'}${salto ? ' <span style="color:' + (cambio < 0 ? '#c0392b' : 'var(--verde)') + '">(' + (cambio > 0 ? '+' : '') + cambio + ')</span>' : ''}</span></div>`;
+      }
+      out.innerHTML = '<div style="font-size:0.72rem;color:var(--texto-suave);margin:0.3rem 0">Stock que tenía el producto en cada backup horario (saltos resaltados):</div>' + html;
+    }
+  } catch (e) {
+    out.innerHTML = '<div style="font-size:0.8rem;color:#c0392b">Error leyendo los backups, probá de nuevo.</div>';
+  }
+  btn.disabled = false; btn.textContent = '🕰️ Reconstruir últimas 24hs (lee los backups)';
 }
 
 // Configura la barra "Viendo:" según quién entró. Jony ve el toggle; Miri ve un label fijo.

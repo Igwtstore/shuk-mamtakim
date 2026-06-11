@@ -15,7 +15,7 @@ const PROTECTED_ACTIONS = [
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
-  'guardarClaveIA'
+  'guardarClaveIA','movimientosStock','auditoriaStock'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -58,6 +58,15 @@ function autorizarPermisos() {
   Logger.log('Permiso de servicios externos OK — código ' + res.getResponseCode());
 }
 
+// Registra todo movimiento de stock de Shuk en la hoja MovimientosStock:
+// quién/qué lo cambió, cuánto había antes y cuánto quedó. Nunca rompe la operación principal.
+function registrarMovStock_(ss, pid, nombre, delta, antes, despues, origen) {
+  try {
+    const h = getOrCreate(ss, 'MovimientosStock', ['Fecha','ID','Producto','Cambio','Antes','Despues','Origen']);
+    h.appendRow([Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), pid, nombre, delta, antes, despues, origen]);
+  } catch (err) { Logger.log('[movstock] ' + err); }
+}
+
 function doGet(e) {
   const accion = e.parameter.accion;
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -65,7 +74,7 @@ function doGet(e) {
   if (PROTECTED_ACTIONS.indexOf(accion) !== -1) {
     // Excepción: el bot (worker) puede consultar la IA con su secreto — para
     // preguntarle al negocio por WhatsApp/Telegram sin sesión de navegador.
-    const esBotIA = accion === 'preguntarIA' && e.parameter.secret === BOT_SECRET;
+    const esBotIA = ['preguntarIA','movimientosStock','auditoriaStock'].indexOf(accion) !== -1 && e.parameter.secret === BOT_SECRET;
     if (!esBotIA && !sesionValida_(e.parameter.token)) {
       Logger.log('[auth] acción protegida SIN sesión válida: ' + accion);
       if (ENFORCE_AUTH) return json({ error: 'no autorizado — iniciá sesión de nuevo' });
@@ -108,10 +117,20 @@ function doGet(e) {
         var sh = ss.getSheetByName('Stock');
         if (sh) {
           var sd = sh.getDataRange().getValues();
+          var cliVenta = dec(e.parameter.cliente);
           stockUpdates.split(',').forEach(function(u) {
             var parts = u.split(':'); var pid = parts[0]; var qty = parseInt(parts[1])||0;
             for (var i = 1; i < sd.length; i++) {
-              if (sd[i][0].toString() === pid) { sh.getRange(i+1,6).setValue(Math.max(0,(parseInt(sd[i][5])||0)-qty)); break; }
+              if (sd[i][0].toString() === pid) {
+                var antes = parseInt(sd[i][5])||0;
+                var despues = Math.max(0, antes - qty);
+                sh.getRange(i+1,6).setValue(despues);
+                var sobre = qty - antes;
+                registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues,
+                  'Venta #' + nVenta + ' — ' + cliVenta + (sobre > 0 ? ' ⚠️ SOBREVENTA: pidió ' + qty + ', había ' + antes : ''));
+                if (sobre > 0) enviarTelegram_('papa', '⚠️ *SOBREVENTA*\n' + sd[i][1] + ': el pedido #' + nVenta + ' (' + cliVenta + ') pidió *' + qty + '* y solo había *' + antes + '*. Faltan ' + sobre + ' — revisalo antes de confirmar.');
+                break;
+              }
             }
           });
         }
@@ -149,7 +168,12 @@ function doGet(e) {
                 su.split(',').forEach(function(u) {
                   const parts = u.split(':'); const pid = parts[0]; const qty = parseInt(parts[1])||0;
                   for (let j = 1; j < sd.length; j++) {
-                    if (sd[j][0].toString() === pid) { sh.getRange(j+1,6).setValue((parseInt(sd[j][5])||0) + qty); break; }
+                    if (sd[j][0].toString() === pid) {
+                      const antes = parseInt(sd[j][5])||0;
+                      sh.getRange(j+1,6).setValue(antes + qty);
+                      registrarMovStock_(ss, pid, sd[j][1], qty, antes, antes + qty, 'Cancelación pedido #' + (datos[i][10]||''));
+                      break;
+                    }
                   }
                 });
               }
@@ -381,7 +405,14 @@ function doGet(e) {
       var updates = dec(e.parameter.updates||''); var sd = sh.getDataRange().getValues();
       updates.split(',').forEach(function(u) {
         var parts = u.split(':'); var pid = parts[0]; var ns = parseInt(parts[1])||0;
-        for (var i = 1; i < sd.length; i++) { if (sd[i][0].toString()===pid) { sh.getRange(i+1,6).setValue(ns); break; } }
+        for (var i = 1; i < sd.length; i++) {
+          if (sd[i][0].toString()===pid) {
+            var antes = parseInt(sd[i][5])||0;
+            sh.getRange(i+1,6).setValue(ns);
+            if (ns !== antes) registrarMovStock_(ss, pid, sd[i][1], ns - antes, antes, ns, 'Ajuste manual (pestaña Stock)');
+            break;
+          }
+        }
       });
       return ok();
     }
@@ -395,6 +426,8 @@ function doGet(e) {
         parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
         dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
         0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos']);
+      const stockIni = parseInt(e.parameter.stock||0);
+      if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
       return ok();
     }
     if (accion === 'actualizarOferta') {
@@ -540,6 +573,11 @@ function doGet(e) {
           Object.keys(campos).forEach(k => {
             if (e.parameter[k] !== undefined && e.parameter[k] !== null && e.parameter[k] !== '') {
               const v = dec(e.parameter[k]);
+              if (k === 'stock') {
+                const antes = parseInt(datos[i][5])||0;
+                const ns = parseInt(v)||0;
+                if (ns !== antes) registrarMovStock_(ss, e.parameter.id, datos[i][1], ns - antes, antes, ns, 'Edición manual (editor de producto)');
+              }
               h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : v);
             }
           });
@@ -547,6 +585,47 @@ function doGet(e) {
         }
       }
       return json({ error: 'producto no encontrado' });
+    }
+    if (accion === 'movimientosStock') {
+      const h = ss.getSheetByName('MovimientosStock');
+      if (!h || h.getLastRow() < 2) return json([]);
+      const pid = (e.parameter.id||'').toString();
+      const datos = h.getRange(2,1,h.getLastRow()-1,7).getValues();
+      const out = [];
+      for (let i = datos.length - 1; i >= 0 && out.length < 200; i--) {
+        const r = datos[i];
+        if (pid && r[1].toString() !== pid) continue;
+        out.push({ fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+          id: r[1].toString(), producto: r[2].toString(), cambio: parseInt(r[3])||0,
+          antes: parseInt(r[4])||0, despues: parseInt(r[5])||0, origen: r[6].toString() });
+      }
+      return json(out);
+    }
+    if (accion === 'auditoriaStock') {
+      // Reconstruye el historial de stock de un producto leyendo los backups horarios de Drive.
+      const pid = (e.parameter.id||'').toString();
+      if (!pid) return json({ error: 'falta id' });
+      const max = Math.min(parseInt(e.parameter.max||24,10)||24, 60);
+      const it = getBackupFolder_().getFiles();
+      const files = [];
+      while (it.hasNext()) files.push(it.next());
+      files.sort((a,b) => b.getName().localeCompare(a.getName()));   // nombre = fecha → más nuevo primero
+      const out = [];
+      files.slice(0, max).forEach(f => {
+        try {
+          const sh = SpreadsheetApp.openById(f.getId()).getSheetByName('Stock');
+          if (!sh) return;
+          const sd = sh.getDataRange().getValues();
+          for (let i = 1; i < sd.length; i++) {
+            if (sd[i][0].toString() === pid) {
+              out.push({ backup: f.getName().replace('Backup Shuk ',''), nombre: sd[i][1].toString(), stock: parseInt(sd[i][5])||0 });
+              return;
+            }
+          }
+          out.push({ backup: f.getName().replace('Backup Shuk ',''), nombre: '', stock: null });   // aún no existía
+        } catch (err) {}
+      });
+      return json(out);
     }
     if (accion === 'preguntarIA') { return json(preguntarIA(ss, e.parameter)); }
     if (accion === 'guardarClaveIA') {

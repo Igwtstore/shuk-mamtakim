@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v2.45</title>
+<title>Shuk Mamtakim — Documentación v2.46</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 2.45 · Junio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 2.46 · Junio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -619,6 +619,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v2.46</td><td>Jun 2026</td><td><strong>Registro de movimientos de stock.</strong> Cada cambio de stock queda anotado en la hoja MovimientosStock con fecha, antes → después y origen (venta #, edición manual, ajuste de la pestaña Stock, cancelación, alta) · Si una venta pide más unidades de las que hay (sobreventa por catálogo desactualizado en el navegador del cliente), queda marcada ⚠️ en el registro y llega alerta inmediata por Telegram · Trazar producto ahora muestra el historial de movimientos y un botón 🕰️ que reconstruye el stock de las últimas 24hs leyendo los backups horarios de Drive</td></tr>
       <tr><td>v2.45</td><td>Jun 2026</td><td><strong>Blindaje contra precios en $0.</strong> Ningún pedido puede llevar productos sin precio: la tienda no deja agregar al carrito un producto sin precio para el modo activo, el pedido manual frena y nombra los productos sin precio del tipo elegido, y al editar un pedido las líneas a $0 se marcan en rojo y piden confirmación antes de guardar · Los pedidos pendientes con líneas a $0 muestran aviso rojo en la tarjeta (no hace falta revisar a mano) · Trazar producto ahora tiene buscador (chau desplegable infinito)</td></tr>
       <tr><td>v2.44</td><td>Jun 2026</td><td><strong>Pulido del panel.</strong> Editor rápido: precios y stock se editan inline en el resultado de búsqueda con 💾 (la ficha completa queda para textos/fotos/eliminar, con ✕ Cerrar) · Buscador en el pedido manual con cantidades persistentes (el total suma lo elegido aunque el filtro lo oculte) · Validación de precios según visibilidad (Ambos exige los dos; Mayorista/Minorista el suyo; Oculto al menos uno) — imposible publicar con precio "—" · Coma decimal aceptada en todos los campos de precio · Fixes: foto fantasma tras guardar, campo categoría trabado</td></tr>
       <tr><td>v2.43</td><td>Jun 2026</td><td><strong>Productos ocultos + editor rápido.</strong> Visibilidad "🙈 Oculto": el producto no aparece en ninguna tienda pero SÍ en el pedido manual (para mercadería traída para clientes puntuales); excluido de flyers y sugerencias de oferta · El editor de productos pasó de desplegable a buscador con resultados (foto, stock, marca de oculto) · Atajo ✏️ en cada producto de "Stock disponible" que abre el editor directo</td></tr>
@@ -645,7 +646,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v2.45 · Junio 2026 · Uso interno
+  Documentación v2.46 · Junio 2026 · Uso interno
 </div>
 
 </div>
