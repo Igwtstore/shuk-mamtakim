@@ -1122,6 +1122,10 @@
       <div id="ep-resultados" style="display:none;max-height:280px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-top:0.4rem"></div>
     </div>
     <div id="ep-form" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;padding-top:0.4rem;border-top:1.5px dashed var(--gris-medio)">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em">Ficha completa</div>
+        <button onclick="cerrarEditorProducto()" style="background:var(--gris);border:1px solid var(--gris-medio);border-radius:8px;padding:6px 14px;font-size:0.8rem;cursor:pointer;font-weight:600">✕ Cerrar sin guardar</button>
+      </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
         <div class="nombre-campo" style="margin:0;flex:2;min-width:160px"><label>Nombre</label><input type="text" id="ep-nombre" /></div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Categoría</label><input type="text" id="ep-categoria" list="categorias-productos-list" onfocus="this.select()" /></div>
@@ -3654,30 +3658,48 @@ function filtrarEditor() {
   if (!cont) return;
   let lista = productos.filter(p =>
     !q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
-  lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 30);
+  lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 20);
   cont.style.display = 'block';
   if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.75rem">Sin resultados</div>'; return; }
   cont.innerHTML = lista.map(p => {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
     const thumb = imgs.length
-      ? `<img src="${imgUrl(imgs[0])[0]}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
-      : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
-    const oculto = (p.visible || '') === 'Oculto' ? ' <span style="font-size:0.6rem;background:#f0ebe3;border-radius:4px;padding:1px 5px">🙈 oculto</span>' : '';
-    return `<div onclick="elegirProductoEditor(${p.id})" style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)" onmouseover="this.style.background='var(--gris)'" onmouseout="this.style.background=''">
-      ${thumb}
-      <div style="min-width:0;flex:1">
-        <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}${oculto}</div>
-        <div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc || '')} · stock ${p.stock}</div>
+      ? `<img src="${imgUrl(imgs[0])[0]}" style="width:42px;height:42px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
+      : `<div style="width:42px;height:42px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const oculto = (p.visible || '') === 'Oculto' ? ' <span style="font-size:0.6rem;background:#f0ebe3;border-radius:4px;padding:1px 5px">🙈</span>' : '';
+    const inp = 'padding:6px 4px;border:1.5px solid var(--gris-medio);border-radius:7px;font-size:0.8rem;width:100%;box-sizing:border-box;text-align:center';
+    return `<div style="padding:0.55rem 0.7rem;border-bottom:1px solid var(--gris)">
+      <div style="display:flex;align-items:center;gap:0.6rem">
+        ${thumb}
+        <div style="min-width:0;flex:1">
+          <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}${oculto}</div>
+          <div style="font-size:0.68rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc || '')}</div>
+        </div>
+        <button onclick="elegirProductoEditor(${p.id})" title="Ficha completa: textos, fotos, eliminar" style="background:var(--gris);border:1px solid var(--gris-medio);border-radius:7px;padding:6px 10px;font-size:0.72rem;cursor:pointer;white-space:nowrap">✏️ Ficha</button>
       </div>
-      <span style="color:var(--dorado);font-size:0.85rem">✏️</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-top:6px;align-items:center">
+        <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">U$S may.</div><input id="epq-may-${p.id}" type="text" value="${esc(String(p.precioMay || ''))}" style="${inp}"></div>
+        <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">$ min.</div><input id="epq-min-${p.id}" type="number" value="${p.precioMin || ''}" style="${inp}"></div>
+        <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">Stock</div><input id="epq-stock-${p.id}" type="number" value="${p.stock || 0}" style="${inp}"></div>
+        <button onclick="guardarRapidoEditor(${p.id})" title="Guardar precio y stock" style="background:var(--verde);color:#fff;border:none;border-radius:7px;padding:8px 12px;font-size:0.8rem;cursor:pointer;margin-top:12px">💾</button>
+      </div>
     </div>`;
   }).join('');
 }
 
-function irAEditarProducto(id) {
-  setPanelSeccion('catalogo');
-  elegirProductoEditor(id);
-  setTimeout(() => document.getElementById('ep-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+async function guardarRapidoEditor(id) {
+  const may = document.getElementById('epq-may-' + id).value.trim();
+  const min = document.getElementById('epq-min-' + id).value.trim();
+  const stock = document.getElementById('epq-stock-' + id).value.trim();
+  const r = await apiWrite(new URLSearchParams({
+    accion: 'editarProducto', id,
+    precioMay: may || '0', precioMin: min || '0', stock: stock || '0'
+  }), '💾 Actualizado ✓');
+  if (!r.error) {
+    const p = productos.find(x => String(x.id) === String(id));
+    if (p) { p.precioMay = may; p.precioMin = parseFloat(min) || 0; p.stock = parseInt(stock) || 0; }
+    renderCatalogo(); renderStockTotal();
+  }
 }
 
 function elegirProductoEditor(id) {
@@ -3685,6 +3707,18 @@ function elegirProductoEditor(id) {
   document.getElementById('ep-buscar').value = p ? p.nombre : '';
   document.getElementById('ep-resultados').style.display = 'none';
   cargarProductoEditor(id);
+}
+
+function cerrarEditorProducto() {
+  document.getElementById('ep-form').style.display = 'none';
+  document.getElementById('ep-buscar').value = '';
+  _epId = null; _epNuevas = [];
+}
+
+function irAEditarProducto(id) {
+  setPanelSeccion('catalogo');
+  elegirProductoEditor(id);
+  setTimeout(() => document.getElementById('ep-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
 
 function cargarProductoEditor(id) {
