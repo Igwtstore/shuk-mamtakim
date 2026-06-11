@@ -1067,8 +1067,8 @@
         </div>
       </div>
       <div class="nombre-campo" style="margin:0">
-        <label>Foto o video del producto</label>
-        <input type="file" id="np-foto" accept="image/*,video/*" onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
+        <label>Fotos y/o video del producto (hasta 5 — podés seleccionar varios juntos)</label>
+        <input type="file" id="np-foto" accept="image/*,video/*" multiple onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
         <div id="np-preview" style="margin-top:0.5rem;display:none">
           <img id="np-preview-img" style="max-height:120px;border-radius:8px;object-fit:contain;background:var(--gris);padding:0.5rem;display:none" />
           <video id="np-preview-vid" autoplay loop muted playsinline style="max-height:120px;border-radius:8px;background:var(--gris);display:none"></video>
@@ -3499,46 +3499,52 @@ function registrarGasto() {
 let _npCloudinaryId = '';
 
 function previewNuevoProducto(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const preview = document.getElementById('np-preview');
-  const img = document.getElementById('np-preview-img');
-  const vid = document.getElementById('np-preview-vid');
+  const files = Array.from(input.files || []);
+  const img = document.getElementById('np-preview');
+  const vid = document.getElementById('np-preview-video');
+  const status = document.getElementById('np-upload-status');
+  if (!files.length) { img.style.display = 'none'; vid.style.display = 'none'; status.textContent = ''; return; }
+  if (files.length > 5) { showToast('Máximo 5 archivos — tomo los primeros 5'); }
+  const file = files[0];
   const esVid = file.type.startsWith('video/');
-  preview.style.display = 'block';
   img.style.display = esVid ? 'none' : 'block';
   vid.style.display = esVid ? 'block' : 'none';
   if (esVid) { vid.src = URL.createObjectURL(file); }
   else { img.src = URL.createObjectURL(file); }
-  document.getElementById('np-upload-status').textContent = esVid ? 'Video seleccionado. Se subirá al guardar.' : 'Foto seleccionada. Se subirá al guardar.';
+  const nImg = files.filter(f => !f.type.startsWith('video/')).length;
+  const nVid = files.length - nImg;
+  status.textContent = [nImg ? nImg + ' foto' + (nImg > 1 ? 's' : '') : '', nVid ? nVid + ' video' + (nVid > 1 ? 's' : '') : '']
+    .filter(Boolean).join(' + ') + ' — se suben al guardar. En la tienda van a rotar solas 🎠';
   _npCloudinaryId = '';
 }
 
-async function subirFotoCloudinary() {
-  const fileInput = document.getElementById('np-foto');
-  const file = fileInput.files[0];
-  if (!file) return '';
+async function subirArchivosCloudinary() {
+  const files = Array.from(document.getElementById('np-foto').files || []).slice(0, 5);
+  if (!files.length) return '';
+  // Imágenes primero (la primera es la portada y el carrusel rota imágenes), videos al final
+  files.sort((a, b) => (a.type.startsWith('video/') ? 1 : 0) - (b.type.startsWith('video/') ? 1 : 0));
   const status = document.getElementById('np-upload-status');
-  const esVid = file.type.startsWith('video/');
-  status.textContent = esVid ? 'Subiendo video...' : 'Subiendo foto...';
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', CLOUDINARY_PRESET);
-  formData.append('folder', 'shuk-mamtakim');
-  const endpoint = esVid ? 'video/upload' : 'image/upload';
-  try {
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${endpoint}`, { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.secure_url) {
-      status.textContent = esVid ? '✓ Video subido correctamente' : '✓ Foto subida correctamente';
-      return esVid ? data.secure_url : data.public_id;
+  const ids = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const esVid = file.type.startsWith('video/');
+    status.textContent = `Subiendo ${i + 1}/${files.length}${esVid ? ' (video)' : ''}...`;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+    formData.append('folder', 'shuk-mamtakim');
+    const endpoint = esVid ? 'video/upload' : 'image/upload';
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${endpoint}`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.secure_url) ids.push(esVid ? data.secure_url : data.public_id);
+      else status.textContent = `Error al subir el archivo ${i + 1}`;
+    } catch (e) {
+      status.textContent = 'Error de conexión en el archivo ' + (i + 1);
     }
-    status.textContent = 'Error al subir el archivo';
-    return '';
-  } catch(e) {
-    status.textContent = 'Error de conexión';
-    return '';
   }
+  status.textContent = ids.length ? `✓ ${ids.length} archivo${ids.length > 1 ? 's' : ''} subido${ids.length > 1 ? 's' : ''}` : 'No se pudo subir ningún archivo';
+  return ids.join(',');
 }
 
 async function guardarNuevoProducto() {
@@ -3558,8 +3564,8 @@ async function guardarNuevoProducto() {
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
   // Subir foto si hay una seleccionada
   let imagenId = '';
-  if (document.getElementById('np-foto').files[0]) {
-    imagenId = await subirFotoCloudinary();
+  if (document.getElementById('np-foto').files.length) {
+    imagenId = await subirArchivosCloudinary();
   }
   // Guardar en Google Sheet via Apps Script
   const params = new URLSearchParams({
