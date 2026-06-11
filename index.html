@@ -1012,9 +1012,10 @@
   </div>
   <div class="admin-card" data-seccion="ventas">
     <div class="admin-titulo">🔍 Trazar producto</div>
-    <select id="trazar-sel" onchange="trazarProducto()" style="padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;width:100%;outline:none;background:white;margin-bottom:0.6rem">
-      <option value="">Elegí un producto…</option>
-    </select>
+    <input type="text" id="trazar-buscar" placeholder="🔍 Buscá el producto (elite, sopa, pitzujim...)" oninput="filtrarTrazar()" onfocus="filtrarTrazar()" autocomplete="off"
+      style="padding:0.6rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;width:100%;outline:none;box-sizing:border-box;margin-bottom:0.4rem" />
+    <div id="trazar-resultados" style="display:none;max-height:240px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-bottom:0.6rem"></div>
+    <select id="trazar-sel" style="display:none"><option value=""></option></select>
     <div id="trazar-result"><div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div></div>
   </div>
   <div class="admin-card">
@@ -4597,14 +4598,35 @@ function renderStockTotal() {
 function _claveProducto(p) {
   return (p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 45) : '')).trim();
 }
-function _llenarTrazarSelect() {
+function _llenarTrazarSelect() { /* reemplazado por el buscador filtrarTrazar() */ }
+
+function filtrarTrazar() {
+  const q = (document.getElementById('trazar-buscar')?.value || '').toLowerCase().trim();
+  const cont = document.getElementById('trazar-resultados');
+  if (!cont) return;
+  let lista = productosVisibles().filter(p =>
+    !q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
+  lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 20);
+  cont.style.display = 'block';
+  if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.7rem">Sin resultados</div>'; return; }
+  cont.innerHTML = lista.map(p => `
+    <div onclick="elegirTrazar(${p.id})" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)" onmouseover="this.style.background='var(--gris)'" onmouseout="this.style.background=''">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
+        <div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((p.desc || '').substring(0, 50))}</div>
+      </div>
+      <span style="color:var(--dorado);font-size:0.8rem">🔍</span>
+    </div>`).join('');
+}
+
+function elegirTrazar(id) {
+  const p = productos.find(x => String(x.id) === String(id));
+  document.getElementById('trazar-buscar').value = p ? p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 30) : '') : '';
+  document.getElementById('trazar-resultados').style.display = 'none';
   const sel = document.getElementById('trazar-sel');
-  if (!sel || !productos.length) return;
-  const lista = productosVisibles().slice().sort((a,b) => getCatIdx(a)-getCatIdx(b) || a.nombre.localeCompare(b.nombre));
-  const actual = sel.value;
-  sel.innerHTML = '<option value="">Elegí un producto…</option>' +
-    lista.map(p => `<option value="${p.id}">${esc(p.nombre)}${p.desc ? esc(' · ' + p.desc.substring(0,40)) : ''}</option>`).join('');
-  if (actual) sel.value = actual;
+  sel.innerHTML = `<option value="${id}" selected></option>`;
+  sel.value = String(id);
+  trazarProducto();
 }
 async function trazarProducto() {
   const sel = document.getElementById('trazar-sel');
