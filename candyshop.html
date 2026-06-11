@@ -1144,6 +1144,7 @@ const esIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 const FORMATOS = { post: { W: 1080, H: 1350, label: '📄 Clásico' }, cuadrado: { W: 1080, H: 1080, label: '⬛ Cuadrado' }, historia: { W: 1080, H: 1920, label: '📱 Historia' } };
 const TEMAS = {
   clasico:  { label: '🎨 Clásico', prompt: '' },
+  acorde:   { label: '🍬 Según productos', prompt: '' },
   cumple:   { label: '🎂 Cumple',   a: '#7b2ff7', b: '#f107a3', accent: '#ffd24a', prompt: 'birthday party with balloons and confetti' },
   invierno: { label: '❄️ Invierno', a: '#0f3057', b: '#1d9bd1', accent: '#ffd24a', prompt: 'cozy winter, snowflakes and hot chocolate' },
   januca:   { label: '🕎 Janucá',   a: '#0d2b6b', b: '#2e6fd8', accent: '#ffd24a', prompt: 'Hanukkah festive glow, dreidels and golden sparkles' },
@@ -1324,13 +1325,17 @@ async function generarTextoFlyer() {
   // Texto y fondo en paralelo. El fondo se reusa al pedir "otro texto" (no se re-paga).
   fUltimaURL = ''; fGuardando = null;
   try { await document.fonts.load('800 90px "Baloo 2"'); } catch (e) {}
-  const temaPrompt = TEMAS[fTema]?.prompt ? lista + '. Style/occasion: ' + TEMAS[fTema].prompt : lista;
-  const pTexto = api('flyerTexto', { hijo: usuario, productos: lista, idea });
-  let pFondo = null;
-  if (quiereFondo && !fFondoImg) pFondo = api('fondoFlyer', { tema: temaPrompt });
-  const d = await pTexto;
-  if (pFondo) {
-    const f = await pFondo;
+  // 1) Claude escribe los textos Y el prompt del fondo (dirección de arte)
+  const d = await api('flyerTexto', { hijo: usuario, productos: lista, idea, ocasion: TEMAS[fTema]?.prompt || '' });
+  if (!d || d.error) {
+    status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
+    return;
+  }
+  fTextos = d;
+  // 2) Con esa dirección de arte se pinta el fondo (calidad alta)
+  if (quiereFondo && !fFondoImg) {
+    status.textContent = '🪄 La IA está pintando el fondo (~30 seg)...';
+    const f = await api('fondoFlyer', { prompt: d.fondoPrompt || '', tema: lista });
     if (f?.b64) {
       fFondoImg = await new Promise(res => {
         const im = new Image();
@@ -1341,12 +1346,6 @@ async function generarTextoFlyer() {
     if (!fFondoImg) mostrarToast('No salió el fondo con IA, va el clásico 🎨');
   }
   if (!quiereFondo) fFondoImg = null;
-
-  if (!d || d.error) {
-    status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
-    return;
-  }
-  fTextos = d;
   status.textContent = '🎨 Dibujando...';
   try {
     await dibujarFlyer(prods, d);
@@ -1448,7 +1447,10 @@ async function dibujarFlyer(prods, t) {
   const W = F.W, H = F.H;
   cv.width = W; cv.height = H;
   const temaSel = TEMAS[fTema];
-  const tema = (fTema !== 'clasico' && temaSel.a)
+  const esHex = c => /^#[0-9a-fA-F]{6}$/.test(c || '');
+  const tema = (fTema === 'acorde' && esHex(t.paletaA) && esHex(t.paletaB) && esHex(t.paletaAccent))
+    ? { a: t.paletaA, b: t.paletaB, accent: t.paletaAccent }
+    : (fTema !== 'clasico' && temaSel.a)
     ? { a: temaSel.a, b: temaSel.b, accent: temaSel.accent }
     : (usuario === 'Iosi'
       ? { a: '#0e6b34', b: '#2fb45e', accent: '#ffd24a' }

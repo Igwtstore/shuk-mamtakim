@@ -1398,13 +1398,22 @@ function flyerTexto(p) {
   const productos = dec(p.productos || '');
   const idea = dec(p.idea || '').substring(0, 300);
 
-  const system = 'Sos el creativo publicitario del Candy Shop de ' + hijo + ', un chico argentino que vende ' +
+  const ocasion = dec(p.ocasion || '');
+  const system = 'Sos el creativo publicitario Y director de arte del Candy Shop de ' + hijo + ', un chico argentino que vende ' +
     'golosinas a amigos, compañeros y vecinos. Escribís textos para flyers: cortos, divertidos, vendedores, ' +
-    'en español rioplatense, con onda pero sin grosería. Respetá los límites de caracteres a rajatabla.';
+    'en español rioplatense, con onda pero sin grosería. Respetá los límites de caracteres a rajatabla. ' +
+    'Además escribís el prompt (en inglés) para generar el FONDO del flyer con un modelo de imágenes: ' +
+    'tiene que ser detallado y profesional — estilo visual concreto (ej: vibrant candy-pop 3D render, soft gradient studio backdrop, ' +
+    'playful flat illustration), motivos inspirados en los productos (vapor de sopa, trozos de chocolate, caramelos flotando), ' +
+    'composición con un centro despejado para superponer tarjetas de productos, iluminación y paleta. ' +
+    'PROHIBIDO en el prompt: texto, letras, números, logos, marcas, personas, packaging legible. ' +
+    'También elegís una paleta de 3 colores en hex que combine con ese fondo: dos para un degradé oscuro-medio ' +
+    '(con buen contraste para texto blanco encima) y un acento vibrante claro (para pills con texto oscuro).';
   const user = 'Productos del flyer: ' + productos + '\n' +
+    (ocasion ? 'Ocasión/tema del flyer: ' + ocasion + '\n' : '') +
     (idea ? 'Idea/texto que escribió ' + hijo + ' (mejorala manteniendo su espíritu): "' + idea + '"'
           : 'No dejó texto: inventá algo corto y tentador.') +
-    '\nGenerá los textos del flyer.';
+    '\nGenerá los textos del flyer, el prompt del fondo y la paleta.';
 
   try {
     const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
@@ -1413,16 +1422,20 @@ function flyerTexto(p) {
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       payload: JSON.stringify({
         model: 'claude-opus-4-8',
-        max_tokens: 1000,
+        max_tokens: 1500,
         system: system,
         output_config: { format: { type: 'json_schema', schema: {
           type: 'object',
           properties: {
             titulo: { type: 'string', description: 'Título grande y pegadizo, MÁXIMO 22 caracteres' },
             frase:  { type: 'string', description: 'Frase vendedora corta, MÁXIMO 80 caracteres' },
-            cierre: { type: 'string', description: 'Llamado a la acción, MÁXIMO 30 caracteres, ej: ¡Pedime ya!' }
+            cierre: { type: 'string', description: 'Llamado a la acción, MÁXIMO 30 caracteres, ej: ¡Pedime ya!' },
+            fondo_prompt: { type: 'string', description: 'Prompt en inglés, detallado y profesional, para generar el fondo del flyer (estilo, motivos de los productos, composición con centro despejado, iluminación, paleta). Sin texto/letras/logos/personas.' },
+            paleta_a: { type: 'string', description: 'Color hex oscuro del degradé, ej #1a2c5e' },
+            paleta_b: { type: 'string', description: 'Color hex medio del degradé, ej #4a6fd4' },
+            paleta_accent: { type: 'string', description: 'Color hex de acento claro y vibrante, ej #ffd24a' }
           },
-          required: ['titulo', 'frase', 'cierre'],
+          required: ['titulo', 'frase', 'cierre', 'fondo_prompt', 'paleta_a', 'paleta_b', 'paleta_accent'],
           additionalProperties: false
         } } },
         messages: [{ role: 'user', content: user }]
@@ -1435,7 +1448,8 @@ function flyerTexto(p) {
     let texto = '';
     (body.content || []).forEach(b => { if (b.type === 'text') texto += b.text; });
     const t = JSON.parse(texto);
-    return { ok: true, titulo: t.titulo || '¡Golosinas!', frase: t.frase || '', cierre: t.cierre || '¡Pedime ya!' };
+    return { ok: true, titulo: t.titulo || '¡Golosinas!', frase: t.frase || '', cierre: t.cierre || '¡Pedime ya!',
+      fondoPrompt: t.fondo_prompt || '', paletaA: t.paleta_a || '', paletaB: t.paleta_b || '', paletaAccent: t.paleta_accent || '' };
   } catch (err) {
     return { error: 'No se pudo generar el texto: ' + err };
   }
@@ -1447,7 +1461,7 @@ function fondoFlyer(p) {
   try {
     const res = UrlFetchApp.fetch(WORKER_RELAY_URL, {
       method: 'post', contentType: 'application/json',
-      payload: JSON.stringify({ fondoIA: true, secret: BOT_SECRET, tema: dec(p.tema || '') }),
+      payload: JSON.stringify({ fondoIA: true, secret: BOT_SECRET, tema: dec(p.tema || ''), prompt: dec(p.prompt || '') }),
       muteHttpExceptions: true
     });
     return JSON.parse(res.getContentText());
