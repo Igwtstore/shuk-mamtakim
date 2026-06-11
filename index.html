@@ -3932,10 +3932,10 @@ async function guardarNuevoProducto() {
         document.getElementById('np-foto').value = '';
         document.getElementById('np-preview').style.display = 'none';
         _npArchivos = [];
+        if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
+        _npPreSubida = ''; _npBandejaId = '';   // limpiar ANTES de redibujar (si no, queda la foto fantasma)
         renderNpArchivos();
         _npCloudinaryId = '';
-        if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
-        _npPreSubida = ''; _npBandejaId = '';
         cargarProductos();
       } else showToast('Error al guardar');
     })
