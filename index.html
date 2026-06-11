@@ -1069,6 +1069,7 @@
       <div class="nombre-campo" style="margin:0">
         <label>Fotos y/o video del producto (hasta 5 — podés seleccionar varios juntos)</label>
         <input type="file" id="np-foto" accept="image/*,video/*" multiple onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
+        <button type="button" onclick="analizarFotoAlta()" style="margin-top:0.5rem;width:100%;padding:0.7rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.85rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y escriba nombre + descripción</button>
         <div id="np-preview" style="margin-top:0.5rem;display:none">
           <img id="np-preview-img" style="max-height:120px;border-radius:8px;object-fit:contain;background:var(--gris);padding:0.5rem;display:none" />
           <video id="np-preview-vid" autoplay loop muted playsinline style="max-height:120px;border-radius:8px;background:var(--gris);display:none"></video>
@@ -1109,6 +1110,13 @@
       <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo les va a los chicos?</button>
     </div>
     <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-titulo">📥 Bandeja de fotos (la IA las describe sola)</div>
+    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">Tirá acá todas las fotos juntas. La IA las analiza y deja listos nombre, descripción y categoría con el estilo del catálogo. Después, al dar de alta, elegís de acá y viene todo pre-pensado.</div>
+    <input type="file" id="bandeja-files" accept="image/*" multiple onchange="subirABandeja(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
+    <div id="bandeja-status" style="font-size:0.78rem;color:var(--texto-suave);margin-top:0.4rem"></div>
+    <div id="bandeja-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:0.75rem"></div>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">🎨 Flyers con IA</div>
@@ -3547,6 +3555,128 @@ async function subirArchivosCloudinary() {
   return ids.join(',');
 }
 
+// ─── IA EN EL ALTA: analizar foto + bandeja ───────────────────────
+let _npPreSubida = '';   // public_id ya subido (análisis o bandeja) → no re-subir
+let _npBandejaId = '';   // si vino de la bandeja, para marcarla usada al guardar
+
+async function analizarFotoAlta() {
+  const files = document.getElementById('np-foto').files;
+  const status = document.getElementById('np-upload-status');
+  let publicId = _npPreSubida;
+  if (!publicId) {
+    const img = Array.from(files || []).find(f => f.type.startsWith('image/'));
+    if (!img) { showToast('Elegí primero una foto del producto'); return; }
+    status.textContent = 'Subiendo la foto...';
+    const formData = new FormData();
+    formData.append('file', img);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+    formData.append('folder', 'shuk-mamtakim');
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      publicId = data.public_id || '';
+    } catch (e) {}
+    if (!publicId) { status.textContent = 'No se pudo subir la foto'; return; }
+    _npPreSubida = publicId;
+  }
+  status.textContent = '✨ La IA está mirando la foto...';
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'analizarFotoProducto', url: publicId }));
+    const d = await r.json();
+    if (d?.ok) {
+      if (d.nombre) document.getElementById('np-nombre').value = d.nombre;
+      if (d.desc) document.getElementById('np-desc').value = d.desc;
+      if (d.categoria) document.getElementById('np-categoria').value = d.categoria;
+      status.textContent = '✨ Ficha sugerida por la IA — revisala y completá precios';
+      showToast('✨ ¡Listo! Revisá y ajustá lo que quieras');
+    } else {
+      status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo analizar');
+    }
+  } catch (e) { status.textContent = '😕 Error al analizar'; }
+}
+
+// ─── BANDEJA DE FOTOS ─────────────────────────────────────────────
+let bandejaCache = [];
+
+async function subirABandeja(input) {
+  const files = Array.from(input.files || []).filter(f => f.type.startsWith('image/'));
+  if (!files.length) return;
+  const status = document.getElementById('bandeja-status');
+  for (let i = 0; i < files.length; i++) {
+    status.textContent = `Subiendo ${i + 1}/${files.length}...`;
+    const formData = new FormData();
+    formData.append('file', files[i]);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+    formData.append('folder', 'shuk-mamtakim');
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.public_id) await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaSubir', publicId: data.public_id }));
+    } catch (e) {}
+  }
+  input.value = '';
+  status.textContent = '🧠 La IA está pensando las fichas (seguí usando el panel tranquilo)...';
+  await cargarBandeja();
+  procesarBandejaLoop();
+}
+
+async function procesarBandejaLoop() {
+  const status = document.getElementById('bandeja-status');
+  for (let intentos = 0; intentos < 15; intentos++) {
+    let d;
+    try {
+      const r = await fetch(APPS_SCRIPT_URL + '?accion=procesarBandeja');
+      d = await r.json();
+    } catch (e) { break; }
+    if (d?.error) { status.textContent = '😕 ' + d.error; return; }
+    await cargarBandeja();
+    if (!d || !d.pendientes) break;
+    status.textContent = `🧠 Pensando... faltan ${d.pendientes}`;
+  }
+  status.textContent = '✅ Bandeja al día';
+}
+
+async function cargarBandeja() {
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?accion=bandejaListar');
+    const d = await r.json();
+    bandejaCache = Array.isArray(d) ? d : [];
+  } catch (e) { return; }
+  const grid = document.getElementById('bandeja-grid');
+  if (!grid) return;
+  if (!bandejaCache.length) { grid.innerHTML = '<div class="sinpedidos" style="grid-column:1/-1">Bandeja vacía — tirá fotos arriba 📸</div>'; return; }
+  grid.innerHTML = bandejaCache.map(b => `
+    <div style="border:1.5px solid var(--gris-medio);border-radius:10px;overflow:hidden;background:#fff">
+      <img src="https://res.cloudinary.com/dq2boloyp/image/upload/e_trim:10/w_300,f_auto,q_auto/${b.publicId}" style="width:100%;height:100px;object-fit:contain;background:#fff" loading="lazy">
+      <div style="padding:6px 8px">
+        ${b.estado === 'listo'
+          ? `<div style="font-size:0.72rem;font-weight:700;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.nombre)}</div>
+             <div style="font-size:0.62rem;color:var(--texto-suave);height:26px;overflow:hidden">${esc(b.desc)}</div>
+             <button onclick="usarDeBandeja('${b.id}')" style="width:100%;margin-top:4px;padding:5px 0;background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;font-size:0.7rem;font-weight:700;cursor:pointer">Usar en alta ↑</button>`
+          : b.estado === 'error'
+          ? `<div style="font-size:0.68rem;color:#c0392b">😕 No se pudo analizar</div>`
+          : `<div style="font-size:0.68rem;color:var(--texto-suave)">🧠 Pensando...</div>`}
+      </div>
+    </div>`).join('');
+}
+
+function usarDeBandeja(id) {
+  const b = bandejaCache.find(x => x.id === id);
+  if (!b) return;
+  document.getElementById('np-nombre').value = b.nombre || '';
+  document.getElementById('np-desc').value = b.desc || '';
+  document.getElementById('np-categoria').value = b.categoria || '';
+  _npPreSubida = b.publicId;
+  _npBandejaId = b.id;
+  document.getElementById('np-foto').value = '';
+  document.getElementById('np-upload-status').textContent = '📥 Foto y ficha tomadas de la bandeja — completá precios y stock';
+  document.getElementById('np-preview').src = 'https://res.cloudinary.com/dq2boloyp/image/upload/w_300,f_auto,q_auto/' + b.publicId;
+  document.getElementById('np-preview').style.display = 'block';
+  document.getElementById('np-preview-video').style.display = 'none';
+  document.getElementById('np-nombre').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showToast('📥 Ficha cargada — faltan precios y stock');
+}
+
 async function guardarNuevoProducto() {
   const nombre = document.getElementById('np-nombre').value.trim();
   const desc = document.getElementById('np-desc').value.trim();
@@ -3566,6 +3696,10 @@ async function guardarNuevoProducto() {
   let imagenId = '';
   if (document.getElementById('np-foto').files.length) {
     imagenId = await subirArchivosCloudinary();
+    if (_npPreSubida && imagenId) imagenId = _npPreSubida + ',' + imagenId;
+    else if (_npPreSubida) imagenId = _npPreSubida;
+  } else if (_npPreSubida) {
+    imagenId = _npPreSubida;
   }
   // Guardar en Google Sheet via Apps Script
   const params = new URLSearchParams({
@@ -3586,6 +3720,8 @@ async function guardarNuevoProducto() {
         document.getElementById('np-foto').value = '';
         document.getElementById('np-preview').style.display = 'none';
         _npCloudinaryId = '';
+        if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
+        _npPreSubida = ''; _npBandejaId = '';
         cargarProductos();
       } else showToast('Error al guardar');
     })
@@ -4089,6 +4225,7 @@ function _tagPanelCards() {
     else if (t.includes('lista de espera')) s = 'stock';
     else if (t.includes('stock')) s = 'stock';
     else if (t.includes('flyer')) s = 'catalogo';
+    else if (t.includes('bandeja')) s = 'catalogo';
     else if (t.includes('agregar nuevo producto')) s = 'catalogo';
     else if (t.includes('ofertas')) s = 'catalogo';
     else if (t.includes('qr')) s = 'inicio';
@@ -4109,7 +4246,7 @@ function setPanelSeccion(s, btn) {
   document.querySelectorAll('.psec-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
-  if (s === 'catalogo' && typeof cargarFlyers === 'function') cargarFlyers();
+  if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
 }
 
 // ─── STOCK DISPONIBLE (sección Stock) ─────────────────────────────────────────

@@ -14,6 +14,7 @@ const PROTECTED_ACTIONS = [
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
+  'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
   'guardarClaveIA'
 ];
 
@@ -524,6 +525,11 @@ function doGet(e) {
     if (accion === 'track')      { return registrarTrack(ss, e.parameter); }
     if (accion === 'getAnalitica') { return json(getAnalitica(ss, e.parameter)); }
     if (accion === 'getProductosDormidos') { return json(getProductosDormidos(ss, e.parameter)); }
+    if (accion === 'analizarFotoProducto') { return json(analizarFotoProducto(ss, e.parameter)); }
+    if (accion === 'bandejaSubir')   { return json(bandejaSubir(ss, e.parameter)); }
+    if (accion === 'bandejaListar')  { return json(bandejaListar(ss)); }
+    if (accion === 'bandejaUsar')    { return json(bandejaUsar(ss, e.parameter)); }
+    if (accion === 'procesarBandeja'){ return json(procesarBandeja(ss)); }
     if (accion === 'editarProducto') {
       // Edita campos puntuales de un producto del Stock de Shuk (solo los que vengan)
       const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
@@ -1554,6 +1560,126 @@ function archivarFlyer(ss, p) {
   return { error: 'no encontrado' };
 }
 
+// ─── ANÁLISIS DE FOTOS DE PRODUCTOS (Claude vision) ──────────────────────────
+// Mira la foto y propone nombre, descripción y categoría siguiendo el MOLDE
+// de los textos reales del catálogo (se le pasan ejemplos como guía).
+function _urlFotoProducto_(ref) {
+  const r = dec(ref || '');
+  if (r.indexOf('http') === 0) return r;
+  return 'https://res.cloudinary.com/dq2boloyp/image/upload/w_800,f_auto,q_auto/' + r;
+}
+
+function analizarFotoProducto(ss, p) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return { error: 'sin_clave', mensaje: 'Falta la clave de IA (se carga desde la card Preguntale a tu negocio).' };
+  const url = _urlFotoProducto_(p.url);
+  if (!url) return { error: 'sin url' };
+
+  // Ejemplos reales del catálogo como molde de estilo + categorías existentes
+  const hs = ss.getSheetByName('Stock');
+  let ejemplos = [], cats = {};
+  if (hs && hs.getLastRow() > 1) {
+    hs.getRange(2, 1, hs.getLastRow() - 1, 9).getValues().forEach(r => {
+      if (r[1] && r[2] && ejemplos.length < 14) ejemplos.push('- ' + r[1] + ' · ' + r[2]);
+      if (r[8]) cats[r[8].toString()] = 1;
+    });
+  }
+  const system = 'Sos el catalogador de "Shuk Mamtakim", almacén argentino de golosinas y productos kosher importados de Israel. ' +
+    'Mirás la foto de un producto y escribís su ficha siguiendo EXACTAMENTE el estilo de estos ejemplos reales del catálogo ' +
+    '(nombre corto y propio del producto; descripción breve que aclara sabor/tipo y peso o cantidad entre paréntesis si se ve):\n' +
+    ejemplos.join('\n') +
+    '\nCategorías existentes (elegí la que mejor calce): ' + Object.keys(cats).join(', ') +
+    '\nSi el texto del envase está en hebreo, interpretalo. Si no estás seguro del peso, no lo inventes.';
+
+  try {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 800,
+        system: system,
+        output_config: { format: { type: 'json_schema', schema: {
+          type: 'object',
+          properties: {
+            nombre: { type: 'string', description: 'Nombre corto del producto, como en los ejemplos' },
+            desc: { type: 'string', description: 'Descripción breve estilo catálogo, con peso/cantidad entre paréntesis si es visible' },
+            categoria: { type: 'string', description: 'Una de las categorías existentes' }
+          },
+          required: ['nombre', 'desc', 'categoria'],
+          additionalProperties: false
+        } } },
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'url', url: url } },
+          { type: 'text', text: 'Generá la ficha de este producto.' }
+        ] }]
+      }),
+      muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    const body = JSON.parse(res.getContentText());
+    if (code !== 200) return { error: 'IA error ' + code + (body.error ? ': ' + body.error.message : '') };
+    let texto = '';
+    (body.content || []).forEach(b => { if (b.type === 'text') texto += b.text; });
+    const t = JSON.parse(texto);
+    return { ok: true, nombre: t.nombre || '', desc: t.desc || '', categoria: t.categoria || '' };
+  } catch (err) { return { error: 'análisis: ' + err }; }
+}
+
+// ─── BANDEJA DE FOTOS (análisis en segundo plano) ────────────────────────────
+function bandejaSubir(ss, p) {
+  const h = getOrCreate(ss, 'BandejaFotos', ['ID','Fecha','PublicId','Nombre','Desc','Categoria','Estado']);
+  const id = 'B' + Date.now() + Math.floor(Math.random() * 1000);
+  h.appendRow([id, new Date(), dec(p.publicId || ''), '', '', '', 'pendiente']);
+  return { ok: true, id };
+}
+
+function bandejaListar(ss) {
+  const h = ss.getSheetByName('BandejaFotos');
+  if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2, 1, h.getLastRow() - 1, 7).getValues()
+    .filter(r => r[0] && r[6] !== 'usado')
+    .map(r => ({
+      id: r[0].toString(), publicId: (r[2] || '').toString(),
+      nombre: (r[3] || '').toString(), desc: (r[4] || '').toString(),
+      categoria: (r[5] || '').toString(), estado: (r[6] || 'pendiente').toString()
+    }))
+    .reverse();
+}
+
+function bandejaUsar(ss, p) {
+  const h = ss.getSheetByName('BandejaFotos'); if (!h) return { error: 'sin hoja' };
+  const datos = h.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][0].toString() === p.id) { h.getRange(i + 1, 7).setValue('usado'); return { ok: true }; }
+  }
+  return { error: 'no encontrado' };
+}
+
+// Analiza hasta 4 fotos pendientes por corrida (la llama el panel tras subir,
+// y también el trigger horario del backup como red de seguridad).
+function procesarBandeja(ss) {
+  const h = ss.getSheetByName('BandejaFotos');
+  if (!h || h.getLastRow() < 2) return { ok: true, procesadas: 0, pendientes: 0 };
+  const datos = h.getDataRange().getValues();
+  let procesadas = 0, pendientes = 0;
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][6] !== 'pendiente') continue;
+    if (procesadas >= 4) { pendientes++; continue; }
+    const r = analizarFotoProducto(ss, { url: datos[i][2] });
+    if (r.ok) {
+      h.getRange(i + 1, 4, 1, 4).setValues([[r.nombre, r.desc, r.categoria, 'listo']]);
+      procesadas++;
+    } else if (r.error === 'sin_clave') {
+      return { error: r.mensaje };
+    } else {
+      h.getRange(i + 1, 7).setValue('error');
+      procesadas++;
+    }
+  }
+  return { ok: true, procesadas, pendientes };
+}
+
 // ─── PRODUCTOS DORMIDOS (sugerencias de oferta) ───────────────────────────────
 // Productos activos con stock que no aparecen en ninguna venta de los últimos
 // N días (default 30) y no tienen oferta vigente. Candidatos a oferta.
@@ -1756,6 +1882,7 @@ function crearBackup() {
     const hora = parseInt(Utilities.formatDate(new Date(), TZ, 'H'), 10);
     if (hora >= 21) cierreDiario();
   } catch (err) { Logger.log('[cierre] ' + err); }
+  try { procesarBandeja(SpreadsheetApp.openById(SPREADSHEET_ID)); } catch (err) { Logger.log('[bandeja] ' + err); }
 }
 
 function getBackupFolder_() {
