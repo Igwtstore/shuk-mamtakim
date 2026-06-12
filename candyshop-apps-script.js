@@ -15,7 +15,7 @@ const PROTECTED_ACTIONS = [
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
-  'guardarClaveIA','movimientosStock','auditoriaStock'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -74,7 +74,7 @@ function doGet(e) {
   if (PROTECTED_ACTIONS.indexOf(accion) !== -1) {
     // Excepción: el bot (worker) puede consultar la IA con su secreto — para
     // preguntarle al negocio por WhatsApp/Telegram sin sesión de navegador.
-    const esBotIA = ['preguntarIA','movimientosStock','auditoriaStock'].indexOf(accion) !== -1 && e.parameter.secret === BOT_SECRET;
+    const esBotIA = ['preguntarIA','movimientosStock','auditoriaStock','leerStockRaw'].indexOf(accion) !== -1 && e.parameter.secret === BOT_SECRET;
     if (!esBotIA && !sesionValida_(e.parameter.token)) {
       Logger.log('[auth] acción protegida SIN sesión válida: ' + accion);
       if (ENFORCE_AUTH) return json({ error: 'no autorizado — iniciá sesión de nuevo' });
@@ -585,6 +585,23 @@ function doGet(e) {
         }
       }
       return json({ error: 'producto no encontrado' });
+    }
+    if (accion === 'leerStockRaw') {
+      // Diagnóstico de solo lectura: devuelve la fila cruda de un producto tal como
+      // la ve el script (para detectar desfasajes entre lo escrito y lo leído).
+      const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
+      const datos = h.getDataRange().getValues();
+      for (let i = 1; i < datos.length; i++) {
+        if (datos[i][0].toString() === (e.parameter.id||'')) {
+          return json({
+            ssId: ss.getId(), ssNombre: ss.getName(), fila: i + 1,
+            valores: datos[i].slice(0, 10),
+            formulaD: h.getRange(i + 1, 4).getFormula(),
+            protecciones: h.getProtections(SpreadsheetApp.ProtectionType.RANGE).length
+          });
+        }
+      }
+      return json({ error: 'no encontrado' });
     }
     if (accion === 'movimientosStock') {
       const h = ss.getSheetByName('MovimientosStock');
