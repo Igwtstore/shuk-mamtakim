@@ -421,8 +421,9 @@ function doGet(e) {
       const datos = h.getDataRange().getValues();
       let maxId = 0;
       for (let i = 1; i < datos.length; i++) { const id = parseInt(datos[i][0])||0; if (id > maxId) maxId = id; }
+      const pMayNum = parseFloat(dec(e.parameter.pMay||'').replace(',', '.'));
       h.appendRow([maxId+1, dec(e.parameter.nombre), dec(e.parameter.desc),
-        dec(e.parameter.pMay), parseFloat(e.parameter.pMin||0),
+        isNaN(pMayNum) ? '' : pMayNum, parseFloat(e.parameter.pMin||0),
         parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
         dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
         0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos']);
@@ -570,13 +571,18 @@ function doGet(e) {
       const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15 };
       for (let i = 1; i < datos.length; i++) {
         if (datos[i][0].toString() === e.parameter.id) {
+          const numericos = { precioMay: 1, precioMin: 1, stock: 1 };
           Object.keys(campos).forEach(k => {
             if (e.parameter[k] !== undefined && e.parameter[k] !== null && e.parameter[k] !== '') {
-              const v = dec(e.parameter[k]);
+              let v = dec(e.parameter[k]);
               if (k === 'stock') {
                 const antes = parseInt(datos[i][5])||0;
                 const ns = parseInt(v)||0;
                 if (ns !== antes) registrarMovStock_(ss, e.parameter.id, datos[i][1], ns - antes, antes, ns, 'Edición manual (editor de producto)');
+              }
+              if (v !== '__VACIO__' && numericos[k]) {
+                const n = parseFloat(v.toString().replace(',', '.'));
+                if (!isNaN(n)) v = n;   // número real: visible para el gviz CSV de la tienda
               }
               h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : v);
             }
