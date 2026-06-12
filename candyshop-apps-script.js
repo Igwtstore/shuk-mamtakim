@@ -199,6 +199,29 @@ function doGet(e) {
           if (e.parameter.usdMyri  !== undefined) h.getRange(i+1,14).setValue(parseFloat(e.parameter.usdMyri)||0);
           if (e.parameter.comiARS  !== undefined) h.getRange(i+1,15).setValue(parseFloat(e.parameter.comiARS)||0);
           if (e.parameter.comiUSD  !== undefined) h.getRange(i+1,16).setValue(parseFloat(e.parameter.comiUSD)||0);
+          // Ajuste de stock por la edición (productos agregados/quitados/cantidades cambiadas).
+          // delta positivo = devolver al stock, negativo = descontar.
+          if (e.parameter.stockDeltas) {
+            const sh2 = ss.getSheetByName('Stock');
+            if (sh2) {
+              const sd2 = sh2.getDataRange().getValues();
+              dec(e.parameter.stockDeltas).split(',').forEach(function(u) {
+                const pp = u.split(':'); const pid = pp[0]; const delta = parseInt(pp[1])||0;
+                if (!delta) return;
+                for (let j = 1; j < sd2.length; j++) {
+                  if (sd2[j][0].toString() === pid) {
+                    const antes = parseInt(sd2[j][5])||0;
+                    const despues = Math.max(0, antes + delta);
+                    sh2.getRange(j+1,6).setValue(despues);
+                    registrarMovStock_(ss, pid, sd2[j][1], delta, antes, despues, 'Edición pedido #' + (datos[i][10]||''));
+                    break;
+                  }
+                }
+              });
+            }
+          }
+          // Mantener coherente la col Stock Updates (la usa la cancelación para devolver stock)
+          if (e.parameter.stockUpdatesNuevo !== undefined) h.getRange(i+1,20).setValue(dec(e.parameter.stockUpdatesNuevo));
           return ok();
         }
       }

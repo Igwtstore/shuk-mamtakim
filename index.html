@@ -6301,24 +6301,40 @@ function exportarPedido(v) {
 // ─── EDITAR PEDIDO ────────────────────────────────────────────────────────────
 let _editPedidoActual = null;
 let _editLineas = [];
+let _editQtysOrig = {};   // cantidades por producto al abrir la edición (para ajustar stock)
 
 function abrirEditarPedido(v) {
   _editPedidoActual = v;
   _editLineas = parsearLineasPedido(v.productos);
+  // Identificar el producto de cada línea (por nombre, desempatando por descripción o precio):
+  // hace falta para ajustar stock al guardar y para reparar descripciones perdidas.
   _editLineas.forEach(l => {
-    if (l.descripcion || !l.nombre || l.precio === undefined) return;
+    if (!l.nombre) return;
     const cands = productos.filter(p => p.nombre === l.nombre);
     if (!cands.length) return;
     let pl = cands[0];
     if (cands.length > 1) {
-      const esMay = (v.tipo || '') === 'Mayorista';
-      pl = cands.find(c => {
-        const precio = esMay ? parseFloat((c.precioMay || '0').toString().replace(',', '.')) : (parseFloat(c.precioMin) || 0);
-        return Math.abs(precio - l.precio) < 0.01;
-      });
+      if (l.descripcion) {
+        const ld = l.descripcion.toLowerCase();
+        pl = cands.find(c => {
+          const pd = (c.desc || '').toLowerCase();
+          return pd && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim()));
+        }) || null;
+      } else {
+        const esMay = (v.tipo || '') === 'Mayorista';
+        pl = cands.find(c => {
+          const precio = esMay ? parseFloat((c.precioMay || '0').toString().replace(',', '.')) : (parseFloat(c.precioMin) || 0);
+          return Math.abs(precio - l.precio) < 0.01;
+        }) || null;
+      }
     }
-    if (pl && pl.desc) l.descripcion = pl.desc.substring(0, 45);
+    if (!pl) return;
+    l.prodId = pl.id;
+    if (!l.descripcion && pl.desc) l.descripcion = pl.desc.substring(0, 45);
   });
+  // Foto de las cantidades originales por producto: el guardado ajusta stock por diferencia.
+  _editQtysOrig = {};
+  _editLineas.forEach(l => { if (l.prodId) _editQtysOrig[l.prodId] = (_editQtysOrig[l.prodId] || 0) + (l.qty || 0); });
 
   document.getElementById('ep-titulo').textContent = `Pedido #${v.nVenta} — ${v.cliente}`;
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
@@ -6445,7 +6461,7 @@ function agregarProductoEdit() {
     precio = Math.round(p.precioMin) || 0;
     moneda = '$';
   }
-  _editLineas.push({ nombre: p.nombre, descripcion: (p.desc || '').substring(0, 45), qty: 1, moneda, precio, desc: 0 });
+  _editLineas.push({ nombre: p.nombre, prodId: p.id, descripcion: (p.desc || '').substring(0, 45), qty: 1, moneda, precio, desc: 0 });
   renderEditLineas();
   recalcularEditTotal();
   sel.value = '';
@@ -6504,9 +6520,27 @@ async function guardarEditPedido() {
   });
   if (desc > 0) nuevasLineas.push(`🏷️ Descuento global: ${desc}%`);
 
+  // Ajuste de stock por diferencia con lo que había al abrir (agregados, quitados, cantidades)
+  const qtysAhora = {};
+  _editLineas.forEach(l => { if (l.prodId) qtysAhora[l.prodId] = (qtysAhora[l.prodId] || 0) + (l.qty || 0); });
+  const idsTodos = [...new Set([...Object.keys(_editQtysOrig), ...Object.keys(qtysAhora)])];
+  const deltas = [];
+  idsTodos.forEach(id => {
+    const d = (_editQtysOrig[id] || 0) - (qtysAhora[id] || 0);   // positivo = devolver al stock
+    if (d !== 0) deltas.push(id + ':' + d);
+  });
+  // Stock Updates actualizado: si después se cancela el pedido, devuelve lo correcto
+  const suMap = {};
+  (_editPedidoActual.stockUpdates || '').split(',').forEach(u => {
+    const pp = u.split(':'); if (pp[0]) suMap[pp[0]] = parseInt(pp[1]) || 0;
+  });
+  idsTodos.forEach(id => { suMap[id] = qtysAhora[id] || 0; });
+  const suNuevo = Object.keys(suMap).filter(k => suMap[k] > 0).map(k => k + ':' + suMap[k]).join(',');
+
   const params = new URLSearchParams({
     accion: 'actualizarPedido',
     id: _editPedidoActual.id,
+    stockUpdatesNuevo: suNuevo,
     productos: nuevasLineas.join(' || '),
     tipo,
     totalARS: Math.round(totalARS),
@@ -6518,6 +6552,15 @@ async function guardarEditPedido() {
     comiARS: Math.round(parseFloat(_editPedidoActual.comiARS||0) * (totalARS / (parseFloat(_editPedidoActual.totalARS)||1) || 1)),
     comiUSD: (parseFloat(_editPedidoActual.comiUSD||0) * (totalUSD / (parseFloat(_editPedidoActual.totalUSD)||1) || 1)).toFixed(2)
   });
+  if (deltas.length) params.set('stockDeltas', deltas.join(','));
+  // Reflejar el ajuste en el catálogo local al instante
+  idsTodos.forEach(id => {
+    const d = (_editQtysOrig[id] || 0) - (qtysAhora[id] || 0);
+    if (!d) return;
+    const pl = productos.find(x => String(x.id) === String(id));
+    if (pl) pl.stock = Math.max(0, pl.stock + d);
+  });
+  _editPedidoActual.stockUpdates = suNuevo;
 
   try {
     const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
