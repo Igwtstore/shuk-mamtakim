@@ -4764,7 +4764,10 @@ async function trazarProducto() {
     <div style="margin-top:0.9rem;border-top:2px solid var(--gris-medio);padding-top:0.6rem">
       <div style="font-weight:800;font-size:0.86rem;margin-bottom:0.4rem">📜 Movimientos de stock <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· stock actual: ${prod.stock} u.</span></div>
       <div id="trazar-movs" style="font-size:0.8rem;color:var(--texto-suave)">Cargando…</div>
-      <button id="trazar-audit-btn" onclick="auditarStockBackups('${id}')" style="margin-top:0.6rem;background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🕰️ Reconstruir últimas 24hs (lee los backups)</button>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.6rem">
+        <button id="trazar-audit-btn" onclick="auditarStockBackups('${id}', 'horario')" style="background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🕰️ Últimas 24hs (hora x hora)</button>
+        <button id="trazar-audit-btn-mes" onclick="auditarStockBackups('${id}', 'diario')" style="background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🗓️ Último mes (día x día)</button>
+      </div>
       <div id="trazar-audit" style="margin-top:0.4rem"></div>
     </div>`;
   apiGet('movimientosStock&id=' + id, 30000).then(movs => {
@@ -4776,7 +4779,8 @@ async function trazarProducto() {
     }
     el.innerHTML = movs.map(m => `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);${(m.origen||'').indexOf('SOBREVENTA') !== -1 ? 'color:#c0392b;font-weight:700' : 'color:var(--texto)'}">
       <span style="font-size:0.78rem">${esc(m.fecha)} · ${esc(m.origen)}</span>
-      <span style="white-space:nowrap;font-weight:700;color:${m.cambio < 0 ? '#c0392b' : 'var(--verde)'}">${m.cambio > 0 ? '+' : ''}${m.cambio} <span style="font-weight:400;color:var(--texto-suave)">(${m.antes}→${m.despues})</span></span></div>`).join('');
+      <span style="white-space:nowrap;font-weight:700;color:${m.cambio < 0 ? '#c0392b' : 'var(--verde)'}">${m.cambio > 0 ? '+' : ''}${m.cambio} <span style="font-weight:400;color:var(--texto-suave)">(${m.antes}→${m.despues})</span></span></div>`).join('') +
+      `<div style="font-size:0.68rem;color:var(--texto-suave);padding:0.35rem 0">${movs.length >= 200 ? 'Mostrando los últimos 200 movimientos.' : '✓ Historial completo: ' + movs.length + ' movimiento' + (movs.length !== 1 ? 's' : '') + ' (el registro existe desde el 11/06/2026 — para antes, usá los backups de abajo).'}</div>`;
   }).catch(() => {
     const el = document.getElementById('trazar-movs');
     if (el) el.innerHTML = 'No se pudieron cargar los movimientos.';
@@ -4784,13 +4788,17 @@ async function trazarProducto() {
 }
 
 // Lee los backups horarios de Drive y muestra cómo fue cambiando el stock del producto.
-async function auditarStockBackups(id) {
-  const btn = document.getElementById('trazar-audit-btn');
+async function auditarStockBackups(id, modo) {
+  const btn = document.getElementById(modo === 'diario' ? 'trazar-audit-btn-mes' : 'trazar-audit-btn');
+  const otro = document.getElementById(modo === 'diario' ? 'trazar-audit-btn' : 'trazar-audit-btn-mes');
   const out = document.getElementById('trazar-audit');
   if (!btn || !out) return;
-  btn.disabled = true; btn.textContent = '🕰️ Leyendo backups… puede tardar medio minuto';
+  const txtOrig = btn.textContent;
+  btn.disabled = true; if (otro) otro.disabled = true;
+  btn.textContent = '🕰 Leyendo backups… puede tardar medio minuto';
   try {
-    const r = await fetch(APPS_SCRIPT_URL + '?accion=auditoriaStock&id=' + encodeURIComponent(id) + '&max=24').then(x => x.json());
+    const extra = modo === 'diario' ? '&modo=diario&dias=30' : '&max=24';
+    const r = await fetch(APPS_SCRIPT_URL + '?accion=auditoriaStock&id=' + encodeURIComponent(id) + extra).then(x => x.json());
     if (!Array.isArray(r) || !r.length) {
       out.innerHTML = '<div style="font-size:0.8rem;color:var(--texto-suave)">No hay backups para leer todavía.</div>';
     } else {
@@ -4803,12 +4811,13 @@ async function auditarStockBackups(id) {
           <span>${esc(cur.backup)}</span>
           <span>${cur.stock === null ? 'no existía' : cur.stock + ' u.'}${salto ? ' <span style="color:' + (cambio < 0 ? '#c0392b' : 'var(--verde)') + '">(' + (cambio > 0 ? '+' : '') + cambio + ')</span>' : ''}</span></div>`;
       }
-      out.innerHTML = '<div style="font-size:0.72rem;color:var(--texto-suave);margin:0.3rem 0">Stock que tenía el producto en cada backup horario (saltos resaltados):</div>' + html;
+      out.innerHTML = '<div style="font-size:0.72rem;color:var(--texto-suave);margin:0.3rem 0">Stock del producto en cada backup ' + (modo === 'diario' ? 'diario (cierre de cada día, saltos resaltados):' : 'horario (saltos resaltados):') + '</div>' + html;
     }
   } catch (e) {
     out.innerHTML = '<div style="font-size:0.8rem;color:#c0392b">Error leyendo los backups, probá de nuevo.</div>';
   }
-  btn.disabled = false; btn.textContent = '🕰️ Reconstruir últimas 24hs (lee los backups)';
+  btn.disabled = false; btn.textContent = txtOrig;
+  if (otro) otro.disabled = false;
 }
 
 // Configura la barra "Viendo:" según quién entró. Jony ve el toggle; Miri ve un label fijo.

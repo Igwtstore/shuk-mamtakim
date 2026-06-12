@@ -653,11 +653,22 @@ function doGet(e) {
       if (!pid) return json({ error: 'falta id' });
       const max = Math.min(parseInt(e.parameter.max||24,10)||24, 60);
       const it = getBackupFolder_().getFiles();
-      const files = [];
+      let files = [];
       while (it.hasNext()) files.push(it.next());
       files.sort((a,b) => b.getName().localeCompare(a.getName()));   // nombre = fecha → más nuevo primero
+      if (e.parameter.modo === 'diario') {
+        // Un backup por día (el último de cada día) — permite mirar un mes con ~30 lecturas
+        const porDia = {};
+        files.forEach(f => {
+          const d = f.getName().replace('Backup Shuk ', '').substring(0, 10);
+          if (!porDia[d]) porDia[d] = f;
+        });
+        files = Object.keys(porDia).sort().reverse().slice(0, Math.min(parseInt(e.parameter.dias||30,10)||30, 31)).map(d => porDia[d]);
+      } else {
+        files = files.slice(0, max);
+      }
       const out = [];
-      files.slice(0, max).forEach(f => {
+      files.forEach(f => {
         try {
           const sh = SpreadsheetApp.openById(f.getId()).getSheetByName('Stock');
           if (!sh) return;
