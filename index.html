@@ -6414,28 +6414,38 @@ function onTipoChange() {
 }
 
 function poblarSelectorProductos() {
+  // El agregado usa buscador: acá solo se limpia al abrir/cambiar tipo.
+  const inp = document.getElementById('ep-add-buscar');
+  const res = document.getElementById('ep-add-resultados');
+  if (inp) inp.value = '';
+  if (res) { res.style.display = 'none'; res.innerHTML = ''; }
+}
+
+function filtrarAgregarEdit() {
+  const inp = document.getElementById('ep-add-buscar');
+  const cont = document.getElementById('ep-add-resultados');
+  if (!inp || !cont) return;
+  const q = inp.value.toLowerCase().trim();
   const tipo = document.getElementById('ep-tipo')?.value || 'Mayorista';
   const esMay = tipo === 'Mayorista';
-  const sel = document.getElementById('ep-add-producto');
-  if (!sel) return;
-  const disponibles = productos.filter(p => p.stock > 0);
-  sel.innerHTML = '<option value="">— Elegir producto —</option>' +
-    disponibles.map(p => {
-      const esPitz = p.dueno === 'Jony';
-      let precio, moneda;
-      if (esMay) {
-        precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
-        moneda = esPitz ? '$' : 'U$S';
-      } else {
-        precio = Math.round(p.precioMin) || 0;
-        moneda = '$';
-      }
-      const precioStr = moneda === 'U$S'
-        ? `U$S ${precio.toFixed(2)}`
-        : `$ ${precio.toLocaleString('es-AR')}`;
-      const desc = p.desc ? ` · ${p.desc.substring(0,30)}` : '';
-      return `<option value="${p.id}">${p.nombre}${desc} — ${precioStr}</option>`;
-    }).join('');
+  const disponibles = productos.filter(p => p.stock > 0 &&
+    (!q || p.nombre.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q) || (p.categoria||'').toLowerCase().includes(q)));
+  if (!disponibles.length) {
+    cont.innerHTML = '<div style="padding:0.6rem;font-size:0.8rem;color:var(--texto-suave)">Sin resultados</div>';
+    cont.style.display = ''; return;
+  }
+  cont.innerHTML = disponibles.slice(0, 30).map(p => {
+    const esPitz = p.dueno === 'Jony';
+    let precio, moneda;
+    if (esMay) { precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0; moneda = esPitz ? '$' : 'U$S'; }
+    else { precio = Math.round(p.precioMin) || 0; moneda = '$'; }
+    const precioStr = moneda === 'U$S' ? `U$S ${precio.toFixed(2)}` : `$ ${precio.toLocaleString('es-AR')}`;
+    return `<div onclick="agregarProductoEdit(${p.id})" style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--gris-medio);cursor:pointer">
+      <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${p.nombre}${p.desc ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${p.desc.substring(0,40)}</span>` : ''}</div>
+      <div style="font-size:0.7rem;color:var(--dorado);font-weight:600">${precioStr} · Stock: ${p.stock}</div>
+    </div>`;
+  }).join('');
+  cont.style.display = '';
 }
 
 function eliminarLineaEdit(i) {
@@ -6444,9 +6454,7 @@ function eliminarLineaEdit(i) {
   recalcularEditTotal();
 }
 
-function agregarProductoEdit() {
-  const sel = document.getElementById('ep-add-producto');
-  const id = parseInt(sel.value);
+function agregarProductoEdit(id) {
   if (!id) return;
   const p = productos.find(x => x.id === id);
   if (!p) return;
@@ -6464,7 +6472,11 @@ function agregarProductoEdit() {
   _editLineas.push({ nombre: p.nombre, prodId: p.id, descripcion: (p.desc || '').substring(0, 45), qty: 1, moneda, precio, desc: 0 });
   renderEditLineas();
   recalcularEditTotal();
-  sel.value = '';
+  const inp = document.getElementById('ep-add-buscar');
+  const res = document.getElementById('ep-add-resultados');
+  if (inp) inp.value = '';
+  if (res) { res.style.display = 'none'; res.innerHTML = ''; }
+  showToast(p.nombre + ' agregado al pedido ✓');
 }
 
 function formatEditVal(n, moneda) {
@@ -6634,10 +6646,10 @@ function cerrarEditPedido() {
       <div id="ep-lineas"></div>
 
       <div class="edit-section-label">Agregar producto</div>
-      <select id="ep-add-producto" class="edit-tipo-select" style="width:100%;margin-bottom:6px">
-        <option value="">— Elegir producto —</option>
-      </select>
-      <button onclick="agregarProductoEdit()" style="width:100%;padding:9px;background:var(--azul);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:4px">+ Agregar al pedido</button>
+      <input type="text" id="ep-add-buscar" placeholder="🔍 Buscá el producto y tocalo para agregarlo" autocomplete="off"
+        oninput="filtrarAgregarEdit()" onfocus="filtrarAgregarEdit()"
+        style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;box-sizing:border-box;outline:none;margin-bottom:4px" />
+      <div id="ep-add-resultados" style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:8px;margin-bottom:6px"></div>
 
       <div class="edit-section-label">Descuento global</div>
       <div class="edit-discount-row">
