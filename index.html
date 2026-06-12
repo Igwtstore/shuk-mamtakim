@@ -2302,6 +2302,7 @@ async function renderCuentaCorriente() {
     (clientesTel || []).forEach(c => {
       if (c.telefono) telPorCliente[c.nombre] = c.telefono.toString().replace(/\D/g, '');
     });
+    _telPorCliente = telPorCliente;   // para precargar el teléfono en el remito
     let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony)
@@ -6022,6 +6023,7 @@ if ('serviceWorker' in navigator) {
 // ─── REMITO ──────────────────────────────────────────────────────────────────
 let _remitoTexto = '';
 let _remitoVenta = null;
+let _telPorCliente = {};
 
 function abrirRemito(v) {
   _remitoVenta = v;
@@ -6046,7 +6048,8 @@ function abrirRemito(v) {
 
   _remitoTexto = lines.join('\n');
   document.getElementById('remito-pre').textContent = _remitoTexto;
-  document.getElementById('remito-phone').value = '';
+  const telCli = _telPorCliente[v.cliente] || '';
+  document.getElementById('remito-phone').value = telCli ? (telCli.length === 10 ? '549' + telCli : telCli) : '';
   document.getElementById('remito-overlay').classList.add('open');
 }
 
@@ -6057,7 +6060,11 @@ function cerrarRemito() {
 function enviarRemitoWA() {
   const phone = document.getElementById('remito-phone').value.replace(/\D/g,'');
   if (!phone) { document.getElementById('remito-phone').focus(); return; }
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(_remitoTexto)}`, '_blank');
+  const esMovil = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const url = esMovil
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(_remitoTexto)}`
+    : `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(_remitoTexto)}`;
+  window.open(url, '_blank');
 }
 
 function copiarRemito() {
@@ -6070,18 +6077,20 @@ function abrirRemitoPDF(v) {
   if (parseFloat(v.totalARS) > 0) totales.push(`$ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
   if (parseFloat(v.totalUSD) > 0) totales.push(`U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
 
-  // Mapa nombre→imagen desde el catálogo
-  const imgMap = {};
-  (productos || []).forEach(p => {
+  // Productos agrupados por nombre: si hay variantes (ej. 4 Bon O Bon),
+  // la línea se matchea por descripción para mostrar la foto correcta.
+  const _fotoRemito = p => {
     const primera = (p.imagen||'').split(',')[0].trim();
-    if (!primera) return;
-    let url;
+    if (!primera) return '';
     if (primera.includes('/') && !primera.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-      url = `${CLOUDINARY_BASE}/w_80,h_80,c_fill/${primera}`;
-    } else {
-      url = `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
+      return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/${primera}`;
     }
-    imgMap[p.nombre.toLowerCase()] = url;
+    return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
+  };
+  const porNombre = {};
+  (productos || []).forEach(p => {
+    const k = p.nombre.toLowerCase().trim();
+    (porNombre[k] = porNombre[k] || []).push(p);
   });
 
   // Parsear líneas en columnas con foto
@@ -6092,7 +6101,16 @@ function abrirRemitoPDF(v) {
     const partes = nombreCompleto.split(' · ');
     const nombre = partes[0].trim();
     const desc = partes.slice(1).join(' · ').trim();
-    const imgUrl = imgMap[nombre.toLowerCase()] || '';
+    const cands = porNombre[nombre.toLowerCase()] || [];
+    let prodLinea = cands[0];
+    if (cands.length > 1 && desc) {
+      const ld = desc.toLowerCase();
+      prodLinea = cands.find(c => {
+        const pd = (c.desc || '').toLowerCase();
+        return pd && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim()));
+      }) || cands[0];
+    }
+    const imgUrl = prodLinea ? _fotoRemito(prodLinea) : '';
     const imgTag = imgUrl
       ? `<img src="${imgUrl}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;display:block" onerror="this.style.display='none'">`
       : `<div style="width:44px;height:44px;border-radius:6px;background:#f0ebe3;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🍬</div>`;
@@ -6200,6 +6218,20 @@ let _editLineas = [];
 function abrirEditarPedido(v) {
   _editPedidoActual = v;
   _editLineas = parsearLineasPedido(v.productos);
+  _editLineas.forEach(l => {
+    if (l.descripcion || !l.nombre || l.precio === undefined) return;
+    const cands = productos.filter(p => p.nombre === l.nombre);
+    if (!cands.length) return;
+    let pl = cands[0];
+    if (cands.length > 1) {
+      const esMay = (v.tipo || '') === 'Mayorista';
+      pl = cands.find(c => {
+        const precio = esMay ? parseFloat((c.precioMay || '0').toString().replace(',', '.')) : (parseFloat(c.precioMin) || 0);
+        return Math.abs(precio - l.precio) < 0.01;
+      });
+    }
+    if (pl && pl.desc) l.descripcion = pl.desc.substring(0, 45);
+  });
 
   document.getElementById('ep-titulo').textContent = `Pedido #${v.nVenta} — ${v.cliente}`;
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
@@ -6326,7 +6358,7 @@ function agregarProductoEdit() {
     precio = Math.round(p.precioMin) || 0;
     moneda = '$';
   }
-  _editLineas.push({ nombre: p.nombre, qty: 1, moneda, precio, desc: 0 });
+  _editLineas.push({ nombre: p.nombre, descripcion: (p.desc || '').substring(0, 45), qty: 1, moneda, precio, desc: 0 });
   renderEditLineas();
   recalcularEditTotal();
   sel.value = '';
@@ -6380,7 +6412,8 @@ async function guardarEditPedido() {
     const unitStr = formatEditVal(precioEf, l.moneda);
     const subStr = formatEditVal(sub, l.moneda);
     const descTag = l.desc > 0 ? ` [-${l.desc}%]` : '';
-    return `• ${l.qty}x ${l.nombre}${descTag} — ${l.moneda} ${unitStr} c/u = ${l.moneda} ${subStr}`;
+    const descProducto = l.descripcion ? ` · ${l.descripcion}` : '';
+    return `• ${l.qty}x ${l.nombre}${descProducto}${descTag} — ${l.moneda} ${unitStr} c/u = ${l.moneda} ${subStr}`;
   });
   if (desc > 0) nuevasLineas.push(`🏷️ Descuento global: ${desc}%`);
 
