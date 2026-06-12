@@ -1208,6 +1208,11 @@
           style="margin-top:0.4rem;width:100%;padding:0.6rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box" />
         <div id="manual-productos-lista" style="margin-top:0.4rem;max-height:300px;overflow-y:auto;border:1.5px solid #e8e6e0;border-radius:8px;"></div>
       </div>
+      <div id="manual-seleccion" style="display:none">
+        <label style="font-size:0.85rem;font-weight:600;color:var(--verde)">🧺 Pedido armado</label>
+        <div id="manual-seleccion-lista" style="margin-top:0.4rem;border:1.5px solid var(--verde);border-radius:8px;background:#f4faf6"></div>
+        <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.3rem">Seguí buscando arriba para agregar más productos.</div>
+      </div>
       <div id="manual-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul)">Total: $ 0</div>
       <button class="guardar-stock-btn" onclick="cargarPedidoManual()" style="margin-top:0">Registrar pedido</button>
     </div>
@@ -3506,6 +3511,44 @@ function actualizarTotalManual() {
   if (arsJ + arsM > 0) parts.push(`$ ${Math.round(arsJ + arsM).toLocaleString('es-AR')}`);
   if (usdM > 0) parts.push(`U$S ${usdM.toFixed(2)}`);
   document.getElementById('manual-total').textContent = 'Total: ' + (parts.join(' + ') || '$ 0');
+  renderManualSeleccion();
+}
+
+// Canasta del pedido manual: lo elegido queda siempre a la vista, aunque el buscador lo filtre.
+function renderManualSeleccion() {
+  const wrap = document.getElementById('manual-seleccion');
+  const lista = document.getElementById('manual-seleccion-lista');
+  if (!wrap || !lista) return;
+  const tipo = document.getElementById('manual-tipo').value;
+  const items = _manualElegibles().filter(p => (_manualQtys[p.id] || 0) > 0);
+  if (!items.length) { wrap.style.display = 'none'; lista.innerHTML = ''; return; }
+  wrap.style.display = '';
+  lista.innerHTML = items.map(p => {
+    const qty = _manualQtys[p.id];
+    const esPitz = p.dueno === 'Jony';
+    let precioUnit, moneda;
+    if (tipo === 'Mayorista') {
+      if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; }
+      else { precioUnit = parseFloat((p.precioMay||'0').toString().replace(',','.')); moneda = 'U$S'; }
+    } else { precioUnit = Math.round(p.precioMin); moneda = '$'; }
+    const sub = precioUnit * qty;
+    const subStr = moneda === 'U$S' ? `U$S ${sub.toFixed(2)}` : `$ ${Math.round(sub).toLocaleString('es-AR')}`;
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;border-bottom:1px solid #d8ecdf">
+      <span style="font-weight:800;color:var(--verde);min-width:34px;text-align:center">${qty}×</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${p.nombre}</div>
+        ${p.desc ? `<div style="font-size:0.68rem;color:var(--texto-suave)">${p.desc.substring(0,45)}</div>` : ''}
+      </div>
+      <span style="font-size:0.78rem;font-weight:700;white-space:nowrap">${subStr}</span>
+      <button onclick="quitarManualItem(${p.id})" title="Sacar del pedido"
+        style="background:#fde8e8;border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;color:#e05c2a;font-size:0.9rem;flex-shrink:0">×</button>
+    </div>`;
+  }).join('');
+}
+
+function quitarManualItem(id) {
+  _manualQtys[id] = 0;
+  renderManualProductos();   // refresca lista (input en 0), total y canasta
 }
 
 function cargarPedidoManual() {
