@@ -1038,7 +1038,7 @@
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px">
-          <label>Precio Mayorista (U$S)</label>
+          <label id="np-pmay-label">Precio Mayorista (U$S)</label>
           <input type="text" inputmode="decimal" id="np-pmay" placeholder="5.80" />
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px">
@@ -1053,7 +1053,7 @@
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:140px">
           <label>Dueño</label>
-          <select id="np-dueno" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <select id="np-dueno" onchange="actualizarLabelPmay()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="Miri">Miri</option>
             <option value="Jony">Jony</option>
           </select>
@@ -1133,7 +1133,7 @@
       </div>
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Descripción</label><input type="text" id="ep-desc" /></div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label>P. Mayorista (U$S)</label><input type="text" id="ep-pmay" /></div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label id="ep-pmay-label">P. Mayorista (U$S)</label><input type="text" id="ep-pmay" /></div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label>P. Minorista ($)</label><input type="number" id="ep-pmin" /></div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:80px"><label>Stock</label><input type="number" id="ep-stock" /></div>
       </div>
@@ -3747,7 +3747,7 @@ function filtrarEditor() {
         <button onclick="elegirProductoEditor(${p.id})" title="Ficha completa: textos, fotos, eliminar" style="background:var(--gris);border:1px solid var(--gris-medio);border-radius:7px;padding:6px 10px;font-size:0.72rem;cursor:pointer;white-space:nowrap">✏️ Ficha</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-top:6px;align-items:center">
-        <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">U$S may.</div><input id="epq-may-${p.id}" type="text" value="${esc(String(p.precioMay || ''))}" style="${inp}"></div>
+        <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">${p.dueno === 'Jony' ? '$ may.' : 'U$S may.'}</div><input id="epq-may-${p.id}" type="text" value="${esc(String(p.precioMay || ''))}" style="${inp}"></div>
         <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">$ min.</div><input id="epq-min-${p.id}" type="number" value="${p.precioMin || ''}" style="${inp}"></div>
         <div><div style="font-size:0.58rem;color:var(--texto-suave);text-align:center">Stock</div><input id="epq-stock-${p.id}" type="number" value="${p.stock || 0}" style="${inp}"></div>
         <button onclick="guardarRapidoEditor(${p.id})" title="Guardar precio y stock" style="background:var(--verde);color:#fff;border:none;border-radius:7px;padding:8px 12px;font-size:0.8rem;cursor:pointer;margin-top:12px">💾</button>
@@ -3804,6 +3804,8 @@ function cargarProductoEditor(id) {
   document.getElementById('ep-desc').value = p.desc || '';
   document.getElementById('ep-categoria').value = p.categoria || '';
   document.getElementById('ep-pmay').value = p.precioMay || '';
+  const epPmayLabel = document.getElementById('ep-pmay-label');
+  if (epPmayLabel) epPmayLabel.textContent = p.dueno === 'Jony' ? 'P. Mayorista ($ pesos)' : 'P. Mayorista (U$S)';
   document.getElementById('ep-pmin').value = p.precioMin || '';
   document.getElementById('ep-stock').value = p.stock || 0;
   document.getElementById('ep-dueno').value = p.dueno || 'Miri';
@@ -4797,6 +4799,17 @@ function renderSocioBar() {
   const subDocs = document.getElementById('subtab-docs');
   if (subDocs) subDocs.style.display = esVistaMiri() ? 'none' : '';
   aplicarBloqueoDuenoMiri();
+}
+
+// Los productos de Jony (Pitzujim) se venden en pesos también al por mayor:
+// la etiqueta y el placeholder del precio mayorista se adaptan al dueño elegido.
+function actualizarLabelPmay() {
+  const dueno = document.getElementById('np-dueno')?.value || 'Miri';
+  const label = document.getElementById('np-pmay-label');
+  const inp = document.getElementById('np-pmay');
+  if (!label || !inp) return;
+  if (dueno === 'Jony') { label.textContent = 'Precio Mayorista ($ pesos)'; inp.placeholder = '63000'; }
+  else { label.textContent = 'Precio Mayorista (U$S)'; inp.placeholder = '5.80'; }
 }
 
 // En vista Miri, el alta de producto queda forzada a dueño Miri.
