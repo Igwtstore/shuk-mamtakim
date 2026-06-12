@@ -5068,7 +5068,8 @@ async function renderAnalitica() {
     <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--gris-medio);padding-top:10px">
       ${kpi(r.tienda, '🛍️ Minorista')}
       ${kpi(r.mayorista, '📦 Mayorista')}
-    </div>`);
+    </div>
+    <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:8px;line-height:1.4">ℹ️ Únicos = navegadores distintos. Tus visitas y las de Miri no cuentan (desde hoy). La misma persona desde celu y compu cuenta como 2.</div>`);
 
   // Embudo
   const e = d.embudo;
@@ -5845,6 +5846,7 @@ async function verificarAdmin() {
   if (socio) {
     adminAuth = true;
     sessionStorage.setItem('adminAuth', '1');
+    localStorage.setItem('shuk_no_track', '1');   // este navegador es del equipo: no cuenta en Analítica
     setSocio(socio);
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('modo-bar').style.display = '';
@@ -5879,6 +5881,7 @@ function init() {
   if (hash === TOKENS.admin) {
     if (sessionStorage.getItem('adminAuth') === '1') {
       adminAuth = true;
+      localStorage.setItem('shuk_no_track', '1');   // navegador del equipo: fuera de Analítica
       setSocio(sessionStorage.getItem('adminSocio') || 'jony');
       document.getElementById('modo-bar').style.display = '';
       // Esperar a que el token de sesión esté listo antes de los primeros renders (clave para Etapa B)
@@ -5936,6 +5939,8 @@ async function _geo() {
 }
 async function track(evento, extra = {}) {
   try {
+    // Precisión: los navegadores del equipo (entraron al panel alguna vez) no cuentan como visitantes
+    if (localStorage.getItem('shuk_no_track')) return;
     const g = await _geo();
     const params = new URLSearchParams({
       accion: 'track', vid: _vid(),
