@@ -2372,6 +2372,10 @@ async function renderPedidos() {
       apiGet('ventas'),
       soloMiri ? Promise.resolve([]) : apiGet('getPagos').catch(() => [])
     ]);
+    if (ventas && ventas.error) {
+      lista.innerHTML = '<div class="sinpedidos">⚠️ Se venció la sesión. Recargá la página y volvé a entrar.</div>';
+      return;
+    }
     if (!Array.isArray(ventas) || !ventas.length) {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
@@ -5772,8 +5776,24 @@ function apiGet(accion, ttl = 8000) {
   const now = Date.now();
   const c = _apiCache[accion];
   if (c && (now - c.t) < ttl) return c.p;
-  const p = fetch(APPS_SCRIPT_URL + '?accion=' + accion)
-    .then(r => r.json())
+  const hacer = () => fetch(APPS_SCRIPT_URL + '?accion=' + accion).then(r => r.json());
+  const p = hacer()
+    .then(async data => {
+      // Sesión vencida (el token de Supabase dura 1 hora): renovar y reintentar una vez.
+      if (data && data.error && String(data.error).indexOf('no autorizado') !== -1) {
+        try {
+          const g = await _sb.auth.getSession();
+          let tok = g.data.session?.access_token || '';
+          if (!tok || tok === _authToken) {
+            const r = await _sb.auth.refreshSession();
+            tok = r.data.session?.access_token || '';
+          }
+          if (tok) _authToken = tok;
+        } catch (e) {}
+        return hacer();
+      }
+      return data;
+    })
     .catch(e => { delete _apiCache[accion]; throw e; });
   _apiCache[accion] = { p, t: now };
   return p;
