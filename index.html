@@ -2543,7 +2543,13 @@ function cambiarEstado(id, estado, btnEl) {
     .then(r => r.json())
     .then(data => {
       if (data.error) { showToast('Error: ' + data.error); if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } }
-      else { if (card) card.remove(); showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado'); setTimeout(() => { refreshAdmin(); if (estado === 'cancelado') cargarProductos(); }, 2000); }
+      else {
+        const msgs = { entregado: 'Pedido entregado ✓', cancelado: 'Pedido cancelado', preparando: 'Pedido en preparación 🔧' };
+        showToast(msgs[estado] || 'Estado actualizado ✓');
+        if (estado === 'preparando') { if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } }
+        else if (card) card.remove();
+        setTimeout(() => { refreshAdmin(); if (estado === 'cancelado') cargarProductos(); }, 2000);
+      }
     })
     .catch(err => { showToast('Error de conexión'); if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; } });
 }
