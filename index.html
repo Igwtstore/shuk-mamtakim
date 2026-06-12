@@ -5829,28 +5829,31 @@ function diasDesdePedido(fechaStr) {
 // Lectura cacheada + deduplicada de endpoints (?accion=X sin otros params).
 // Evita pedir lo mismo varias veces en la misma carga del panel.
 const _apiCache = {};
+// Fetch al backend que, si la sesión venció (el token de Supabase dura 1 hora),
+// renueva el token y reintenta UNA vez. Lo usan lecturas y escrituras.
+async function fetchConSesion(url) {
+  const hacer = () => fetch(url).then(r => r.json());
+  const data = await hacer();
+  if (data && data.error && String(data.error).indexOf('no autorizado') !== -1) {
+    try {
+      const g = await _sb.auth.getSession();
+      let tok = g.data.session?.access_token || '';
+      if (!tok || tok === _authToken) {
+        const r = await _sb.auth.refreshSession();
+        tok = r.data.session?.access_token || '';
+      }
+      if (tok) _authToken = tok;
+    } catch (e) {}
+    return hacer();
+  }
+  return data;
+}
+
 function apiGet(accion, ttl = 8000) {
   const now = Date.now();
   const c = _apiCache[accion];
   if (c && (now - c.t) < ttl) return c.p;
-  const hacer = () => fetch(APPS_SCRIPT_URL + '?accion=' + accion).then(r => r.json());
-  const p = hacer()
-    .then(async data => {
-      // Sesión vencida (el token de Supabase dura 1 hora): renovar y reintentar una vez.
-      if (data && data.error && String(data.error).indexOf('no autorizado') !== -1) {
-        try {
-          const g = await _sb.auth.getSession();
-          let tok = g.data.session?.access_token || '';
-          if (!tok || tok === _authToken) {
-            const r = await _sb.auth.refreshSession();
-            tok = r.data.session?.access_token || '';
-          }
-          if (tok) _authToken = tok;
-        } catch (e) {}
-        return hacer();
-      }
-      return data;
-    })
+  const p = fetchConSesion(APPS_SCRIPT_URL + '?accion=' + accion)
     .catch(e => { delete _apiCache[accion]; throw e; });
   _apiCache[accion] = { p, t: now };
   return p;
@@ -5862,8 +5865,7 @@ function invalidarCache() { for (const k in _apiCache) delete _apiCache[k]; }
 async function apiWrite(params, okMsg) {
   invalidarCache();
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
-    const data = await res.json().catch(() => ({}));
+    const data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => ({}));
     if (data && data.error) { showToast('⚠️ ' + data.error); return { error: data.error }; }
     if (okMsg) showToast(okMsg);
     return Object.assign({ ok: true }, data);
@@ -6575,8 +6577,7 @@ async function guardarEditPedido() {
   _editPedidoActual.stockUpdates = suNuevo;
 
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
-    const data = await res.json();
+    const data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString());
     if (data.ok) {
       showToast('Pedido actualizado ✓');
       document.getElementById('edit-pedido-overlay').classList.remove('open');
