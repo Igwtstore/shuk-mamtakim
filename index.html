@@ -742,6 +742,53 @@
     .logo { font-size: 1.15rem; }
   }
 
+  /* === MODO RECATO (Tzniut) — tienda solo texto, sin imágenes === */
+  body.recato .producto-img-wrap,
+  body.recato #banner-wrap,
+  body.recato .share-btn,
+  body.recato .carousel-btn,
+  body.recato .carousel-dots { display: none !important; }
+  body.recato .catalogo {
+    grid-template-columns: 1fr !important;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    gap: 0.5rem;
+  }
+  body.recato .producto-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.9rem;
+    padding: 0.7rem 0.9rem;
+    min-height: 0;
+  }
+  body.recato .producto-info { flex: 1 1 60%; min-width: 0; }
+  body.recato .producto-controles { flex: 1 1 100%; margin-top: 0.2rem; }
+  body.recato .producto-nombre { font-size: 1rem; }
+  .recato-banner {
+    display: none;
+    max-width: 900px;
+    margin: 1rem auto 0;
+    padding: 0.85rem 1rem;
+    background: var(--dorado-claro, #fdf3e3);
+    border: 1.5px solid var(--dorado, #c79a3a);
+    border-radius: 12px;
+    font-size: 0.9rem;
+    color: var(--texto, #2c2c2c);
+    line-height: 1.45;
+  }
+  .recato-banner.visible { display: block; }
+  .recato-banner .rb-acciones { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+  .recato-banner button {
+    border: none; border-radius: 8px; padding: 0.5rem 0.9rem;
+    font-family: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer;
+  }
+  .rb-si { background: var(--dorado, #c79a3a); color: #fff; }
+  .rb-wa { background: #25D366; color: #fff; }
+  .rb-no { background: transparent; color: var(--texto-suave, #777); text-decoration: underline; }
+
   /* ─── Wizard del flyer (portado del Candy Shop) ─── */
   .wizard-overlay { display: none; position: fixed; inset: 0; background: #f5f0e8; z-index: 200; flex-direction: column; }
   .wizard-overlay.open { display: flex; }
@@ -779,6 +826,7 @@
       <button class="dark-toggle" id="install-btn" style="display:none;font-size:0.78rem;width:auto;padding:0 0.7rem;border-radius:20px" onclick="installPWA()" title="Instalar app">📲 Instalar</button>
       <button class="dark-toggle" onclick="activarNotificaciones()" title="Activar notificaciones" id="notif-toggle">🔔</button>
       <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
+      <button class="dark-toggle" onclick="toggleRecato()" id="recato-btn" title="Modo sin fotos (solo texto)" style="font-size:0.95rem">📝</button>
       <button class="dark-toggle" onclick="window.print()" title="Exportar PDF" style="font-size:0.85rem">🖨️</button>
     </div>
     <button class="carrito-btn" onclick="abrirCarrito()" id="carrito-btn-header" style="display:none">
@@ -797,6 +845,14 @@
 
 <!-- CATÁLOGO -->
 <div id="catalogo-section">
+  <div class="recato-banner" id="recato-banner">
+    <span id="recato-banner-txt">📵 <strong>Parece que tu teléfono no está mostrando las fotos.</strong> Podemos mostrarte la tienda en <strong>modo solo texto</strong>, con todos los precios.</span>
+    <div class="rb-acciones">
+      <button class="rb-si" onclick="toggleRecato(true);ocultarRecatoBanner()">✓ Ver sin fotos</button>
+      <button class="rb-wa" onclick="pedirCatalogoWhatsApp()">📲 Mandame el catálogo</button>
+      <button class="rb-no" onclick="ocultarRecatoBanner(true)">Ahora no</button>
+    </div>
+  </div>
   <div id="banner-wrap" style="max-width:900px;margin:1rem auto 0;padding:0 1rem">
     <img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_900,f_auto,q_auto/website_banner_rhyfih.png"
       alt="Shuk Mamtakim — Dulces Tradicionales"
@@ -1896,7 +1952,45 @@ function imgFallbackNext(el) {
     el.onerror = null;
     el.style.display = 'none';
     if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+    registrarImgFallida();   // detección de filtro de imágenes (modo recato)
   }
+}
+
+// === MODO RECATO (Tzniut): tienda solo texto para teléfonos con filtro de imágenes ===
+let _imgFalladas = 0, _recatoSugerido = false;
+function registrarImgFallida() {
+  _imgFalladas++;
+  // Si ya falló un puñado de fotos y el cliente no eligió nada, ofrecer el modo sin fotos.
+  if (_imgFalladas >= 4 && !_recatoSugerido
+      && !document.body.classList.contains('recato')
+      && localStorage.getItem('shuk_recato') !== '0') {
+    _recatoSugerido = true;
+    const b = document.getElementById('recato-banner');
+    if (b) b.classList.add('visible');
+  }
+}
+
+function toggleRecato(forzar) {
+  const on = forzar !== undefined ? forzar : !document.body.classList.contains('recato');
+  document.body.classList.toggle('recato', on);
+  localStorage.setItem('shuk_recato', on ? '1' : '0');
+  const btn = document.getElementById('recato-btn');
+  if (btn) { btn.textContent = on ? '🖼️' : '📝'; btn.title = on ? 'Volver a ver fotos' : 'Modo sin fotos (solo texto)'; }
+  if (on) ocultarRecatoBanner();
+  if (typeof showToast === 'function') showToast(on ? '📝 Modo sin fotos activado' : '🖼️ Fotos activadas');
+}
+
+function ocultarRecatoBanner(recordar) {
+  const b = document.getElementById('recato-banner');
+  if (b) b.classList.remove('visible');
+  // "Ahora no" = no volver a molestar en esta sesión; el toggle del header sigue disponible.
+  if (recordar) _recatoSugerido = true;
+}
+
+function pedirCatalogoWhatsApp() {
+  const msg = 'Hola! Mi teléfono no muestra bien la tienda 🙏 ¿Me pueden pasar el catálogo de Shuk Mamtakim con los precios? Gracias!';
+  window.open(`https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`, '_blank');
+  ocultarRecatoBanner();
 }
 
 function esVideo(url) {
@@ -5928,6 +6022,17 @@ if (localStorage.getItem('darkMode') === '1') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _updateDarkBtn);
   else _updateDarkBtn();
 }
+
+// Modo Recato: se activa por memoria del cliente o por link compartible (?recato=1 / ?sinfotos=1)
+(function initRecato() {
+  const qs = new URLSearchParams(location.search);
+  const porLink = qs.has('recato') || qs.has('sinfotos') || qs.has('texto');
+  const guardado = localStorage.getItem('shuk_recato') === '1';
+  if (!porLink && !guardado) return;
+  const aplicar = () => { if (typeof toggleRecato === 'function') toggleRecato(true); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicar);
+  else aplicar();
+})();
 function init() {
   const hash = window.location.hash.replace('#', '');
   const path = window.location.pathname;
