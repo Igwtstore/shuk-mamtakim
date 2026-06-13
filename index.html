@@ -827,7 +827,7 @@
       <button class="dark-toggle" onclick="activarNotificaciones()" title="Activar notificaciones" id="notif-toggle">🔔</button>
       <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
       <button class="dark-toggle" onclick="toggleRecato()" id="recato-btn" title="Modo sin fotos (solo texto)" style="font-size:0.95rem">📝</button>
-      <button class="dark-toggle" onclick="window.print()" title="Exportar PDF" style="font-size:0.85rem">🖨️</button>
+      <button class="dark-toggle" onclick="generarCatalogoPDF()" title="Descargar catálogo PDF" style="font-size:0.85rem">📄</button>
     </div>
     <button class="carrito-btn" onclick="abrirCarrito()" id="carrito-btn-header" style="display:none">
       🛒 Carrito
@@ -1848,6 +1848,105 @@ function packActivo(p) {
 function esPesos(p) {
   if (modo === 'minorista') return true;
   return p.dueno === 'Jony';
+}
+
+// === CATÁLOGO PDF (lista de precios) — reemplaza el window.print() roto en celular ===
+function precioTextoPDF(p) {
+  if (modo === 'mayorista') {
+    const v = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
+    if (p.dueno === 'Jony') return '$ ' + Math.round(v).toLocaleString('es-AR');
+    if (!v) return '-';
+    let str = 'U$S ' + v.toFixed(2);
+    if (_tc > 0) str += '  ($ ' + Math.round(v * _tc).toLocaleString('es-AR') + ')';
+    return str;
+  }
+  return '$ ' + Math.round(p.precioMin).toLocaleString('es-AR');
+}
+
+function cargarJsPDF() {
+  return new Promise((resolve, reject) => {
+    if (window.jspdf) return resolve(window.jspdf);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = () => resolve(window.jspdf);
+    s.onerror = () => reject(new Error('No se pudo cargar el generador de PDF'));
+    document.head.appendChild(s);
+  });
+}
+
+async function generarCatalogoPDF() {
+  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  const lista = productosVisibles().filter(p => {
+    const vis = (p.visible || 'Ambos').trim();
+    return p.stock > 0 && (vis === 'Ambos' || vis === tipoActual);
+  }).sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre));
+  if (!lista.length) { showToast('No hay productos disponibles para el catálogo'); return; }
+  showToast('📄 Generando catálogo PDF…');
+  let jspdf;
+  try { jspdf = await cargarJsPDF(); }
+  catch (e) { showToast('⚠️ No se pudo cargar el generador. Probá con internet estable.'); return; }
+  const { jsPDF } = jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const dorado = [199, 154, 58], gris = [120, 120, 120], negro = [40, 40, 40];
+  const hoy = new Date().toLocaleDateString('es-AR');
+  let y = 0;
+
+  const pie = () => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...gris);
+    doc.text('Pedidos por WhatsApp: +54 9 11 3175-4540   ·   shuk-mamtakim.vercel.app', W / 2, H - 22, { align: 'center' });
+  };
+  const encabezado = () => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(...dorado);
+    doc.text('SHUK MAMTAKIM', margin, 48);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...gris);
+    doc.text('Dulces Tradicionales · Frutos Secos', margin, 64);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...negro);
+    doc.text('Lista de Precios — ' + tipoActual.toUpperCase(), margin, 86);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...gris);
+    doc.text(hoy, W - margin, 86, { align: 'right' });
+    doc.setDrawColor(...dorado); doc.setLineWidth(1.2);
+    doc.line(margin, 94, W - margin, 94);
+    y = 116;
+  };
+  encabezado(); pie();
+
+  const nuevaPaginaSiHaceFalta = (alto) => {
+    if (y + alto > H - 40) { doc.addPage(); encabezado(); pie(); }
+  };
+  const anchoPrecio = 130;
+  const anchoTexto = W - margin * 2 - anchoPrecio - 10;
+  let catActual = null;
+
+  lista.forEach(p => {
+    const cat = p.categoria || 'Varios';
+    if (cat !== catActual) {
+      catActual = cat;
+      nuevaPaginaSiHaceFalta(34);
+      y += 6;
+      doc.setFillColor(252, 243, 227);
+      doc.rect(margin, y - 11, W - margin * 2, 20, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...dorado);
+      doc.text(cat.toUpperCase(), margin + 6, y + 3);
+      y += 24;
+    }
+    nuevaPaginaSiHaceFalta(20);
+    const nombre = p.nombre + (p.desc ? '  ·  ' + p.desc : '');
+    const linea = doc.splitTextToSize(nombre, anchoTexto)[0];
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...negro);
+    doc.text(linea, margin + 4, y);
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...negro);
+    doc.text(precioTextoPDF(p), W - margin, y, { align: 'right' });
+    doc.setDrawColor(235, 235, 235); doc.setLineWidth(0.5);
+    doc.line(margin, y + 6, W - margin, y + 6);
+    y += 19;
+  });
+
+  const archivo = 'Shuk-Mamtakim-Precios-' + tipoActual + '-' + hoy.replace(/\//g, '-') + '.pdf';
+  doc.save(archivo);
+  showToast('✅ Catálogo PDF listo — ya podés mandarlo por WhatsApp');
 }
 
 function renderCatalogo() {
