@@ -4440,9 +4440,19 @@ async function renderCaja() {
       const usdM = parseFloat(v.usdMyri || 0);
       const comiA = parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15);
       const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
-      // Auto-routing solo para Efectivo y Cuenta Corriente; Transferencia/MP requieren confirmación
-      const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fp === 'Efectivo' ? 'EFT_JONY' : null);
-      const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fp === 'Efectivo' ? 'EFT_MYRI' : null);
+      // 🔑 REGLA DE ORO: un pedido NO cobrado nunca entra a la caja física.
+      // Va a "cuenta corriente / pendiente" hasta que confirmes el cobro. La forma de pago
+      // que eligió el cliente es solo una intención, no plata en mano.
+      const cobrado = !!(v.cajaJony || v.cajaMyri);
+      if (!cobrado) {
+        if (arsJ > 0) movs.push({ desc: `Pend. cobro #${n} ${f}`, col: 'CTA_CTE_ARS', val: arsJ, mon: 'ARS', tipo: 'venta' });
+        if (arsM > 0) movs.push({ desc: `Pend. cobro #${n} ${f}`, col: 'CTA_CTE_ARS', val: arsM, mon: 'ARS', tipo: 'venta' });
+        if (usdM > 0) movs.push({ desc: `Pend. cobro #${n} ${f}`, col: 'CTA_CTE_USD', val: usdM, mon: 'USD', tipo: 'venta' });
+        return;
+      }
+      // Pedido cobrado: se imputa a la caja real donde entró (la elegiste al confirmar el cobro).
+      const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
+      const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       if (arsJ > 0 && cajaJ) {
         movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta' });
       }
