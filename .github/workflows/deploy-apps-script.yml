@@ -24,12 +24,8 @@ jobs:
       - name: Write credentials
         run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
 
-      - name: Push & deploy to all 3 web apps
+      - name: Push & deploy (motor v2 — un solo web app sirve las 3 puertas)
         run: |
           clasp push -f
-          # Shuk Mamtakim (index.html)
-          clasp deploy -i AKfycbyW18FtDDS9sG3qcgS4h85tZrM4aWnP4NfvOKDYzV67nEt_kme8jPUiKVFJa1u7iG9-4Q
-          # Candy Shop (candyshop.html)
-          clasp deploy -i AKfycbzaxlnfpPqE1oU3onsSGHv9gcBiip4y9bNH4dJ0aCBYXMZAAkLhaL83itj9HsvrntvoCA
-          # Tienda minorista (tienda.html)
-          clasp deploy -i AKfycbxdAaSjGfBQoMz_38kHvTvUNswM94BdQexq5IDAINgTbvgpNOcOdyu8TXIHsbAZWAJ-hA
+          # Motor v2 (Shuk + Candy + Tienda usan esta misma URL)
+          clasp deploy -i AKfycbxO71AD5tBy1KpWCP0K9-uBEZEc7Qv1ehMv3PA3zDQwngwj7XHMLgIY6M7vWosr7-nc
