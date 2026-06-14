@@ -779,10 +779,38 @@ function doPost(e) {
       });
       return json(JSON.parse(res.getContentText()));
     }
+    // Webhook del gateway de SMS (capcom6 SMS Gateway): SMS entrante de un cliente.
+    // El cliente manda un SMS → lo procesa el cerebro de Shuki → respondemos por SMS.
+    if (body.event === 'sms:received' && body.payload) {
+      const from = (body.payload.phoneNumber || '').toString().trim();
+      const text = (body.payload.message || '').toString().trim();
+      if (from && text) {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const r = procesarVozIA_(ss, from, text, false, 'texto');   // canal texto = lista escaneable
+        if (r && r.reply) enviarSMS_(r.reply, from);
+      }
+      return json({ ok: true });
+    }
     return json({ error: 'acción desconocida' });
   } catch (err) {
     return json({ error: 'doPost: ' + err });
   }
+}
+
+// Envía un SMS usando el cloud del gateway (capcom6 SMS Gateway / sms-gate.app).
+// Credenciales en Script Properties: SMS_GATEWAY_USER y SMS_GATEWAY_PASS (las da la app).
+function enviarSMS_(texto, to) {
+  const user = PropertiesService.getScriptProperties().getProperty('SMS_GATEWAY_USER');
+  const pass = PropertiesService.getScriptProperties().getProperty('SMS_GATEWAY_PASS');
+  if (!user || !pass) { Logger.log('[sms] faltan SMS_GATEWAY_USER/PASS en Propiedades'); return; }
+  try {
+    UrlFetchApp.fetch('https://api.sms-gate.app/3rdparty/v1/message', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'Authorization': 'Basic ' + Utilities.base64Encode(user + ':' + pass) },
+      payload: JSON.stringify({ message: (texto || '').substring(0, 600), phoneNumbers: [to] }),
+      muteHttpExceptions: true
+    });
+  } catch (err) { Logger.log('[sms] error envío: ' + err); }
 }
 
 function dec(v){try{return decodeURIComponent(v||'');}catch(e){return v||'';}}
