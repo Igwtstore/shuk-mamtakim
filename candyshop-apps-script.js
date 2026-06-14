@@ -94,7 +94,7 @@ function doGet(e) {
       // y el gateway real (secret). Recibe from=teléfono, text=mensaje → {reply}.
       if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET))
         return json({ error: 'no autorizado' });
-      return json(procesarMensajeBot_(ss, e.parameter.from || '', dec(e.parameter.text || '')));
+      return json(procesarMensajeBot_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1'));
     }
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid). 90s entre pedidos, máx 4/hora.
@@ -2179,7 +2179,8 @@ function botAyuda_() {
 }
 
 // Cierra el pedido: lo crea en Ventas, descuenta stock, registra ganancias y avisa al negocio.
-function botConfirmar_(ss, s, prods, tel) {
+// Si sim=true es una PRUEBA: arma el resumen pero NO crea pedido ni toca stock.
+function botConfirmar_(ss, s, prods, tel, sim) {
   const carrito = s.carrito;
   const ids = Object.keys(carrito).filter(k => carrito[k] > 0);
   if (!ids.length) return 'Tu pedido esta vacio. Mandá LISTA para empezar. 🛒';
@@ -2195,6 +2196,11 @@ function botConfirmar_(ss, s, prods, tel) {
     if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + p.precioMin);
   });
   if (!lineas.length) return 'Hubo un problema con tu pedido. Mandá LISTA y probá de nuevo.';
+  if (sim) {
+    s.carrito = {}; botGuardarSesion_(s);
+    return '✅ (PRUEBA) Pedido tomado! Total ' + botMoney_(total) +
+      '.\nEn la realidad acá se cargaria el pedido y se descontaria el stock.\nNada se modificó porque es una simulación. 🧪';
+  }
   const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
   const idV = 'P' + Date.now().toString();
   const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
@@ -2241,7 +2247,7 @@ function botConfirmar_(ss, s, prods, tel) {
 }
 
 // Punto de entrada del cerebro.
-function procesarMensajeBot_(ss, tel, texto) {
+function procesarMensajeBot_(ss, tel, texto, sim) {
   tel = (tel||'').toString().trim();
   if (!tel) return { reply: 'Error: sin numero de origen.' };
   const s = botSesion_(ss, tel);
@@ -2258,7 +2264,7 @@ function procesarMensajeBot_(ss, tel, texto) {
   }
   if (['VER','CARRITO','PEDIDO'].indexOf(T) !== -1) return { reply: botVerCarrito_(prods, s.carrito) };
   if (['LISTO','FIN','CONFIRMAR','TERMINAR','PAGAR','ENVIAR'].indexOf(T) !== -1)
-    return { reply: botConfirmar_(ss, s, prods, tel), cerrado: true };
+    return { reply: botConfirmar_(ss, s, prods, tel, sim), cerrado: true };
 
   // Agregar producto: 43x2 · 43*2 · 43 2 · 43,2
   const m = raw.match(/^\s*(\d{1,4})\s*[xX*,\s]\s*(\d{1,3})\s*$/);

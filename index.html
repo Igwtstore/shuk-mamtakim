@@ -1017,7 +1017,23 @@
     <button class="psec-btn" onclick="setPanelSeccion('dinero',this)">💰 Dinero</button>
     <button class="psec-btn" onclick="setPanelSeccion('stock',this)">📦 Stock</button>
     <button class="psec-btn" onclick="setPanelSeccion('catalogo',this)">🛍️ Catálogo</button>
+    <button class="psec-btn" onclick="setPanelSeccion('bot',this)">📱 Bot</button>
     <button class="psec-btn" onclick="setPanelSeccion('inicio',this)">🏠 Inicio</button>
+  </div>
+  <div class="admin-card" data-seccion="bot">
+    <div class="admin-titulo">📱 Probador del bot (SMS / voz)</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">
+      Escribí como si fueras un cliente sin smartphone. Probá: <b>HOLA</b> → un número de categoría → <b>43x2</b> → <b>VER</b> → <b>LISTO</b>.
+      <span style="color:var(--verde);font-weight:600">Modo prueba: nada se carga ni se descuenta. 🧪</span>
+    </div>
+    <div id="bot-chat" style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem;height:320px;overflow-y:auto;background:var(--gris);display:flex;flex-direction:column;gap:0.4rem;font-size:0.85rem"></div>
+    <div style="display:flex;gap:0.4rem;margin-top:0.5rem">
+      <input id="bot-input" type="text" placeholder="Escribí un mensaje… (ej: HOLA)" autocomplete="off"
+        onkeydown="if(event.key==='Enter')botEnviarSim()"
+        style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
+      <button onclick="botEnviarSim()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:0 1.1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Enviar</button>
+    </div>
+    <button onclick="botReiniciarSim()" style="margin-top:0.5rem;background:transparent;border:none;color:var(--texto-suave);text-decoration:underline;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🔄 Reiniciar conversación</button>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">📱 QR del catálogo</div>
@@ -4858,6 +4874,39 @@ function setPanelSeccion(s, btn) {
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
   if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
+  if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí HOLA para que arranque el bot 👇', 'bot'); }
+}
+
+// ─── PROBADOR DEL BOT (simulador SMS/voz, modo prueba: no carga pedidos) ──────
+const BOT_SIM_TEL = 'sim_panel';
+function botPintarMsg(texto, lado) {
+  const cont = document.getElementById('bot-chat');
+  if (!cont) return;
+  const b = document.createElement('div');
+  b.style.cssText = 'max-width:82%;padding:0.5rem 0.75rem;border-radius:12px;white-space:pre-wrap;line-height:1.4;' +
+    (lado === 'cliente'
+      ? 'align-self:flex-end;background:var(--azul);color:#fff;border-bottom-right-radius:3px'
+      : 'align-self:flex-start;background:#fff;color:var(--texto);border:1px solid var(--gris-medio);border-bottom-left-radius:3px');
+  b.textContent = texto;
+  cont.appendChild(b);
+  cont.scrollTop = cont.scrollHeight;
+}
+async function botEnviarSim() {
+  const inp = document.getElementById('bot-input');
+  const txt = (inp.value || '').trim();
+  if (!txt) return;
+  botPintarMsg(txt, 'cliente');
+  inp.value = '';
+  try {
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botMsg&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_SIM_TEL)}&text=${encodeURIComponent(txt)}`);
+    botPintarMsg((data && data.reply) ? data.reply : '(sin respuesta)', 'bot');
+  } catch (e) { botPintarMsg('⚠️ Error de conexión', 'bot'); }
+}
+function botReiniciarSim() {
+  const ch = document.getElementById('bot-chat');
+  if (ch) ch.innerHTML = '';
+  fetchConSesion(`${APPS_SCRIPT_URL}?accion=botMsg&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_SIM_TEL)}&text=BORRAR`).catch(() => {});
+  botPintarMsg('— conversación reiniciada — escribí HOLA para empezar', 'bot');
 }
 
 // ─── STOCK DISPONIBLE (sección Stock) ─────────────────────────────────────────
@@ -6640,7 +6689,8 @@ function filtrarAgregarEdit() {
   const inp = document.getElementById('ep-add-buscar');
   const cont = document.getElementById('ep-add-resultados');
   if (!inp || !cont) return;
-  const q = inp.value.toLowerCase().trim();
+  const q = inp.value.toLowerCase().trim
+  ();
   const tipo = document.getElementById('ep-tipo')?.value || 'Mayorista';
   const esMay = tipo === 'Mayorista';
   const disponibles = productos.filter(p => p.stock > 0 &&
