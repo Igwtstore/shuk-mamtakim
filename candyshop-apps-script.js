@@ -96,6 +96,12 @@ function doGet(e) {
         return json({ error: 'no autorizado' });
       return json(procesarMensajeBot_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1'));
     }
+    if (accion === 'botVoz') {
+      // Cerebro conversacional con IA (para voz natural): entiende lenguaje común.
+      if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET))
+        return json({ error: 'no autorizado' });
+      return json(procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1'));
+    }
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid). 90s entre pedidos, máx 4/hora.
       const vidVenta = dec(e.parameter.vid || '');
@@ -2319,4 +2325,116 @@ function procesarMensajeBot_(ss, tel, texto, sim) {
 
   return { reply: 'No te entendí 🤔 Mandá:\n• LISTA (ver productos)\n• codigo y cantidad (ej ' +
     (prods[0] ? prods[0].id + 'x2' : '12x2') + ')\n• VER (tu pedido) · LISTO (cerrar)' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AGENTE DE VOZ CONVERSACIONAL (Shuki) — Claude entiende lenguaje natural
+//  El cliente habla normal ("quiero dos maní grill") y la IA arma el pedido.
+//  Mismo carrito/sesión que el bot de comandos; el cierre lo hace el backend.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function procesarVozIA_(ss, tel, texto, sim) {
+  tel = (tel||'').toString().trim();
+  if (!tel) return { reply: 'No te escuché bien, ¿me repetís?' };
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return { reply: 'Disculpá, ahora no puedo atenderte. Probá más tarde.', error: 'sin_clave' };
+
+  const s = botSesion_(ss, tel);
+  const prods = botLeerProductos_(ss);
+  if (!prods.length) return { reply: 'Perdoná, ahora mismo no tengo productos disponibles. Llamá más tarde así te atiendo.' };
+
+  // Catálogo compacto para el prompt
+  const cat = prods.map(p => p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | $' + botMiles_(p.precioMin) + ' | stock ' + p.stock).join('\n');
+  // Carrito actual (memoria del pedido)
+  const ids = Object.keys(s.carrito).filter(k => s.carrito[k] > 0);
+  let carritoTxt = '(vacío)', total = 0;
+  if (ids.length) {
+    const ls = [];
+    ids.forEach(id => {
+      const p = prods.find(x => x.id === id); if (!p) return;
+      const sub = p.precioMin * s.carrito[id]; total += sub;
+      ls.push(s.carrito[id] + 'x ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' = $' + botMiles_(sub));
+    });
+    carritoTxt = ls.join('\n') + '\nTOTAL: $' + botMiles_(total);
+  }
+
+  const system =
+    'Sos Shuki, el vendedor telefónico de Shuk Mamtakim, un negocio familiar argentino de golosinas y frutos secos kosher. ' +
+    'Atendés a un cliente por TELÉFONO. Hablás español rioplatense, cálido, cercano y BREVE (es una llamada: frases cortas, ' +
+    'naturales, una idea por vez). Sos buena onda como un vendedor de barrio que conoce a su gente.\n' +
+    'Te paso el CATÁLOGO (codigo | producto | precio | stock) y el CARRITO actual del cliente. El cliente te habla normal.\n' +
+    'Tu trabajo: ayudarlo a armar el pedido y cerrarlo.\n' +
+    'REGLAS:\n' +
+    '- Identificá el producto por su nombre aunque lo diga informal ("maní grill", "los chocolates blancos").\n' +
+    '- Si es ambiguo o no está, preguntá con amabilidad cuál es.\n' +
+    '- Respetá el stock. Si no alcanza, decíselo con tacto.\n' +
+    '- Nunca digas códigos en voz alta (el cliente no los ve): hablá con los nombres.\n' +
+    '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
+    '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
+    'Respondé el JSON: reply = lo que vas a DECIR (corto, natural, para leer en voz). acciones = lista de cambios al carrito.';
+
+  const user = 'CATÁLOGO:\n' + cat + '\n\nCARRITO ACTUAL:\n' + carritoTxt + '\n\nEL CLIENTE DICE: "' + texto + '"';
+
+  let data;
+  try {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: 'claude-opus-4-8', max_tokens: 800, system: system,
+        output_config: { format: { type: 'json_schema', schema: {
+          type: 'object',
+          properties: {
+            reply: { type: 'string', description: 'Lo que Shuki dice en voz: corto, natural, español rioplatense.' },
+            acciones: { type: 'array', description: 'Cambios al carrito según lo que pidió el cliente.', items: {
+              type: 'object',
+              properties: {
+                tipo: { type: 'string', enum: ['agregar','quitar','vaciar','confirmar'] },
+                codigo: { type: 'string', description: 'Código del producto del catálogo (para agregar/quitar).' },
+                cantidad: { type: 'number', description: 'Cantidad (para agregar).' }
+              },
+              required: ['tipo']
+            } }
+          },
+          required: ['reply','acciones']
+        } } },
+        messages: [{ role: 'user', content: user }]
+      }),
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) {
+      Logger.log('[voz] error ' + res.getResponseCode() + ': ' + res.getContentText().substring(0,300));
+      return { reply: 'Perdoná, se me cortó. ¿Me lo repetís?' };
+    }
+    const body = JSON.parse(res.getContentText());
+    let txt = '';
+    (body.content||[]).forEach(b => { if (b.type === 'text') txt += b.text; });
+    data = JSON.parse(txt);
+  } catch (err) {
+    Logger.log('[voz] ' + err);
+    return { reply: 'Uy, tuve un problemita. ¿Me repetís lo último?' };
+  }
+
+  // Aplicar acciones al carrito
+  let confirmar = false;
+  (data.acciones||[]).forEach(a => {
+    const tipo = (a.tipo||'').toLowerCase();
+    if (tipo === 'vaciar') s.carrito = {};
+    else if (tipo === 'quitar' && a.codigo) delete s.carrito[String(a.codigo)];
+    else if (tipo === 'agregar' && a.codigo) {
+      const p = prods.find(x => x.id === String(a.codigo));
+      if (p) {
+        const q = parseInt(a.cantidad)||1;
+        s.carrito[p.id] = Math.min(p.stock, (s.carrito[p.id]||0) + q);
+      }
+    } else if (tipo === 'confirmar') confirmar = true;
+  });
+  botGuardarSesion_(s);
+
+  // El cierre lo maneja el backend (total exacto + creación real / simulación)
+  if (confirmar) {
+    const cierre = botConfirmar_(ss, s, prods, tel, sim);
+    return { reply: (data.reply ? data.reply + ' ' : '') + cierre, cerrado: true };
+  }
+  return { reply: data.reply || '¿Querés algo más?' };
 }

@@ -1033,6 +1033,10 @@
         style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
       <button onclick="botEnviarSim()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:0 1.1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Enviar</button>
     </div>
+    <div style="display:flex;gap:0.8rem;align-items:center;margin-top:0.6rem;flex-wrap:wrap">
+      <button id="bot-voz-btn" onclick="botVozToggle()" style="background:#25D366;color:#fff;border:none;border-radius:22px;padding:0.55rem 1.1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem">🎤 Hablar con Shuki (demo voz IA)</button>
+      <span style="font-size:0.72rem;color:var(--texto-suave)">Apretá, hablá natural ("hola, quiero dos maní grill") y te responde con voz. Usá <b>Chrome en la compu</b> o Android.</span>
+    </div>
     <button onclick="botReiniciarSim()" style="margin-top:0.5rem;background:transparent;border:none;color:var(--texto-suave);text-decoration:underline;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🔄 Reiniciar conversación</button>
   </div>
   <div class="admin-card">
@@ -4906,8 +4910,63 @@ function botReiniciarSim() {
   const ch = document.getElementById('bot-chat');
   if (ch) ch.innerHTML = '';
   fetchConSesion(`${APPS_SCRIPT_URL}?accion=botMsg&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_SIM_TEL)}&text=BORRAR`).catch(() => {});
-  botPintarMsg('— conversación reiniciada — escribí HOLA para empezar', 'bot');
+  if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+  botPintarMsg('— conversación reiniciada — escribí HOLA o tocá 🎤 Hablar', 'bot');
 }
+
+// ─── DEMO DE VOZ (Web Speech API): hablás y Shuki te responde hablando ───────
+let _vozRec = null, _vozActiva = false;
+const BOT_VOZ_TEL = 'sim_voz';
+function actualizarBotonVoz() {
+  const b = document.getElementById('bot-voz-btn');
+  if (!b) return;
+  b.textContent = _vozActiva ? '🔴 Escuchando… (tocá para parar)' : '🎤 Hablar con Shuki (demo voz IA)';
+  b.style.background = _vozActiva ? '#c0392b' : '#25D366';
+}
+function botVozToggle() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Tu navegador no soporta reconocimiento de voz. Usá Chrome en la compu o en Android.'); return; }
+  if (_vozActiva) { if (_vozRec) _vozRec.stop(); return; }
+  if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+  _vozRec = new SR();
+  _vozRec.lang = 'es-AR';
+  _vozRec.interimResults = false;
+  _vozRec.maxAlternatives = 1;
+  _vozActiva = true; actualizarBotonVoz();
+  _vozRec.onresult = async (ev) => {
+    const txt = (ev.results[0][0].transcript || '').trim();
+    if (txt) { botPintarMsg(txt, 'cliente'); await botVozProcesar(txt); }
+  };
+  _vozRec.onerror = () => { _vozActiva = false; actualizarBotonVoz(); };
+  _vozRec.onend = () => { _vozActiva = false; actualizarBotonVoz(); };
+  try { _vozRec.start(); } catch (e) { _vozActiva = false; actualizarBotonVoz(); }
+}
+async function botVozProcesar(txt) {
+  botPintarMsg('…', 'bot');
+  const chat = document.getElementById('bot-chat');
+  const pensando = chat ? chat.lastChild : null;
+  try {
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
+    const reply = (data && data.reply) ? data.reply : 'No te entendí, ¿me repetís?';
+    if (pensando && pensando.textContent === '…') pensando.textContent = reply;
+    else botPintarMsg(reply, 'bot');
+    botHablar(reply);
+  } catch (e) {
+    if (pensando && pensando.textContent === '…') pensando.textContent = '⚠️ Error de conexión';
+    else botPintarMsg('⚠️ Error de conexión', 'bot');
+  }
+}
+function botHablar(texto) {
+  if (typeof speechSynthesis === 'undefined') return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = 'es-AR'; u.rate = 1.02; u.pitch = 1.0;
+  const voces = speechSynthesis.getVoices();
+  const esp = voces.find(v => /es[-_]AR/i.test(v.lang)) || voces.find(v => /es[-_]MX/i.test(v.lang)) || voces.find(v => /^es/i.test(v.lang));
+  if (esp) u.voice = esp;
+  speechSynthesis.speak(u);
+}
+if (typeof speechSynthesis !== 'undefined') { try { speechSynthesis.getVoices(); } catch (e) {} }
 
 // ─── STOCK DISPONIBLE (sección Stock) ─────────────────────────────────────────
 function renderStockTotal() {
