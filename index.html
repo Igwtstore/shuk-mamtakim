@@ -4913,7 +4913,9 @@ async function botEnviarSim() {
 function botReiniciarSim() {
   const ch = document.getElementById('bot-chat');
   if (ch) ch.innerHTML = '';
+  // Limpiar las dos sesiones de prueba: comandos (sim_panel) y voz (sim_voz)
   fetchConSesion(`${APPS_SCRIPT_URL}?accion=botMsg&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_SIM_TEL)}&text=BORRAR`).catch(() => {});
+  fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=__reset__`).catch(() => {});
   if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   botPintarMsg('— conversación reiniciada — escribí HOLA o tocá 🎤 Hablar', 'bot');
 }

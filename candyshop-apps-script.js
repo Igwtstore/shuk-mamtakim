@@ -2127,7 +2127,7 @@ function botGuardarSesion_(s) {
   s.h.getRange(s.fila, 2).setValue(JSON.stringify(s.carrito));
   s.h.getRange(s.fila, 3).setValue(Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'));
   if (s.nombre) s.h.getRange(s.fila, 4).setValue(s.nombre);
-  if (s.historial) s.h.getRange(s.fila, 5).setValue(JSON.stringify(s.historial.slice(-10)));
+  if (s.historial) s.h.getRange(s.fila, 5).setValue(JSON.stringify(s.historial.slice(-6)));
 }
 
 function botMenuCategorias_(prods) {
@@ -2358,6 +2358,12 @@ function procesarVozIA_(ss, tel, texto, sim) {
   if (!apiKey) return { reply: 'Disculpá, ahora no puedo atenderte. Probá más tarde.', error: 'sin_clave' };
 
   const s = botSesion_(ss, tel);
+  // Reset de la charla de prueba (lo usa el botón "Reiniciar" del simulador)
+  if ((texto || '').trim() === '__reset__') {
+    s.carrito = {}; s.historial = [];
+    botGuardarSesion_(s);
+    return { reply: 'ok' };
+  }
   const prods = botLeerProductos_(ss);
   if (!prods.length) return { reply: 'Perdoná, ahora mismo no tengo productos disponibles. Llamá más tarde así te atiendo.' };
 
@@ -2372,6 +2378,8 @@ function procesarVozIA_(ss, tel, texto, sim) {
       previos.map(pp => '- ' + pp.fecha + ': ' + pp.productos.replace(/\n/g, '; ')).join('\n');
   }
   if (!perfil) perfil = 'Cliente nuevo o sin datos previos.';
+  // Charla previa (últimos 6 turnos) como contexto narrativo
+  const histTxt = (s.historial || []).slice(-6).map(t => (t.r === 'a' ? 'Shuki' : 'Cliente') + ': ' + t.t).join('\n');
   // Carrito actual (memoria del pedido)
   const ids = Object.keys(s.carrito).filter(k => s.carrito[k] > 0);
   let carritoTxt = '(vacío)', total = 0;
@@ -2413,15 +2421,15 @@ function procesarVozIA_(ss, tel, texto, sim) {
     '- confirmar = true SOLO cuando el cliente confirma que ya terminó y quiere cerrar.\n' +
     '- nombre_cliente = el nombre del cliente si lo dijo en algún momento, si no "".\n\n' +
     'PERFIL DEL CLIENTE:\n' + perfil + '\n\n' +
-    'CATÁLOGO (codigo | producto | precio | stock | DESC opcional):\n' + cat + '\n\nCARRITO ACTUAL del cliente:\n' + carritoTxt;
+    'CATÁLOGO (codigo | producto | precio | stock | DESC opcional):\n' + cat + '\n\nCARRITO ACTUAL del cliente:\n' + carritoTxt +
+    (histTxt ? '\n\nCHARLA HASTA AHORA (para que tengas contexto):\n' + histTxt : '');
 
-  // Historial de la charla (memoria conversacional) → mensajes con roles
-  const mensajes = [];
-  (s.historial || []).forEach(t => mensajes.push({ role: t.r === 'a' ? 'assistant' : 'user', content: t.t }));
-  mensajes.push({ role: 'user', content: texto });
+  // El historial va como CONTEXTO en el system (arriba). El único mensaje es el turno actual.
+  // (Mezclar turnos previos con structured output degradaba la respuesta.)
+  const mensajes = [{ role: 'user', content: texto }];
 
   const payload = JSON.stringify({
-    model: 'claude-opus-4-8', max_tokens: 2000, system: system,
+    model: 'claude-sonnet-4-6', max_tokens: 1500, system: system,
     output_config: { format: { type: 'json_schema', schema: {
       type: 'object',
       properties: {
@@ -2484,7 +2492,7 @@ function procesarVozIA_(ss, tel, texto, sim) {
   if (data.nombre_cliente && data.nombre_cliente.trim() && !s.nombre) s.nombre = data.nombre_cliente.trim();
   const confirmar = data.confirmar === true && Object.keys(nuevo).length > 0;
   // Guardar el turno en el historial (memoria conversacional)
-  s.historial = (s.historial || []).concat([{ r: 'u', t: texto }, { r: 'a', t: data.reply || '' }]).slice(-10);
+  s.historial = (s.historial || []).concat([{ r: 'u', t: texto }, { r: 'a', t: data.reply || '' }]).slice(-6);
   if (confirmar) s.historial = [];   // pedido cerrado: arranca charla nueva
   botGuardarSesion_(s);
 
