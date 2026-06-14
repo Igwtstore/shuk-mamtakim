@@ -4910,7 +4910,7 @@ async function botEnviarSim() {
   const pensando = chat ? chat.lastChild : null;
   try {
     // Mismo cerebro inteligente (IA) que la voz: entiende lenguaje natural.
-    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&canal=texto&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
     const reply = (data && data.reply) ? data.reply : 'No te entendí, ¿me repetís?';
     if (pensando && pensando.textContent === '…') pensando.textContent = reply;
     else botPintarMsg(reply, 'bot');
@@ -4960,7 +4960,7 @@ async function botVozProcesar(txt) {
   const chat = document.getElementById('bot-chat');
   const pensando = chat ? chat.lastChild : null;
   try {
-    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&canal=voz&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
     const reply = (data && data.reply) ? data.reply : 'No te entendí, ¿me repetís?';
     if (pensando && pensando.textContent === '…') pensando.textContent = reply;
     else botPintarMsg(reply, 'bot');

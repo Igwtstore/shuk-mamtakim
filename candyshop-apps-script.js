@@ -100,7 +100,7 @@ function doGet(e) {
       // Cerebro conversacional con IA (para voz natural): entiende lenguaje común.
       if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET))
         return json({ error: 'no autorizado' });
-      return json(procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1'));
+      return json(procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1', e.parameter.canal || 'texto'));
     }
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid). 90s entre pedidos, máx 4/hora.
@@ -2351,9 +2351,10 @@ function botPedidosPrevios_(ss, tel) {
   return out;
 }
 
-function procesarVozIA_(ss, tel, texto, sim) {
+function procesarVozIA_(ss, tel, texto, sim, canal) {
   tel = (tel||'').toString().trim();
   if (!tel) return { reply: 'No te escuché bien, ¿me repetís?' };
+  const esVoz = canal === 'voz';
   const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
   if (!apiKey) return { reply: 'Disculpá, ahora no puedo atenderte. Probá más tarde.', error: 'sin_clave' };
 
@@ -2412,6 +2413,9 @@ function procesarVozIA_(ss, tel, texto, sim) {
     '- Si el cliente te dice su nombre, anotalo en el campo nombre_cliente.\n' +
     '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
     '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
+    (esVoz
+      ? '- CANAL: estás en una LLAMADA telefónica. Hablá en prosa fluida y natural, frases cortas, SIN listas, SIN números de ítem, SIN viñetas (no se pueden "escuchar"). Si enumerás productos, decilos en una oración corrida y breve.\n'
+      : '- CANAL: estás por MENSAJE de texto (SMS/WhatsApp). Cuando listes varios productos, ponelos en LISTA VERTICAL, uno por línea con guión "- ", cortita y fácil de leer (nombre y precio). Para charlar usá frases normales. Sé breve.\n') +
     'Respondé el JSON:\n' +
     '- reply = lo que vas a DECIR (corto, natural, para leer en voz).\n' +
     '- pedido = la lista COMPLETA de lo que el cliente quiere HASTA AHORA (codigo y cantidad de CADA producto, no solo lo nuevo). ' +
