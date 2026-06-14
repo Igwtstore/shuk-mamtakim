@@ -1023,12 +1023,12 @@
   <div class="admin-card" data-seccion="bot">
     <div class="admin-titulo">📱 Probador del bot (SMS / voz)</div>
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">
-      Escribí como si fueras un cliente sin smartphone. Probá: <b>HOLA</b> → un número de categoría → <b>43x2</b> → <b>VER</b> → <b>LISTO</b>.
+      Escribí (o hablá) <b>natural</b>, como un cliente real: <i>"hola, quiero 3 maní grill y 2 chocolates"</i>, <i>"¿qué tenés?"</i>, <i>"¿cómo es la Lotus?"</i>, <i>"listo, soy Lucía, cerralo"</i>.
       <span style="color:var(--verde);font-weight:600">Modo prueba: nada se carga ni se descuenta. 🧪</span>
     </div>
     <div id="bot-chat" style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem;height:320px;overflow-y:auto;background:var(--gris);display:flex;flex-direction:column;gap:0.4rem;font-size:0.85rem"></div>
     <div style="display:flex;gap:0.4rem;margin-top:0.5rem">
-      <input id="bot-input" type="text" placeholder="Escribí un mensaje… (ej: HOLA)" autocomplete="off"
+      <input id="bot-input" type="text" placeholder="Escribí natural… (ej: quiero 2 maní grill)" autocomplete="off"
         onkeydown="if(event.key==='Enter')botEnviarSim()"
         style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
       <button onclick="botEnviarSim()" style="background:var(--azul);color:#fff;border:none;border-radius:8px;padding:0 1.1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Enviar</button>
@@ -4882,7 +4882,7 @@ function setPanelSeccion(s, btn) {
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
   if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
-  if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí HOLA para que arranque el bot 👇', 'bot'); }
+  if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí o hablá natural para probar a Shuki 👇 (ej: "hola, qué tenés?")', 'bot'); }
 }
 
 // ─── PROBADOR DEL BOT (simulador SMS/voz, modo prueba: no carga pedidos) ──────
@@ -4905,16 +4905,24 @@ async function botEnviarSim() {
   if (!txt) return;
   botPintarMsg(txt, 'cliente');
   inp.value = '';
+  botPintarMsg('…', 'bot');
+  const chat = document.getElementById('bot-chat');
+  const pensando = chat ? chat.lastChild : null;
   try {
-    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botMsg&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_SIM_TEL)}&text=${encodeURIComponent(txt)}`);
-    botPintarMsg((data && data.reply) ? data.reply : '(sin respuesta)', 'bot');
-  } catch (e) { botPintarMsg('⚠️ Error de conexión', 'bot'); }
+    // Mismo cerebro inteligente (IA) que la voz: entiende lenguaje natural.
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
+    const reply = (data && data.reply) ? data.reply : 'No te entendí, ¿me repetís?';
+    if (pensando && pensando.textContent === '…') pensando.textContent = reply;
+    else botPintarMsg(reply, 'bot');
+  } catch (e) {
+    if (pensando && pensando.textContent === '…') pensando.textContent = '⚠️ Error de conexión';
+    else botPintarMsg('⚠️ Error de conexión', 'bot');
+  }
 }
 function botReiniciarSim() {
   const ch = document.getElementById('bot-chat');
   if (ch) ch.innerHTML = '';
-  // Limpiar las dos sesiones de prueba: comandos (sim_panel) y voz (sim_voz)
-  fetchConSesion(`${APPS_SCRIPT_URL}?accion=botMsg&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_SIM_TEL)}&text=BORRAR`).catch(() => {});
+  // Limpiar la sesión de prueba (texto y voz comparten el mismo cerebro/sesión)
   fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=__reset__`).catch(() => {});
   if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   botPintarMsg('— conversación reiniciada — escribí HOLA o tocá 🎤 Hablar', 'bot');
