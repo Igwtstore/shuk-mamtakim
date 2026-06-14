@@ -2108,23 +2108,25 @@ function botCategorias_(prods) {
 
 // Estado de la conversación por teléfono (carrito + nombre), en la hoja BotSesiones.
 function botSesion_(ss, tel) {
-  const h = getOrCreate(ss, 'BotSesiones', ['Telefono','Carrito','UltimaActividad','Nombre']);
+  const h = getOrCreate(ss, 'BotSesiones', ['Telefono','Carrito','UltimaActividad','Nombre','Historial']);
   const d = h.getDataRange().getValues();
   for (let i = 1; i < d.length; i++) {
     if (d[i][0].toString() === tel) {
-      let carrito = {};
+      let carrito = {}, hist = [];
       try { carrito = JSON.parse(d[i][1]||'{}'); } catch(e) {}
-      return { fila: i+1, carrito: carrito, nombre: (d[i][3]||'').toString(), h: h };
+      try { hist = JSON.parse(d[i][4]||'[]'); } catch(e) {}
+      return { fila: i+1, carrito: carrito, nombre: (d[i][3]||'').toString(), historial: hist, h: h };
     }
   }
-  h.appendRow([tel, '{}', Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), '']);
-  return { fila: h.getLastRow(), carrito: {}, nombre: '', h: h };
+  h.appendRow([tel, '{}', Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), '', '[]']);
+  return { fila: h.getLastRow(), carrito: {}, nombre: '', historial: [], h: h };
 }
 
 function botGuardarSesion_(s) {
   s.h.getRange(s.fila, 2).setValue(JSON.stringify(s.carrito));
   s.h.getRange(s.fila, 3).setValue(Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'));
   if (s.nombre) s.h.getRange(s.fila, 4).setValue(s.nombre);
+  if (s.historial) s.h.getRange(s.fila, 5).setValue(JSON.stringify(s.historial.slice(-10)));
 }
 
 function botMenuCategorias_(prods) {
@@ -2371,9 +2373,13 @@ function procesarVozIA_(ss, tel, texto, sim) {
     '- Nunca digas códigos en voz alta (el cliente no los ve): hablá con los nombres.\n' +
     '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
     '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
-    'Respondé el JSON: reply = lo que vas a DECIR (corto, natural, para leer en voz). acciones = lista de cambios al carrito.';
+    'Respondé el JSON: reply = lo que vas a DECIR (corto, natural, para leer en voz). acciones = lista de cambios al carrito.\n\n' +
+    'CATÁLOGO (codigo | producto | precio | stock):\n' + cat + '\n\nCARRITO ACTUAL del cliente:\n' + carritoTxt;
 
-  const user = 'CATÁLOGO:\n' + cat + '\n\nCARRITO ACTUAL:\n' + carritoTxt + '\n\nEL CLIENTE DICE: "' + texto + '"';
+  // Historial de la charla (memoria conversacional) → mensajes con roles
+  const mensajes = [];
+  (s.historial || []).forEach(t => mensajes.push({ role: t.r === 'a' ? 'assistant' : 'user', content: t.t }));
+  mensajes.push({ role: 'user', content: texto });
 
   let data;
   try {
@@ -2400,7 +2406,7 @@ function procesarVozIA_(ss, tel, texto, sim) {
           required: ['reply','acciones'],
           additionalProperties: false
         } } },
-        messages: [{ role: 'user', content: user }]
+        messages: mensajes
       }),
       muteHttpExceptions: true
     });
@@ -2431,6 +2437,9 @@ function procesarVozIA_(ss, tel, texto, sim) {
       }
     } else if (tipo === 'confirmar') confirmar = true;
   });
+  // Guardar el turno en el historial (memoria conversacional)
+  s.historial = (s.historial || []).concat([{ r: 'u', t: texto }, { r: 'a', t: data.reply || '' }]).slice(-10);
+  if (confirmar) s.historial = [];   // pedido cerrado: arranca charla nueva
   botGuardarSesion_(s);
 
   // El cierre lo maneja el backend (total exacto + creación real / simulación)
