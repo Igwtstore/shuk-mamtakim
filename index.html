@@ -1208,6 +1208,7 @@
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Categoría</label><input type="text" id="ep-categoria" list="categorias-productos-list" onfocus="this.select()" /></div>
       </div>
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Descripción</label><input type="text" id="ep-desc" /></div>
+      <div class="nombre-campo" style="margin:0.6rem 0 0"><label>🎤 Descripción para Shuki (el bot la usa al describir por voz/SMS)</label><textarea id="ep-descbot" rows="2" placeholder="Ej: Nueces pecán rebozadas con pasta de la famosa galletita Lotus. Crocantes y dulces." style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box;resize:vertical"></textarea></div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label id="ep-pmay-label">P. Mayorista (U$S)</label><input type="text" id="ep-pmay" /></div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:100px"><label>P. Minorista ($)</label><input type="number" id="ep-pmin" /></div>
@@ -1768,7 +1769,8 @@ async function cargarProductos() {
       cantPack: parseInt(r[12]||'0'),
       precioPack: parseFloat((r[13]||'0').replace(',','.')),
       dueno: (r[14]||'').trim(),
-      visibleOferta: (r[15]||'Ambos').trim()
+      visibleOferta: (r[15]||'Ambos').trim(),
+      descBot: (r[16]||'').trim()
     })).filter(p => p.activo && p.id);
     // Sugerencias de categoría para el alta de productos (las del catálogo + las estándar)
     const dlCat = document.getElementById('categorias-productos-list');
@@ -4058,6 +4060,7 @@ function cargarProductoEditor(id) {
   _epNuevas = [];
   document.getElementById('ep-nombre').value = p.nombre || '';
   document.getElementById('ep-desc').value = p.desc || '';
+  { const eb = document.getElementById('ep-descbot'); if (eb) eb.value = p.descBot || ''; }
   document.getElementById('ep-categoria').value = p.categoria || '';
   document.getElementById('ep-pmay').value = p.precioMay || '';
   const epPmayLabel = document.getElementById('ep-pmay-label');
@@ -4139,6 +4142,7 @@ async function guardarEdicionProducto() {
     accion: 'editarProducto', id: _epId,
     nombre: document.getElementById('ep-nombre').value.trim(),
     desc: document.getElementById('ep-desc').value.trim() || '__VACIO__',
+    descBot: document.getElementById('ep-descbot').value.trim() || '__VACIO__',
     categoria: document.getElementById('ep-categoria').value.trim() || 'Varios',
     precioMay: document.getElementById('ep-pmay').value.trim().replace(',', '.') || '0',
     precioMin: document.getElementById('ep-pmin').value.trim().replace(',', '.') || '0',

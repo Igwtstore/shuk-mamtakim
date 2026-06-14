@@ -462,7 +462,7 @@ function doGet(e) {
         isNaN(pMayNum) ? '' : pMayNum, parseFloat(e.parameter.pMin||0),
         parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
         dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
-        0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos']);
+        0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||'')]);
       const stockIni = parseInt(e.parameter.stock||0);
       if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
       return ok();
@@ -604,7 +604,7 @@ function doGet(e) {
       // Edita campos puntuales de un producto del Stock de Shuk (solo los que vengan)
       const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
       const datos = h.getDataRange().getValues();
-      const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15 };
+      const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15, descBot: 17 };
       for (let i = 1; i < datos.length; i++) {
         if (datos[i][0].toString() === e.parameter.id) {
           const numericos = { precioMay: 1, precioMin: 1, stock: 1 };
@@ -2089,7 +2089,8 @@ function botLeerProductos_(ss) {
     out.push({
       id: d[i][0].toString(), nombre: (d[i][1]||'').toString(), desc: (d[i][2]||'').toString(),
       precioMin: parseFloat(d[i][4])||0, stock: stock,
-      categoria: (d[i][8]||'Varios').toString(), dueno: (d[i][14]||'Miri').toString()
+      categoria: (d[i][8]||'Varios').toString(), dueno: (d[i][14]||'Miri').toString(),
+      descBot: (d[i][16]||'').toString()   // descripción rica para Shuki (col 17, opcional)
     });
   }
   return out;
@@ -2335,6 +2336,21 @@ function procesarMensajeBot_(ss, tel, texto, sim) {
 //  Mismo carrito/sesión que el bot de comandos; el cierre lo hace el backend.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Últimos pedidos de un teléfono (memoria del cliente entre llamadas).
+function botPedidosPrevios_(ss, tel) {
+  const h = ss.getSheetByName('Ventas');
+  if (!h || h.getLastRow() < 2) return [];
+  const d = h.getDataRange().getValues();
+  const out = [];
+  for (let i = d.length - 1; i >= 1 && out.length < 3; i--) {
+    const vid = (d[i][20]||'').toString();
+    if (vid === 'sms_' + tel && (d[i][7]||'').toString() !== 'cancelado') {
+      out.push({ fecha: (d[i][1]||'').toString().substring(0,10), productos: (d[i][4]||'').toString() });
+    }
+  }
+  return out;
+}
+
 function procesarVozIA_(ss, tel, texto, sim) {
   tel = (tel||'').toString().trim();
   if (!tel) return { reply: 'No te escuché bien, ¿me repetís?' };
@@ -2345,8 +2361,17 @@ function procesarVozIA_(ss, tel, texto, sim) {
   const prods = botLeerProductos_(ss);
   if (!prods.length) return { reply: 'Perdoná, ahora mismo no tengo productos disponibles. Llamá más tarde así te atiendo.' };
 
-  // Catálogo compacto para el prompt
-  const cat = prods.map(p => p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | $' + botMiles_(p.precioMin) + ' | stock ' + p.stock).join('\n');
+  // Catálogo compacto para el prompt (incluye descripción rica si la cargaron)
+  const cat = prods.map(p => p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | $' + botMiles_(p.precioMin) + ' | stock ' + p.stock + (p.descBot ? ' | DESC: ' + p.descBot : '')).join('\n');
+  // Perfil del cliente: nombre conocido + qué compró antes (memoria entre llamadas)
+  const previos = botPedidosPrevios_(ss, tel);
+  let perfil = '';
+  if (s.nombre) perfil += 'El cliente se llama ' + s.nombre + '. ';
+  if (previos.length) {
+    perfil += 'Ya compró antes con nosotros. Sus últimos pedidos:\n' +
+      previos.map(pp => '- ' + pp.fecha + ': ' + pp.productos.replace(/\n/g, '; ')).join('\n');
+  }
+  if (!perfil) perfil = 'Cliente nuevo o sin datos previos.';
   // Carrito actual (memoria del pedido)
   const ids = Object.keys(s.carrito).filter(k => s.carrito[k] > 0);
   let carritoTxt = '(vacío)', total = 0;
@@ -2369,8 +2394,14 @@ function procesarVozIA_(ss, tel, texto, sim) {
     'REGLAS:\n' +
     '- Identificá el producto por su nombre aunque lo diga informal ("maní grill", "los chocolates blancos").\n' +
     '- Si es ambiguo o no está, preguntá con amabilidad cuál es.\n' +
+    '- Si el cliente pregunta cómo es un producto, describilo corto y apetitoso. Si en el catálogo el producto ' +
+    'trae "DESC:", usá ESA descripción (es la oficial del negocio). Si no la trae, describí con lo que sabés de ' +
+    'esa golosina/marca, sin inventar ingredientes ni datos que no podés saber.\n' +
     '- Respetá el stock. Si no alcanza, decíselo con tacto.\n' +
     '- Nunca digas códigos en voz alta (el cliente no los ve): hablá con los nombres.\n' +
+    '- PERFIL DEL CLIENTE: si ya lo conocés por su nombre, saludalo por su nombre con cariño. Si compró antes, ' +
+    'podés referirte a eso con naturalidad ("¿te llevo las pecan Lotus como la otra vez?"). No seas invasivo.\n' +
+    '- Si el cliente te dice su nombre, anotalo en el campo nombre_cliente.\n' +
     '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
     '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
     'Respondé el JSON:\n' +
@@ -2379,8 +2410,10 @@ function procesarVozIA_(ss, tel, texto, sim) {
     'El CARRITO ACTUAL de abajo te dice cómo viene. Si el cliente agrega algo, sumalo a lo que ya había. ' +
     'Si solo pregunta, saluda o charla, devolvé el pedido EXACTAMENTE igual a como está (no lo cambies). ' +
     'Si pide sacar algo, devolvé la lista sin eso. Si quiere empezar de cero, devolvé lista vacía.\n' +
-    '- confirmar = true SOLO cuando el cliente confirma que ya terminó y quiere cerrar.\n\n' +
-    'CATÁLOGO (codigo | producto | precio | stock):\n' + cat + '\n\nCARRITO ACTUAL del cliente:\n' + carritoTxt;
+    '- confirmar = true SOLO cuando el cliente confirma que ya terminó y quiere cerrar.\n' +
+    '- nombre_cliente = el nombre del cliente si lo dijo en algún momento, si no "".\n\n' +
+    'PERFIL DEL CLIENTE:\n' + perfil + '\n\n' +
+    'CATÁLOGO (codigo | producto | precio | stock | DESC opcional):\n' + cat + '\n\nCARRITO ACTUAL del cliente:\n' + carritoTxt;
 
   // Historial de la charla (memoria conversacional) → mensajes con roles
   const mensajes = [];
@@ -2407,9 +2440,10 @@ function procesarVozIA_(ss, tel, texto, sim) {
               required: ['codigo','cantidad'],
               additionalProperties: false
             } },
-            confirmar: { type: 'boolean', description: 'true solo cuando el cliente confirma que terminó.' }
+            confirmar: { type: 'boolean', description: 'true solo cuando el cliente confirma que terminó.' },
+            nombre_cliente: { type: 'string', description: 'Nombre del cliente si lo dijo, si no "".' }
           },
-          required: ['reply','pedido','confirmar'],
+          required: ['reply','pedido','confirmar','nombre_cliente'],
           additionalProperties: false
         } } },
         messages: mensajes
@@ -2438,6 +2472,8 @@ function procesarVozIA_(ss, tel, texto, sim) {
     if (q > 0) nuevo[p.id] = Math.min(p.stock, q);
   });
   s.carrito = nuevo;
+  // Recordar el nombre del cliente entre llamadas
+  if (data.nombre_cliente && data.nombre_cliente.trim() && !s.nombre) s.nombre = data.nombre_cliente.trim();
   const confirmar = data.confirmar === true && Object.keys(nuevo).length > 0;
   // Guardar el turno en el historial (memoria conversacional)
   s.historial = (s.historial || []).concat([{ r: 'u', t: texto }, { r: 'a', t: data.reply || '' }]).slice(-10);
