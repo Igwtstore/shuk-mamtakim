@@ -2689,7 +2689,7 @@ async function renderPedidos() {
       <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}" id="pedido-${v.id}">
         <div class="pedido-item-header">
           <div>
-            <div class="pedido-cliente">${esc(v.cliente)} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${esc(v.tipo)})</span></div>
+            <div class="pedido-cliente">${v.nVenta ? `<span style="color:var(--dorado)">#${v.nVenta}</span> · ` : ''}${esc(v.cliente)} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${esc(v.tipo)})</span></div>
             <div class="pedido-fecha">${v.fecha} · ${v.formaPago}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
@@ -4420,12 +4420,28 @@ function _lineasPedidoVista(productosStr, soloMiri) {
 function verDetalleMovimientoCaja(vid) {
   const d = (window._cajaDetalles || {})[vid];
   if (!d) return;
-  const lineas = (d.lineas && d.lineas.length)
-    ? d.lineas.map(l => `<div style="padding:2px 0;border-bottom:1px solid var(--gris)">${l}</div>`).join('')
-    : '<div style="color:var(--texto-suave)">(este pedido no tiene productos de tu parte)</div>';
-  const html = `<div style="font-weight:700;font-size:1rem;margin-bottom:2px">Pedido #${d.n} — ${d.cliente || 's/nombre'}</div>
+  let totARS = 0, totUSD = 0;
+  const filas = (d.lineas || []).map(l => {
+    // "• 6x Nombre · desc — U$S 5.80 c/u = U$S 34.80"  →  izq: cantidad+nombre, der: subtotal
+    const m = l.match(/^•\s*(.+?)\s+—\s+.+?\s+c\/u\s+=\s+(.+)$/);
+    const nombre = m ? m[1] : l.replace(/^•\s*/, '');
+    const subT = m ? m[2].trim() : '';
+    if (subT) {
+      const usd = /U\$S/i.test(subT);
+      const n = usd ? (parseFloat(subT.replace(/[^0-9.,]/g, '').replace(',', '.')) || 0)
+                    : (parseFloat(subT.replace(/[^0-9.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0);
+      if (usd) totUSD += n; else totARS += n;
+    }
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--gris)">
+      <span style="flex:1">${esc(nombre)}</span>
+      <span style="font-weight:700;white-space:nowrap">${subT}</span></div>`;
+  }).join('');
+  const cuerpo = (d.lineas && d.lineas.length) ? filas : '<div style="color:var(--texto-suave)">(este pedido no tiene productos de tu parte)</div>';
+  const totalTxt = [totARS ? '$ ' + Math.round(totARS).toLocaleString('es-AR') : '', totUSD ? 'U$S ' + totUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+  const html = `<div style="font-weight:700;font-size:1rem;margin-bottom:2px">Pedido #${d.n} — ${esc(d.cliente || 's/nombre')}</div>
     <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${d.fecha} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
-    <div style="font-size:0.85rem;line-height:1.45">${lineas}</div>`;
+    <div style="font-size:0.85rem;line-height:1.4">${cuerpo}</div>
+    ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total</span><span>${totalTxt}</span></div>` : ''}`;
   let ov = document.getElementById('caja-detalle-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -4567,15 +4583,18 @@ async function renderCaja() {
         </tr>
       </thead>
       <tbody>
-        ${movsVis.length ? movsVis.map(m => `
+        ${movsVis.length ? movsVis.map(m => {
+          const d = m.vid ? (_det[m.vid] || {}) : {};
+          const sub2 = m.sub || (d.fecha || '');
+          return `
         <tr style="border-bottom:1px solid var(--gris-medio);${m.vid ? 'cursor:pointer' : ''}" ${m.vid ? `onclick="verDetalleMovimientoCaja('${m.vid}')" title="Ver detalle del pedido"` : ''}>
-          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${m.sub ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${m.sub}</span>` : ''}</td>
+          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${d.cliente ? ` · ${esc(d.cliente)}` : ''}${sub2 ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${sub2}</span>` : ''}</td>
           ${cols.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
             return `<td style="text-align:right;padding:0.35rem 0.5rem;font-weight:600;color:${color};white-space:nowrap">${m.val < 0 ? '-' : ''}${fmt(m.val, m.mon)}</td>`;
           }).join('')}
-        </tr>`).join('') : `<tr><td colspan="${cols.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
+        </tr>`; }).join('') : `<tr><td colspan="${cols.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
       </tbody>
       <tfoot>
         <tr style="background:var(--gris);font-weight:700;border-top:2px solid var(--azul)">
