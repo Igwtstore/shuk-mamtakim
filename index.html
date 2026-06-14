@@ -4403,6 +4403,43 @@ function registrarRendicion() {
     .catch(() => showToast('Error al registrar'));
 }
 
+// Líneas de productos de un pedido, filtradas según la vista (Miri solo ve sus golosinas, no Pitzujim de Jony)
+function _lineasPedidoVista(productosStr, soloMiri) {
+  const lineas = (productosStr || '').split('||').map(l => l.trim()).filter(l => l.startsWith('•'));
+  if (!soloMiri) return lineas;
+  return lineas.filter(l => {
+    const m = l.match(/•\s*\d+x\s+(.+?)\s+—/);
+    if (!m) return true;
+    const nombre = m[1].split(' · ')[0].trim();
+    const prod = productos.find(p => p.nombre === nombre);
+    return !prod || prod.dueno !== 'Jony';   // ocultar lo de Jony en vista Miri
+  });
+}
+
+// Popup con el detalle de un pedido al clickear su movimiento en la caja
+function verDetalleMovimientoCaja(vid) {
+  const d = (window._cajaDetalles || {})[vid];
+  if (!d) return;
+  const lineas = (d.lineas && d.lineas.length)
+    ? d.lineas.map(l => `<div style="padding:2px 0;border-bottom:1px solid var(--gris)">${l}</div>`).join('')
+    : '<div style="color:var(--texto-suave)">(este pedido no tiene productos de tu parte)</div>';
+  const html = `<div style="font-weight:700;font-size:1rem;margin-bottom:2px">Pedido #${d.n} — ${d.cliente || 's/nombre'}</div>
+    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${d.fecha} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
+    <div style="font-size:0.85rem;line-height:1.45">${lineas}</div>`;
+  let ov = document.getElementById('caja-detalle-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'caja-detalle-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  } else { ov.innerHTML = ''; }
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--blanco,#fff);border-radius:12px;padding:1rem 1.1rem;max-width:440px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.25)';
+  box.innerHTML = html + '<button onclick="document.getElementById(\'caja-detalle-overlay\').remove()" style="margin-top:14px;width:100%;padding:0.55rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>';
+  ov.appendChild(box);
+}
+
 async function renderCaja() {
   const cont = document.getElementById('caja-contenido');
   cont.innerHTML = '<div class="sinpedidos">Cargando...</div>';
@@ -4431,6 +4468,7 @@ async function renderCaja() {
     ]);
 
     const movs = [];
+    const _det = {};   // detalle de cada pedido (para desplegar al clickear un movimiento)
     ventas.filter(v => v.estado !== 'cancelado').forEach((v, idx) => {
       const n = v.nVenta || (idx + 1);
       const fp = v.formaPago || '';
@@ -4440,27 +4478,30 @@ async function renderCaja() {
       const usdM = parseFloat(v.usdMyri || 0);
       const comiA = parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15);
       const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
+      // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
+      _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
+                     lineas: _lineasPedidoVista(v.productos, soloMiri) };
       // 🔑 REGLA DE ORO: un pedido NO cobrado nunca entra a la caja física.
       // Va a "cuenta corriente / pendiente" hasta que confirmes el cobro. La forma de pago
       // que eligió el cliente es solo una intención, no plata en mano.
       const cobrado = !!(v.cajaJony || v.cajaMyri);
       if (!cobrado) {
-        if (arsJ > 0) movs.push({ desc: `Pend. cobro #${n} ${f}`, col: 'CTA_CTE_ARS', val: arsJ, mon: 'ARS', tipo: 'venta' });
-        if (arsM > 0) movs.push({ desc: `Pend. cobro #${n} ${f}`, col: 'CTA_CTE_ARS', val: arsM, mon: 'ARS', tipo: 'venta' });
-        if (usdM > 0) movs.push({ desc: `Pend. cobro #${n} ${f}`, col: 'CTA_CTE_USD', val: usdM, mon: 'USD', tipo: 'venta' });
+        if (arsJ > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id });
+        if (arsM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsM, mon: 'ARS', tipo: 'venta', vid: v.id });
+        if (usdM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_USD', val: usdM, mon: 'USD', tipo: 'venta', vid: v.id });
         return;
       }
       // Pedido cobrado: se imputa a la caja real donde entró (la elegiste al confirmar el cobro).
       const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       if (arsJ > 0 && cajaJ) {
-        movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta' });
+        movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id });
       }
       if (arsM > 0 && cajaM) {
         const pagoFueAMyri = ['MP_GABY','EFT_MYRI','CTA_CTE_ARS'].includes(cajaM);
         // myriNet = lo que le corresponde a MYRI de este pago
         const myriNet = pagoFueAMyri ? arsM : arsM - comiA;
-        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet });
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet, vid: v.id });
         if (comiA > 0 && pagoFueAMyri) {
           movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
         }
@@ -4472,10 +4513,10 @@ async function renderCaja() {
           if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
             const arsEquiv = Math.round(usdM * tc);
             const comiARS_conv = Math.round(arsEquiv * 0.15);
-            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}` });
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`, vid: v.id });
             if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi', srcCol: colUSD });
           } else {
-            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta' });
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta', vid: v.id });
             if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi', srcCol: colUSD });
           }
         }
@@ -4503,6 +4544,7 @@ async function renderCaja() {
 
     // En vista Miri, descartar movimientos de cajas de Jony
     const movsVis = soloMiri ? movs.filter(m => MIRI_COLS.includes(m.col)) : movs;
+    window._cajaDetalles = _det;   // para desplegar el detalle al clickear un movimiento
 
     const totalsARS = {}, totalsUSD = {};
     cols.forEach(c => { totalsARS[c.key] = 0; totalsUSD[c.key] = 0; });
@@ -4526,8 +4568,8 @@ async function renderCaja() {
       </thead>
       <tbody>
         ${movsVis.length ? movsVis.map(m => `
-        <tr style="border-bottom:1px solid var(--gris-medio)">
-          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.desc}${m.sub ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${m.sub}</span>` : ''}</td>
+        <tr style="border-bottom:1px solid var(--gris-medio);${m.vid ? 'cursor:pointer' : ''}" ${m.vid ? `onclick="verDetalleMovimientoCaja('${m.vid}')" title="Ver detalle del pedido"` : ''}>
+          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${m.sub ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${m.sub}</span>` : ''}</td>
           ${cols.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
