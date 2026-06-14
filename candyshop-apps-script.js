@@ -2386,17 +2386,19 @@ function procesarVozIA_(ss, tel, texto, sim) {
           type: 'object',
           properties: {
             reply: { type: 'string', description: 'Lo que Shuki dice en voz: corto, natural, español rioplatense.' },
-            acciones: { type: 'array', description: 'Cambios al carrito según lo que pidió el cliente.', items: {
+            acciones: { type: 'array', description: 'Cambios al carrito. Para vaciar/confirmar usá codigo "" y cantidad 0.', items: {
               type: 'object',
               properties: {
                 tipo: { type: 'string', enum: ['agregar','quitar','vaciar','confirmar'] },
-                codigo: { type: 'string', description: 'Código del producto del catálogo (para agregar/quitar).' },
-                cantidad: { type: 'number', description: 'Cantidad (para agregar).' }
+                codigo: { type: 'string', description: 'Código del producto del catálogo. "" si no aplica.' },
+                cantidad: { type: 'number', description: 'Cantidad para agregar. 0 si no aplica.' }
               },
-              required: ['tipo']
+              required: ['tipo','codigo','cantidad'],
+              additionalProperties: false
             } }
           },
-          required: ['reply','acciones']
+          required: ['reply','acciones'],
+          additionalProperties: false
         } } },
         messages: [{ role: 'user', content: user }]
       }),
