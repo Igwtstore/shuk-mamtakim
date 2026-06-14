@@ -2373,7 +2373,13 @@ function procesarVozIA_(ss, tel, texto, sim) {
     '- Nunca digas códigos en voz alta (el cliente no los ve): hablá con los nombres.\n' +
     '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
     '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
-    'Respondé el JSON: reply = lo que vas a DECIR (corto, natural, para leer en voz). acciones = lista de cambios al carrito.\n\n' +
+    'Respondé el JSON:\n' +
+    '- reply = lo que vas a DECIR (corto, natural, para leer en voz).\n' +
+    '- pedido = la lista COMPLETA de lo que el cliente quiere HASTA AHORA (codigo y cantidad de CADA producto, no solo lo nuevo). ' +
+    'El CARRITO ACTUAL de abajo te dice cómo viene. Si el cliente agrega algo, sumalo a lo que ya había. ' +
+    'Si solo pregunta, saluda o charla, devolvé el pedido EXACTAMENTE igual a como está (no lo cambies). ' +
+    'Si pide sacar algo, devolvé la lista sin eso. Si quiere empezar de cero, devolvé lista vacía.\n' +
+    '- confirmar = true SOLO cuando el cliente confirma que ya terminó y quiere cerrar.\n\n' +
     'CATÁLOGO (codigo | producto | precio | stock):\n' + cat + '\n\nCARRITO ACTUAL del cliente:\n' + carritoTxt;
 
   // Historial de la charla (memoria conversacional) → mensajes con roles
@@ -2392,18 +2398,18 @@ function procesarVozIA_(ss, tel, texto, sim) {
           type: 'object',
           properties: {
             reply: { type: 'string', description: 'Lo que Shuki dice en voz: corto, natural, español rioplatense.' },
-            acciones: { type: 'array', description: 'Cambios al carrito. Para vaciar/confirmar usá codigo "" y cantidad 0.', items: {
+            pedido: { type: 'array', description: 'Lista COMPLETA de lo que el cliente quiere hasta ahora (estado final, no incremental).', items: {
               type: 'object',
               properties: {
-                tipo: { type: 'string', enum: ['agregar','quitar','vaciar','confirmar'] },
-                codigo: { type: 'string', description: 'Código del producto del catálogo. "" si no aplica.' },
-                cantidad: { type: 'number', description: 'Cantidad para agregar. 0 si no aplica.' }
+                codigo: { type: 'string', description: 'Código del producto del catálogo.' },
+                cantidad: { type: 'number', description: 'Cantidad total de ese producto en el pedido.' }
               },
-              required: ['tipo','codigo','cantidad'],
+              required: ['codigo','cantidad'],
               additionalProperties: false
-            } }
+            } },
+            confirmar: { type: 'boolean', description: 'true solo cuando el cliente confirma que terminó.' }
           },
-          required: ['reply','acciones'],
+          required: ['reply','pedido','confirmar'],
           additionalProperties: false
         } } },
         messages: mensajes
@@ -2423,20 +2429,16 @@ function procesarVozIA_(ss, tel, texto, sim) {
     return { reply: 'Uy, tuve un problemita. ¿Me repetís lo último?' };
   }
 
-  // Aplicar acciones al carrito
-  let confirmar = false;
-  (data.acciones||[]).forEach(a => {
-    const tipo = (a.tipo||'').toLowerCase();
-    if (tipo === 'vaciar') s.carrito = {};
-    else if (tipo === 'quitar' && a.codigo) delete s.carrito[String(a.codigo)];
-    else if (tipo === 'agregar' && a.codigo) {
-      const p = prods.find(x => x.id === String(a.codigo));
-      if (p) {
-        const q = parseInt(a.cantidad)||1;
-        s.carrito[p.id] = Math.min(p.stock, (s.carrito[p.id]||0) + q);
-      }
-    } else if (tipo === 'confirmar') confirmar = true;
+  // El carrito = el estado completo que declara la IA (idempotente: no suma de más)
+  const nuevo = {};
+  (data.pedido||[]).forEach(it => {
+    const p = prods.find(x => x.id === String(it.codigo));
+    if (!p) return;
+    const q = parseInt(it.cantidad) || 0;
+    if (q > 0) nuevo[p.id] = Math.min(p.stock, q);
   });
+  s.carrito = nuevo;
+  const confirmar = data.confirmar === true && Object.keys(nuevo).length > 0;
   // Guardar el turno en el historial (memoria conversacional)
   s.historial = (s.historial || []).concat([{ r: 'u', t: texto }, { r: 'a', t: data.reply || '' }]).slice(-10);
   if (confirmar) s.historial = [];   // pedido cerrado: arranca charla nueva
