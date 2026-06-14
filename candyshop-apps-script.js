@@ -2146,11 +2146,16 @@ function botAgregar_(s, prods, codigo, qty) {
   if (!p) return 'No encontré el codigo ' + codigo + '. Mandá LISTA para ver los codigos.';
   if (qty < 1) qty = 1;
   const ya = s.carrito[codigo] || 0;
-  if (ya + qty > p.stock) return 'De ' + p.nombre + ' quedan ' + p.stock + '. Probá una cantidad menor.';
+  if (ya + qty > p.stock) return 'De ' + botNombreItem_(p) + ' quedan ' + p.stock + '. Probá una cantidad menor.';
   s.carrito[codigo] = ya + qty;
   botGuardarSesion_(s);
-  return '✓ ' + s.carrito[codigo] + 'x ' + p.nombre + ' = ' + botMoney_(p.precioMin * s.carrito[codigo]) +
+  return '✓ ' + s.carrito[codigo] + 'x ' + botNombreItem_(p) + ' = ' + botMoney_(p.precioMin * s.carrito[codigo]) +
     '\n\nSegui pidiendo, VER tu pedido, o LISTO para cerrar.';
+}
+
+// Nombre mostrable: suma el sabor/desc para los genéricos tipo "Pitzujim".
+function botNombreItem_(p) {
+  return p.desc ? p.nombre + ' ' + botCorto_(p.desc, 22) : p.nombre;
 }
 
 function botVerCarrito_(prods, carrito) {
@@ -2161,7 +2166,7 @@ function botVerCarrito_(prods, carrito) {
     const p = prods.find(x => x.id === id);
     if (!p) return;
     const sub = p.precioMin * carrito[id]; total += sub;
-    s += carrito[id] + 'x ' + p.nombre + ' = ' + botMoney_(sub) + '\n';
+    s += carrito[id] + 'x ' + botNombreItem_(p) + ' = ' + botMoney_(sub) + '\n';
   });
   s += '\nTOTAL: ' + botMoney_(total) + '\n\nLISTO para confirmar · BORRAR para vaciar';
   return s;
