@@ -2420,47 +2420,55 @@ function procesarVozIA_(ss, tel, texto, sim) {
   (s.historial || []).forEach(t => mensajes.push({ role: t.r === 'a' ? 'assistant' : 'user', content: t.t }));
   mensajes.push({ role: 'user', content: texto });
 
-  let data;
-  try {
-    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-      method: 'post', contentType: 'application/json',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      payload: JSON.stringify({
-        model: 'claude-opus-4-8', max_tokens: 800, system: system,
-        output_config: { format: { type: 'json_schema', schema: {
+  const payload = JSON.stringify({
+    model: 'claude-opus-4-8', max_tokens: 2000, system: system,
+    output_config: { format: { type: 'json_schema', schema: {
+      type: 'object',
+      properties: {
+        reply: { type: 'string', description: 'Lo que Shuki dice en voz: corto, natural, español rioplatense.' },
+        pedido: { type: 'array', description: 'Lista COMPLETA de lo que el cliente quiere hasta ahora (estado final, no incremental).', items: {
           type: 'object',
           properties: {
-            reply: { type: 'string', description: 'Lo que Shuki dice en voz: corto, natural, español rioplatense.' },
-            pedido: { type: 'array', description: 'Lista COMPLETA de lo que el cliente quiere hasta ahora (estado final, no incremental).', items: {
-              type: 'object',
-              properties: {
-                codigo: { type: 'string', description: 'Código del producto del catálogo.' },
-                cantidad: { type: 'number', description: 'Cantidad total de ese producto en el pedido.' }
-              },
-              required: ['codigo','cantidad'],
-              additionalProperties: false
-            } },
-            confirmar: { type: 'boolean', description: 'true solo cuando el cliente confirma que terminó.' },
-            nombre_cliente: { type: 'string', description: 'Nombre del cliente si lo dijo, si no "".' }
+            codigo: { type: 'string', description: 'Código del producto del catálogo.' },
+            cantidad: { type: 'number', description: 'Cantidad total de ese producto en el pedido.' }
           },
-          required: ['reply','pedido','confirmar','nombre_cliente'],
+          required: ['codigo','cantidad'],
           additionalProperties: false
-        } } },
-        messages: mensajes
-      }),
-      muteHttpExceptions: true
-    });
-    if (res.getResponseCode() !== 200) {
-      Logger.log('[voz] error ' + res.getResponseCode() + ': ' + res.getContentText().substring(0,300));
-      return { reply: 'Perdoná, se me cortó. ¿Me lo repetís?' };
+        } },
+        confirmar: { type: 'boolean', description: 'true solo cuando el cliente confirma que terminó.' },
+        nombre_cliente: { type: 'string', description: 'Nombre del cliente si lo dijo, si no "".' }
+      },
+      required: ['reply','pedido','confirmar','nombre_cliente'],
+      additionalProperties: false
+    } } },
+    messages: mensajes
+  });
+  // Llamada con reintento: cubre cortes/hipos transitorios de la API y JSON truncado.
+  let data, dbg = '';
+  for (let intento = 0; intento < 3 && !data; intento++) {
+    if (intento > 0) Utilities.sleep(500);
+    try {
+      const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+        method: 'post', contentType: 'application/json',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        payload: payload, muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      const raw = res.getContentText();
+      if (code !== 200) { dbg = 'http ' + code + ': ' + raw.substring(0, 150); continue; }
+      const body = JSON.parse(raw);
+      const stop = (body.content && body.stop_reason) ? body.stop_reason : '';
+      let txt = '';
+      (body.content || []).forEach(b => { if (b.type === 'text') txt += b.text; });
+      data = JSON.parse(txt);
+      if (stop === 'max_tokens') dbg = 'truncado (subir max_tokens)';
+    } catch (err) {
+      dbg = 'parse/exc: ' + String(err).substring(0, 150);
     }
-    const body = JSON.parse(res.getContentText());
-    let txt = '';
-    (body.content||[]).forEach(b => { if (b.type === 'text') txt += b.text; });
-    data = JSON.parse(txt);
-  } catch (err) {
-    Logger.log('[voz] ' + err);
-    return { reply: 'Uy, tuve un problemita. ¿Me repetís lo último?' };
+  }
+  if (!data) {
+    Logger.log('[voz] falló tras reintentos: ' + dbg);
+    return { reply: 'Perdoná, se me trabó un segundo. ¿Me lo repetís?', _dbg: dbg };
   }
 
   // El carrito = el estado completo que declara la IA (idempotente: no suma de más)
