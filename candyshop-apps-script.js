@@ -2137,7 +2137,8 @@ function botListarCategoria_(prods, cat) {
   items.forEach(p => {
     s += p.id + '- ' + p.nombre + (p.desc ? ' ' + botCorto_(p.desc,20) : '') + '  ' + botMoney_(p.precioMin) + '\n';
   });
-  s += '\nMandá: codigo x cantidad (ej: ' + items[0].id + 'x2)\nVER tu pedido · LISTO para cerrar';
+  const ej2 = items[1] ? ', ' + items[1].id + 'x1' : '';
+  s += '\nMandá: codigo x cantidad (ej: ' + items[0].id + 'x2' + ej2 + ')\nPodés pedir varios separados por coma.\nVER tu pedido · LISTO para cerrar';
   return s;
 }
 
@@ -2156,6 +2157,42 @@ function botAgregar_(s, prods, codigo, qty) {
 // Nombre mostrable: suma el sabor/desc para los genéricos tipo "Pitzujim".
 function botNombreItem_(p) {
   return p.desc ? p.nombre + ' ' + botCorto_(p.desc, 22) : p.nombre;
+}
+
+// Parsea uno o varios ítems de un mensaje. Separadores entre ítems: coma, ";",
+// salto de línea o " y ". Cada ítem: "codigo x cant", "codigo*cant" o "codigo cant".
+// Devuelve [{codigo,qty},...] o null si el mensaje no es una lista de ítems.
+function botParsearItems_(raw) {
+  const partes = (raw || '').split(/\s*[,;\n]\s*|\s+y\s+/i).map(t => t.trim()).filter(Boolean);
+  if (!partes.length) return null;
+  const items = [];
+  for (let i = 0; i < partes.length; i++) {
+    const m = partes[i].match(/^(\d{1,4})\s*[xX*\s]\s*(\d{1,3})$/);
+    if (!m) return null;   // si alguna parte no tiene forma de ítem, no es lista de ítems
+    items.push({ codigo: m[1], qty: parseInt(m[2], 10) });
+  }
+  return items;
+}
+
+// Agrega varios ítems de una. Reporta los que se agregaron y los que fallaron.
+function botAgregarVarios_(s, prods, items) {
+  if (items.length === 1) return botAgregar_(s, prods, items[0].codigo, items[0].qty);
+  const oks = [], errs = [];
+  items.forEach(it => {
+    const p = prods.find(x => x.id === it.codigo);
+    if (!p) { errs.push('codigo ' + it.codigo + ' no existe'); return; }
+    let qty = it.qty < 1 ? 1 : it.qty;
+    const ya = s.carrito[it.codigo] || 0;
+    if (ya + qty > p.stock) { errs.push('de ' + botNombreItem_(p) + ' solo quedan ' + p.stock); return; }
+    s.carrito[it.codigo] = ya + qty;
+    oks.push(qty + 'x ' + botNombreItem_(p));
+  });
+  botGuardarSesion_(s);
+  let r = '';
+  if (oks.length) r += '✓ Agregué:\n' + oks.map(o => '• ' + o).join('\n') + '\n';
+  if (errs.length) r += (oks.length ? '\n' : '') + '⚠️ No pude:\n' + errs.map(e => '• ' + e).join('\n') + '\n';
+  r += '\nSegui pidiendo, VER tu pedido, o LISTO para cerrar.';
+  return r;
 }
 
 function botVerCarrito_(prods, carrito) {
@@ -2266,9 +2303,9 @@ function procesarMensajeBot_(ss, tel, texto, sim) {
   if (['LISTO','FIN','CONFIRMAR','TERMINAR','PAGAR','ENVIAR'].indexOf(T) !== -1)
     return { reply: botConfirmar_(ss, s, prods, tel, sim), cerrado: true };
 
-  // Agregar producto: 43x2 · 43*2 · 43 2 · 43,2
-  const m = raw.match(/^\s*(\d{1,4})\s*[xX*,\s]\s*(\d{1,3})\s*$/);
-  if (m) return { reply: botAgregar_(s, prods, m[1], parseInt(m[2],10)) };
+  // Agregar UNO o VARIOS productos: "43x2" · "43x2, 44x3" · "43x2 y 44x3" · "43 2"
+  const items = botParsearItems_(raw);
+  if (items && items.length) return { reply: botAgregarVarios_(s, prods, items) };
 
   // Solo un código → si es producto, agregar 1; si es número de categoría, listar
   const solo = raw.match(/^\s*(\d{1,4})\s*$/);
