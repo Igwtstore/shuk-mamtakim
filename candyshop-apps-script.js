@@ -89,6 +89,13 @@ function doGet(e) {
     }
   }
   try {
+    if (accion === 'botMsg') {
+      // Cerebro del bot de pedidos (SMS / voz). Lo usa el panel (token) para simular
+      // y el gateway real (secret). Recibe from=teléfono, text=mensaje → {reply}.
+      if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET))
+        return json({ error: 'no autorizado' });
+      return json(procesarMensajeBot_(ss, e.parameter.from || '', dec(e.parameter.text || '')));
+    }
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid). 90s entre pedidos, máx 4/hora.
       const vidVenta = dec(e.parameter.vid || '');
@@ -2048,4 +2055,220 @@ function configurarBackup() {
     .everyHours(1)
     .create();
   Logger.log('Backup horario configurado (cada 60 min)');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CEREBRO DEL BOT — pedidos por SMS / voz (transporte-agnóstico)
+//  Recibe {from: teléfono, text: mensaje} y devuelve {reply}. El MISMO motor
+//  sirve para SMS (gateway Android) y para voz (speech→texto→cerebro→voz).
+//  Texto plano (sin asteriscos) para verse bien en teléfonos básicos kosher.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function botMiles_(n){ return Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function botMoney_(n){ return '$ ' + botMiles_(n); }
+function botCorto_(t,n){ t=(t||'').toString(); return t.length>n ? t.substring(0,n-1)+'…' : t; }
+
+// Lee de la hoja Stock los productos que un cliente minorista puede pedir.
+function botLeerProductos_(ss) {
+  const h = ss.getSheetByName('Stock');
+  if (!h || h.getLastRow() < 2) return [];
+  const d = h.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < d.length; i++) {
+    const activo = (d[i][7]||'').toString().toUpperCase();
+    const vis = (d[i][9]||'Ambos').toString().trim();
+    const stock = parseInt(d[i][5])||0;
+    if (activo === 'NO' || vis === 'Oculto' || stock <= 0) continue;
+    if (vis !== 'Ambos' && vis !== 'Minorista') continue;   // el bot atiende minoristas
+    out.push({
+      id: d[i][0].toString(), nombre: (d[i][1]||'').toString(), desc: (d[i][2]||'').toString(),
+      precioMin: parseFloat(d[i][4])||0, stock: stock,
+      categoria: (d[i][8]||'Varios').toString(), dueno: (d[i][14]||'Miri').toString()
+    });
+  }
+  return out;
+}
+
+function botCategorias_(prods) {
+  const orden = ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Varios'];
+  const cats = [];
+  prods.forEach(p => { if (cats.indexOf(p.categoria) === -1) cats.push(p.categoria); });
+  cats.sort((a,b) => {
+    const ia = orden.indexOf(a), ib = orden.indexOf(b);
+    return (ia===-1?99:ia) - (ib===-1?99:ib);
+  });
+  return cats;
+}
+
+// Estado de la conversación por teléfono (carrito + nombre), en la hoja BotSesiones.
+function botSesion_(ss, tel) {
+  const h = getOrCreate(ss, 'BotSesiones', ['Telefono','Carrito','UltimaActividad','Nombre']);
+  const d = h.getDataRange().getValues();
+  for (let i = 1; i < d.length; i++) {
+    if (d[i][0].toString() === tel) {
+      let carrito = {};
+      try { carrito = JSON.parse(d[i][1]||'{}'); } catch(e) {}
+      return { fila: i+1, carrito: carrito, nombre: (d[i][3]||'').toString(), h: h };
+    }
+  }
+  h.appendRow([tel, '{}', Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), '']);
+  return { fila: h.getLastRow(), carrito: {}, nombre: '', h: h };
+}
+
+function botGuardarSesion_(s) {
+  s.h.getRange(s.fila, 2).setValue(JSON.stringify(s.carrito));
+  s.h.getRange(s.fila, 3).setValue(Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'));
+  if (s.nombre) s.h.getRange(s.fila, 4).setValue(s.nombre);
+}
+
+function botMenuCategorias_(prods) {
+  if (!prods.length) return 'Por ahora no hay productos disponibles. Probá más tarde. 🍬';
+  const cats = botCategorias_(prods);
+  let s = '🍬 Shuk Mamtakim - Hola! Que buscas?\n\n';
+  cats.forEach((c,i) => { s += (i+1) + '- ' + c + '\n'; });
+  s += '\nMandá el numero de la categoria.\nO LISTO cuando termines.';
+  return s;
+}
+
+function botListarCategoria_(prods, cat) {
+  const items = prods.filter(p => p.categoria === cat);
+  if (!items.length) return 'No hay productos en esa categoria ahora. Mandá LISTA.';
+  let s = cat.toUpperCase() + ':\n\n';
+  items.forEach(p => {
+    s += p.id + '- ' + p.nombre + (p.desc ? ' ' + botCorto_(p.desc,20) : '') + '  ' + botMoney_(p.precioMin) + '\n';
+  });
+  s += '\nMandá: codigo x cantidad (ej: ' + items[0].id + 'x2)\nVER tu pedido · LISTO para cerrar';
+  return s;
+}
+
+function botAgregar_(s, prods, codigo, qty) {
+  const p = prods.find(x => x.id === codigo);
+  if (!p) return 'No encontré el codigo ' + codigo + '. Mandá LISTA para ver los codigos.';
+  if (qty < 1) qty = 1;
+  const ya = s.carrito[codigo] || 0;
+  if (ya + qty > p.stock) return 'De ' + p.nombre + ' quedan ' + p.stock + '. Probá una cantidad menor.';
+  s.carrito[codigo] = ya + qty;
+  botGuardarSesion_(s);
+  return '✓ ' + s.carrito[codigo] + 'x ' + p.nombre + ' = ' + botMoney_(p.precioMin * s.carrito[codigo]) +
+    '\n\nSegui pidiendo, VER tu pedido, o LISTO para cerrar.';
+}
+
+function botVerCarrito_(prods, carrito) {
+  const ids = Object.keys(carrito).filter(k => carrito[k] > 0);
+  if (!ids.length) return 'Tu pedido esta vacio. Mandá LISTA para ver los productos. 🛒';
+  let s = 'TU PEDIDO:\n\n', total = 0;
+  ids.forEach(id => {
+    const p = prods.find(x => x.id === id);
+    if (!p) return;
+    const sub = p.precioMin * carrito[id]; total += sub;
+    s += carrito[id] + 'x ' + p.nombre + ' = ' + botMoney_(sub) + '\n';
+  });
+  s += '\nTOTAL: ' + botMoney_(total) + '\n\nLISTO para confirmar · BORRAR para vaciar';
+  return s;
+}
+
+function botAyuda_() {
+  return 'Shuk Mamtakim - Como pedir:\n\n' +
+    '• LISTA = ver categorias\n• numero = ver esa categoria\n• codigo x cantidad (ej 12x2) = agregar\n' +
+    '• VER = tu pedido\n• LISTO = confirmar\n• BORRAR = empezar de nuevo';
+}
+
+// Cierra el pedido: lo crea en Ventas, descuenta stock, registra ganancias y avisa al negocio.
+function botConfirmar_(ss, s, prods, tel) {
+  const carrito = s.carrito;
+  const ids = Object.keys(carrito).filter(k => carrito[k] > 0);
+  if (!ids.length) return 'Tu pedido esta vacio. Mandá LISTA para empezar. 🛒';
+  const lineas = [], suArr = [], jonyArr = [];
+  let total = 0;
+  ids.forEach(id => {
+    const p = prods.find(x => x.id === id);
+    if (!p) return;
+    const qty = carrito[id], sub = p.precioMin * qty;
+    total += sub;
+    lineas.push('• ' + qty + 'x ' + p.nombre + (p.desc ? ' · ' + p.desc : '') + ' — $ ' + botMiles_(p.precioMin) + ' c/u = $ ' + botMiles_(sub));
+    suArr.push(id + ':' + qty);
+    if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + p.precioMin);
+  });
+  if (!lineas.length) return 'Hubo un problema con tu pedido. Mandá LISTA y probá de nuevo.';
+  const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
+  const idV = 'P' + Date.now().toString();
+  const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+  const row = h.getLastRow() + 1;
+  const nVenta = row - 1;
+  const cliente = s.nombre ? s.nombre : ('SMS ' + tel);
+  const stockUpdates = suArr.join(',');
+  if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
+  h.appendRow([idV, fecha, cliente, 'Minorista', lineas.join('\n'), 'A coordinar', '📱 Pedido por SMS', 'pendiente',
+    total, 0, nVenta, 0, 0, 0, 0, 0, '', '', 0, stockUpdates, 'sms_' + tel]);
+  h.getRange(row, 1, 1, 2).setNumberFormat('@');
+  // Descontar stock + registrar movimiento
+  const sh = ss.getSheetByName('Stock');
+  if (sh) {
+    const sd = sh.getDataRange().getValues();
+    suArr.forEach(u => {
+      const parts = u.split(':'); const pid = parts[0]; const qty = parseInt(parts[1])||0;
+      for (let i = 1; i < sd.length; i++) {
+        if (sd[i][0].toString() === pid) {
+          const antes = parseInt(sd[i][5])||0, despues = Math.max(0, antes - qty);
+          sh.getRange(i+1,6).setValue(despues);
+          registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues, 'Venta SMS #' + nVenta + ' — ' + cliente);
+          break;
+        }
+      }
+    });
+  }
+  // Ganancias pitzujim (igual que la web)
+  if (jonyArr.length) {
+    const hG = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
+    let g = 0;
+    jonyArr.forEach(it => {
+      const pp = it.split(':'); const avg = getCostoPromedio(ss, pp[0]);
+      if (avg > 0) g += (parseFloat(pp[2]) - avg) * (parseFloat(pp[1])||0);
+    });
+    if (g > 0) hG.appendRow([fecha, 'ganancia_pitzujim', 'Pitzujim — ' + cliente, Math.round(g)]);
+  }
+  // Avisar al negocio
+  enviarTelegram_('papa', '📱 NUEVO PEDIDO POR SMS #' + nVenta + '\n👤 ' + cliente + ' (' + tel + ')\n\n' + lineas.join('\n') + '\n\nTotal: $ ' + botMiles_(total) + '\nCoordiná entrega y cobro desde el panel.');
+  s.carrito = {};
+  botGuardarSesion_(s);
+  return '✅ Pedido tomado' + (s.nombre ? ', ' + s.nombre : '') + '! Total ' + botMoney_(total) +
+    '.\nTe contactamos para coordinar la entrega. Gracias! 🍬';
+}
+
+// Punto de entrada del cerebro.
+function procesarMensajeBot_(ss, tel, texto) {
+  tel = (tel||'').toString().trim();
+  if (!tel) return { reply: 'Error: sin numero de origen.' };
+  const s = botSesion_(ss, tel);
+  const prods = botLeerProductos_(ss);
+  const raw = (texto||'').trim();
+  const T = raw.toUpperCase();
+
+  if (T === '' || ['HOLA','LISTA','MENU','MENÚ','INICIO','EMPEZAR','BUENAS','BUENAS!','HI'].indexOf(T) !== -1)
+    return { reply: botMenuCategorias_(prods), nVenta: 0 };
+  if (['AYUDA','HELP','?'].indexOf(T) !== -1) return { reply: botAyuda_() };
+  if (['BORRAR','VACIAR','CANCELAR','RESET'].indexOf(T) !== -1) {
+    s.carrito = {}; botGuardarSesion_(s);
+    return { reply: 'Listo, vacié tu pedido. Mandá LISTA para empezar de nuevo. 🗑️' };
+  }
+  if (['VER','CARRITO','PEDIDO'].indexOf(T) !== -1) return { reply: botVerCarrito_(prods, s.carrito) };
+  if (['LISTO','FIN','CONFIRMAR','TERMINAR','PAGAR','ENVIAR'].indexOf(T) !== -1)
+    return { reply: botConfirmar_(ss, s, prods, tel), cerrado: true };
+
+  // Agregar producto: 43x2 · 43*2 · 43 2 · 43,2
+  const m = raw.match(/^\s*(\d{1,4})\s*[xX*,\s]\s*(\d{1,3})\s*$/);
+  if (m) return { reply: botAgregar_(s, prods, m[1], parseInt(m[2],10)) };
+
+  // Solo un código → si es producto, agregar 1; si es número de categoría, listar
+  const solo = raw.match(/^\s*(\d{1,4})\s*$/);
+  if (solo) {
+    const esProd = prods.find(p => p.id === solo[1]);
+    if (esProd) return { reply: botAgregar_(s, prods, solo[1], 1) };
+    const cats = botCategorias_(prods);
+    const n = parseInt(solo[1], 10);
+    if (n >= 1 && n <= cats.length) return { reply: botListarCategoria_(prods, cats[n-1]) };
+  }
+
+  return { reply: 'No te entendí 🤔 Mandá:\n• LISTA (ver productos)\n• codigo y cantidad (ej ' +
+    (prods[0] ? prods[0].id + 'x2' : '12x2') + ')\n• VER (tu pedido) · LISTO (cerrar)' };
 }
