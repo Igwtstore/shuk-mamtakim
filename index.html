@@ -684,6 +684,7 @@
   .estado-preparando { background: #e8eeff; color: #2c6fad; }
   .estado-entregado { background: var(--verde-claro); color: var(--verde); }
   .estado-cancelado { background: var(--rojo-claro); color: var(--rojo); }
+  .estado-cotizacion { background: #fdf3e3; color: #b8860b; }
   .pedido-item.preparando { border-left-color: #2c6fad; }
   .filtros-estado { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.75rem; }
   .filtro-estado-btn { padding:0.3rem 0.9rem; border:1.5px solid var(--gris-medio); border-radius:20px; background:white; font-family:'DM Sans',sans-serif; font-size:0.78rem; font-weight:600; cursor:pointer; color:var(--texto-suave); transition:all 0.15s; }
@@ -1040,6 +1041,17 @@
       <span style="font-size:0.72rem;color:var(--texto-suave)">Apretá, hablá natural ("hola, quiero dos maní grill") y te responde con voz. Usá <b>Chrome en la compu</b> o Android.</span>
     </div>
     <button onclick="botReiniciarSim()" style="margin-top:0.5rem;background:transparent;border:none;color:var(--texto-suave);text-decoration:underline;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🔄 Reiniciar conversación</button>
+  </div>
+  <div class="admin-card" data-seccion="inicio">
+    <div class="admin-titulo">🏪 Estado de la tienda</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Controlá si la tienda vende, toma solo cotizaciones, o está cerrada. Actual: <b id="estado-tienda-actual">…</b></div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <button onclick="cambiarEstadoTienda('abierta')" class="estado-t-btn" data-est="abierta" style="flex:1;min-width:90px;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">🟢 Abierta</button>
+      <button onclick="cambiarEstadoTienda('cotizacion')" class="estado-t-btn" data-est="cotizacion" style="flex:1;min-width:90px;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">🟡 Cotización</button>
+      <button onclick="cambiarEstadoTienda('cerrada')" class="estado-t-btn" data-est="cerrada" style="flex:1;min-width:90px;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">🔴 Cerrada</button>
+    </div>
+    <input type="text" id="estado-tienda-msg" placeholder="Mensaje opcional para el cliente (ej: Volvemos el lunes)" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
+    <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.4rem">🟡 Cotización: el cliente arma el pedido pero NO se descuenta stock; lo aceptás vos y ahí baja. 🔴 Cerrada: no puede pedir, ve un aviso con tu WhatsApp.</div>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">📱 QR del catálogo</div>
@@ -1684,6 +1696,63 @@ const DRIVE_FOLDER = '1Mgu_gDhvO1bs-YmFsXsOyxuiBV6yEyLe';
 const WA_NUM1 = '5491131754540';
 const WA_NUM2 = '972527596202';
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
+
+// Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'
+let _estadoTienda = 'abierta', _tiendaMsg = '';
+async function cargarEstadoTienda() {
+  try {
+    const d = await fetch(`${APPS_SCRIPT_URL}?accion=getEstadoTienda&z=${Date.now()}`).then(r => r.json());
+    _estadoTienda = d.estado || 'abierta';
+    _tiendaMsg = d.mensaje || '';
+  } catch (e) { _estadoTienda = 'abierta'; }
+  pintarBannerTienda();
+  marcarEstadoTiendaBtn();
+}
+function pintarBannerTienda() {
+  let b = document.getElementById('estado-tienda-banner');
+  const enTienda = modo === 'mayorista' || modo === 'minorista';
+  if (_estadoTienda === 'abierta' || !enTienda) { if (b) b.style.display = 'none'; return; }
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'estado-tienda-banner';
+    b.style.cssText = 'max-width:900px;margin:0.75rem auto 0;padding:0.7rem 1rem;border-radius:10px;font-size:0.88rem;font-weight:600;text-align:center';
+    const cont = document.getElementById('catalogo-section');
+    if (cont) cont.insertBefore(b, cont.firstChild);
+  }
+  b.style.display = 'block';
+  if (_estadoTienda === 'cerrada') {
+    b.style.background = '#fde8e8'; b.style.color = '#c0392b';
+    b.innerHTML = `🔴 ${_tiendaMsg || 'Tienda cerrada por el momento.'} <a href="https://wa.me/${WA_NUM1}" target="_blank" style="color:#c0392b;text-decoration:underline">Contactar al vendedor</a>`;
+  } else {
+    b.style.background = 'var(--dorado-claro,#fdf3e3)'; b.style.color = '#7a5a1a';
+    b.innerHTML = `🟡 ${_tiendaMsg || 'Cerrado por control de stock.'} Podés armar tu pedido y se enviará como <b>cotización</b> (te confirmamos stock en 24hs).`;
+  }
+}
+
+// Control del estado de la tienda (panel admin)
+async function cambiarEstadoTienda(estado) {
+  const msg = document.getElementById('estado-tienda-msg')?.value || '';
+  const r = await apiWrite(new URLSearchParams({ accion: 'setEstadoTienda', estado, mensaje: msg }),
+    estado === 'abierta' ? '🟢 Tienda abierta' : estado === 'cotizacion' ? '🟡 Modo cotización activado' : '🔴 Tienda cerrada');
+  if (r.ok) { _estadoTienda = estado; _tiendaMsg = msg; marcarEstadoTiendaBtn(); }
+}
+function marcarEstadoTiendaBtn() {
+  const lbl = { abierta: '🟢 Abierta', cotizacion: '🟡 Solo cotización', cerrada: '🔴 Cerrada' };
+  const el = document.getElementById('estado-tienda-actual'); if (el) el.textContent = lbl[_estadoTienda] || _estadoTienda;
+  document.querySelectorAll('.estado-t-btn').forEach(b => {
+    const activo = b.dataset.est === _estadoTienda;
+    b.style.background = activo ? 'var(--azul)' : '#fff';
+    b.style.color = activo ? '#fff' : 'var(--texto)';
+  });
+  const inp = document.getElementById('estado-tienda-msg'); if (inp && _tiendaMsg && !inp.value) inp.value = _tiendaMsg;
+}
+
+// Acepta una cotización: la convierte en pedido y descuenta el stock
+async function aceptarCotizacion(id) {
+  if (!confirm('¿Aceptar esta cotización? Se va a convertir en pedido y se descontará el stock.')) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'aceptarCotizacion', id }), '✅ Cotización aceptada — stock descontado');
+  if (r.ok) refreshAdmin();
+}
 const _sb = supabase.createClient('https://soarkknjewgcewryxqac.supabase.co','sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2');
 // Token de sesión para autenticar las llamadas del admin contra el backend. Se mantiene fresco solo.
 let _authToken = '';
@@ -2206,6 +2275,11 @@ function cambiarQty(id, delta, max) {
 }
 
 function agregarAlCarrito(id) {
+  if (_estadoTienda === 'cerrada') {
+    if (confirm((_tiendaMsg || 'La tienda está cerrada por el momento.') + '\n\n¿Querés contactar al vendedor por WhatsApp?'))
+      window.open(`https://wa.me/${WA_NUM1}?text=${encodeURIComponent('Hola! Quería consultar por un pedido 🍬')}`, '_blank');
+    return;
+  }
   const qty = cantidades[id] || 0;
   if (qty === 0) { showToast('Elegí una cantidad primero'); return; }
   const p = productos.find(x => x.id === id);
@@ -2476,9 +2550,10 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
     usdMyri: (usdMyri || 0).toFixed(2),
     comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
-    notas: notaPedido || '',
+    notas: (_estadoTienda === 'cotizacion' ? '🟡 COTIZACIÓN · ' : '') + (notaPedido || ''),
     vid: _vid()
   });
+  if (_estadoTienda === 'cotizacion') params.set('cotizacion', '1');   // no descuenta stock hasta aceptar
   fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
 }
 
@@ -2530,7 +2605,7 @@ async function renderCuentaCorriente() {
       if (c.telefono) telPorCliente[c.nombre] = c.telefono.toString().replace(/\D/g, '');
     });
     _telPorCliente = telPorCliente;   // para precargar el teléfono en el remito
-    let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && !v.cajaJony && !v.cajaMyri);
+    let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !v.cajaJony && !v.cajaMyri);
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony)
     const pagadoPorCliente = {};
@@ -2713,15 +2788,17 @@ async function renderPedidos() {
         ${_notasClientes[v.cliente] ? `<div style="font-size:0.75rem;background:#fdf3e3;border-left:3px solid var(--dorado);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.3rem;color:#7a5a1a">👤 ${esc(_notasClientes[v.cliente])}</div>` : ''}
         ${v.notas && v.notas !== 'Manual' ? `<div style="font-size:0.75rem;background:#e8f5ee;border-left:3px solid var(--verde);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.2rem;color:#1a5a2e">📝 ${esc(v.notas)}</div>` : ''}
         <div class="pedido-acciones">
-          ${conAcciones ? `
+          ${estado === 'cotizacion' ? `
+          <button class="btn-accion" style="background:#fdf3e3;color:#7a5a1a;font-weight:700;border:1.5px solid var(--dorado)" onclick="aceptarCotizacion('${v.id}')">✅ Aceptar (descuenta stock)</button>
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Rechazar</button>` : (conAcciones ? `
           ${estado === 'pendiente' ? `<button class="btn-accion" style="background:#e8eeff;color:#2c6fad" onclick="cambiarEstado('${v.id}','preparando',this)">🔧 Preparando</button>` : ''}
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : `
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`}
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`)}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
-          <button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>
-          ${(!cobrado && !soloMiri) ? (() => {
+          ${estado !== 'cotizacion' ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>` : ''}
+          ${(estado !== 'cotizacion' && !cobrado && !soloMiri) ? (() => {
             const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0 };
             const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
             const remGolARS = Math.max(0, Math.round(arsM - pg.golARS));
@@ -4494,7 +4571,7 @@ async function renderCaja() {
 
     const movs = [];
     const _det = {};   // detalle de cada pedido (para desplegar al clickear un movimiento)
-    ventas.filter(v => v.estado !== 'cancelado').forEach((v, idx) => {
+    ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach((v, idx) => {
       const n = v.nVenta || (idx + 1);
       const fp = v.formaPago || '';
       const f = v.fecha || '';
@@ -4706,7 +4783,7 @@ async function renderCuentaSocios() {
   let comiDebeU = 0, jonyTieneU = 0;
 
   const MYRI_ARS = ['MP_GABY','EFT_MYRI'];   // cajas de Myri en pesos
-  ventas.filter(v => v.estado !== 'cancelado').forEach(v => {
+  ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
     if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
     const fp = (v.formaPago||'').trim();
     const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
@@ -4831,7 +4908,7 @@ function setModo(m) {
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
   if (m === 'admin') { renderSocioBar(); setAdminTab(_adminTabActual); renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderCuentaSocios(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); renderStockTotal(); _llenarTrazarSelect(); startAdminPolling(); }
-  else { stopAdminPolling(); renderCatalogo(); }
+  else { stopAdminPolling(); renderCatalogo(); pintarBannerTienda(); }
 }
 
 let _categoriaActiva = 'Todos';
@@ -5143,7 +5220,7 @@ async function trazarProducto() {
   cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Buscando…</div>';
   const ventas = await apiGet('ventas').catch(() => []);
   const filas = []; let totalU = 0;
-  (Array.isArray(ventas) ? ventas : []).filter(v => v.estado !== 'cancelado').forEach(v => {
+  (Array.isArray(ventas) ? ventas : []).filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
     (v.productos || '').split(' || ').forEach(l => {
       const m = l.match(/(\d+)x\s+(.+?)\s+—/);   // descriptor completo (nombre · desc) hasta el precio
       if (m && m[2].trim() === clave) {
@@ -5299,7 +5376,7 @@ async function renderClientes() {
   const soloMiri = esVistaMiri();
   // Agrupar pedidos por cliente (en vista Miri solo sus pedidos y montos)
   const ventasMapa = {};
-  ventas.filter(v => v.estado !== 'cancelado' && (!soloMiri || pedidoEsDeMiri(v))).forEach(v => {
+  ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && (!soloMiri || pedidoEsDeMiri(v))).forEach(v => {
     const key = v.cliente;
     if (!ventasMapa[key]) ventasMapa[key] = { pedidos: 0, totalARS: 0, totalUSD: 0, ultima: v.fecha, historial: [], tipo: v.tipo };
     ventasMapa[key].pedidos++;
@@ -5722,7 +5799,7 @@ function abrirSaldoInicialModal() {
 async function renderDashboard() {
   const ventas = await apiGet('ventas').catch(() => null);
   if (!Array.isArray(ventas)) return;
-  const todas = ventas.filter(v => v.estado !== 'cancelado');
+  const todas = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion');
 
   // En vista Miri se usan solo los montos de Miri (no totalARS/USD, que incluyen Jony)
   const soloMiri = esVistaMiri();
@@ -6355,6 +6432,7 @@ if (localStorage.getItem('darkMode') === '1') {
   else aplicar();
 })();
 function init() {
+  cargarEstadoTienda();   // estado de la tienda (abierta/cotización/cerrada)
   const hash = window.location.hash.replace('#', '');
   const path = window.location.pathname;
   document.getElementById('modo-bar').style.display = 'none';
