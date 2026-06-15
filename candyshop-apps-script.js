@@ -2512,7 +2512,7 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
   if (!prods.length) return { reply: 'Perdoná, ahora mismo no tengo productos disponibles. Llamá más tarde así te atiendo.' };
 
   // Catálogo compacto para el prompt (incluye descripción rica si la cargaron)
-  const cat = prods.map(p => p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | $' + botMiles_(p.precioMin) + ' | stock ' + p.stock + (p.descBot ? ' | DESC: ' + p.descBot : '')).join('\n');
+  const cat = prods.map(p => p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | ' + Math.round(p.precioMin) + ' pesos | stock ' + p.stock + (p.descBot ? ' | DESC: ' + p.descBot : '')).join('\n');
   // Perfil del cliente: nombre conocido + qué compró antes (memoria entre llamadas)
   const previos = botPedidosPrevios_(ss, tel);
   let perfil = '';
@@ -2532,9 +2532,9 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
     ids.forEach(id => {
       const p = prods.find(x => x.id === id); if (!p) return;
       const sub = p.precioMin * s.carrito[id]; total += sub;
-      ls.push(s.carrito[id] + 'x ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' = $' + botMiles_(sub));
+      ls.push(s.carrito[id] + 'x ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' = ' + Math.round(sub) + ' pesos');
     });
-    carritoTxt = ls.join('\n') + '\nTOTAL: $' + botMiles_(total);
+    carritoTxt = ls.join('\n') + '\nTOTAL: ' + Math.round(total) + ' pesos';
   }
 
   const system =
@@ -2542,6 +2542,7 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
     'Atendés a un cliente por TELÉFONO. Hablás español rioplatense, cálido, cercano y BREVE (es una llamada: frases cortas, ' +
     'naturales, una idea por vez). Sos buena onda como un vendedor de barrio que conoce a su gente.\n' +
     'Te paso el CATÁLOGO (codigo | producto | precio | stock) y el CARRITO actual del cliente. El cliente te habla normal.\n' +
+    '⚠️ MONEDA: TODOS los precios están en PESOS ARGENTINOS. NUNCA hables de dólares ni de "U$S". Decí "pesos" o "$".\n' +
     'Tu trabajo: ayudarlo a armar el pedido y cerrarlo.\n' +
     'REGLAS:\n' +
     '- Identificá el producto por su nombre aunque lo diga informal ("maní grill", "los chocolates blancos").\n' +
@@ -2576,7 +2577,7 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
   const mensajes = [{ role: 'user', content: texto }];
 
   const payload = JSON.stringify({
-    model: 'claude-sonnet-4-6', max_tokens: 1500, system: system,
+    model: 'claude-haiku-4-5', max_tokens: 1500, system: system,
     output_config: { format: { type: 'json_schema', schema: {
       type: 'object',
       properties: {
