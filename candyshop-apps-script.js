@@ -1079,8 +1079,9 @@ function arreglarVentasHijosDia(ss, p) {
   const data = h.getDataRange().getValues();
   const vistas = {}, aBorrar = [];
   for (let i = 1; i < data.length; i++) {
-    const fecha = (data[i][0] || '').toString();
-    if (fecha.indexOf(dia) !== 0) continue;
+    let fecha = data[i][0];
+    fecha = (fecha instanceof Date) ? Utilities.formatDate(fecha, TZ, 'dd/MM/yyyy') : fecha.toString().split(' ')[0];
+    if (fecha !== dia) continue;
     if (hijo && data[i][1] !== hijo) continue;
     const cli = (data[i][7] || '').toString().trim();
     if (!cli) { aBorrar.push(i); continue; }                  // sin cliente → borrar
