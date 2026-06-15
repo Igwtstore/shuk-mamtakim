@@ -14,6 +14,7 @@ const PROTECTED_ACTIONS = [
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
+  'setEstadoTienda','aceptarCotizacion',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
   'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw'
 ];
@@ -102,6 +103,49 @@ function doGet(e) {
         return json({ error: 'no autorizado' });
       return json(procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1', e.parameter.canal || 'texto'));
     }
+    if (accion === 'getEstadoTienda') {
+      // Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'. Público (lo lee la tienda).
+      const est = PropertiesService.getScriptProperties().getProperty('TIENDA_ESTADO') || 'abierta';
+      const msg = PropertiesService.getScriptProperties().getProperty('TIENDA_MSG') || '';
+      return json({ estado: est, mensaje: msg });
+    }
+    if (accion === 'setEstadoTienda') {
+      PropertiesService.getScriptProperties().setProperty('TIENDA_ESTADO', dec(e.parameter.estado || 'abierta'));
+      if (e.parameter.mensaje !== undefined) PropertiesService.getScriptProperties().setProperty('TIENDA_MSG', dec(e.parameter.mensaje));
+      return ok();
+    }
+    if (accion === 'aceptarCotizacion') {
+      // Convierte una cotización en pedido pendiente y RECIÉN AHÍ descuenta el stock.
+      const h = ss.getSheetByName('Ventas'); if (!h) return json({ error: 'sin hoja' });
+      const datos = h.getDataRange().getValues();
+      for (let i = 1; i < datos.length; i++) {
+        const cellId = datos[i][0] instanceof Date ? datos[i][0].toISOString() : datos[i][0].toString().trim();
+        if (cellId === e.parameter.id) {
+          if ((datos[i][7] || '') !== 'cotizacion') return json({ error: 'no es cotización' });
+          h.getRange(i+1, 8).setValue('pendiente');
+          const su = (datos[i][19] || '').toString();
+          if (su) {
+            const sh = ss.getSheetByName('Stock');
+            if (sh) {
+              const sd = sh.getDataRange().getValues();
+              su.split(',').forEach(function(u) {
+                const pp = u.split(':'); const pid = pp[0]; const qty = parseInt(pp[1])||0;
+                for (let j = 1; j < sd.length; j++) {
+                  if (sd[j][0].toString() === pid) {
+                    const antes = parseInt(sd[j][5])||0, despues = Math.max(0, antes - qty);
+                    sh.getRange(j+1,6).setValue(despues);
+                    registrarMovStock_(ss, pid, sd[j][1], -qty, antes, despues, 'Cotización aceptada #' + (datos[i][10]||''));
+                    break;
+                  }
+                }
+              });
+            }
+          }
+          return ok();
+        }
+      }
+      return json({ error: 'no encontrado' });
+    }
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid). 90s entre pedidos, máx 4/hora.
       const vidVenta = dec(e.parameter.vid || '');
@@ -120,13 +164,15 @@ function doGet(e) {
       const nVenta = row - 1;
       const stockUpdates = dec(e.parameter.stockUpdates||'');
       if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
-      h.appendRow([id, fecha, dec(e.parameter.cliente), dec(e.parameter.tipo), dec(e.parameter.productos), dec(e.parameter.formaPago), dec(e.parameter.notas||''), 'pendiente',
+      const esCotizacion = e.parameter.cotizacion === '1';
+      h.appendRow([id, fecha, dec(e.parameter.cliente), dec(e.parameter.tipo), dec(e.parameter.productos), dec(e.parameter.formaPago), dec(e.parameter.notas||''), esCotizacion ? 'cotizacion' : 'pendiente',
         parseFloat(e.parameter.totalARS||0), parseFloat(e.parameter.totalUSD||0), nVenta,
         parseFloat(e.parameter.arsJONY||0), parseFloat(e.parameter.arsMyri||0),
         parseFloat(e.parameter.usdMyri||0), parseFloat(e.parameter.comiARS||0), parseFloat(e.parameter.comiUSD||0),
         '', '', 0, stockUpdates, vidVenta]);
       h.getRange(row, 1, 1, 2).setNumberFormat('@');
-      if (stockUpdates) {
+      // En cotización NO se descuenta stock (se descuenta recién cuando se acepta desde el panel).
+      if (stockUpdates && !esCotizacion) {
         var sh = ss.getSheetByName('Stock');
         if (sh) {
           var sd = sh.getDataRange().getValues();
