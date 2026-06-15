@@ -103,6 +103,24 @@ function doGet(e) {
         return json({ error: 'no autorizado' });
       return json(procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1', e.parameter.canal || 'texto'));
     }
+    if (accion === 'tts') {
+      // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
+      if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET)) return json({ error: 'no autorizado' });
+      const key = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
+      if (!key) return json({ error: 'sin_openai' });
+      const texto = dec(e.parameter.text || '').substring(0, 500);
+      if (!texto) return json({ error: 'sin texto' });
+      try {
+        const res = UrlFetchApp.fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'post', contentType: 'application/json',
+          headers: { 'Authorization': 'Bearer ' + key },
+          payload: JSON.stringify({ model: 'tts-1', voice: 'onyx', input: texto, response_format: 'mp3', speed: 1.05 }),
+          muteHttpExceptions: true
+        });
+        if (res.getResponseCode() !== 200) return json({ error: 'tts ' + res.getResponseCode() });
+        return json({ ok: true, audio: Utilities.base64Encode(res.getContent()) });
+      } catch (err) { return json({ error: String(err) }); }
+    }
     if (accion === 'getEstadoTienda') {
       // Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'. Público (lo lee la tienda).
       const est = PropertiesService.getScriptProperties().getProperty('TIENDA_ESTADO') || 'abierta';

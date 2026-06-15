@@ -5169,6 +5169,7 @@ function botVozToggle() {
 function _vozTerminar() {
   _vozConversacion = false; _vozEstado = 'off';
   try { if (_vozRec) _vozRec.abort(); } catch (e) {}
+  try { if (_vozAudio) { _vozAudio.pause(); _vozAudio = null; } } catch (e) {}
   if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   actualizarBotonVoz();
 }
@@ -5203,7 +5204,24 @@ async function botVozProcesar(txt) {
     if (_vozConversacion) _vozEscuchar();
   }
 }
-function botHablar(texto, onfin) {
+let _vozAudio = null;
+async function botHablar(texto, onfin) {
+  _vozEstado = 'hablando'; actualizarBotonVoz();
+  // 1) Intentar voz natural (OpenAI TTS); 2) si falla, voz del navegador
+  try {
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=tts&token=${encodeURIComponent(_authToken)}&text=${encodeURIComponent((texto||'').substring(0,500))}`);
+    if (data && data.audio) {
+      try { if (_vozAudio) { _vozAudio.pause(); } } catch (e) {}
+      _vozAudio = new Audio('data:audio/mp3;base64,' + data.audio);
+      _vozAudio.onended = () => { if (onfin) onfin(); };
+      _vozAudio.onerror = () => hablarNavegador(texto, onfin);
+      await _vozAudio.play();
+      return;
+    }
+  } catch (e) {}
+  hablarNavegador(texto, onfin);
+}
+function hablarNavegador(texto, onfin) {
   if (typeof speechSynthesis === 'undefined') { if (onfin) onfin(); return; }
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(texto);
@@ -5211,7 +5229,6 @@ function botHablar(texto, onfin) {
   const voces = speechSynthesis.getVoices();
   const esp = voces.find(v => /es[-_]AR/i.test(v.lang)) || voces.find(v => /es[-_](MX|US|ES)/i.test(v.lang)) || voces.find(v => /^es/i.test(v.lang));
   if (esp) u.voice = esp;
-  _vozEstado = 'hablando'; actualizarBotonVoz();
   u.onend = () => { if (onfin) onfin(); };
   u.onerror = () => { if (onfin) onfin(); };
   speechSynthesis.speak(u);
