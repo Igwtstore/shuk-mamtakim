@@ -814,7 +814,9 @@ function enviarSMS_(texto, to, sim) {
   const pass = PropertiesService.getScriptProperties().getProperty('SMS_GATEWAY_PASS');
   if (!user || !pass) { Logger.log('[sms] faltan SMS_GATEWAY_USER/PASS en Propiedades'); return; }
   try {
-    const cuerpo = { message: (texto || '').substring(0, 600), phoneNumbers: [to] };
+    let dest = (to || '').toString().trim();
+    if (dest && dest.charAt(0) !== '+') dest = '+' + dest;   // la API exige formato +54...
+    const cuerpo = { message: (texto || '').substring(0, 600), phoneNumbers: [dest] };
     if (sim) cuerpo.simNumber = parseInt(sim) || undefined;   // responder por la línea de Shuk
     UrlFetchApp.fetch('https://api.sms-gate.app/3rdparty/v1/message', {
       method: 'post', contentType: 'application/json',
