@@ -786,10 +786,18 @@ function doPost(e) {
     if (body.event === 'sms:received' && body.payload) {
       const from = (body.payload.phoneNumber || '').toString().trim();
       const text = (body.payload.message || '').toString().trim();
+      const sim = body.payload.simNumber != null ? String(body.payload.simNumber) : '';
+      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      // Log de todo SMS entrante (para identificar la SIM de Shuk y diagnóstico)
+      try { getOrCreate(ss, 'SMSLog', ['Fecha','SIM','De','Texto']).appendRow([Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), sim, from, text]); } catch (e) {}
+      const simShuk = PropertiesService.getScriptProperties().getProperty('SMS_SIM_SHUK');
+      // SEGURIDAD: si no está configurada la SIM de Shuk, NO responder (modo captura, evita contestar a la línea de trabajo).
+      if (!simShuk) return json({ ok: true, modo: 'captura', simRecibida: sim });
+      // Solo responder a los SMS que entraron por la línea de Shuk.
+      if (sim && String(sim) !== String(simShuk)) return json({ ok: true, ignorado: 'otra linea' });
       if (from && text) {
-        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
         const r = procesarVozIA_(ss, from, text, false, 'texto');   // canal texto = lista escaneable
-        if (r && r.reply) enviarSMS_(r.reply, from);
+        if (r && r.reply) enviarSMS_(r.reply, from, simShuk);
       }
       return json({ ok: true });
     }
@@ -801,15 +809,17 @@ function doPost(e) {
 
 // Envía un SMS usando el cloud del gateway (capcom6 SMS Gateway / sms-gate.app).
 // Credenciales en Script Properties: SMS_GATEWAY_USER y SMS_GATEWAY_PASS (las da la app).
-function enviarSMS_(texto, to) {
+function enviarSMS_(texto, to, sim) {
   const user = PropertiesService.getScriptProperties().getProperty('SMS_GATEWAY_USER');
   const pass = PropertiesService.getScriptProperties().getProperty('SMS_GATEWAY_PASS');
   if (!user || !pass) { Logger.log('[sms] faltan SMS_GATEWAY_USER/PASS en Propiedades'); return; }
   try {
+    const cuerpo = { message: (texto || '').substring(0, 600), phoneNumbers: [to] };
+    if (sim) cuerpo.simNumber = parseInt(sim) || undefined;   // responder por la línea de Shuk
     UrlFetchApp.fetch('https://api.sms-gate.app/3rdparty/v1/message', {
       method: 'post', contentType: 'application/json',
       headers: { 'Authorization': 'Basic ' + Utilities.base64Encode(user + ':' + pass) },
-      payload: JSON.stringify({ message: (texto || '').substring(0, 600), phoneNumbers: [to] }),
+      payload: JSON.stringify(cuerpo),
       muteHttpExceptions: true
     });
   } catch (err) { Logger.log('[sms] error envío: ' + err); }
