@@ -1038,7 +1038,7 @@
     </div>
     <div style="display:flex;gap:0.8rem;align-items:center;margin-top:0.6rem;flex-wrap:wrap">
       <button id="bot-voz-btn" onclick="botVozToggle()" style="background:#25D366;color:#fff;border:none;border-radius:22px;padding:0.55rem 1.1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem">🎤 Hablar con Shuki (demo voz IA)</button>
-      <span style="font-size:0.72rem;color:var(--texto-suave)">Apretá, hablá natural ("hola, quiero dos maní grill") y te responde con voz. Usá <b>Chrome en la compu</b> o Android.</span>
+      <span style="font-size:0.72rem;color:var(--texto-suave)">Tocá una vez y empezá a hablar natural ("hola, quiero dos maní grill"). Shuki te responde y <b>sigue escuchando solo</b>, como una llamada. Tocá de nuevo para terminar. Usá <b>Chrome en la compu</b> o Android.</span>
     </div>
     <button onclick="botReiniciarSim()" style="margin-top:0.5rem;background:transparent;border:none;color:var(--texto-suave);text-decoration:underline;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🔄 Reiniciar conversación</button>
   </div>
@@ -5139,6 +5139,7 @@ async function botEnviarSim() {
 function botReiniciarSim() {
   const ch = document.getElementById('bot-chat');
   if (ch) ch.innerHTML = '';
+  if (typeof _vozTerminar === 'function' && _vozConversacion) _vozTerminar();   // cortar la charla por voz si estaba activa
   // Limpiar la sesión de prueba (texto y voz comparten el mismo cerebro/sesión)
   fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=__reset__`).catch(() => {});
   if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
@@ -5146,58 +5147,74 @@ function botReiniciarSim() {
 }
 
 // ─── DEMO DE VOZ (Web Speech API): hablás y Shuki te responde hablando ───────
-let _vozRec = null, _vozActiva = false;
+// Demo de voz en MODO CONVERSACIÓN: hablás → responde → vuelve a escuchar solo (como una llamada)
+let _vozRec = null, _vozConversacion = false, _vozEstado = 'off';
 const BOT_VOZ_TEL = 'sim_voz';
 function actualizarBotonVoz() {
   const b = document.getElementById('bot-voz-btn');
   if (!b) return;
-  b.textContent = _vozActiva ? '🔴 Escuchando… (tocá para parar)' : '🎤 Hablar con Shuki (demo voz IA)';
-  b.style.background = _vozActiva ? '#c0392b' : '#25D366';
+  const t = { off: '🎤 Hablar con Shuki (demo voz)', escuchando: '🔴 Escuchando… (tocá para terminar)', pensando: '💭 Shuki pensando…', hablando: '🔊 Shuki hablando…' };
+  b.textContent = t[_vozEstado] || t.off;
+  b.style.background = _vozEstado === 'off' ? '#25D366' : (_vozEstado === 'escuchando' ? '#c0392b' : '#888');
 }
 function botVozToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { alert('Tu navegador no soporta reconocimiento de voz. Usá Chrome en la compu o en Android.'); return; }
-  if (_vozActiva) { if (_vozRec) _vozRec.stop(); return; }
+  if (_vozConversacion) { _vozTerminar(); return; }
+  _vozConversacion = true;
+  _vozEscuchar();
+}
+function _vozTerminar() {
+  _vozConversacion = false; _vozEstado = 'off';
+  try { if (_vozRec) _vozRec.abort(); } catch (e) {}
   if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+  actualizarBotonVoz();
+}
+function _vozEscuchar() {
+  if (!_vozConversacion) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   _vozRec = new SR();
-  _vozRec.lang = 'es-AR';
-  _vozRec.interimResults = false;
-  _vozRec.maxAlternatives = 1;
-  _vozActiva = true; actualizarBotonVoz();
+  _vozRec.lang = 'es-AR'; _vozRec.interimResults = false; _vozRec.maxAlternatives = 1;
+  _vozEstado = 'escuchando'; actualizarBotonVoz();
+  let capto = false;
   _vozRec.onresult = async (ev) => {
+    capto = true;
     const txt = (ev.results[0][0].transcript || '').trim();
     if (txt) { botPintarMsg(txt, 'cliente'); await botVozProcesar(txt); }
   };
-  _vozRec.onerror = () => { _vozActiva = false; actualizarBotonVoz(); };
-  _vozRec.onend = () => { _vozActiva = false; actualizarBotonVoz(); };
-  try { _vozRec.start(); } catch (e) { _vozActiva = false; actualizarBotonVoz(); }
+  _vozRec.onerror = () => {};
+  _vozRec.onend = () => { if (_vozConversacion && !capto && _vozEstado === 'escuchando') _vozEscuchar(); };  // silencio → seguir escuchando
+  try { _vozRec.start(); } catch (e) {}
 }
 async function botVozProcesar(txt) {
+  _vozEstado = 'pensando'; actualizarBotonVoz();
   botPintarMsg('…', 'bot');
   const chat = document.getElementById('bot-chat');
   const pensando = chat ? chat.lastChild : null;
   try {
     const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&canal=voz&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
     const reply = (data && data.reply) ? data.reply : 'No te entendí, ¿me repetís?';
-    if (pensando && pensando.textContent === '…') pensando.textContent = reply;
-    else botPintarMsg(reply, 'bot');
-    botHablar(reply);
+    if (pensando && pensando.textContent === '…') pensando.textContent = reply; else botPintarMsg(reply, 'bot');
+    botHablar(reply, () => { if (_vozConversacion) _vozEscuchar(); else { _vozEstado = 'off'; actualizarBotonVoz(); } });
   } catch (e) {
-    if (pensando && pensando.textContent === '…') pensando.textContent = '⚠️ Error de conexión';
-    else botPintarMsg('⚠️ Error de conexión', 'bot');
+    if (pensando && pensando.textContent === '…') pensando.textContent = '⚠️ Error de conexión'; else botPintarMsg('⚠️ Error de conexión', 'bot');
+    if (_vozConversacion) _vozEscuchar();
   }
 }
-function botHablar(texto) {
-  if (typeof speechSynthesis === 'undefined') return;
+function botHablar(texto, onfin) {
+  if (typeof speechSynthesis === 'undefined') { if (onfin) onfin(); return; }
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(texto);
-  u.lang = 'es-AR'; u.rate = 1.02; u.pitch = 1.0;
+  u.lang = 'es-AR'; u.rate = 1.03; u.pitch = 1.0;
   const voces = speechSynthesis.getVoices();
-  const esp = voces.find(v => /es[-_]AR/i.test(v.lang)) || voces.find(v => /es[-_]MX/i.test(v.lang)) || voces.find(v => /^es/i.test(v.lang));
+  const esp = voces.find(v => /es[-_]AR/i.test(v.lang)) || voces.find(v => /es[-_](MX|US|ES)/i.test(v.lang)) || voces.find(v => /^es/i.test(v.lang));
   if (esp) u.voice = esp;
+  _vozEstado = 'hablando'; actualizarBotonVoz();
+  u.onend = () => { if (onfin) onfin(); };
+  u.onerror = () => { if (onfin) onfin(); };
   speechSynthesis.speak(u);
 }
-if (typeof speechSynthesis !== 'undefined') { try { speechSynthesis.getVoices(); } catch (e) {} }
+if (typeof speechSynthesis !== 'undefined') { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch (e) {} }
 
 // ─── STOCK DISPONIBLE (sección Stock) ─────────────────────────────────────────
 function renderStockTotal() {
