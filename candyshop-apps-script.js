@@ -101,7 +101,13 @@ function doGet(e) {
       // Cerebro conversacional con IA (para voz natural): entiende lenguaje común.
       if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET))
         return json({ error: 'no autorizado' });
-      return json(procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1', e.parameter.canal || 'texto'));
+      const rVoz = procesarVozIA_(ss, e.parameter.from || '', dec(e.parameter.text || ''), e.parameter.sim === '1', e.parameter.canal || 'texto');
+      // Voz natural embebida: generamos el audio en la MISMA respuesta (ahorra un viaje de red → menos lag).
+      if (e.parameter.tts === '1' && rVoz && rVoz.reply) {
+        const a = ttsOpenAI_(rVoz.reply);
+        if (a) rVoz.audio = a;
+      }
+      return json(rVoz);
     }
     if (accion === 'tts') {
       // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
@@ -110,16 +116,9 @@ function doGet(e) {
       if (!key) return json({ error: 'sin_openai' });
       const texto = dec(e.parameter.text || '').substring(0, 500);
       if (!texto) return json({ error: 'sin texto' });
-      try {
-        const res = UrlFetchApp.fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'post', contentType: 'application/json',
-          headers: { 'Authorization': 'Bearer ' + key },
-          payload: JSON.stringify({ model: 'tts-1', voice: 'onyx', input: texto, response_format: 'mp3', speed: 1.05 }),
-          muteHttpExceptions: true
-        });
-        if (res.getResponseCode() !== 200) return json({ error: 'tts ' + res.getResponseCode() });
-        return json({ ok: true, audio: Utilities.base64Encode(res.getContent()) });
-      } catch (err) { return json({ error: String(err) }); }
+      const b64 = ttsOpenAI_(texto, key);
+      if (!b64) return json({ error: 'tts_fallo' });
+      return json({ ok: true, audio: b64 });
     }
     if (accion === 'getEstadoTienda') {
       // Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'. Público (lo lee la tienda).
@@ -2512,6 +2511,22 @@ function botPedidosPrevios_(ss, tel) {
   return out;
 }
 
+// Texto → voz natural (OpenAI TTS). Devuelve base64 del mp3, o null si falla.
+function ttsOpenAI_(texto, key) {
+  key = key || PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
+  if (!key || !texto) return null;
+  try {
+    const res = UrlFetchApp.fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + key },
+      payload: JSON.stringify({ model: 'tts-1', voice: 'onyx', input: texto.substring(0, 500), response_format: 'mp3', speed: 1.05 }),
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) return null;
+    return Utilities.base64Encode(res.getContent());
+  } catch (err) { return null; }
+}
+
 function procesarVozIA_(ss, tel, texto, sim, canal) {
   tel = (tel||'').toString().trim();
   if (!tel) return { reply: 'No te escuché bien, ¿me repetís?' };
@@ -2522,7 +2537,7 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
   const s = botSesion_(ss, tel);
   // Reset de la charla de prueba (lo usa el botón "Reiniciar" del simulador)
   if ((texto || '').trim() === '__reset__') {
-    s.carrito = {}; s.historial = [];
+    s.carrito = {}; s.historial = []; s.nombre = '';
     botGuardarSesion_(s);
     return { reply: 'ok' };
   }
@@ -2557,8 +2572,11 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
 
   const system =
     'Sos Shuki, el vendedor telefónico de Shuk Mamtakim, un negocio familiar argentino de golosinas y frutos secos kosher. ' +
-    'Atendés a un cliente por TELÉFONO. Hablás español rioplatense, cálido, cercano y BREVE (es una llamada: frases cortas, ' +
+    'Atendés a un cliente por TELÉFONO. Hablás español RIOPLATENSE de Buenos Aires, cálido, cercano y BREVE (es una llamada: frases cortas, ' +
     'naturales, una idea por vez). Sos buena onda como un vendedor de barrio que conoce a su gente.\n' +
+    '⚠️ ACENTO: hablá SOLO como argentino/porteño. Usá voseo ("vos", "tenés", "querés"). PROHIBIDO usar mexicanismos ' +
+    'u otros regionalismos: NUNCA digas "te late", "órale", "qué onda", "ahorita", "platicar", "chido", "padre", "antojar". ' +
+    'En lugar de "¿cuál te late?" decí "¿cuál te gusta?", "¿cuál llevás?" o "¿cuál te tienta?". Sonás 100% argentino.\n' +
     'Te paso el CATÁLOGO (codigo | producto | precio | stock) y el CARRITO actual del cliente. El cliente te habla normal.\n' +
     '⚠️ MONEDA: TODOS los precios están en PESOS ARGENTINOS. NUNCA hables de dólares ni de "U$S". Decí "pesos" o "$".\n' +
     'Tu trabajo: ayudarlo a armar el pedido y cerrarlo.\n' +
@@ -2572,7 +2590,10 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
     '- Nunca digas códigos en voz alta (el cliente no los ve): hablá con los nombres.\n' +
     '- PERFIL DEL CLIENTE: si ya lo conocés por su nombre, saludalo por su nombre con cariño. Si compró antes, ' +
     'podés referirte a eso con naturalidad ("¿te llevo las pecan Lotus como la otra vez?"). No seas invasivo.\n' +
-    '- Si el cliente te dice su nombre, anotalo en el campo nombre_cliente.\n' +
+    '- ⚠️ NO repitas el nombre del cliente en cada frase: queda pesado y artificial. Usalo SOLO al saludar al ' +
+    'principio y, como mucho, al cerrar el pedido. En el medio de la charla hablale normal, SIN nombrarlo.\n' +
+    '- Si el cliente te dice su nombre, anotalo en nombre_cliente. Si te CORRIGE el nombre o aclara que es otra ' +
+    'persona ("no soy X, soy Y"), creele y usá SIEMPRE el último nombre que te dio. Nunca vuelvas a un nombre viejo.\n' +
     '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
     '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
     (esVoz
@@ -2654,8 +2675,9 @@ function procesarVozIA_(ss, tel, texto, sim, canal) {
     if (q > 0) nuevo[p.id] = Math.min(p.stock, q);
   });
   s.carrito = nuevo;
-  // Recordar el nombre del cliente entre llamadas
-  if (data.nombre_cliente && data.nombre_cliente.trim() && !s.nombre) s.nombre = data.nombre_cliente.trim();
+  // Recordar el nombre del cliente entre llamadas. Si dice/corrige el nombre, el ÚLTIMO gana
+  // (así "no soy Lucía, soy Jony" pisa al viejo, en vez de quedar pegado para siempre).
+  if (data.nombre_cliente && data.nombre_cliente.trim()) s.nombre = data.nombre_cliente.trim();
   const confirmar = data.confirmar === true && Object.keys(nuevo).length > 0;
   // Guardar el turno en el historial (memoria conversacional)
   s.historial = (s.historial || []).concat([{ r: 'u', t: texto }, { r: 'a', t: data.reply || '' }]).slice(-6);

@@ -5195,29 +5195,32 @@ async function botVozProcesar(txt) {
   const chat = document.getElementById('bot-chat');
   const pensando = chat ? chat.lastChild : null;
   try {
-    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&canal=voz&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
+    const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=botVoz&sim=1&canal=voz&tts=1&token=${encodeURIComponent(_authToken)}&from=${encodeURIComponent(BOT_VOZ_TEL)}&text=${encodeURIComponent(txt)}`);
     const reply = (data && data.reply) ? data.reply : 'No te entendí, ¿me repetís?';
     if (pensando && pensando.textContent === '…') pensando.textContent = reply; else botPintarMsg(reply, 'bot');
-    botHablar(reply, () => { if (_vozConversacion) _vozEscuchar(); else { _vozEstado = 'off'; actualizarBotonVoz(); } });
+    // El audio ya viene embebido (un solo viaje de red) → reproducir directo. Si no vino, botHablar lo pide.
+    botHablar(reply, () => { if (_vozConversacion) _vozEscuchar(); else { _vozEstado = 'off'; actualizarBotonVoz(); } }, data && data.audio);
   } catch (e) {
     if (pensando && pensando.textContent === '…') pensando.textContent = '⚠️ Error de conexión'; else botPintarMsg('⚠️ Error de conexión', 'bot');
     if (_vozConversacion) _vozEscuchar();
   }
 }
 let _vozAudio = null;
-async function botHablar(texto, onfin) {
+async function botHablar(texto, onfin, audioListo) {
   _vozEstado = 'hablando'; actualizarBotonVoz();
-  // 1) Intentar voz natural (OpenAI TTS); 2) si falla, voz del navegador
+  // 1) Voz natural (OpenAI TTS). Si el audio ya vino embebido en la respuesta, lo usamos directo (sin
+  //    otro viaje de red). Si no, lo pedimos. 2) Si todo falla, voz del navegador.
+  const reproducir = (b64) => {
+    try { if (_vozAudio) { _vozAudio.pause(); } } catch (e) {}
+    _vozAudio = new Audio('data:audio/mp3;base64,' + b64);
+    _vozAudio.onended = () => { if (onfin) onfin(); };
+    _vozAudio.onerror = () => hablarNavegador(texto, onfin);
+    _vozAudio.play().catch(() => hablarNavegador(texto, onfin));
+  };
+  if (audioListo) { reproducir(audioListo); return; }
   try {
     const data = await fetchConSesion(`${APPS_SCRIPT_URL}?accion=tts&token=${encodeURIComponent(_authToken)}&text=${encodeURIComponent((texto||'').substring(0,500))}`);
-    if (data && data.audio) {
-      try { if (_vozAudio) { _vozAudio.pause(); } } catch (e) {}
-      _vozAudio = new Audio('data:audio/mp3;base64,' + data.audio);
-      _vozAudio.onended = () => { if (onfin) onfin(); };
-      _vozAudio.onerror = () => hablarNavegador(texto, onfin);
-      await _vozAudio.play();
-      return;
-    }
+    if (data && data.audio) { reproducir(data.audio); return; }
   } catch (e) {}
   hablarNavegador(texto, onfin);
 }
