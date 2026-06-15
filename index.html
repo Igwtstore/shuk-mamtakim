@@ -1091,6 +1091,7 @@
     <div class="admin-titulo">📦 Pedidos</div>
     <div class="filtros-estado" id="filtros-estado">
       <button class="filtro-estado-btn activo" onclick="setFiltroEstado('todos',this)">Todos</button>
+      <button class="filtro-estado-btn" onclick="setFiltroEstado('cotizacion',this)">🟡 Cotización</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('pendiente',this)">⏳ Pendiente</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('preparando',this)">🔧 Preparando</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('entregado',this)">✓ Entregado</button>
@@ -2701,8 +2702,9 @@ async function renderPedidos() {
     const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
     let todos = [...ventas].reverse();
     if (soloMiri) todos = todos.filter(pedidoEsDeMiri);
-    const activos = ['pendiente','preparando'];
-    const pendientes = todos.filter(v => activos.includes(v.estado || 'pendiente'));
+    const activos = ['cotizacion','pendiente','preparando'];   // cotizaciones arriba: requieren tu decisión
+    const pendientes = todos.filter(v => activos.includes(v.estado || 'pendiente'))
+      .sort((a,b) => (a.estado === 'cotizacion' ? 0 : 1) - (b.estado === 'cotizacion' ? 0 : 1));   // cotizaciones primero
     const historial = todos.filter(v => !activos.includes(v.estado || 'pendiente'));
 
     const renderCard = (v, conAcciones) => {
@@ -2827,7 +2829,7 @@ async function renderPedidos() {
     if (filtro === 'todos') {
       pedidosFiltrados = pendientes;
       historialFiltrado = historial.slice(0,10);
-    } else if (['pendiente','preparando'].includes(filtro)) {
+    } else if (['cotizacion','pendiente','preparando'].includes(filtro)) {
       pedidosFiltrados = todos.filter(v => (v.estado||'pendiente') === filtro);
       historialFiltrado = [];
     } else {
