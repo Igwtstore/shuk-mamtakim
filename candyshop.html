@@ -2286,6 +2286,7 @@ function calcCambio() {
 }
 
 async function confirmarVentaWizard() {
+  if (_registrandoVenta) return;   // ya se está registrando: ignorar clics repetidos
   if (!Object.keys(wProductosSeleccionados).length || !wPago) return;
   if ((wPago === 'nopago' || wPago === 'cuenta' || wPago === 'masque') && !wCliente) { _pedirClienteWizard(); return; }
   if (wPago === 'cuenta') {
@@ -2296,7 +2297,10 @@ async function confirmarVentaWizard() {
     const monto = parseFloat(document.getElementById('w-monto-masque').value) || 0;
     if (!monto) { document.getElementById('w-monto-masque').focus(); return; }
   }
-  document.getElementById('wizard-next').textContent = 'Registrando...';
+  const wbtn = document.getElementById('wizard-next');
+  _registrandoVenta = true;
+  wbtn.textContent = 'Registrando...'; wbtn.disabled = true;
+  try {
 
   const total = calcTotal();
   let montoPago, saldo, esDebe;
@@ -2342,6 +2346,12 @@ async function confirmarVentaWizard() {
   const tabHoy = document.querySelector('.tab');
   if (tabHoy) showTab('dashboard', tabHoy);
   mostrarToast('✅ Venta registrada!');
+  } catch (e) {
+    alert('Hubo un error al registrar. Reintentá.');
+  } finally {
+    _registrandoVenta = false;
+    wbtn.disabled = false; wbtn.textContent = 'Registrar venta';
+  }
 }
 
 // ─── DEUDORES BIDIRECCIONAL ───────────────────────────────────────
@@ -2455,6 +2465,7 @@ async function cobrarTodo(cliente, i) {
 
 // ─── RETRO WIZARD ─────────────────────────────────────────────────
 let rStep = 0, rFecha = '', rCliente = '', rProductosSeleccionados = {}, rPago = '';
+let _registrandoVenta = false;   // candado anti doble-clic (evita ventas duplicadas)
 const RETRO_TITLES = ['¿Qué día?', '¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
 
 function _retroEnterKey(e) {
@@ -2686,6 +2697,7 @@ function calcRCambio() {
 }
 
 async function confirmarRetroVenta() {
+  if (_registrandoVenta) return;   // ya se está registrando: ignorar clics repetidos
   if (!rFecha || !Object.keys(rProductosSeleccionados).length || !rPago) return;
   if ((rPago === 'nopago' || rPago === 'cuenta' || rPago === 'masque') && !rCliente) { _pedirClienteRetro(); return; }
   if (rPago === 'cuenta') {
@@ -2697,7 +2709,9 @@ async function confirmarRetroVenta() {
     if (!m) { document.getElementById('rw-monto-masque').focus(); return; }
   }
   const btn = document.getElementById('retro-next');
-  btn.textContent = 'Registrando...'; btn.style.display = 'block';
+  _registrandoVenta = true;
+  btn.textContent = 'Registrando...'; btn.disabled = true; btn.style.display = 'block';
+  try {
 
   const total = calcRTotal();
   let montoPago, saldo, esDebe;
@@ -2738,6 +2752,12 @@ async function confirmarRetroVenta() {
   t.textContent = '✅ Venta histórica registrada!';
   t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2c6fad;color:white;padding:12px 24px;border-radius:20px;font-weight:700;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
   document.body.appendChild(t); setTimeout(() => t.remove(), 2500);
+  } catch (e) {
+    alert('Hubo un error al registrar. Reintentá.');
+  } finally {
+    _registrandoVenta = false;
+    btn.disabled = false; btn.textContent = 'Registrar venta';
+  }
 }
 
 // ─── HISTORIAL POR CLIENTE ───────────────────────────────────────
