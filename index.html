@@ -1599,6 +1599,11 @@
         </optgroup>
       </select>
     </div>
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante (opcional — foto de transferencia/MP)</label>
+      <input type="file" id="cobro-comprobante" accept="image/*" style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files[0] ? '✓ '+this.files[0].name : ''" />
+      <div id="cobro-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
+    </div>
     <div id="cobro-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
       <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">Tipo de cambio — U$S 1 = $</label>
       <input type="number" id="cobro-tc" placeholder="ej: 1200" min="1" oninput="cobro_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
@@ -2696,6 +2701,7 @@ async function renderPedidos() {
             <span class="estado-pill estado-${estado}">${estado}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
             ${cobrado ? `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>` : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`}
+            ${v.comprobante ? `<a href="${esc(v.comprobante)}" target="_blank" style="font-size:0.68rem;color:var(--azul);font-weight:600;text-decoration:none">🧾 Ver comprobante</a>` : ''}
           </div>
         </div>
         ${avisoVenc}
@@ -6110,6 +6116,8 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
   document.getElementById('cobro-myri-amt').textContent = myriAmts.join(' + ');
   document.getElementById('cobro-tc').value = '';
   document.getElementById('cobro-tc-result').textContent = '';
+  const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
+  const cs = document.getElementById('cobro-comprobante-st'); if (cs) cs.textContent = '';
   cobro_onSelectChange();
   document.getElementById('cobro-modal').style.display = 'flex';
 }
@@ -6192,7 +6200,22 @@ async function confirmarCobroModal() {
   const cajaJony = jw.style.display !== 'none' ? document.getElementById('cobro-caja-jony').value : '';
   const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
+  // Subir comprobante a Cloudinary si adjuntaron uno
+  let comprobante = '';
+  const fileInp = document.getElementById('cobro-comprobante');
+  const file = fileInp && fileInp.files[0];
+  if (file) {
+    showToast('📎 Subiendo comprobante…');
+    try {
+      const fd = new FormData();
+      fd.append('file', file); fd.append('upload_preset', CLOUDINARY_PRESET); fd.append('folder', 'shuk-comprobantes');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+      comprobante = data.secure_url || '';
+    } catch (e) { showToast('⚠️ No se pudo subir el comprobante, igual confirmo el cobro'); }
+  }
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
+  if (comprobante) params.set('comprobante', comprobante);
   // En vista Myri solo se cobra su parte; no tocar la caja de Jony.
   if (esVistaMiri()) params.set('soloMyri', '1');
   cerrarModalCobro();

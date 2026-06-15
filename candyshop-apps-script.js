@@ -250,6 +250,7 @@ function doGet(e) {
           if (e.parameter.soloMyri !== '1') h.getRange(i+1,17).setValue(dec(e.parameter.cajaJony||''));
           h.getRange(i+1,18).setValue(dec(e.parameter.cajaMyri||''));
           h.getRange(i+1,19).setValue(parseFloat(e.parameter.tipoCambio||0));
+          if (e.parameter.comprobante) h.getRange(i+1,22).setValue(dec(e.parameter.comprobante));   // URL del comprobante de pago
           return ok();
         }
       }
@@ -410,7 +411,7 @@ function doGet(e) {
     }
     if (accion === 'ventas') {
       const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return json([]);
-      const nc = Math.min(20, h.getLastColumn());
+      const nc = Math.min(22, h.getLastColumn());
       return json(h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
         id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
         fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
@@ -418,7 +419,8 @@ function doGet(e) {
         estado:r[7]||'pendiente', totalARS:r[8]||0, totalUSD:r[9]||0,
         nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
         usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
-        cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||''
+        cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
+        comprobante:r[21]||''
       })));
     }
     if (accion === 'gastos') {
