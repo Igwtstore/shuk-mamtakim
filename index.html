@@ -4449,7 +4449,8 @@ function verDetalleMovimientoCaja(vid) {
   const html = `<div style="font-weight:700;font-size:1rem;margin-bottom:2px">Pedido #${d.n} — ${esc(d.cliente || 's/nombre')}</div>
     <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${d.fecha} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
     <div style="font-size:0.85rem;line-height:1.4">${cuerpo}</div>
-    ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total</span><span>${totalTxt}</span></div>` : ''}`;
+    ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total</span><span>${totalTxt}</span></div>` : ''}
+    ${d.comprobante ? `<a href="${esc(d.comprobante)}" target="_blank" style="display:block;text-align:center;margin-top:10px;padding:0.5rem;background:var(--verde-claro,#e8f5ee);color:var(--verde);border-radius:8px;font-weight:700;text-decoration:none">🧾 Ver comprobante de pago</a>` : ''}`;
   let ov = document.getElementById('caja-detalle-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -4504,7 +4505,7 @@ async function renderCaja() {
       const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
       // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
       _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
-                     lineas: _lineasPedidoVista(v.productos, soloMiri) };
+                     lineas: _lineasPedidoVista(v.productos, soloMiri), comprobante: v.comprobante || '' };
       // 🔑 REGLA DE ORO: un pedido NO cobrado nunca entra a la caja física.
       // Va a "cuenta corriente / pendiente" hasta que confirmes el cobro. La forma de pago
       // que eligió el cliente es solo una intención, no plata en mano.
