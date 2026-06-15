@@ -1356,6 +1356,12 @@
       <button class="guardar-stock-btn" onclick="registrarGasto()" style="margin-top:0">Registrar gasto</button>
     </div>
   </div>
+  <div class="admin-card" data-seccion="dinero">
+    <div class="admin-titulo">🔍 Control / Auditoría</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Revisa automáticamente que no haya errores: caja, repartos, duplicados, stock. En vez de chequear a mano.</div>
+    <button class="guardar-stock-btn" style="margin-top:0" onclick="auditarSistema()">🔍 Revisar todo</button>
+    <div id="auditoria-resultado" style="margin-top:0.75rem"></div>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">🔄 Transferir entre cajas</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
@@ -4540,6 +4546,57 @@ function verDetalleMovimientoCaja(vid) {
   box.style.cssText = 'background:var(--blanco,#fff);border-radius:12px;padding:1rem 1.1rem;max-width:440px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.25)';
   box.innerHTML = html + '<button onclick="document.getElementById(\'caja-detalle-overlay\').remove()" style="margin-top:14px;width:100%;padding:0.55rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>';
   ov.appendChild(box);
+}
+
+// 🔍 Auditoría: corre chequeos automáticos sobre ventas y stock, lista las alertas.
+async function auditarSistema() {
+  const cont = document.getElementById('auditoria-resultado');
+  if (!cont) return;
+  cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Revisando…</div>';
+  let ventas = [];
+  try { ventas = await apiGet('ventas'); } catch (e) { cont.innerHTML = '<div style="color:#c0392b">No se pudo leer las ventas.</div>'; return; }
+  if (!Array.isArray(ventas)) ventas = [];
+  const al = [];   // {sev:'alta'|'media', txt}
+  const reales = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion');
+
+  reales.forEach(v => {
+    const n = v.nVenta || '?', cli = v.cliente || 's/nombre';
+    const tARS = Math.round(parseFloat(v.totalARS) || 0);
+    const tUSD = parseFloat(v.totalUSD) || 0;
+    const repARS = Math.round((parseFloat(v.arsJONY) || 0) + (parseFloat(v.arsMyri) || 0));
+    const usdM = parseFloat(v.usdMyri) || 0;
+    // Total 0
+    if (tARS === 0 && tUSD === 0) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): total en $0` });
+    // Reparto ARS no cuadra
+    if (tARS > 0 && Math.abs(tARS - repARS) > 1) al.push({ sev: 'alta', txt: `Pedido #${n} (${cli}): total $${tARS.toLocaleString('es-AR')} pero el reparto Jony+Myri suma $${repARS.toLocaleString('es-AR')}` });
+    // USD Myri fantasma (como el de Roger)
+    if (tUSD === 0 && usdM > 0) al.push({ sev: 'alta', txt: `Pedido #${n} (${cli}): tiene U$S ${usdM} de Myri pero el total en dólares es 0 (residuo a limpiar)` });
+    if (tUSD > 0 && Math.abs(tUSD - usdM) > 0.5 && usdM > 0) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): total U$S ${tUSD.toFixed(2)} vs Myri U$S ${usdM.toFixed(2)}` });
+    // Entregado hace rato sin cobrar
+    const cobrado = v.cajaJony || v.cajaMyri;
+    const dias = diasDesdePedido(v.fecha);
+    if (v.estado === 'entregado' && !cobrado && dias > 7) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): entregado hace ${dias} días y sigue sin cobrar` });
+  });
+
+  // Posibles duplicados (mismo cliente + total + día + productos)
+  const grupos = {};
+  reales.forEach(v => {
+    const k = (v.cliente || '') + '|' + Math.round(parseFloat(v.totalARS) || 0) + '|' + (v.fecha || '').split(' ')[0] + '|' + (v.productos || '').substring(0, 40);
+    (grupos[k] = grupos[k] || []).push(v.nVenta);
+  });
+  Object.values(grupos).forEach(ns => { if (ns.length > 1) al.push({ sev: 'alta', txt: `Posible duplicado: pedidos #${ns.join(', #')} parecen iguales (mismo cliente, total y día)` }); });
+
+  // Stock negativo
+  (productos || []).forEach(p => { if ((p.stock || 0) < 0) al.push({ sev: 'alta', txt: `Stock negativo: ${p.nombre} (${p.stock})` }); });
+
+  if (!al.length) {
+    cont.innerHTML = '<div style="background:var(--verde-claro,#e8f5ee);color:var(--verde);padding:0.7rem;border-radius:8px;font-weight:700;text-align:center">✓ Todo cuadra — no encontré errores</div>';
+    return;
+  }
+  al.sort((a, b) => (a.sev === 'alta' ? 0 : 1) - (b.sev === 'alta' ? 0 : 1));
+  cont.innerHTML = `<div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.4rem">${al.length} cosa(s) para revisar:</div>` +
+    al.map(a => `<div style="display:flex;gap:0.5rem;padding:0.45rem 0.6rem;border-radius:8px;margin-bottom:0.35rem;background:${a.sev === 'alta' ? '#fde8e8' : '#fdf3e3'};font-size:0.82rem">
+      <span>${a.sev === 'alta' ? '🔴' : '🟡'}</span><span>${esc(a.txt)}</span></div>`).join('');
 }
 
 async function renderCaja() {
