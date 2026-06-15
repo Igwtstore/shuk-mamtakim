@@ -23,7 +23,7 @@ const ENFORCE_HIJOS = true;   // Etapa B: estricto — rechaza acciones de hijos
 const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker del bot
 // 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
 const PROTECTED_HIJOS = [
-  'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia',
+  'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
@@ -746,6 +746,7 @@ function doGet(e) {
     if (accion === 'eliminarProductoHijo') { return json(eliminarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarVentaHijos')   { return json(eliminarVentaHijos(ss, e.parameter)); }
     if (accion === 'limpiarVentasHijosDia'){ return json(limpiarVentasHijosDia(ss, e.parameter)); }
+    if (accion === 'arreglarVentasHijosDia'){ return json(arreglarVentasHijosDia(ss, e.parameter)); }
     if (accion === 'editarVentaHijos')     { return json(editarVentaHijos(ss, e.parameter)); }
     if (accion === 'getProveedoresHijos')  { return json(getProveedoresHijos(ss)); }
     if (accion === 'agregarProveedorHijos'){ return json(agregarProveedorHijos(ss, e.parameter)); }
@@ -1065,6 +1066,36 @@ function limpiarVentasHijosDia(ss, p) {
     }
   }
   return { ok: true, borradas: borradas };
+}
+
+// Limpieza fina de un día: borra las ventas SIN cliente (carga masiva duplicada) y
+// DEDUPLICA las con cliente (deja la primera de cada línea idéntica). Revierte CC.
+function arreglarVentasHijosDia(ss, p) {
+  const dia = (p.dia || '').trim();
+  const hijo = (p.hijo || '').trim();
+  if (!dia) return { error: 'falta dia' };
+  const h = ss.getSheetByName('VentasHijos');
+  if (!h || h.getLastRow() < 2) return { error: 'sin hoja' };
+  const data = h.getDataRange().getValues();
+  const vistas = {}, aBorrar = [];
+  for (let i = 1; i < data.length; i++) {
+    const fecha = (data[i][0] || '').toString();
+    if (fecha.indexOf(dia) !== 0) continue;
+    if (hijo && data[i][1] !== hijo) continue;
+    const cli = (data[i][7] || '').toString().trim();
+    if (!cli) { aBorrar.push(i); continue; }                  // sin cliente → borrar
+    const key = cli + '|' + data[i][2] + '|' + data[i][4] + '|' + data[i][5];
+    if (vistas[key]) aBorrar.push(i); else vistas[key] = true; // línea idéntica repetida → borrar
+  }
+  let n = 0;
+  for (let j = aBorrar.length - 1; j >= 0; j--) {              // de mayor a menor: no desfasa
+    const i = aBorrar[j];
+    const saldo = parseFloat(data[i][10]) || 0;
+    if (saldo > 0 && data[i][7]) registrarMovimientoCC(ss, data[i][1], data[i][7].toString(), -saldo, 'anulacion', data[i][2]);
+    h.deleteRow(i + 1);
+    n++;
+  }
+  return { ok: true, borradas: n };
 }
 
 function editarVentaHijos(ss, p) {
