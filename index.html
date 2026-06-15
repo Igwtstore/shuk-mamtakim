@@ -106,9 +106,10 @@
   .dark-toggle:hover { background:rgba(255,255,255,0.1); }
 
   @media print {
-    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section { display:none !important; }
+    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section, #admin-tab-panel, .recato-banner, #banner-wrap, .share-btn, .carousel-btn { display:none !important; }
     .catalogo { grid-template-columns: repeat(3,1fr) !important; }
     .producto-card { break-inside:avoid; box-shadow:none !important; border:1px solid #ddd; }
+    body { background:#fff !important; }
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -827,7 +828,8 @@
       <button class="dark-toggle" onclick="activarNotificaciones()" title="Activar notificaciones" id="notif-toggle">🔔</button>
       <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
       <button class="dark-toggle" onclick="toggleRecato()" id="recato-btn" title="Modo sin fotos (solo texto)" style="font-size:0.95rem">📝</button>
-      <button class="dark-toggle" onclick="generarCatalogoPDF()" title="Descargar catálogo PDF" style="font-size:0.85rem">📄</button>
+      <button class="dark-toggle" onclick="window.print()" title="Imprimir catálogo CON fotos" style="font-size:0.85rem">🖼️</button>
+      <button class="dark-toggle" onclick="generarCatalogoPDF()" title="Lista de precios PDF (sin fotos)" style="font-size:0.85rem">📄</button>
     </div>
     <button class="carrito-btn" onclick="abrirCarrito()" id="carrito-btn-header" style="display:none">
       🛒 Carrito
