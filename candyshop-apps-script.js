@@ -23,7 +23,7 @@ const ENFORCE_HIJOS = true;   // Etapa B: estricto — rechaza acciones de hijos
 const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker del bot
 // 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
 const PROTECTED_HIJOS = [
-  'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto',
+  'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
@@ -745,6 +745,7 @@ function doGet(e) {
     if (accion === 'editarProductoHijo')   { return json(editarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarProductoHijo') { return json(eliminarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarVentaHijos')   { return json(eliminarVentaHijos(ss, e.parameter)); }
+    if (accion === 'limpiarVentasHijosDia'){ return json(limpiarVentasHijosDia(ss, e.parameter)); }
     if (accion === 'editarVentaHijos')     { return json(editarVentaHijos(ss, e.parameter)); }
     if (accion === 'getProveedoresHijos')  { return json(getProveedoresHijos(ss)); }
     if (accion === 'agregarProveedorHijos'){ return json(agregarProveedorHijos(ss, e.parameter)); }
@@ -1042,6 +1043,28 @@ function eliminarVentaHijos(ss, p) {
   }
   h.deleteRow(rowIndex);
   return { ok: true };
+}
+
+// Borra TODAS las ventas de un día (y opcional un hijo). Revierte los saldos de CC.
+// Útil para limpiar pruebas/duplicados masivos. dia en formato "dd/MM/yyyy".
+function limpiarVentasHijosDia(ss, p) {
+  const dia = (p.dia || '').trim();
+  const hijo = (p.hijo || '').trim();
+  if (!dia) return { error: 'falta dia' };
+  const h = ss.getSheetByName('VentasHijos');
+  if (!h || h.getLastRow() < 2) return { error: 'sin hoja' };
+  const data = h.getDataRange().getValues();
+  let borradas = 0;
+  for (let i = data.length - 1; i >= 1; i--) {   // de abajo hacia arriba (no desfasa índices)
+    const fecha = (data[i][0] || '').toString();
+    if (fecha.indexOf(dia) === 0 && (!hijo || data[i][1] === hijo)) {
+      const saldo = parseFloat(data[i][10]) || 0;
+      if (saldo > 0 && data[i][7]) registrarMovimientoCC(ss, data[i][1], data[i][7].toString(), -saldo, 'anulacion', data[i][2]);
+      h.deleteRow(i + 1);
+      borradas++;
+    }
+  }
+  return { ok: true, borradas: borradas };
 }
 
 function editarVentaHijos(ss, p) {
