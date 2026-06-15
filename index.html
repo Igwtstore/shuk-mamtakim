@@ -4771,31 +4771,34 @@ async function renderCuentaSocios() {
   const soloMiri = esVistaMiri();
 
   // Línea de saldo según dirección
-  const lineaSaldo = (val, fmt) => {
+  const lineaSaldo = (val, fmt, moneda) => {
     if (Math.abs(val) < 1) return `<div style="font-size:0.9rem;color:var(--verde);font-weight:700">✓ Al día (${fmt === fu ? 'U$S 0' : '$ 0'})</div>`;
     const myriDebe = val > 0;
     const quien = soloMiri
       ? (myriDebe ? 'Le debés a Jony' : 'Jony tiene tuyo')
       : (myriDebe ? 'Myri te debe' : 'Le debés a Myri');
     const color = myriDebe ? (soloMiri ? '#c0392b' : 'var(--verde)') : (soloMiri ? 'var(--verde)' : '#c0392b');
-    return `<div style="font-size:0.78rem;color:var(--texto-suave)">${quien}</div>
+    return `<div style="font-size:0.78rem;color:var(--texto-suave)">${quien} <span style="font-size:0.66rem">(${moneda})</span></div>
             <div style="font-size:1.3rem;font-weight:800;color:${color}">${fmt(val)}</div>`;
   };
 
   let html = '<div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem">';
-  html += `<div style="flex:1;min-width:130px">${lineaSaldo(ars, f)}</div>`;
-  if (Math.abs(usd) >= 0.01) html += `<div style="flex:1;min-width:130px">${lineaSaldo(usd, fu)}</div>`;
+  html += `<div style="flex:1;min-width:130px">${lineaSaldo(ars, f, 'pesos')}</div>`;
+  if (Math.abs(usd) >= 0.01) html += `<div style="flex:1;min-width:130px">${lineaSaldo(usd, fu, 'dólares')}</div>`;
   html += '</div>';
 
   if (!soloMiri) {
-    // Desglose solo para Jony
+    // Desglose claro para Jony: de dónde sale el saldo (ventas cruzadas)
     const fila = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
-      `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:1px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600">${sign}${f(val)}</span></div>`;
+      `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${f(val)}</span></div>`;
+    const neto = comiDebe + pitzMyri - jonyTiene - saldadoARS;
     html += `<div style="background:var(--gris);border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
-      ${fila('Comisión que Myri debe', comiDebe, '+')}
-      ${fila('Pitzujim que cobró Myri', pitzMyri, '+')}
-      ${fila('Golosinas de Myri que tenés', jonyTiene, '−')}
+      <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">Por las ventas cruzadas entre vos y Myri:</div>
+      ${fila('Comisión que Myri te debe', comiDebe, '+')}
+      ${fila('Ventas tuyas que cobró Myri (te las debe)', pitzMyri, '+')}
+      ${fila('Ventas de Myri que cobraste vos (se las debés)', jonyTiene, '−')}
       ${saldadoARS !== 0 ? fila('Ya saldado', saldadoARS, '−') : ''}
+      ${Math.abs(neto) >= 1 ? `<div style="display:flex;justify-content:space-between;font-size:0.8rem;padding-top:0.35rem;margin-top:0.3rem;border-top:1px solid var(--gris-medio);font-weight:700"><span>${neto>0?'Myri te debe':'Le debés a Myri'}</span><span>${f(neto)}</span></div>` : ''}
     </div>`;
     html += `<button onclick="saldarCuentaSocios()" style="width:100%;padding:0.7rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer">✓ Saldar y poner en cero</button>`;
   } else {
