@@ -4883,10 +4883,11 @@ async function renderCuentaSocios() {
     const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
     const comiA = (parseFloat(v.comiARS)||0) || Math.round(arsM*0.15);
     const comiU = (parseFloat(v.comiUSD)||0) || parseFloat((usdM*0.15).toFixed(2));
-    // Mismo ruteo que el Caja: usa lo confirmado o deduce de la forma de pago.
-    // La cuenta corriente NO se cuenta hasta que efectivamente se cobre.
-    const cajaJ = v.cajaJony || (fp==='Cuenta corriente'?'CTA_CTE_ARS':fp==='Efectivo'?'EFT_JONY':'');
-    const cajaM = v.cajaMyri || (fp==='Cuenta corriente'?'CTA_CTE_ARS':fp==='Efectivo'?'EFT_MYRI':'');
+    // REGLA ESTRICTA: solo cuenta lo que tiene cobro CONFIRMADO (caja real elegida al confirmar).
+    // No se deduce de la forma de pago: un pedido marcado 'Efectivo' sin confirmar NO se cuenta
+    // (es deuda hasta que se confirme). Así coincide con deudores y el diagnóstico.
+    const cajaJ = v.cajaJony || '';
+    const cajaM = v.cajaMyri || '';
 
     // Pitzujim que terminó en caja de Myri → Myri le debe el total
     if (arsJ > 0 && MYRI_ARS.includes(cajaJ)) pitzMyri += arsJ;
@@ -4899,7 +4900,7 @@ async function renderCuentaSocios() {
 
     // Golosinas en USD (puede haberse convertido a ARS con tipo de cambio)
     if (usdM > 0) {
-      const colUSD = v.cajaMyri || (fp==='Cuenta corriente'?'CTA_CTE_USD':fp==='Efectivo'?'ETF_USD_MYRI':'');
+      const colUSD = v.cajaMyri || '';   // estricto: solo cobro confirmado
       const tc = parseFloat(v.tipoCambio)||0;
       if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
         const arsEq = usdM * tc; const comiConv = Math.round(arsEq*0.15);
@@ -4984,11 +4985,29 @@ async function renderCuentaSocios() {
       else _pComi += comiAv;
     });
     const _filaDiag = (lbl, val, color) => `<div style="display:flex;justify-content:space-between;font-size:0.74rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:700;color:${color};white-space:nowrap">${f(val)}</span></div>`;
+    // Ventas marcadas con un método de pago (Efectivo/Transf/MP) pero SIN cobro confirmado.
+    // Son las "dudosas": capaz cobraste y no apretaste confirmar. Botón para confirmar cada una.
+    const _metodoPago = fpx => ['Efectivo','Transferencia','Mercado Pago'].includes((fpx||'').trim());
+    const _revisar = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion'
+      && !esCobradoReal(v) && _metodoPago(v.formaPago) && !pedidosConPago.has(String(v.id)));
+    const _filaRev = v => {
+      const aJ = parseFloat(v.arsJONY)||0, aM = parseFloat(v.arsMyri)||0, uM = parseFloat(v.usdMyri)||0;
+      const tot = [aM>0?f(aM):'', uM>0?('U$S '+uM.toFixed(2)):''].filter(Boolean).join(' + ') || f(aJ);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed #e0d4b8">
+        <span style="font-size:0.7rem;color:#7a5a1a">${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${(v.formaPago||'').trim()} · ${tot}</span></span>
+        <button onclick="abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM})" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
+      </div>`;
+    };
     html += `<div style="background:#f4f7fb;border:1px solid #e0e8f2;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
       <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">🔎 Tu comisión sobre golosinas de Myri:</div>
       ${_filaDiag('💰 Ya cobradas → comisión ganada', _cComi, 'var(--verde)')}
       ${_filaDiag('⏳ Sin cobrar → comisión cuando cobres', _pComi, 'var(--dorado)')}
       <div style="font-size:0.63rem;color:var(--texto-suave);margin-top:0.25rem">Lo "sin cobrar" no es plata perdida: esos pedidos están en la cuenta corriente (deudores).</div>
+      ${_revisar.length ? `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #e0e8f2">
+        <div style="font-size:0.66rem;font-weight:700;color:#b8860b;margin-bottom:0.2rem">📋 Revisar — marcadas como pago pero sin confirmar (${_revisar.length}):</div>
+        <div style="font-size:0.62rem;color:var(--texto-suave);margin-bottom:0.2rem">Si la cobraste, tocá Confirmar y elegí la caja. Si no, dejala (queda como deuda).</div>
+        ${_revisar.map(_filaRev).join('')}
+      </div>` : ''}
     </div>`;
     html += `<button onclick="saldarCuentaSocios()" style="width:100%;padding:0.7rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer">✓ Saldar y poner en cero</button>`;
   } else {
