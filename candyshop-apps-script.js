@@ -1050,8 +1050,8 @@ function consultarDeudores(ss, p) {
   const datos = h.getRange(2,1,h.getLastRow()-1,5).getValues();
   const saldos = {};
   datos.filter(r => r[1] === p.hijo && r[2]).forEach(r => {
-    const c = r[2].toString().toLowerCase();
-    if (!saldos[c]) saldos[c] = { cliente: r[2], saldo: 0 };
+    const c = r[2].toString().trim().toLowerCase();
+    if (!saldos[c]) saldos[c] = { cliente: r[2].toString().trim(), saldo: 0 };
     saldos[c].saldo += parseFloat(r[3])||0;
   });
   // Devuelve positivos (nos deben) Y negativos (les debemos vuelto)
@@ -1065,7 +1065,7 @@ function consultarDeudaCliente(ss, p) {
   const h = ss.getSheetByName('CCHijos'); const detalle = [];
   if (h && h.getLastRow() > 1) {
     h.getRange(2,1,h.getLastRow()-1,5).getValues()
-      .filter(r => r[1] === p.hijo && r[2]?.toString().toLowerCase() === dec(p.cliente).toLowerCase() && parseFloat(r[3]) > 0)
+      .filter(r => r[1] === p.hijo && (r[2]||'').toString().trim().toLowerCase() === dec(p.cliente).trim().toLowerCase() && parseFloat(r[3]) > 0)
       .slice(-5).forEach(r => detalle.push({
         fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM') : r[0].toString(),
         producto: r[4]||'deuda', monto: parseFloat(r[3])
@@ -1218,8 +1218,9 @@ function editarVentaHijos(ss, p) {
 function getSaldoCliente(ss, hijo, cliente) {
   const h = ss.getSheetByName('CCHijos'); if (!h || h.getLastRow() < 2) return 0;
   let saldo = 0;
+  const objetivo = (cliente||'').toString().trim().toLowerCase();
   h.getRange(2,1,h.getLastRow()-1,5).getValues()
-    .filter(r => r[1] === hijo && r[2]?.toString().toLowerCase() === cliente.toLowerCase())
+    .filter(r => r[1] === hijo && (r[2]||'').toString().trim().toLowerCase() === objetivo)
     .forEach(r => { saldo += parseFloat(r[3])||0; });
   return saldo; // positivo = nos deben, negativo = les debemos vuelto
 }
