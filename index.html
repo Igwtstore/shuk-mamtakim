@@ -2860,7 +2860,10 @@ async function renderPedidos() {
     let pedidosFiltrados, historialFiltrado;
     if (filtro === 'todos') {
       pedidosFiltrados = pendientes;
-      historialFiltrado = historial.slice(0,10);
+      // Los que TODAVÍA DEBEN se muestran siempre (aunque sean viejos); los ya pagados/cancelados, solo los 10 recientes.
+      const debenAun = historial.filter(v => v.estado !== 'cancelado' && !esCobradoReal(v));
+      const yaListos = historial.filter(v => v.estado === 'cancelado' || esCobradoReal(v));
+      historialFiltrado = [...debenAun, ...yaListos.slice(0, 10)];
     } else if (['cotizacion','pendiente','preparando'].includes(filtro)) {
       pedidosFiltrados = todos.filter(v => (v.estado||'pendiente') === filtro);
       historialFiltrado = [];
@@ -4969,36 +4972,23 @@ async function renderCuentaSocios() {
       ${Math.abs(neto) >= 1 ? `<div style="display:flex;justify-content:space-between;font-size:0.8rem;padding-top:0.35rem;margin-top:0.3rem;border-top:1px solid var(--gris-medio);font-weight:700"><span>${neto>0?'Myri te debe':'Le debés a Myri'}</span><span>${f(neto)}</span></div>` : ''}
     </div>`;
 
-    // 🔎 DIAGNÓSTICO de comisión: dónde está la plata de las golosinas de Myri.
-    // Loop aparte, SOLO informativo — no afecta los números de arriba.
-    let _gCobr = 0, _cComi = 0, _gPend = 0, _pComi = 0, _gCaida = 0, _caComi = 0; const _caidas = [];
+    // 🔎 DIAGNÓSTICO de comisión: cuánto ya ganaste y cuánto falta cobrar.
+    // Pagado = caja REAL (esCobradoReal). Lo no cobrado es comisión FUTURA (no perdida):
+    // esos pedidos figuran en la cuenta corriente como deuda. Loop aparte, no afecta los números de arriba.
+    let _cComi = 0, _pComi = 0;
     ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
       if (pedidosConPago.has(String(v.id))) return;
       const arsM = parseFloat(v.arsMyri) || 0; if (arsM <= 0) return;
-      const fpv = (v.formaPago || '').trim();
       const comiAv = (parseFloat(v.comiARS) || 0) || Math.round(arsM * 0.15);
-      const cajaMv = v.cajaMyri || (fpv === 'Cuenta corriente' ? 'CTA_CTE_ARS' : fpv === 'Efectivo' ? 'EFT_MYRI' : '');
-      if (['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY'].includes(cajaMv)) { _gCobr += arsM; _cComi += comiAv; }
-      else if (String(cajaMv).startsWith('CTA_CTE')) { _gPend += arsM; _pComi += comiAv; }
-      else { _gCaida += arsM; _caComi += comiAv; _caidas.push(v); }
+      if (esCobradoReal(v)) _cComi += comiAv;
+      else _pComi += comiAv;
     });
     const _filaDiag = (lbl, val, color) => `<div style="display:flex;justify-content:space-between;font-size:0.74rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:700;color:${color};white-space:nowrap">${f(val)}</span></div>`;
-    // Cada pedido "caído" con botón para confirmar el cobro directo (por ID interno, sin depender del # duplicado)
-    const _filaCaida = v => {
-      const aJ = parseFloat(v.arsJONY)||0, aM = parseFloat(v.arsMyri)||0, uM = parseFloat(v.usdMyri)||0;
-      const fpTag = (v.formaPago||'').trim();
-      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed #f0d4d4">
-        <span style="font-size:0.7rem;color:#7a3b2a">#${v.nVenta||'?'} · ${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${fpTag} · ${f(aM)}</span></span>
-        <button onclick="abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM})" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
-      </div>`;
-    };
     html += `<div style="background:#f4f7fb;border:1px solid #e0e8f2;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
-      <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">🔎 Tu comisión sobre golosinas de Myri (incluye lo que cobraste vos):</div>
-      ${_filaDiag('💰 Golosinas cobradas → tu comisión', _cComi, 'var(--verde)')}
-      ${_filaDiag('⏳ Golosinas sin cobrar → comisión futura', _pComi, 'var(--dorado)')}
-      ${_gCaida > 0 ? `<div style="display:flex;justify-content:space-between;font-size:0.74rem;padding:4px 0;margin-top:0.3rem;border-top:1px solid #e0e8f2"><span style="color:#c0392b;font-weight:700">⚠️ Sin contabilizar (Transf/MP sin confirmar)</span><span style="font-weight:700;color:#c0392b;white-space:nowrap">${f(_caComi)}</span></div>
-      <div style="font-size:0.64rem;color:#c0392b;margin:0.2rem 0">Confirmales el cobro acá mismo (elegí la caja real donde entró la plata):</div>
-      ${_caidas.map(_filaCaida).join('')}` : `<div style="font-size:0.64rem;color:var(--verde);margin-top:0.2rem">✓ Nada sin contabilizar por forma de pago</div>`}
+      <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">🔎 Tu comisión sobre golosinas de Myri:</div>
+      ${_filaDiag('💰 Ya cobradas → comisión ganada', _cComi, 'var(--verde)')}
+      ${_filaDiag('⏳ Sin cobrar → comisión cuando cobres', _pComi, 'var(--dorado)')}
+      <div style="font-size:0.63rem;color:var(--texto-suave);margin-top:0.25rem">Lo "sin cobrar" no es plata perdida: esos pedidos están en la cuenta corriente (deudores).</div>
     </div>`;
     html += `<button onclick="saldarCuentaSocios()" style="width:100%;padding:0.7rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer">✓ Saldar y poner en cero</button>`;
   } else {
