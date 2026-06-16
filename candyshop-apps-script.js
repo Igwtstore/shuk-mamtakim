@@ -24,7 +24,7 @@ const ENFORCE_HIJOS = true;   // Etapa B: estricto — rechaza acciones de hijos
 const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker del bot
 // 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
 const PROTECTED_HIJOS = [
-  'registrarVentaHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
+  'registrarVentaHijos','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
@@ -803,6 +803,7 @@ function doGet(e) {
     // ─── SISTEMA HIJOS ────────────────────────────────────────────────────────
     if (accion === 'getCatalogoHijos')     { return json(getCatalogoHijos(ss)); }
     if (accion === 'registrarVentaHijos')  { return json(registrarVentaHijos(ss, e.parameter)); }
+    if (accion === 'registrarConsumoHijos'){ return json(registrarConsumoHijos(ss, e.parameter)); }
     if (accion === 'registrarPagoCliente') { return json(registrarPagoCliente(ss, e.parameter)); }
     if (accion === 'registrarVueltoCC')    { return json(registrarVueltoCC(ss, e.parameter)); }
     if (accion === 'registrarPagoVuelto')  { return json(registrarPagoVuelto(ss, e.parameter)); }
@@ -1019,6 +1020,28 @@ function registrarVentaHijos(ss, p) {
     registrarMovimientoCC(ss, p.hijo, dec(p.cliente), parseFloat(p.saldoPendiente), 'deuda', prodLabel);
   }
   return { ok: true };
+}
+
+// Registra algo que el chico se comió o regaló (sale del stock, no es una venta).
+function registrarConsumoHijos(ss, p) {
+  const h = getOrCreate(ss, 'ConsumoHijos', ['Fecha','Hijo','Producto','Codigo','Cantidad','Costo','Motivo','Nota']);
+  h.appendRow([new Date(), p.hijo, dec(p.productoNombre||''), dec(p.productoCodigo||''),
+    parseInt(p.cantidad)||1, parseFloat(p.costo)||0, dec(p.motivo||'comido'), dec(p.nota||'')]);
+  return { ok: true };
+}
+
+// Lo consumido/regalado HOY por ese hijo (para descontar del stock y mostrar el registro).
+function getConsumoHoy(ss, p) {
+  const h = ss.getSheetByName('ConsumoHijos'); if (!h || h.getLastRow() < 2) return [];
+  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  return h.getRange(2,1,h.getLastRow()-1,8).getValues()
+    .filter(r => {
+      if (!r[0]) return false;
+      const f = (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') : r[0].toString().trim().substring(0,10);
+      return r[1] === p.hijo && f === hoyStr;
+    })
+    .map(r => ({ producto:r[2], codigo:r[3], cantidad:r[4], costo:r[5], motivo:r[6], nota:r[7],
+      hora: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : '' }));
 }
 
 function registrarPagoCliente(ss, p) {
@@ -1308,6 +1331,7 @@ function panelHijos(ss, p) {
     deudores: consultarDeudores(ss, p),
     catalogo: getCatalogoHijos(ss),
     stockDia: getStockDia(ss, p),
+    consumo: getConsumoHoy(ss, p),
     visitas: visitasHijoResumen_(ss, (p.hijo || '').toLowerCase())
   };
 }

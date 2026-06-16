@@ -375,6 +375,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="stock-grid" id="stock-grid"></div>
     </div>
     <div class="card">
+      <button onclick="abrirComi()" style="width:100%;padding:14px;background:linear-gradient(135deg,#ff8f00,#f4511e);color:#fff;border:none;border-radius:14px;font-size:1.05rem;font-weight:800;cursor:pointer">😋 Me lo comí / 🎁 Regalé</button>
+      <div id="consumo-list" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
       <div class="card-title">Ventas de hoy</div>
       <div id="ventas-list"><div class="spinner">Cargando...</div></div>
     </div>
@@ -473,6 +477,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Saldo pendiente (deuda)</label>
       <input type="number" id="ev-saldo" min="0" placeholder="0" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:16px">
       <button id="ev-save-btn" onclick="confirmarEditarVenta()" style="width:100%;padding:13px;background:#5c3d1e;color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ME LO COMÍ / REGALÉ -->
+<div class="modal-overlay" id="comi-overlay" onclick="cerrarComiSiAfuera(event)">
+  <div class="modal-card" style="max-width:360px">
+    <div class="modal-header">
+      <span style="font-weight:700;font-size:1rem">😋 Me lo comí / 🎁 Regalé</span>
+      <button class="modal-close" onclick="cerrarComi()">✕</button>
+    </div>
+    <div style="padding:0 4px 4px">
+      <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Producto</label>
+      <select id="comi-producto" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;margin-bottom:12px;background:#fff"></select>
+      <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Cantidad</label>
+      <input type="number" id="comi-cantidad" min="1" value="1" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:12px">
+      <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">¿Qué pasó?</label>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button type="button" id="comi-m-comido" onclick="setMotivoComi('comido')" style="flex:1;padding:9px 4px;border:none;border-radius:10px;font-size:0.82rem;font-weight:700;cursor:pointer">😋 Me lo comí</button>
+        <button type="button" id="comi-m-regalo" onclick="setMotivoComi('regalo')" style="flex:1;padding:9px 4px;border:none;border-radius:10px;font-size:0.82rem;font-weight:700;cursor:pointer">🎁 Regalo</button>
+        <button type="button" id="comi-m-otro" onclick="setMotivoComi('otro')" style="flex:1;padding:9px 4px;border:none;border-radius:10px;font-size:0.82rem;font-weight:700;cursor:pointer">📝 Otro</button>
+      </div>
+      <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Nota (opcional)</label>
+      <textarea id="comi-nota" rows="2" placeholder="Ej: se lo regalé a Dani" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:16px;font-family:inherit;resize:vertical"></textarea>
+      <button id="comi-save-btn" onclick="confirmarComi()" style="width:100%;padding:13px;background:#5c3d1e;color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer">Anotar</button>
     </div>
   </div>
 </div>
@@ -863,7 +892,8 @@ function renderPanel(d) {
   renderDeudores(arr(d.deudores));
   renderCatalogo(catalogoCache);
   renderVisitasKid(d.visitas || {});
-  renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache);
+  renderConsumoHoy(d.consumo);
+  renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache, arr(d.consumo));
 }
 
 // 1) Pinta al instante lo último guardado en el teléfono, 2) trae todo el panel
@@ -910,6 +940,57 @@ async function cargarDatos(silent = false) {
 function renderVisitasKid(v) {
   document.getElementById('s-vis-hoy').textContent = v.hoy || 0;
   document.getElementById('s-vis-total').textContent = v.total || 0;
+}
+
+// ─── ME LO COMÍ / REGALÉ ──────────────────────────────────────────
+let comiMotivo = 'comido', _comiEnviando = false;
+async function abrirComi() {
+  if (!catalogoCache.length) catalogoCache = await api('getCatalogoHijos') || [];
+  const sel = document.getElementById('comi-producto');
+  sel.innerHTML = catalogoCache.map(p =>
+    `<option value="${p.codigo}" data-nombre="${(p.nombre||'').replace(/"/g,'')}" data-costo="${p.costo||0}">${p.nombre}</option>`).join('');
+  document.getElementById('comi-cantidad').value = 1;
+  document.getElementById('comi-nota').value = '';
+  setMotivoComi('comido');
+  document.getElementById('comi-overlay').classList.add('open');
+}
+function cerrarComi() { document.getElementById('comi-overlay').classList.remove('open'); }
+function cerrarComiSiAfuera(e) { if (e.target.id === 'comi-overlay') cerrarComi(); }
+function setMotivoComi(m) {
+  comiMotivo = m;
+  ['comido','regalo','otro'].forEach(x => {
+    const b = document.getElementById('comi-m-' + x);
+    if (b) { b.style.background = x === m ? '#5c3d1e' : '#f0ebe3'; b.style.color = x === m ? '#fff' : '#5c3d1e'; }
+  });
+}
+async function confirmarComi() {
+  if (_comiEnviando) return;
+  const sel = document.getElementById('comi-producto');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) { mostrarToast('❌ Elegí un producto', '#c0392b'); return; }
+  _comiEnviando = true;
+  const btn = document.getElementById('comi-save-btn'); btn.disabled = true; btn.textContent = 'Anotando...';
+  const res = await api('registrarConsumoHijos', {
+    hijo: usuario, productoCodigo: sel.value, productoNombre: opt.dataset.nombre || opt.text,
+    cantidad: parseInt(document.getElementById('comi-cantidad').value) || 1,
+    costo: parseFloat(opt.dataset.costo) || 0, motivo: comiMotivo,
+    nota: document.getElementById('comi-nota').value.trim()
+  });
+  _comiEnviando = false; btn.disabled = false; btn.textContent = 'Anotar';
+  cerrarComi();
+  if (res?.ok) { mostrarToast('✅ Anotado'); cargarDatos(); }
+  else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
+}
+function renderConsumoHoy(consumo) {
+  const el = document.getElementById('consumo-list'); if (!el) return;
+  const list = arr(consumo);
+  if (!list.length) { el.innerHTML = ''; return; }
+  el.innerHTML = list.slice().reverse().map(c => {
+    const icon = c.motivo === 'regalo' ? '🎁' : (c.motivo === 'otro' ? '📝' : '😋');
+    return `<div style="display:flex;justify-content:space-between;font-size:0.84rem;color:#666;padding:4px 0;border-top:1px solid #f0ebe3">
+      <span>${icon} ${c.cantidad}× ${c.producto}${c.nota ? ` <span style="color:#aaa">· ${c.nota}</span>` : ''}</span>
+      <span style="color:#bbb;font-size:0.78rem">${c.hora || ''}</span></div>`;
+  }).join('');
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
@@ -2987,7 +3068,7 @@ async function confirmarCargaStock() {
 function cerrarCargaStock() { document.getElementById('stock-overlay').classList.remove('open'); }
 function cerrarStockSiAfuera(e) { if (e.target.id === 'stock-overlay') cerrarCargaStock(); }
 
-function renderStockRestante(stockDia, ventas, catalogo) {
+function renderStockRestante(stockDia, ventas, catalogo, consumo = []) {
   const card = document.getElementById('stock-card');
   const grid = document.getElementById('stock-grid');
   if (!stockDia || !Object.keys(stockDia).length) { card.style.display = 'none'; return; }
@@ -2998,10 +3079,17 @@ function renderStockRestante(stockDia, ventas, catalogo) {
     const cod = (v.codigo || '').toString();
     vendidoHoy[cod] = (vendidoHoy[cod] || 0) + (v.cantidad || 1);
   });
+  // Lo comido/regalado también sale del stock
+  const consumidoHoy = {};
+  arr(consumo).forEach(c => {
+    const cod = (c.codigo || '').toString();
+    consumidoHoy[cod] = (consumidoHoy[cod] || 0) + (parseInt(c.cantidad) || 0);
+  });
 
   const items = Object.entries(stockDia).map(([cod, inicial]) => {
     const vendido = vendidoHoy[cod] || 0;
-    const restante = inicial - vendido;
+    const consumido = consumidoHoy[cod] || 0;
+    const restante = inicial - vendido - consumido;
     const prod = catalogo.find(p => p.codigo === cod);
     return { nombre: prod?.nombre || cod, inicial, vendido, restante };
   });
