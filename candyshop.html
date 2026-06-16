@@ -3055,11 +3055,12 @@ function renderHistoria(ventas) {
 
   el.innerHTML = fechas.map((fecha, idx) => {
     const vd = porDia[fecha];
-    let cobrado = 0, enCC = 0, ganancia = 0;
+    let cobrado = 0, enCC = 0, ganancia = 0, vendido = 0;
     const resumenMap = {};
     vd.forEach(v => {
       const sub = (v.precio || 0) * (v.cantidad || 1);
       const pendiente = v.saldoPendiente || 0;
+      vendido += sub;
       cobrado += sub - pendiente;
       enCC += pendiente;
       const cod = (v.codigo || '').toLowerCase();
@@ -3079,30 +3080,48 @@ function renderHistoria(ventas) {
           <div class="dia-resumen">${resumen}</div>
         </div>
         <div class="dia-nums">
-          <div class="dia-vendido-label">${fmt(cobrado)}</div>
-          <div class="dia-ganancia-label">+${fmt(ganancia)}${enCC > 0 ? ` · <span style="color:#e05c2a;font-size:0.78rem">CC ${fmt(enCC)}</span>` : ''}</div>
+          <div class="dia-vendido-label">${fmt(vendido)}</div>
+          <div class="dia-ganancia-label">+${fmt(ganancia)}${enCC > 0 ? ` · <span style="color:#e05c2a;font-size:0.78rem">fiado ${fmt(enCC)}</span>` : ''}</div>
         </div>
       </div>
       <div class="dia-detalle" id="dia-det-${idx}">
-        ${vd.map(v => {
-          const sub = (v.precio || 0) * (v.cantidad || 1);
-          const cod = (v.codigo||'').replace(/'/g,"\\'");
-          const nom = (v.producto||'').replace(/'/g,"\\'");
-          const cli = (v.cliente||'').replace(/'/g,"\\'");
-          return `<div class="item-row">
-            <div class="item-info">
-              <div class="item-name">${v.cantidad}× ${v.producto}</div>
-              ${v.cliente ? `<div class="item-sub">👤 ${v.cliente}${v.saldoPendiente > 0 ? ` · <span style="color:#e05c2a">Debe ${fmt(v.saldoPendiente)}</span>` : ''}</div>` : ''}
-            </div>
-            <div class="item-right">
-              <div class="item-price">${fmt(sub)}</div>
-              <div class="item-actions">
-                <button class="item-action-btn" onclick="abrirEditarVenta(${v.rowIndex},'${cod}','${nom}',${v.cantidad||1},${v.precio||0},'${cli}',${v.saldoPendiente||0})" title="Editar">✏️</button>
-                <button class="item-action-btn" onclick="eliminarVenta(${v.rowIndex})" title="Eliminar">🗑️</button>
+        ${(() => {
+          // Agrupar las líneas del día en VENTAS (misma persona + misma hora).
+          const grp = new Map();
+          vd.forEach(v => {
+            const cliN = (v.cliente||'').trim() || 'Sin nombre';
+            const k = cliN.toLowerCase() + '|' + (v.hora||'');
+            if (!grp.has(k)) grp.set(k, { cliente: cliN, hora: v.hora||'', lineas: [], total: 0, pend: 0 });
+            const g = grp.get(k);
+            g.lineas.push(v); g.total += (v.precio||0)*(v.cantidad||1); g.pend += (v.saldoPendiente||0);
+          });
+          return Array.from(grp.values()).map(g => {
+            const fiadoTag = g.pend > 0 ? `<span style="background:#fff0e6;color:#e05c2a;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:5px">FIADO ${fmt(g.pend)}</span>` : '';
+            const lineas = g.lineas.map(v => {
+              const sub = (v.precio||0)*(v.cantidad||1);
+              const cod = (v.codigo||'').replace(/'/g,"\\'");
+              const nom = (v.producto||'').replace(/'/g,"\\'");
+              const cli = (v.cliente||'').replace(/'/g,"\\'");
+              return `<div class="item-row" style="padding-left:8px">
+                <div class="item-info"><div class="item-name" style="font-size:0.88rem">${v.cantidad}× ${v.producto}</div></div>
+                <div class="item-right">
+                  <div class="item-price">${fmt(sub)}</div>
+                  <div class="item-actions">
+                    <button class="item-action-btn" onclick="abrirEditarVenta(${v.rowIndex},'${cod}','${nom}',${v.cantidad||1},${v.precio||0},'${cli}',${v.saldoPendiente||0})" title="Editar">✏️</button>
+                    <button class="item-action-btn" onclick="eliminarVenta(${v.rowIndex})" title="Eliminar">🗑️</button>
+                  </div>
+                </div>
+              </div>`;
+            }).join('');
+            return `<div style="border-left:3px solid ${g.pend>0?'#e8a87c':'#2e8b57'};margin:6px 0 8px;padding-left:6px">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;font-weight:700;color:#5c3d1e;padding:2px 0">
+                <span>👤 ${g.cliente}${fiadoTag}<span style="font-weight:400;color:#aaa"> · ${g.hora}</span></span>
+                <span>${fmt(g.total)}</span>
               </div>
-            </div>
-          </div>`;
-        }).join('')}
+              ${lineas}
+            </div>`;
+          }).join('');
+        })()}
         <div class="dia-stat-row">
           <div><strong>${vd.length}</strong>ventas</div>
           <div><strong>${fmt(cobrado)}</strong>cobrado</div>

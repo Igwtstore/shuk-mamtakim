@@ -1104,9 +1104,10 @@ function ventasPeriodo(ss, p) {
       } else {
         fecha = r[0].toString().trim().substring(0, 10);
       }
+      const hora = (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : (r[0]||'').toString().trim().substring(11,16);
       return {
         rowIndex: idx + 2,
-        fecha, hijo: r[1], producto: r[2], codigo: r[3],
+        fecha, hora, hijo: r[1], producto: r[2], codigo: r[3],
         cantidad: r[4], precio: r[5], total: r[6],
         cliente: r[7], esDebe: r[8], pagoParcial: r[9], saldoPendiente: r[10]
       };
