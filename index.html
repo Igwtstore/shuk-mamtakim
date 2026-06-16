@@ -2860,10 +2860,11 @@ async function renderPedidos() {
     let pedidosFiltrados, historialFiltrado;
     if (filtro === 'todos') {
       pedidosFiltrados = pendientes;
-      // Los que TODAVÍA DEBEN se muestran siempre (aunque sean viejos); los ya pagados/cancelados, solo los 10 recientes.
+      // Se muestra TODO el historial: primero los que aún deben, después los ya pagados/cancelados.
+      // Va dentro de un recuadro con scroll (no alarga la página al infinito).
       const debenAun = historial.filter(v => v.estado !== 'cancelado' && !esCobradoReal(v));
       const yaListos = historial.filter(v => v.estado === 'cancelado' || esCobradoReal(v));
-      historialFiltrado = [...debenAun, ...yaListos.slice(0, 10)];
+      historialFiltrado = [...debenAun, ...yaListos];
     } else if (['cotizacion','pendiente','preparando'].includes(filtro)) {
       pedidosFiltrados = todos.filter(v => (v.estado||'pendiente') === filtro);
       historialFiltrado = [];
@@ -2878,7 +2879,9 @@ async function renderPedidos() {
 
     const htmlHistorial = historialFiltrado.length
       ? `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Historial (${historialFiltrado.length})</div>` +
-        historialFiltrado.map(v => renderCard(v, false)).join('')
+        `<div style="max-height:560px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--gris-medio);border-radius:10px;padding:6px">` +
+        historialFiltrado.map(v => renderCard(v, false)).join('') +
+        `</div>`
       : '';
 
     lista.innerHTML = htmlPedidos + htmlHistorial;
@@ -5058,6 +5061,7 @@ function abrirUsarPlataMyri() {
   }).join('');
   document.getElementById('upm-monto').value = '';
   document.getElementById('upm-desc').value = '';
+  document.getElementById('upm-fecha').value = '';
   ov.classList.add('open');
 }
 function cerrarUsarPlataMyri() { document.getElementById('upm-overlay').classList.remove('open'); }
@@ -5077,16 +5081,21 @@ async function confirmarUsarPlataMyri() {
     + `• Sale de la caja de Myri: ${fmtM(usarCaja)}\n`
     + (excedente > 0 ? `• Myri te queda debiendo: ${fmtM(excedente)} (lo pusiste vos)` : '• Le alcanza con su caja, no te debe nada');
   if (!confirm(resumen)) return;
+  // Fecha opcional: si la eligió, va como dd/MM/yyyy; si no, el backend usa hoy.
+  const fIso = document.getElementById('upm-fecha').value;
+  const fechaParam = fIso ? fIso.split('-').reverse().join('/') : '';
   const btn = document.getElementById('upm-btn'); btn.disabled = true; btn.textContent = 'Guardando...';
   let okAll = true;
   if (usarCaja > 0) {
     const p1 = new URLSearchParams({ accion: 'rendicion', desc: 'Usado de Myri: ' + desc, monto: usarCaja, moneda: mon, columna: caja });
+    if (fechaParam) p1.set('fecha', fechaParam);
     const r1 = await apiWrite(p1, '');
     if (!r1.ok) okAll = false;
   }
   if (okAll && excedente > 0) {
     const p2 = new URLSearchParams({ accion: 'registrarMovSocio', desc: 'Adelanto: ' + desc });
     if (mon === 'USD') p2.set('montoUSD', excedente); else p2.set('montoARS', excedente);
+    if (fechaParam) p2.set('fecha', fechaParam);
     const r2 = await apiWrite(p2, '');
     if (!r2.ok) okAll = false;
   }
@@ -7430,6 +7439,8 @@ function cerrarEditPedido() {
       <input type="number" id="upm-monto" min="0" step="0.01" placeholder="0" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
       <div class="edit-section-label">¿Qué fue? (a quién / concepto)</div>
       <input type="text" id="upm-desc" placeholder="Ej: pago farmacia, transferencia a Juan..." style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
+      <div class="edit-section-label">Fecha <span style="font-weight:400;text-transform:none;color:var(--texto-suave)">(vacío = hoy)</span></div>
+      <input type="date" id="upm-fecha" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
     </div>
     <div class="edit-modal-footer">
       <button class="edit-btn-cancel" onclick="cerrarUsarPlataMyri()">Cancelar</button>

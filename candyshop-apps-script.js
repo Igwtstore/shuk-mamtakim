@@ -393,7 +393,7 @@ function doGet(e) {
     }
     if (accion === 'rendicion') {
       const h = getOrCreate(ss, 'Rendiciones', ['Fecha','Descripción','Monto','Moneda','Columna']);
-      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const fecha = e.parameter.fecha ? dec(e.parameter.fecha) : Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
       const row = h.getLastRow() + 1;
       h.appendRow([fecha, dec(e.parameter.desc), parseFloat(e.parameter.monto||0), dec(e.parameter.moneda||'ARS'), dec(e.parameter.columna||'')]);
       h.getRange(row,1).setNumberFormat('@'); return ok();
@@ -429,7 +429,7 @@ function doGet(e) {
     // Convención: monto POSITIVO = Myri le debe MÁS a Jony; negativo = Jony le debe a Myri.
     if (accion === 'registrarMovSocio') {
       const h = getOrCreate(ss, 'MovsSocios', ['Fecha','Descripcion','MontoARS','MontoUSD']);
-      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const fecha = e.parameter.fecha ? dec(e.parameter.fecha) : Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
       const montoARS = parseFloat(e.parameter.montoARS||0) || 0;
       const montoUSD = parseFloat(e.parameter.montoUSD||0) || 0;
       if (montoARS === 0 && montoUSD === 0) return json({error:'nada para registrar'});
