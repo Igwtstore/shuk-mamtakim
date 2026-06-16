@@ -59,6 +59,20 @@ function autorizarPermisos() {
   Logger.log('Permiso de servicios externos OK — código ' + res.getResponseCode());
 }
 
+// Próximo # de venta: máximo histórico de la col 11 + 1, NUNCA la cantidad de filas.
+// Así, aunque se borren pedidos, el número no se reusa (evita # duplicados).
+function siguienteNVenta_(h) {
+  const last = h.getLastRow();
+  if (last < 2) return 1;
+  const nums = h.getRange(2, 11, last - 1, 1).getValues();
+  let max = 0;
+  for (let i = 0; i < nums.length; i++) {
+    const n = parseInt(nums[i][0]);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 // Registra todo movimiento de stock de Shuk en la hoja MovimientosStock:
 // quién/qué lo cambió, cuánto había antes y cuánto quedó. Nunca rompe la operación principal.
 function registrarMovStock_(ss, pid, nombre, delta, antes, despues, origen) {
@@ -187,8 +201,11 @@ function doGet(e) {
       const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
       const id = 'P' + Date.now().toString();
       const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      // Lock para que dos pedidos simultáneos no tomen el mismo número.
+      const lockVenta = LockService.getScriptLock();
+      try { lockVenta.waitLock(20000); } catch (e) {}
       const row = h.getLastRow() + 1;
-      const nVenta = row - 1;
+      const nVenta = siguienteNVenta_(h);
       const stockUpdates = dec(e.parameter.stockUpdates||'');
       if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
       const esCotizacion = e.parameter.cotizacion === '1';
@@ -198,6 +215,8 @@ function doGet(e) {
         parseFloat(e.parameter.usdMyri||0), parseFloat(e.parameter.comiARS||0), parseFloat(e.parameter.comiUSD||0),
         '', '', 0, stockUpdates, vidVenta]);
       h.getRange(row, 1, 1, 2).setNumberFormat('@');
+      SpreadsheetApp.flush();
+      try { lockVenta.releaseLock(); } catch (e) {}
       // En cotización NO se descuenta stock (se descuenta recién cuando se acepta desde el panel).
       if (stockUpdates && !esCotizacion) {
         var sh = ss.getSheetByName('Stock');
@@ -2463,12 +2482,12 @@ function botConfirmar_(ss, s, prods, tel, sim) {
   const idV = 'P' + Date.now().toString();
   const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
   const row = h.getLastRow() + 1;
-  const nVenta = row - 1;
+  const nVenta = siguienteNVenta_(h);   // nunca reusa números aunque se borren pedidos
   const cliente = s.nombre ? s.nombre : ('SMS ' + tel);
   const stockUpdates = suArr.join(',');
   if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
   h.appendRow([idV, fecha, cliente, 'Minorista', lineas.join('\n'), 'A coordinar', '📱 Pedido por SMS', 'pendiente',
-    total, 0, nVenta, 0, 0, 0, 0, 0, '', '', 0, stockUpdates, 'sms_' + tel]);
+    total, 0, nVenta, 0, 0, 0, 0, 0, '', '', 0, stockUpdates, 'sms_' + tel]);  // nVenta = siguienteNVenta_
   h.getRange(row, 1, 1, 2).setNumberFormat('@');
   // Descontar stock + registrar movimiento
   const sh = ss.getSheetByName('Stock');
@@ -2616,7 +2635,7 @@ function registrarPedidoVoz_(ss, itemsStr, cliente, direccion, tel, dry) {
   const idV = 'P' + Date.now().toString();
   const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
   const row = h.getLastRow() + 1;
-  const nVenta = row - 1;
+  const nVenta = siguienteNVenta_(h);   // nunca reusa números aunque se borren pedidos
   const cli = cliente ? cliente : ('Tel ' + (tel || 's/d'));
   const notas = '📞 Pedido por teléfono (Shuki)' + (direccion ? ' — Dirección: ' + direccion : '');
   if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
