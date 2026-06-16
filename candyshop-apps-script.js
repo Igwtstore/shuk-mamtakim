@@ -159,7 +159,7 @@ function doGet(e) {
                 const pp = u.split(':'); const pid = pp[0]; const qty = parseInt(pp[1])||0;
                 for (let j = 1; j < sd.length; j++) {
                   if (sd[j][0].toString() === pid) {
-                    const antes = parseInt(sd[j][5])||0, despues = Math.max(0, antes - qty);
+                    const antes = parseInt(sd[j][5])||0, despues = antes - qty;  // puede quedar negativo (sobreventa) → devolución simétrica al cancelar
                     sh.getRange(j+1,6).setValue(despues);
                     registrarMovStock_(ss, pid, sd[j][1], -qty, antes, despues, 'Cotización aceptada #' + (datos[i][10]||''));
                     break;
@@ -209,7 +209,7 @@ function doGet(e) {
             for (var i = 1; i < sd.length; i++) {
               if (sd[i][0].toString() === pid) {
                 var antes = parseInt(sd[i][5])||0;
-                var despues = Math.max(0, antes - qty);
+                var despues = antes - qty;  // puede quedar negativo (sobreventa) → devolución simétrica al cancelar
                 sh.getRange(i+1,6).setValue(despues);
                 var sobre = qty - antes;
                 registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues,
@@ -245,7 +245,10 @@ function doGet(e) {
         const cellId = datos[i][0] instanceof Date ? datos[i][0].toISOString() : datos[i][0].toString().trim();
         if (cellId === e.parameter.id) {
           h.getRange(i+1,8).setValue(dec(e.parameter.estado));
-          if (dec(e.parameter.estado) === 'cancelado') {
+          const estadoPrev = (datos[i][7] || '').toString().trim();
+          // Solo devolver stock si el pedido REALMENTE lo había descontado:
+          // una cotización nunca descuenta (hasta aceptarse) y un pedido ya cancelado no debe devolver dos veces.
+          if (dec(e.parameter.estado) === 'cancelado' && estadoPrev !== 'cancelado' && estadoPrev !== 'cotizacion') {
             const su = datos[i][19] || '';
             if (su) {
               const sh = ss.getSheetByName('Stock');
@@ -287,7 +290,10 @@ function doGet(e) {
           if (e.parameter.comiUSD  !== undefined) h.getRange(i+1,16).setValue(parseFloat(e.parameter.comiUSD)||0);
           // Ajuste de stock por la edición (productos agregados/quitados/cantidades cambiadas).
           // delta positivo = devolver al stock, negativo = descontar.
-          if (e.parameter.stockDeltas) {
+          // OJO: una cotización todavía NO descontó stock, así que sus deltas NO se aplican
+          // (el stock recién se mueve cuando se acepta, según stockUpdatesNuevo).
+          const estadoPed = (datos[i][7] || '').toString().trim();
+          if (e.parameter.stockDeltas && estadoPed !== 'cotizacion') {
             const sh2 = ss.getSheetByName('Stock');
             if (sh2) {
               const sd2 = sh2.getDataRange().getValues();
@@ -297,7 +303,7 @@ function doGet(e) {
                 for (let j = 1; j < sd2.length; j++) {
                   if (sd2[j][0].toString() === pid) {
                     const antes = parseInt(sd2[j][5])||0;
-                    const despues = Math.max(0, antes + delta);
+                    const despues = antes + delta;  // puede quedar negativo (sobreventa) → simétrico con la devolución
                     sh2.getRange(j+1,6).setValue(despues);
                     registrarMovStock_(ss, pid, sd2[j][1], delta, antes, despues, 'Edición pedido #' + (datos[i][10]||''));
                     break;
@@ -2472,7 +2478,7 @@ function botConfirmar_(ss, s, prods, tel, sim) {
       const parts = u.split(':'); const pid = parts[0]; const qty = parseInt(parts[1])||0;
       for (let i = 1; i < sd.length; i++) {
         if (sd[i][0].toString() === pid) {
-          const antes = parseInt(sd[i][5])||0, despues = Math.max(0, antes - qty);
+          const antes = parseInt(sd[i][5])||0, despues = antes - qty;  // puede quedar negativo (sobreventa) → devolución simétrica
           sh.getRange(i+1,6).setValue(despues);
           registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues, 'Venta SMS #' + nVenta + ' — ' + cliente);
           break;
@@ -2543,7 +2549,7 @@ function borrarVentas_(ss, idsStr) {
   const devueltas = [], borradas = [];
   // Devolver stock de las no canceladas
   filas.forEach(f => {
-    if (f.estado !== 'cancelado' && f.su && sh && sd) {
+    if (f.estado !== 'cancelado' && f.estado !== 'cotizacion' && f.su && sh && sd) {
       f.su.split(',').forEach(u => {
         const p = u.split(':'); const pid = p[0]; const qty = parseInt(p[1]) || 0;
         if (!pid || qty <= 0) return;
@@ -2625,7 +2631,7 @@ function registrarPedidoVoz_(ss, itemsStr, cliente, direccion, tel, dry) {
       const parts = u.split(':'); const pid = parts[0]; const qty = parseInt(parts[1]) || 0;
       for (let i = 1; i < sd.length; i++) {
         if (sd[i][0].toString() === pid) {
-          const antes = parseInt(sd[i][5]) || 0, despues = Math.max(0, antes - qty);
+          const antes = parseInt(sd[i][5]) || 0, despues = antes - qty;  // puede quedar negativo (sobreventa) → devolución simétrica
           sh.getRange(i + 1, 6).setValue(despues);
           registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues, 'Venta TEL #' + nVenta + ' — ' + cli);
           break;

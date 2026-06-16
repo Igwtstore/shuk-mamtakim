@@ -6977,9 +6977,44 @@ function parsearLineasPedido(productosStr) {
   });
 }
 
+// Máximo que se puede pedir de una línea sin sobrevender:
+// stock que queda en catálogo + lo que este pedido ya tenía reservado de ese producto,
+// menos lo que ya ocupan otras líneas del mismo producto en esta edición.
+function maxQtyLinea(i) {
+  const l = _editLineas[i];
+  if (!l || !l.prodId) return Infinity;           // producto no identificado: sin tope
+  const p = productos.find(x => String(x.id) === String(l.prodId));
+  if (!p) return Infinity;
+  // En una cotización el stock no se descontó, así que solo está disponible lo del catálogo.
+  // En un pedido ya descontado, se suma lo que este pedido ya tenía reservado de ese producto.
+  const esCotiz = _editPedidoActual && (_editPedidoActual.estado || '') === 'cotizacion';
+  const dispProducto = (parseInt(p.stock) || 0) + (esCotiz ? 0 : (_editQtysOrig[l.prodId] || 0));
+  const otras = _editLineas.reduce((s, o, j) =>
+    (j !== i && String(o.prodId) === String(l.prodId)) ? s + (parseInt(o.qty) || 0) : s, 0);
+  return Math.max(0, dispProducto - otras);
+}
+
+function setQtyLinea(i, valor, inp) {
+  const max = maxQtyLinea(i);
+  let q = parseInt(valor) || 1;
+  if (q < 1) q = 1;
+  if (q > max) {
+    q = max;
+    if (inp) inp.value = max;
+    showToast('Sin stock: máximo ' + max + ' de ' + _editLineas[i].nombre);
+  }
+  _editLineas[i].qty = q;
+  const hint = document.getElementById('ep-stock-hint-' + i);
+  if (hint) hint.textContent = isFinite(max) ? 'máx ' + max : '';
+  recalcularEditTotal();
+}
+
 function renderEditLineas() {
   const cont = document.getElementById('ep-lineas');
-  cont.innerHTML = _editLineas.map((l, i) => `
+  cont.innerHTML = _editLineas.map((l, i) => {
+    const max = maxQtyLinea(i);
+    const maxAttr = isFinite(max) ? ` max="${max}"` : '';
+    return `
     <div class="edit-row" style="flex-wrap:wrap;gap:6px;position:relative">
       <div style="display:flex;align-items:center;width:100%;gap:6px">
         <span class="edit-prod-name" style="flex:1;font-weight:600;font-size:0.85rem">${l.nombre}${l.descripcion ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${l.descripcion}</span>` : ''}</span>
@@ -6987,8 +7022,9 @@ function renderEditLineas() {
       </div>
       <div style="display:flex;align-items:center;gap:6px;width:100%">
         <label style="font-size:0.7rem;color:var(--texto-suave);min-width:28px">Cant.</label>
-        <input class="edit-price-input" type="number" value="${l.qty}" min="1" step="1" style="width:60px;text-align:center"
-          oninput="_editLineas[${i}].qty = parseInt(this.value)||1; recalcularEditTotal()">
+        <input class="edit-price-input" type="number" value="${l.qty}" min="1"${maxAttr} step="1" style="width:60px;text-align:center"
+          oninput="setQtyLinea(${i}, this.value, this)">
+        <span id="ep-stock-hint-${i}" style="font-size:0.6rem;color:var(--texto-suave);min-width:32px">${isFinite(max) ? 'máx ' + max : ''}</span>
         <label style="font-size:0.7rem;color:var(--texto-suave);min-width:28px">${l.moneda}</label>
         <input class="edit-price-input" type="number" value="${l.precio}" min="0" step="${l.moneda === 'U$S' ? '0.01' : '1'}" placeholder="Precio"
           style="${!(parseFloat(l.precio) > 0) ? 'border:2px solid #c0392b;background:#fde0e0' : ''}"
@@ -6998,7 +7034,8 @@ function renderEditLineas() {
           oninput="_editLineas[${i}].desc = parseFloat(this.value)||0; recalcularEditTotal()">
         <span class="edit-subtotal" id="ep-sub-${i}" style="flex:1;text-align:right">${l.moneda} ${formatEditVal(l.precio * l.qty, l.moneda)}</span>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function onTipoChange() {
@@ -7176,13 +7213,15 @@ async function guardarEditPedido() {
     comiARS: Math.round(parseFloat(_editPedidoActual.comiARS||0) * (totalARS / (parseFloat(_editPedidoActual.totalARS)||1) || 1)),
     comiUSD: (parseFloat(_editPedidoActual.comiUSD||0) * (totalUSD / (parseFloat(_editPedidoActual.totalUSD)||1) || 1)).toFixed(2)
   });
-  if (deltas.length) params.set('stockDeltas', deltas.join(','));
-  // Reflejar el ajuste en el catálogo local al instante
-  idsTodos.forEach(id => {
+  // Una cotización todavía no descontó stock: no se mandan deltas ni se ajusta el catálogo local.
+  const esCotiz = (_editPedidoActual.estado || '') === 'cotizacion';
+  if (deltas.length && !esCotiz) params.set('stockDeltas', deltas.join(','));
+  // Reflejar el ajuste en el catálogo local al instante (salvo cotización)
+  if (!esCotiz) idsTodos.forEach(id => {
     const d = (_editQtysOrig[id] || 0) - (qtysAhora[id] || 0);
     if (!d) return;
     const pl = productos.find(x => String(x.id) === String(id));
-    if (pl) pl.stock = Math.max(0, pl.stock + d);
+    if (pl) pl.stock = pl.stock + d;
   });
   _editPedidoActual.stockUpdates = suNuevo;
 
