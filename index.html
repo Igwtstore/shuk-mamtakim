@@ -2597,6 +2597,20 @@ async function renderVisitas() {
   } catch(e) {}
 }
 
+// Normaliza el nombre del cliente para agrupar la cuenta corriente:
+// ignora mayúsculas, espacios de más y acentos, así "Isi Michan" e "isi michan" son la MISMA cuenta.
+function normCliente(s) {
+  return (s || '').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // saca acentos
+    .replace(/\s+/g, ' ');                              // colapsa espacios
+}
+// Entre dos grafías del mismo nombre, elige la "más prolija" (más mayúsculas → nombre propio).
+function mejorNombreCliente(a, b) {
+  if (!a) return b; if (!b) return a;
+  const mayus = x => (x.match(/[A-ZÁÉÍÓÚÑ]/g) || []).length;
+  return mayus(a) >= mayus(b) ? a : b;
+}
+
 async function renderCuentaCorriente() {
   const lista = document.getElementById('cc-lista');
   const badge = document.getElementById('cc-total-badge');
@@ -2608,34 +2622,42 @@ async function renderCuentaCorriente() {
       apiGet('getClientes').catch(() => [])
     ]);
     const telPorCliente = {};
+    const telPorClienteNorm = {};
     (clientesTel || []).forEach(c => {
-      if (c.telefono) telPorCliente[c.nombre] = c.telefono.toString().replace(/\D/g, '');
+      if (c.telefono) {
+        const tel = c.telefono.toString().replace(/\D/g, '');
+        telPorCliente[c.nombre] = tel;
+        telPorClienteNorm[normCliente(c.nombre)] = tel;
+      }
     });
     _telPorCliente = telPorCliente;   // para precargar el teléfono en el remito
     let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !v.cajaJony && !v.cajaMyri);
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
-    // Pagos acumulados por cliente (solo vista Jony)
+    // Pagos acumulados por cliente (solo vista Jony) — clave NORMALIZADA para que crucen aunque difiera la grafía
     const pagadoPorCliente = {};
     (pagos || []).forEach(p => {
-      if (!pagadoPorCliente[p.cliente]) pagadoPorCliente[p.cliente] = { ars: 0, usd: 0 };
-      pagadoPorCliente[p.cliente].ars += parseFloat(p.montoARS)||0;
-      pagadoPorCliente[p.cliente].usd += parseFloat(p.montoUSD)||0;
+      const k = normCliente(p.cliente);
+      if (!pagadoPorCliente[k]) pagadoPorCliente[k] = { ars: 0, usd: 0 };
+      pagadoPorCliente[k].ars += parseFloat(p.montoARS)||0;
+      pagadoPorCliente[k].usd += parseFloat(p.montoUSD)||0;
     });
-    // Agrupar por cliente (en vista Miri usa solo los montos de Miri)
+    // Agrupar por cliente NORMALIZADO (en vista Miri usa solo los montos de Miri)
     const porCliente = {};
     cc.forEach(v => {
-      if (!porCliente[v.cliente]) porCliente[v.cliente] = { pedidos: [], totalARS: 0, totalUSD: 0 };
-      porCliente[v.cliente].pedidos.push(v);
-      porCliente[v.cliente].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
-      porCliente[v.cliente].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
+      const k = normCliente(v.cliente);
+      if (!porCliente[k]) porCliente[k] = { nombre: v.cliente, pedidos: [], totalARS: 0, totalUSD: 0 };
+      else porCliente[k].nombre = mejorNombreCliente(porCliente[k].nombre, v.cliente);
+      porCliente[k].pedidos.push(v);
+      porCliente[k].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
+      porCliente[k].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
     });
     // Restar pagos a cuenta (vista Jony)
-    Object.entries(porCliente).forEach(([cli, d]) => {
-      const pg = pagadoPorCliente[cli];
+    Object.entries(porCliente).forEach(([k, d]) => {
+      const pg = pagadoPorCliente[k];
       if (pg) { d.totalARS -= pg.ars; d.totalUSD -= pg.usd; }
     });
     // Quitar los que quedaron saldados
-    const entries = Object.entries(porCliente).filter(([_, d]) => d.totalARS > 1 || d.totalUSD > 0.01);
+    const entries = Object.values(porCliente).filter(d => d.totalARS > 1 || d.totalUSD > 0.01);
     if (!entries.length) {
       lista.innerHTML = '<div style="color:var(--verde);font-size:0.82rem;padding:0.3rem 0">✓ Sin deudas pendientes</div>';
       badge.style.display = 'none';
@@ -2643,7 +2665,8 @@ async function renderCuentaCorriente() {
     }
     badge.textContent = entries.length + ' deudor' + (entries.length !== 1 ? 'es' : '');
     badge.style.display = '';
-    lista.innerHTML = entries.map(([cliente, data]) => {
+    lista.innerHTML = entries.map(data => {
+      const cliente = data.nombre;
       const totStr = [
         data.totalARS > 0 ? '$ ' + Math.round(data.totalARS).toLocaleString('es-AR') : '',
         data.totalUSD > 0 ? 'U$S ' + data.totalUSD.toFixed(2) : ''
@@ -2661,7 +2684,7 @@ async function renderCuentaCorriente() {
           <div style="text-align:right">
             <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
             ${btnPago}
-            <button onclick="recordarDeudaWA('${cliEsc}','${totStr}','${telPorCliente[cliente] || ''}')"
+            <button onclick="recordarDeudaWA('${cliEsc}','${totStr}','${telPorClienteNorm[normCliente(cliente)] || telPorCliente[cliente] || ''}')"
               style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px">💬 Recordar</button>
           </div>
         </div>
