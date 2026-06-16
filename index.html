@@ -1089,6 +1089,9 @@
 
   <div class="admin-card">
     <div class="admin-titulo">📦 Pedidos</div>
+    <input type="text" id="pedidos-buscar" placeholder="🔍 Buscar pedido (cliente, #, producto...)" autocomplete="off"
+      oninput="setBusquedaPedidos(this.value)"
+      style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;box-sizing:border-box;outline:none;margin-bottom:0.5rem" />
     <div class="filtros-estado" id="filtros-estado">
       <button class="filtro-estado-btn activo" onclick="setFiltroEstado('todos',this)">Todos</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('cotizacion',this)">🟡 Cotización</button>
@@ -1097,6 +1100,7 @@
       <button class="filtro-estado-btn" onclick="setFiltroEstado('entregado',this)">✓ Entregado</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('cancelado',this)">✕ Cancelado</button>
     </div>
+    <div id="pedidos-contador" style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.4rem"></div>
     <div class="pedidos-lista" id="pedidos-lista">
       <div class="sinpedidos">Cargando pedidos...</div>
     </div>
@@ -2856,6 +2860,24 @@ async function renderPedidos() {
     // Guardar todos para filtrado
     _todosLosPedidos = todos;
 
+    const cont = document.getElementById('pedidos-contador');
+
+    // BUSCADOR: si hay texto, muestra TODOS los pedidos que matchean (ignora el filtro de estado).
+    // Sirve para verificar que ningún pedido esté "escondido".
+    const q = (_busquedaPedidos || '').toLowerCase().trim();
+    if (q) {
+      const matches = todos.filter(v =>
+        (v.cliente || '').toLowerCase().includes(q) ||
+        String(v.nVenta || '').includes(q) ||
+        (v.productos || '').toLowerCase().includes(q) ||
+        (v.formaPago || '').toLowerCase().includes(q));
+      if (cont) cont.textContent = `🔍 ${matches.length} resultado${matches.length !== 1 ? 's' : ''} para "${q}" · ${todos.length} pedidos en total`;
+      lista.innerHTML = matches.length
+        ? `<div style="max-height:620px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--gris-medio);border-radius:10px;padding:6px">${matches.map(v => renderCard(v, true)).join('')}</div>`
+        : '<div class="sinpedidos">No hay pedidos que coincidan con la búsqueda.</div>';
+      return;
+    }
+
     const filtro = _filtroEstadoActual || 'todos';
     let pedidosFiltrados, historialFiltrado;
     if (filtro === 'todos') {
@@ -2883,6 +2905,9 @@ async function renderPedidos() {
         historialFiltrado.map(v => renderCard(v, false)).join('') +
         `</div>`
       : '';
+
+    const mostrados = (filtro === 'todos') ? (pendientes.length + historialFiltrado.length) : (pedidosFiltrados.length + historialFiltrado.length);
+    if (cont) cont.textContent = `Mostrando ${mostrados} de ${todos.length} pedidos${filtro !== 'todos' ? ' (filtro: ' + filtro + ')' : ''}`;
 
     lista.innerHTML = htmlPedidos + htmlHistorial;
   } catch(e) {
@@ -5119,12 +5144,20 @@ function setModo(m) {
 let _categoriaActiva = 'Todos';
 let _filtroEstadoActual = 'todos';
 let _todosLosPedidos = [];
+let _busquedaPedidos = '';
 
 function setFiltroEstado(filtro, btn) {
   _filtroEstadoActual = filtro;
   document.querySelectorAll('.filtro-estado-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   renderPedidos();
+}
+
+let _busqPedTimer = null;
+function setBusquedaPedidos(v) {
+  _busquedaPedidos = v || '';
+  clearTimeout(_busqPedTimer);
+  _busqPedTimer = setTimeout(() => renderPedidos(), 200);   // pequeño debounce
 }
 
 function renderFiltros() {
