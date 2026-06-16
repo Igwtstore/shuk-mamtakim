@@ -7377,6 +7377,23 @@ async function guardarEditPedido() {
   idsTodos.forEach(id => { suMap[id] = qtysAhora[id] || 0; });
   const suNuevo = Object.keys(suMap).filter(k => suMap[k] > 0).map(k => k + ':' + suMap[k]).join(',');
 
+  // RECALCULAR el split Jony/Myri desde los productos REALES (no escalar el viejo, que distorsiona).
+  // Jony = Pitzujim (por dueño en catálogo o por nombre); Myri = el resto. USD = golosinas de Myri.
+  const _esJonyLinea = l => {
+    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
+    return (p && p.dueno === 'Jony') || /pitzujim/i.test(l.nombre || '');
+  };
+  let eArsJ = 0, eArsM = 0, eUsdM = 0;
+  _editLineas.forEach(l => {
+    const sub = (parseFloat(l.precio) || 0) * (l.qty || 0) * (1 - (l.desc || 0) / 100);
+    if (l.moneda === 'U$S') eUsdM += sub;
+    else if (_esJonyLinea(l)) eArsJ += sub;
+    else eArsM += sub;
+  });
+  if (desc > 0 && desc <= 100) { const fg = 1 - desc / 100; eArsJ *= fg; eArsM *= fg; eUsdM *= fg; }
+  const eComiARS = Math.round(eArsM * 0.15);
+  const eComiUSD = parseFloat((eUsdM * 0.15).toFixed(2));
+
   const params = new URLSearchParams({
     accion: 'actualizarPedido',
     id: _editPedidoActual.id,
@@ -7385,12 +7402,12 @@ async function guardarEditPedido() {
     tipo,
     totalARS: Math.round(totalARS),
     totalUSD: totalUSD.toFixed(2),
-    // Escalar los splits proporcionalmente
-    arsJONY: Math.round(parseFloat(_editPedidoActual.arsJONY||0) * (totalARS / (parseFloat(_editPedidoActual.totalARS)||1) || 1)),
-    arsMyri: Math.round(parseFloat(_editPedidoActual.arsMyri||0) * (totalARS / (parseFloat(_editPedidoActual.totalARS)||1) || 1)),
-    usdMyri: (parseFloat(_editPedidoActual.usdMyri||0) * (totalUSD / (parseFloat(_editPedidoActual.totalUSD)||1) || 1)).toFixed(2),
-    comiARS: Math.round(parseFloat(_editPedidoActual.comiARS||0) * (totalARS / (parseFloat(_editPedidoActual.totalARS)||1) || 1)),
-    comiUSD: (parseFloat(_editPedidoActual.comiUSD||0) * (totalUSD / (parseFloat(_editPedidoActual.totalUSD)||1) || 1)).toFixed(2)
+    // Split recalculado desde los productos reales (Pitzujim → Jony, resto → Myri, USD → Myri)
+    arsJONY: Math.round(eArsJ),
+    arsMyri: Math.round(eArsM),
+    usdMyri: eUsdM.toFixed(2),
+    comiARS: eComiARS,
+    comiUSD: eComiUSD.toFixed(2)
   });
   // Una cotización todavía no descontó stock: no se mandan deltas ni se ajusta el catálogo local.
   const esCotiz = (_editPedidoActual.estado || '') === 'cotizacion';
