@@ -2610,6 +2610,12 @@ function mejorNombreCliente(a, b) {
   const mayus = x => (x.match(/[A-ZÁÉÍÓÚÑ]/g) || []).length;
   return mayus(a) >= mayus(b) ? a : b;
 }
+// Un pedido está REALMENTE cobrado solo si entró a una caja de plata de verdad.
+// "Cta Cte" (CTA_CTE_*) NO cuenta como cobrado: es justamente la deuda pendiente.
+function esCobradoReal(v) {
+  const real = c => !!c && !String(c).startsWith('CTA_CTE');
+  return real(v.cajaJony) || real(v.cajaMyri);
+}
 
 async function renderCuentaCorriente() {
   const lista = document.getElementById('cc-lista');
@@ -2631,7 +2637,10 @@ async function renderCuentaCorriente() {
       }
     });
     _telPorCliente = telPorCliente;   // para precargar el teléfono en el remito
-    let cc = ventas.filter(v => v.formaPago === 'Cuenta corriente' && v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !v.cajaJony && !v.cajaMyri);
+    // DEUDA = todo pedido vivo (no cancelado/cotización) que NO esté cobrado de verdad,
+    // sin importar la etiqueta de forma de pago. Así no se escapan los que se cobraron "a Cta Cte"
+    // ni los marcados con otra forma de pago pero nunca cobrados.
+    let cc = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !esCobradoReal(v));
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony) — clave NORMALIZADA para que crucen aunque difiera la grafía
     const pagadoPorCliente = {};
@@ -2758,7 +2767,7 @@ async function renderPedidos() {
       const usdM = parseFloat(v.usdMyri || 0);
       const comiA = parseFloat(v.comiARS || 0);
       const comiU = parseFloat(v.comiUSD || 0);
-      const cobrado = v.cajaJony || v.cajaMyri;
+      const cobrado = esCobradoReal(v);
       const splitParts = [];
       if (!soloMiri && arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">Pitzujim JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
       if (arsM > 0) splitParts.push(`<span>Golosinas MYRI: $ ${Math.round(arsM).toLocaleString('es-AR')}</span>`);
