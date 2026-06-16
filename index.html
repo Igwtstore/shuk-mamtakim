@@ -4750,6 +4750,7 @@ async function renderCaja() {
         else totalsUSD[m.col] += m.val;
       }
     });
+    window._cajaSaldos = { ars: totalsARS, usd: totalsUSD };   // saldo por caja → lo usa "Usar plata de Myri"
 
     const colColor = { venta: 'var(--verde)', comi: 'var(--dorado)', gasto: 'var(--rojo)', rendicion: 'var(--texto-suave)' };
 
@@ -4861,12 +4862,16 @@ const JONY_BOXES_CC = ['EFT_JONY','MP_JONY'];
 async function renderCuentaSocios() {
   const cont = document.getElementById('cuenta-socios-contenido');
   if (!cont) return;
-  const [ventas, liq, pagos] = await Promise.all([
+  const [ventas, liq, pagos, movsSoc] = await Promise.all([
     apiGet('ventas').catch(() => null),
     apiGet('getLiquidaciones').catch(() => ({totalARS:0,totalUSD:0})),
-    apiGet('getPagos').catch(() => [])
+    apiGet('getPagos').catch(() => []),
+    apiGet('getMovsSocios').catch(() => ({totalARS:0,totalUSD:0}))
   ]);
   if (!ventas) { cont.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
+  // Movimientos manuales (adelantos que Myri te hace pagar, etc.): + = Myri te debe más.
+  const movsARS = parseFloat(movsSoc.totalARS) || 0;
+  const movsUSD = parseFloat(movsSoc.totalUSD) || 0;
   const pedidosConPago = new Set((pagos||[]).filter(p => p.pedidoId).map(p => String(p.pedidoId)));
 
   // Componentes (ARS)
@@ -4934,8 +4939,8 @@ async function renderCuentaSocios() {
   });
 
   const saldadoARS = parseFloat(liq.totalARS)||0, saldadoUSD = parseFloat(liq.totalUSD)||0;
-  const ars = comiDebe + pitzMyri - jonyTiene - saldadoARS;
-  const usd = comiDebeU - jonyTieneU - saldadoUSD;
+  const ars = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
+  const usd = comiDebeU - jonyTieneU + movsUSD - saldadoUSD;
   _socios = { ars: Math.round(ars), usd: parseFloat(usd.toFixed(2)) };
 
   const f = n => '$ ' + Math.abs(Math.round(n)).toLocaleString('es-AR');
@@ -4963,12 +4968,13 @@ async function renderCuentaSocios() {
     // Desglose claro para Jony: de dónde sale el saldo (ventas cruzadas)
     const fila = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
       `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${f(val)}</span></div>`;
-    const neto = comiDebe + pitzMyri - jonyTiene - saldadoARS;
+    const neto = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
     html += `<div style="background:var(--gris);border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
       <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">Por las ventas cruzadas entre vos y Myri:</div>
       ${fila('Comisión que Myri te debe', comiDebe, '+')}
       ${fila('Ventas tuyas que cobró Myri (te las debe)', pitzMyri, '+')}
       ${fila('Ventas de Myri que cobraste vos (se las debés)', jonyTiene, '−')}
+      ${movsARS > 0 ? fila('Adelantos que te hizo pagar (te los debe)', movsARS, '+') : (movsARS < 0 ? fila('Adelantos a favor de Myri', -movsARS, '−') : '')}
       ${saldadoARS !== 0 ? fila('Ya saldado', saldadoARS, '−') : ''}
       ${Math.abs(neto) >= 1 ? `<div style="display:flex;justify-content:space-between;font-size:0.8rem;padding-top:0.35rem;margin-top:0.3rem;border-top:1px solid var(--gris-medio);font-weight:700"><span>${neto>0?'Myri te debe':'Le debés a Myri'}</span><span>${f(neto)}</span></div>` : ''}
     </div>`;
@@ -5009,6 +5015,7 @@ async function renderCuentaSocios() {
         ${_revisar.map(_filaRev).join('')}
       </div>` : ''}
     </div>`;
+    html += `<button onclick="abrirUsarPlataMyri()" style="width:100%;padding:0.7rem;background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer;margin-bottom:0.5rem">💸 Usar plata de Myri (pagar / entregar)</button>`;
     html += `<button onclick="saldarCuentaSocios()" style="width:100%;padding:0.7rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer">✓ Saldar y poner en cero</button>`;
   } else {
     const hayDeuda = Math.abs(ars) >= 1 || Math.abs(usd) >= 0.01;
@@ -5028,6 +5035,63 @@ async function saldarCuentaSocios() {
   const params = new URLSearchParams({ accion: 'saldarSocios', montoARS: ars, montoUSD: usd, nota: dir });
   const r = await apiWrite(params, '🤝 Cuenta saldada ✓');
   if (r.ok) renderCuentaSocios();
+}
+
+// ─── USAR PLATA DE MYRI (pagar algo / entregarle) ──────────────────────────────
+// Descuenta de la caja de ella lo que tiene; si te pasás, el excedente queda como "Myri te debe".
+const _MYRI_CAJAS = [
+  { key: 'EFT_MYRI', label: 'EFT $ MYRI (efectivo)', mon: 'ARS' },
+  { key: 'MP_GABY', label: 'MP GABY (transferencia)', mon: 'ARS' },
+  { key: 'ETF_USD_MYRI', label: 'ETF U$S MYRI (dólares)', mon: 'USD' }
+];
+function _saldoCaja(key, mon) {
+  const s = window._cajaSaldos || { ars:{}, usd:{} };
+  return Math.max(0, (mon === 'USD' ? (s.usd[key]||0) : (s.ars[key]||0)));
+}
+function abrirUsarPlataMyri() {
+  const ov = document.getElementById('upm-overlay');
+  const sel = document.getElementById('upm-caja');
+  sel.innerHTML = _MYRI_CAJAS.map(c => {
+    const bal = _saldoCaja(c.key, c.mon);
+    const balStr = c.mon === 'USD' ? `U$S ${bal.toFixed(2)}` : `$ ${Math.round(bal).toLocaleString('es-AR')}`;
+    return `<option value="${c.key}" data-mon="${c.mon}">${c.label} — tiene ${balStr}</option>`;
+  }).join('');
+  document.getElementById('upm-monto').value = '';
+  document.getElementById('upm-desc').value = '';
+  ov.classList.add('open');
+}
+function cerrarUsarPlataMyri() { document.getElementById('upm-overlay').classList.remove('open'); }
+async function confirmarUsarPlataMyri() {
+  const caja = document.getElementById('upm-caja').value;
+  const cfg = _MYRI_CAJAS.find(c => c.key === caja) || _MYRI_CAJAS[0];
+  const mon = cfg.mon;
+  const monto = parseFloat(document.getElementById('upm-monto').value) || 0;
+  const desc = document.getElementById('upm-desc').value.trim();
+  if (monto <= 0) { showToast('Poné un monto'); return; }
+  if (!desc) { showToast('Poné qué pagaste / a quién'); return; }
+  const fmtM = v => mon === 'USD' ? `U$S ${v.toFixed(2)}` : `$ ${Math.round(v).toLocaleString('es-AR')}`;
+  const balance = _saldoCaja(caja, mon);
+  const usarCaja = Math.min(monto, balance);
+  const excedente = +(monto - usarCaja).toFixed(2);
+  const resumen = `Usar ${fmtM(monto)} — ${desc}\n\n`
+    + `• Sale de la caja de Myri: ${fmtM(usarCaja)}\n`
+    + (excedente > 0 ? `• Myri te queda debiendo: ${fmtM(excedente)} (lo pusiste vos)` : '• Le alcanza con su caja, no te debe nada');
+  if (!confirm(resumen)) return;
+  const btn = document.getElementById('upm-btn'); btn.disabled = true; btn.textContent = 'Guardando...';
+  let okAll = true;
+  if (usarCaja > 0) {
+    const p1 = new URLSearchParams({ accion: 'rendicion', desc: 'Usado de Myri: ' + desc, monto: usarCaja, moneda: mon, columna: caja });
+    const r1 = await apiWrite(p1, '');
+    if (!r1.ok) okAll = false;
+  }
+  if (okAll && excedente > 0) {
+    const p2 = new URLSearchParams({ accion: 'registrarMovSocio', desc: 'Adelanto: ' + desc });
+    if (mon === 'USD') p2.set('montoUSD', excedente); else p2.set('montoARS', excedente);
+    const r2 = await apiWrite(p2, '');
+    if (!r2.ok) okAll = false;
+  }
+  btn.disabled = false; btn.textContent = 'Confirmar';
+  if (okAll) { showToast('Registrado ✓'); cerrarUsarPlataMyri(); setTimeout(() => refreshAdmin(), 800); }
 }
 
 function setModo(m) {
@@ -7348,6 +7412,29 @@ function cerrarEditPedido() {
   <div class="stock-drawer-body" id="stock-drawer-body"></div>
   <div class="stock-drawer-footer">
     <button class="guardar-stock-btn" onclick="guardarStock()" style="width:100%;margin:0">Guardar cambios</button>
+  </div>
+</div>
+
+<!-- MODAL USAR PLATA DE MYRI -->
+<div class="edit-overlay" id="upm-overlay" onclick="if(event.target.id==='upm-overlay')cerrarUsarPlataMyri()">
+  <div class="edit-modal">
+    <div class="edit-modal-header">
+      <span class="edit-modal-title">💸 Usar plata de Myri</span>
+      <button class="btn-cerrar-modal" onclick="cerrarUsarPlataMyri()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:0.9rem">✕</button>
+    </div>
+    <div class="edit-modal-body">
+      <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.75rem;line-height:1.4">Pagaste algo de ella o le diste plata. Sale de la caja de Myri; si te pasás de lo que tiene, el resto te lo queda debiendo.</div>
+      <div class="edit-section-label">De qué caja de Myri</div>
+      <select class="edit-tipo-select" id="upm-caja"></select>
+      <div class="edit-section-label">Monto</div>
+      <input type="number" id="upm-monto" min="0" step="0.01" placeholder="0" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
+      <div class="edit-section-label">¿Qué fue? (a quién / concepto)</div>
+      <input type="text" id="upm-desc" placeholder="Ej: pago farmacia, transferencia a Juan..." style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
+    </div>
+    <div class="edit-modal-footer">
+      <button class="edit-btn-cancel" onclick="cerrarUsarPlataMyri()">Cancelar</button>
+      <button class="edit-btn-save" id="upm-btn" onclick="confirmarUsarPlataMyri()">Confirmar</button>
+    </div>
   </div>
 </div>
 

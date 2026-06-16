@@ -11,6 +11,7 @@ const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
+  'registrarMovSocio','getMovsSocios',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
@@ -417,6 +418,33 @@ function doGet(e) {
       const movimientos = rows.map(r => ({
         fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
         montoARS: parseFloat(r[1])||0, montoUSD: parseFloat(r[2])||0, nota: (r[3]||'').toString()
+      }));
+      return json({
+        totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
+        totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
+        movimientos
+      });
+    }
+    // Movimientos manuales de la cuenta corriente entre socios (adelantos, pagos que Myri hace pagar a Jony, etc.)
+    // Convención: monto POSITIVO = Myri le debe MÁS a Jony; negativo = Jony le debe a Myri.
+    if (accion === 'registrarMovSocio') {
+      const h = getOrCreate(ss, 'MovsSocios', ['Fecha','Descripcion','MontoARS','MontoUSD']);
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const montoARS = parseFloat(e.parameter.montoARS||0) || 0;
+      const montoUSD = parseFloat(e.parameter.montoUSD||0) || 0;
+      if (montoARS === 0 && montoUSD === 0) return json({error:'nada para registrar'});
+      const row = h.getLastRow() + 1;
+      h.appendRow([fecha, dec(e.parameter.desc||'Movimiento entre socios'), montoARS, montoUSD]);
+      h.getRange(row,1).setNumberFormat('@');
+      return ok();
+    }
+    if (accion === 'getMovsSocios') {
+      const h = ss.getSheetByName('MovsSocios');
+      if (!h || h.getLastRow() < 2) return json({totalARS:0, totalUSD:0, movimientos:[]});
+      const rows = h.getRange(2,1,h.getLastRow()-1,4).getValues();
+      const movimientos = rows.map(r => ({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+        desc: (r[1]||'').toString(), montoARS: parseFloat(r[2])||0, montoUSD: parseFloat(r[3])||0
       }));
       return json({
         totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
