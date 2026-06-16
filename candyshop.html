@@ -788,7 +788,7 @@ let usuario = null;
 let catalogoCache = [];
 let editandoCodigo = null;
 
-const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
+const fmt = n => '$' + Math.round(parseFloat(n)||0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
 
 // ─── LOGIN ────────────────────────────────────────────────────────
 function login(nombre) {
@@ -919,17 +919,25 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   const conDeuda = new Set(deudores.filter(d => d.saldo > 0).map(d => d.cliente.toLowerCase()));
   const conVuelto = new Set(deudores.filter(d => d.saldo < 0).map(d => d.cliente.toLowerCase()));
 
-  let cobrado = 0, ganancia = 0;
+  // Agrupar líneas en VENTAS reales: misma persona + misma hora = una compra.
+  const grupos = new Map();
+  let vendido = 0, cobrado = 0, ganancia = 0, deuda = 0;
   ventas.forEach(v => {
     const subtotal = (v.precio || 0) * (v.cantidad || 1);
     const pendiente = v.saldoPendiente || 0;
-    cobrado += subtotal - pendiente;
     const cod = (v.codigo || '').toLowerCase();
     const costo = costoMap[cod] || 0;
-    ganancia += (v.precio - costo) * v.cantidad;
+    const gan = (v.precio - costo) * (v.cantidad || 1);
+    vendido += subtotal; cobrado += subtotal - pendiente; ganancia += gan; deuda += pendiente;
+    const cli = (v.cliente || '').trim() || 'Sin nombre';
+    const key = cli.toLowerCase() + '|' + (v.hora || '');
+    if (!grupos.has(key)) grupos.set(key, { cliente: cli, hora: v.hora || '', lineas: [], total: 0, gan: 0, pend: 0 });
+    const g = grupos.get(key);
+    g.lineas.push({ cantidad: v.cantidad, producto: v.producto, subtotal: subtotal });
+    g.total += subtotal; g.gan += gan; g.pend += pendiente;
   });
 
-  document.getElementById('s-ventas').textContent = ventas.length;
+  document.getElementById('s-ventas').textContent = grupos.size;
   document.getElementById('s-cobrado').textContent = fmt(cobrado);
   document.getElementById('s-ganancia').textContent = fmt(ganancia);
   document.getElementById('s-diezmo').textContent = fmt(ganancia * 0.1);
@@ -937,25 +945,35 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   const el = document.getElementById('ventas-list');
   if (!ventas.length) { el.innerHTML = '<div class="empty">Sin ventas hoy todavía 😴</div>'; return; }
 
-  el.innerHTML = ventas.map(v => {
-    const subtotal = (v.precio || 0) * (v.cantidad || 1);
-    const cod = (v.codigo || '').toLowerCase();
-    const costo = costoMap[cod] || 0;
-    const gan = (v.precio - costo) * v.cantidad;
-    const clienteLC = (v.cliente || '').toLowerCase();
-    const debeTag = v.saldoPendiente > 0 && conDeuda.has(clienteLC) ? '<span class="badge badge-debe">DEBE</span>' : '';
+  // Resumen claro: cuánto se vendió, cuánto entró, cuánto queda debiendo.
+  const resumen = `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:90px;background:#f3f7ff;border-radius:10px;padding:8px 10px;text-align:center">
+      <div style="font-size:0.7rem;color:#888">Vendido</div><div style="font-weight:800;color:#2c6fad">${fmt(vendido)}</div></div>
+    <div style="flex:1;min-width:90px;background:#f0fbf3;border-radius:10px;padding:8px 10px;text-align:center">
+      <div style="font-size:0.7rem;color:#888">Cobrado</div><div style="font-weight:800;color:#2e8b57">${fmt(cobrado)}</div></div>
+    <div style="flex:1;min-width:90px;background:#fff4ef;border-radius:10px;padding:8px 10px;text-align:center">
+      <div style="font-size:0.7rem;color:#888">En deuda</div><div style="font-weight:800;color:#e05c2a">${fmt(deuda)}</div></div>
+  </div>`;
+
+  // Una tarjeta por venta (compra), con sus productos adentro.
+  const cards = Array.from(grupos.values()).reverse().map(g => {
+    const clienteLC = g.cliente.toLowerCase();
+    const debeTag = g.pend > 0 ? '<span class="badge badge-debe">DEBE</span>' : '';
     const cambioTag = conVuelto.has(clienteLC) ? '<span class="badge badge-cambio">CAMBIO</span>' : '';
-    return `<div class="item-row">
-      <div class="item-info">
-        <div class="item-name">${v.cantidad}x ${v.producto}${debeTag}${cambioTag}</div>
-        ${v.cliente ? `<div class="item-sub">👤 ${v.cliente}</div>` : ''}
+    const lineasHtml = g.lineas.map(l =>
+      `<div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#555;padding:1px 0">
+        <span>${l.cantidad}x ${l.producto}</span><span>${fmt(l.subtotal)}</span></div>`).join('');
+    return `<div style="border:1px solid #eee;border-left:4px solid ${g.pend>0?'#e05c2a':'#2e8b57'};border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:700;color:#5c3d1e">👤 ${g.cliente}${debeTag}${cambioTag}<span style="font-weight:400;color:#aaa;font-size:0.78rem"> · ${g.hora}</span></div>
+        <div style="text-align:right"><div style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</div>${g.gan>0?`<div style="font-size:0.75rem;color:#2e8b57">+${fmt(g.gan)}</div>`:''}</div>
       </div>
-      <div class="item-right">
-        <div class="item-price">${fmt(subtotal)}</div>
-        ${costo > 0 ? `<div class="item-gain">+${fmt(gan)}</div>` : ''}
-      </div>
+      ${lineasHtml}
+      ${g.pend>0?`<div style="font-size:0.78rem;color:#e05c2a;margin-top:4px">Debe: ${fmt(g.pend)}</div>`:''}
     </div>`;
   }).join('');
+
+  el.innerHTML = resumen + cards;
 }
 
 

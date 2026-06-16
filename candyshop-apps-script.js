@@ -109,6 +109,16 @@ function doGet(e) {
       }
       return json(rVoz);
     }
+    if (accion === 'pedidoVoz') {
+      // Carga un pedido tomado por Shuki en la llamada telefónica (lo llama la "tool" de Ultravox al cerrar).
+      if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
+      return json(registrarPedidoVoz_(ss, e.parameter.items || '', dec(e.parameter.cliente || ''), dec(e.parameter.direccion || ''), dec(e.parameter.tel || ''), e.parameter.dry === '1'));
+    }
+    if (accion === 'borrarVentas') {
+      // Borra ventas por # de venta (uso administrativo). Si no está cancelada, devuelve su stock primero.
+      if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
+      return json(borrarVentas_(ss, dec(e.parameter.ids || '')));
+    }
     if (accion === 'tts') {
       // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
       if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET)) return json({ error: 'no autorizado' });
@@ -836,6 +846,15 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
+    // Tool de Retell (custom function): POST con {args:{cliente,direccion,items}} y secret/accion en la URL.
+    if (e.parameter && e.parameter.accion === 'pedidoVoz') {
+      if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
+      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const a = body.args || body;
+      const itemsStr = (typeof a.items === 'string') ? a.items : JSON.stringify(a.items || []);
+      const tel = a.tel || (body.call && (body.call.from_number || '')) || '';
+      return json(registrarPedidoVoz_(ss, itemsStr, a.cliente || '', a.direccion || '', tel));
+    }
     if (body.accion === 'transcribirIdea') {
       const ok = sesionValida_(body.token) || body.secret === BOT_SECRET;
       if (!ok) return json({ error: 'no autorizado' });
@@ -1069,7 +1088,8 @@ function ventasHoyHijos(ss, p) {
       }
       return r[1] === p.hijo && fechaStr === hoyStr;
     })
-    .map(r => ({ producto:r[2], codigo:r[3], cantidad:r[4], precio:r[5], cliente:r[7], saldoPendiente:r[10] }));
+    .map(r => ({ producto:r[2], codigo:r[3], cantidad:r[4], precio:r[5], cliente:r[7], saldoPendiente:r[10],
+      hora: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : (r[0]||'').toString().trim().substring(11,16) }));
 }
 
 function ventasPeriodo(ss, p) {
@@ -2450,6 +2470,156 @@ function botConfirmar_(ss, s, prods, tel, sim) {
   botGuardarSesion_(s);
   return '✅ Pedido tomado' + (s.nombre ? ', ' + s.nombre : '') + '! Total ' + botMoney_(total) +
     '.\nTe contactamos para coordinar la entrega. Gracias! 🍬';
+}
+
+// Normaliza texto para comparar nombres (minúsculas, sin acentos, sin símbolos).
+function normTxt_(s) {
+  return (s || '').toString().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Busca el producto que mejor matchea un nombre o código que dijo Shuki.
+function matchProductoVoz_(prods, key) {
+  key = (key || '').toString().trim();
+  if (!key) return null;
+  // 1) Código exacto
+  const byId = prods.find(p => p.id === key);
+  if (byId) return byId;
+  // 2) Por nombre: cuento cuántas palabras de la consulta aparecen en "nombre + desc"
+  const q = normTxt_(key); if (!q) return null;
+  const qWords = q.split(' ').filter(w => w.length > 2);
+  let best = null, bestScore = 0;
+  prods.forEach(p => {
+    const hay = normTxt_(p.nombre + ' ' + (p.desc || ''));
+    let score = 0;
+    qWords.forEach(w => { if (hay.indexOf(w) !== -1) score++; });
+    if (score > bestScore) { bestScore = score; best = p; }
+  });
+  // Requiere al menos 1 palabra significativa en común
+  return bestScore >= 1 ? best : null;
+}
+
+// Borra ventas por # de venta. Devuelve el stock de las que no estén canceladas. ids = "23,19,18".
+function borrarVentas_(ss, idsStr) {
+  const h = ss.getSheetByName('Ventas');
+  if (!h) return { ok: false, error: 'sin hoja' };
+  const objetivo = (idsStr || '').split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
+  if (!objetivo.length) return { ok: false, error: 'sin ids' };
+  const d = h.getDataRange().getValues();
+  const sh = ss.getSheetByName('Stock');
+  const sd = sh ? sh.getDataRange().getValues() : null;
+  const filas = [];   // {row, nVenta, estado, stockUpdates}
+  for (let i = 1; i < d.length; i++) {
+    const nVenta = parseInt(d[i][10]);
+    if (objetivo.indexOf(nVenta) !== -1) filas.push({ row: i + 1, nVenta: nVenta, estado: (d[i][7] || '').toString(), su: (d[i][19] || '').toString(), cliente: (d[i][2] || '').toString() });
+  }
+  if (!filas.length) return { ok: false, error: 'no encontradas', objetivo: objetivo };
+  const devueltas = [], borradas = [];
+  // Devolver stock de las no canceladas
+  filas.forEach(f => {
+    if (f.estado !== 'cancelado' && f.su && sh && sd) {
+      f.su.split(',').forEach(u => {
+        const p = u.split(':'); const pid = p[0]; const qty = parseInt(p[1]) || 0;
+        if (!pid || qty <= 0) return;
+        for (let i = 1; i < sd.length; i++) {
+          if (sd[i][0].toString() === pid) {
+            const antes = parseInt(sd[i][5]) || 0, despues = antes + qty;
+            sh.getRange(i + 1, 6).setValue(despues);
+            sd[i][5] = despues;
+            registrarMovStock_(ss, pid, sd[i][1], qty, antes, despues, 'Borrado venta #' + f.nVenta + ' (devolución)');
+            break;
+          }
+        }
+      });
+      devueltas.push(f.nVenta);
+    }
+  });
+  // Borrar filas de abajo hacia arriba (para no correr los índices)
+  filas.sort((a, b) => b.row - a.row).forEach(f => { h.deleteRow(f.row); borradas.push(f.nVenta); });
+  return { ok: true, borradas: borradas, stockDevuelto: devueltas };
+}
+
+// Carga un pedido tomado por Shuki en la llamada telefónica (Ultravox).
+// items = JSON: [{"nombre":"Chocolate Elite blanco","cantidad":2}, ...]  (o "codigo" en vez de "nombre").
+// cliente y direccion los junta Shuki en la charla.
+function registrarPedidoVoz_(ss, itemsStr, cliente, direccion, tel, dry) {
+  const prods = botLeerProductos_(ss);
+  if (!prods.length) return { ok: false, error: 'sin_productos' };
+  // Parseo robusto del JSON de items: viene como string y según el proveedor puede llegar
+  // codificado distinto. Probamos varias formas hasta que uno parsee a array.
+  const tryp = function (s) {
+    if (Array.isArray(s)) return s;
+    if (typeof s !== 'string' || !s) return null;
+    try { const x = JSON.parse(s); return Array.isArray(x) ? x : null; } catch (e) { return null; }
+  };
+  let lista = tryp(itemsStr);
+  if (!lista) { try { lista = tryp(decodeURIComponent(itemsStr)); } catch (e) {} }
+  if (!lista) { try { lista = tryp((itemsStr || '').replace(/\+/g, ' ')); } catch (e) {} }
+  if (!lista) lista = [];
+  const carrito = {}, noEncontrados = [];
+  lista.forEach(it => {
+    const key = (it && (it.codigo || it.nombre || it.producto)) || '';
+    const q = parseInt(it && it.cantidad) || 0;
+    if (!key || q <= 0) return;
+    const p = matchProductoVoz_(prods, key);
+    if (p) carrito[p.id] = (carrito[p.id] || 0) + q;
+    else noEncontrados.push(key);
+  });
+  const ids = Object.keys(carrito).filter(k => carrito[k] > 0);
+  if (!ids.length) return { ok: false, error: 'pedido_vacio', noEncontrados: noEncontrados, recibido: (itemsStr || '').toString().substring(0, 200) };
+  const lineas = [], suArr = [], jonyArr = [];
+  let total = 0;
+  ids.forEach(id => {
+    const p = prods.find(x => x.id === id);
+    const qty = Math.min(carrito[id], p.stock || carrito[id]);
+    const sub = p.precioMin * qty;
+    total += sub;
+    lineas.push('• ' + qty + 'x ' + p.nombre + (p.desc ? ' · ' + p.desc : '') + ' — $ ' + botMiles_(p.precioMin) + ' c/u = $ ' + botMiles_(sub));
+    suArr.push(id + ':' + qty);
+    if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + p.precioMin);
+  });
+  // Modo simulación: devuelve lo que matcheó sin tocar la planilla ni el stock.
+  if (dry) return { ok: true, dry: true, total: total, lineas: lineas, noEncontrados: noEncontrados };
+  const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
+  const idV = 'P' + Date.now().toString();
+  const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+  const row = h.getLastRow() + 1;
+  const nVenta = row - 1;
+  const cli = cliente ? cliente : ('Tel ' + (tel || 's/d'));
+  const notas = '📞 Pedido por teléfono (Shuki)' + (direccion ? ' — Dirección: ' + direccion : '');
+  if (h.getRange(1, 21).getValue() !== 'VID') h.getRange(1, 21).setValue('VID');
+  h.appendRow([idV, fecha, cli, 'Minorista', lineas.join('\n'), 'A coordinar', notas, 'pendiente',
+    total, 0, nVenta, 0, 0, 0, 0, 0, '', '', 0, suArr.join(','), 'voz_' + (tel || '')]);
+  h.getRange(row, 1, 1, 2).setNumberFormat('@');
+  // Descontar stock + registrar movimiento
+  const sh = ss.getSheetByName('Stock');
+  if (sh) {
+    const sd = sh.getDataRange().getValues();
+    suArr.forEach(u => {
+      const parts = u.split(':'); const pid = parts[0]; const qty = parseInt(parts[1]) || 0;
+      for (let i = 1; i < sd.length; i++) {
+        if (sd[i][0].toString() === pid) {
+          const antes = parseInt(sd[i][5]) || 0, despues = Math.max(0, antes - qty);
+          sh.getRange(i + 1, 6).setValue(despues);
+          registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues, 'Venta TEL #' + nVenta + ' — ' + cli);
+          break;
+        }
+      }
+    });
+  }
+  // Ganancias pitzujim (igual que la web/SMS)
+  if (jonyArr.length) {
+    const hG = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
+    let g = 0;
+    jonyArr.forEach(it => {
+      const pp = it.split(':'); const avg = getCostoPromedio(ss, pp[0]);
+      if (avg > 0) g += (parseFloat(pp[2]) - avg) * (parseFloat(pp[1]) || 0);
+    });
+    if (g > 0) hG.appendRow([fecha, 'ganancia_pitzujim', 'Pitzujim — ' + cli, Math.round(g)]);
+  }
+  // Avisar al negocio
+  enviarTelegram_('papa', '📞 NUEVO PEDIDO POR TELÉFONO #' + nVenta + '\n👤 ' + cli + (tel ? ' (' + tel + ')' : '') + (direccion ? '\n📍 ' + direccion : '') + '\n\n' + lineas.join('\n') + '\n\nTotal: $ ' + botMiles_(total) + '\nCoordiná entrega y cobro desde el panel.');
+  return { ok: true, nVenta: nVenta, total: total, resumen: lineas.map(l => l.replace('• ', '')).join('; ') };
 }
 
 // Punto de entrada del cerebro.
