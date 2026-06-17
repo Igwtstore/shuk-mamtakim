@@ -1246,7 +1246,8 @@
       <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
       <div id="ep-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
       <button class="guardar-stock-btn" style="margin-top:0.75rem" onclick="guardarEdicionProducto()">💾 Guardar cambios</button>
-      <button class="guardar-stock-btn" style="margin-top:0.5rem;background:#fde8e8;color:#c0392b" onclick="eliminarProductoEditor()">🗑️ Eliminar producto (se oculta de todos lados)</button>
+      <button class="guardar-stock-btn" style="margin-top:0.5rem;background:#fff3e0;color:#b8860b" onclick="eliminarProductoEditor()">🙈 Ocultar producto (se conserva el historial)</button>
+      <button class="guardar-stock-btn" style="margin-top:0.4rem;background:#fde8e8;color:#c0392b" onclick="borrarProductoEditor()">🗑️ Borrar definitivamente (se va del catálogo)</button>
     </div>
   </div>
   <div class="admin-card">
@@ -4321,7 +4322,21 @@ async function eliminarProductoEditor() {
   if (!_epId) return;
   const p = productos.find(x => String(x.id) === String(_epId));
   if (!confirm(`¿Eliminar "${p?.nombre}"? Se oculta de la tienda y el panel (el historial de ventas se conserva).`)) return;
-  const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: _epId, activo: 'NO' }), '🗑️ Producto eliminado');
+  const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: _epId, activo: 'NO' }), '🙈 Producto ocultado');
+  if (!r.error) {
+    document.getElementById('ep-form').style.display = 'none';
+    document.getElementById('ep-buscar').value = '';
+    _epId = null;
+    await cargarProductos();
+    poblarEditorProductos();
+  }
+}
+
+async function borrarProductoEditor() {
+  if (!_epId) return;
+  const p = productos.find(x => String(x.id) === String(_epId));
+  if (!confirm(`¿BORRAR DEFINITIVAMENTE "${p?.nombre}"?\n\nSe va del catálogo para siempre. Si solo querés que no se venda más, mejor usá "Ocultar" (conserva el historial).\n\n¿Seguro?`)) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'eliminarProducto', id: _epId }), '🗑️ Producto borrado');
   if (!r.error) {
     document.getElementById('ep-form').style.display = 'none';
     document.getElementById('ep-buscar').value = '';
@@ -4647,6 +4662,9 @@ async function auditarSistema() {
     const cobrado = v.cajaJony || v.cajaMyri;
     const dias = diasDesdePedido(v.fecha);
     if (v.estado === 'entregado' && !cobrado && dias > 7) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): entregado hace ${dias} días y sigue sin cobrar` });
+    // stockUpdates DAÑADO (venta vieja de 1 ítem que Sheets guardó como fecha): al cancelarla el stock no vuelve solo
+    const su = (v.stockUpdates || '').toString().trim();
+    if (su && !/^\d+:-?\d+(,\d+:-?\d+)*$/.test(su)) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): dato de stock dañado (venta vieja) — si la cancelás, el stock NO vuelve solo, ajustalo a mano` });
   });
 
   // Posibles duplicados (mismo cliente + total + día + productos)
