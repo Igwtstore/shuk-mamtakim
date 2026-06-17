@@ -2129,13 +2129,10 @@ function resumenNegocio_(ss) {
       }));
   }
 
-  // Diezmo / ganancias Jony (agregado)
-  const hgj = ss.getSheetByName('GananciasJony');
-  if (hgj && hgj.getLastRow() > 1) {
-    let total = 0;
-    hgj.getRange(2, 1, hgj.getLastRow() - 1, 4).getValues().forEach(row => { total += parseFloat(row[3]) || 0; });
-    r.gananciasJonyAcumulado = Math.round(total);
-  }
+  // Diezmo / ganancias Jony: EN VIVO (comisión + Pitzujim cobrados del período), consistente
+  // con el panel. (Ya no se suma el log viejo, que incluía comisión no cobrada.)
+  const perJ = gananciaJonyPeriodo_(ss);
+  r.gananciasJonyAcumulado = Math.round(perJ.comisionARS + perJ.pitz);
 
   // Candy Shop: ventas por mes/hijo + deudores + depósito
   const hvh = ss.getSheetByName('VentasHijos');
