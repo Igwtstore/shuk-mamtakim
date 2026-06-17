@@ -997,12 +997,17 @@ function renderConsumoHoy(consumo) {
   }).join('');
 }
 
+// Normaliza nombre de cliente (mayúsc/minúsc + espacios + acentos) — igual que el backend y Shuk.
+function normCli(s) {
+  return (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────
 function renderDashboard(ventas, catalogo, deudores = []) {
   const costoMap = {};
   catalogo.forEach(p => { costoMap[p.codigo?.toLowerCase()] = p.costo || 0; });
-  const conDeuda = new Set(deudores.filter(d => d.saldo > 0).map(d => d.cliente.toLowerCase()));
-  const conVuelto = new Set(deudores.filter(d => d.saldo < 0).map(d => d.cliente.toLowerCase()));
+  const conDeuda = new Set(deudores.filter(d => d.saldo > 0).map(d => normCli(d.cliente)));
+  const conVuelto = new Set(deudores.filter(d => d.saldo < 0).map(d => normCli(d.cliente)));
 
   // Agrupar líneas en VENTAS reales: misma persona + misma hora = una compra.
   const grupos = new Map();
@@ -1015,7 +1020,7 @@ function renderDashboard(ventas, catalogo, deudores = []) {
     const gan = (v.precio - costo) * (v.cantidad || 1);
     vendido += subtotal; cobrado += subtotal - pendiente; ganancia += gan; deuda += pendiente;
     const cli = (v.cliente || '').trim() || 'Sin nombre';
-    const key = cli.toLowerCase() + '|' + (v.hora || '');
+    const key = normCli(cli) + '|' + (v.hora || '');
     if (!grupos.has(key)) grupos.set(key, { cliente: cli, hora: v.hora || '', lineas: [], total: 0, gan: 0, pend: 0 });
     const g = grupos.get(key);
     g.lineas.push({ ...v, subtotal });   // guarda rowIndex/codigo/precio/cliente/saldo para editar/borrar
@@ -1048,7 +1053,7 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   // Una tarjeta por venta (compra), con sus productos adentro. "fiado" es solo dato histórico
   // de esa compra; la deuda que vale es la de la cuenta corriente (pestaña Deudores).
   const cards = Array.from(grupos.values()).reverse().map(g => {
-    const clienteLC = g.cliente.toLowerCase();
+    const clienteLC = normCli(g.cliente);
     const cambioTag = conVuelto.has(clienteLC) ? '<span class="badge badge-cambio">CAMBIO</span>' : '';
     const lineasHtml = g.lineas.map(l => {
       const cod = (l.codigo||'').replace(/'/g,"\\'");
@@ -2261,7 +2266,8 @@ function filtrarSugerencias() {
 }
 
 function renderSugerencias(q) {
-  const lista = deudoresCache.filter(d => !q || d.cliente.toLowerCase().includes(q));
+  const nq = normCli(q);
+  const lista = deudoresCache.filter(d => !nq || normCli(d.cliente).includes(nq));
   const el = document.getElementById('cliente-sugerencias');
   el.innerHTML = lista.map(d => `
     <div class="cliente-sug" onclick="seleccionarCliente('${d.cliente.replace(/'/g,"\\'")}')">
@@ -2272,9 +2278,9 @@ function renderSugerencias(q) {
 
 // Deuda actual de un cliente, desde la cache de deudores (sin pegarle al server).
 function _saldoCacheCliente(nombre) {
-  const n = (nombre || '').trim().toLowerCase();
+  const n = normCli(nombre);
   if (!n) return 0;
-  const d = deudoresCache.find(x => (x.cliente || '').trim().toLowerCase() === n);
+  const d = deudoresCache.find(x => normCli(x.cliente) === n);
   return d ? d.saldo : 0;
 }
 // #1 — Muestra al lado del nombre cuánto debe ese cliente (o si le debemos cambio).
@@ -2282,8 +2288,8 @@ function mostrarDeudaCliente() {
   const el = document.getElementById('w-cliente-deuda');
   if (!el) return;
   const nom = (document.getElementById('w-cliente').value || '').trim();
-  const n = nom.toLowerCase();
-  const d = nom ? deudoresCache.find(x => (x.cliente || '').trim().toLowerCase() === n) : null;
+  const n = normCli(nom);
+  const d = nom ? deudoresCache.find(x => normCli(x.cliente) === n) : null;
   const nombre = d ? d.cliente : nom;          // mostrar la grafía linda del cliente
   const saldo = d ? d.saldo : 0;
   if (saldo > 0) el.innerHTML = `<div style="background:#fde8e8;border:1px solid #f0c0c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#c0392b">⚠️ ${nombre} ya debe ${fmt(saldo)}</div>`;

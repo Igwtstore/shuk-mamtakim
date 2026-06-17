@@ -1144,13 +1144,27 @@ function registrarPagoVuelto(ss, p) {
   return { ok: true };
 }
 
+// Normaliza el nombre del cliente: ignora mayúsc/minúsc, espacios de más y acentos.
+// "Edu", "edu", "  EDU ", "José"/"Jose" → la MISMA cuenta. (Igual que en Shuk.)
+function normCli_(s) {
+  return (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+}
+// Entre dos grafías del mismo nombre, elige la más "prolija" (más mayúsculas → nombre propio).
+function mejorCli_(a, b) {
+  if (!a) return b; if (!b) return a;
+  const may = x => (x.match(/[A-ZÁÉÍÓÚÑ]/g) || []).length;
+  return may(a) >= may(b) ? a : b;
+}
+
 function consultarDeudores(ss, p) {
   const h = ss.getSheetByName('CCHijos'); if (!h || h.getLastRow() < 2) return [];
   const datos = h.getRange(2,1,h.getLastRow()-1,5).getValues();
   const saldos = {};
   datos.filter(r => r[1] === p.hijo && r[2]).forEach(r => {
-    const c = r[2].toString().trim().toLowerCase();
-    if (!saldos[c]) saldos[c] = { cliente: r[2].toString().trim(), saldo: 0 };
+    const c = normCli_(r[2]);
+    const disp = r[2].toString().trim();
+    if (!saldos[c]) saldos[c] = { cliente: disp, saldo: 0 };
+    else saldos[c].cliente = mejorCli_(saldos[c].cliente, disp);   // muestra la grafía más linda
     saldos[c].saldo += parseFloat(r[3])||0;
   });
   // Devuelve positivos (nos deben) Y negativos (les debemos vuelto)
@@ -1164,7 +1178,7 @@ function consultarDeudaCliente(ss, p) {
   const h = ss.getSheetByName('CCHijos'); const detalle = [];
   if (h && h.getLastRow() > 1) {
     h.getRange(2,1,h.getLastRow()-1,5).getValues()
-      .filter(r => r[1] === p.hijo && (r[2]||'').toString().trim().toLowerCase() === dec(p.cliente).trim().toLowerCase() && parseFloat(r[3]) > 0)
+      .filter(r => r[1] === p.hijo && normCli_(r[2]) === normCli_(dec(p.cliente)) && parseFloat(r[3]) > 0)
       .slice(-5).forEach(r => detalle.push({
         fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM') : r[0].toString(),
         producto: r[4]||'deuda', monto: parseFloat(r[3])
@@ -1232,7 +1246,7 @@ function auditarHijos(ss, p) {
     const fechaMin = (r[0] && typeof r[0].getTime === 'function')
       ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy HH:mm')
       : r[0].toString().trim().substring(0, 16);
-    const key = [r[1], (r[7] || '').toString().trim().toLowerCase(), (r[3] || '').toString().trim(),
+    const key = [r[1], normCli_(r[7]), (r[3] || '').toString().trim(),
                  (r[2] || '').toString().trim().toLowerCase(), r[4], r[5], fechaMin].join('|');
     (grupos[key] = grupos[key] || []).push({
       rowIndex: i + 2, fecha: fechaMin, cliente: (r[7] || '').toString(),
@@ -1364,9 +1378,9 @@ function editarVentaHijos(ss, p) {
 function getSaldoCliente(ss, hijo, cliente) {
   const h = ss.getSheetByName('CCHijos'); if (!h || h.getLastRow() < 2) return 0;
   let saldo = 0;
-  const objetivo = (cliente||'').toString().trim().toLowerCase();
+  const objetivo = normCli_(cliente);
   h.getRange(2,1,h.getLastRow()-1,5).getValues()
-    .filter(r => r[1] === hijo && (r[2]||'').toString().trim().toLowerCase() === objetivo)
+    .filter(r => r[1] === hijo && normCli_(r[2]) === objetivo)
     .forEach(r => { saldo += parseFloat(r[3])||0; });
   return saldo; // positivo = nos deben, negativo = les debemos vuelto
 }
@@ -1379,10 +1393,10 @@ function registrarMovimientoCC(ss, hijo, cliente, monto, desc, producto) {
 function historialCliente(ss, p) {
   const h = ss.getSheetByName('CCHijos');
   if (!h || h.getLastRow() < 2) return [];
-  const clienteLC = dec(p.cliente).toLowerCase();
+  const clienteLC = normCli_(dec(p.cliente));
   const nCols = h.getLastColumn();
   return h.getRange(2, 1, h.getLastRow() - 1, nCols).getValues()
-    .filter(r => r[1] === p.hijo && r[2] && r[2].toString().toLowerCase() === clienteLC)
+    .filter(r => r[1] === p.hijo && r[2] && normCli_(r[2]) === clienteLC)
     .sort((a, b) => {
       const ta = a[0] instanceof Date ? a[0].getTime() : 0;
       const tb = b[0] instanceof Date ? b[0].getTime() : 0;
