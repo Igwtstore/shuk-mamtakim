@@ -2282,9 +2282,12 @@ function mostrarDeudaCliente() {
   const el = document.getElementById('w-cliente-deuda');
   if (!el) return;
   const nom = (document.getElementById('w-cliente').value || '').trim();
-  const saldo = _saldoCacheCliente(nom);
-  if (saldo > 0) el.innerHTML = `<div style="background:#fde8e8;border:1px solid #f0c0c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#c0392b">⚠️ ${nom} ya debe ${fmt(saldo)}</div>`;
-  else if (saldo < 0) el.innerHTML = `<div style="background:#e8f0ff;border:1px solid #c0d0f0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#2c6fad">💰 A ${nom} le debemos ${fmt(-saldo)} de cambio</div>`;
+  const n = nom.toLowerCase();
+  const d = nom ? deudoresCache.find(x => (x.cliente || '').trim().toLowerCase() === n) : null;
+  const nombre = d ? d.cliente : nom;          // mostrar la grafía linda del cliente
+  const saldo = d ? d.saldo : 0;
+  if (saldo > 0) el.innerHTML = `<div style="background:#fde8e8;border:1px solid #f0c0c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#c0392b">⚠️ ${nombre} ya debe ${fmt(saldo)}</div>`;
+  else if (saldo < 0) el.innerHTML = `<div style="background:#e8f0ff;border:1px solid #c0d0f0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#2c6fad">💰 A ${nombre} le debemos ${fmt(-saldo)} de cambio</div>`;
   else el.innerHTML = '';
 }
 // #2 — En vivo, mientras tipea cuánto pagó: qué queda debiendo (y el total con lo de antes).
