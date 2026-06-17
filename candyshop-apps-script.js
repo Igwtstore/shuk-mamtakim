@@ -11,7 +11,7 @@ const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
-  'registrarMovSocio','getMovsSocios','backupAhora',
+  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
@@ -367,6 +367,27 @@ function doGet(e) {
         if (cellId === e.parameter.id) { h.getRange(i+1,7).setValue(dec(e.parameter.nota||'')); return ok(); }
       }
       return json({error:'no encontrado'});
+    }
+    if (accion === 'renumerarVentas') {
+      // Reasigna el # de venta (col 11) correlativo y ÚNICO por orden de fila (1,2,3…).
+      // El # es cosmético: la plata se identifica por el ID interno, no se toca nada de plata.
+      // dry=1 → solo devuelve qué cambiaría (vista previa, no escribe).
+      const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return json({ ok: true, total: 0, cambios: [] });
+      const filas = h.getLastRow() - 1;
+      const data = h.getRange(2, 1, filas, 11).getValues();
+      const cambios = [];
+      for (let i = 0; i < data.length; i++) {
+        const nuevo = i + 1, viejo = parseInt(data[i][10]) || 0;
+        if (nuevo !== viejo) {
+          const fecha = data[i][1] instanceof Date ? Utilities.formatDate(data[i][1], TZ, 'dd/MM/yyyy') : (data[i][1] || '').toString();
+          cambios.push({ viejo: viejo, nuevo: nuevo, cliente: (data[i][2] || '').toString(), fecha: fecha });
+        }
+      }
+      if (e.parameter.dry === '1') return json({ ok: true, total: filas, cambios: cambios.slice(0, 200), totalCambios: cambios.length });
+      // Aplicar: escribir 1..N en la col 11 (números, como el original), en un solo batch.
+      const vals = []; for (let i = 0; i < filas; i++) vals.push([i + 1]);
+      h.getRange(2, 11, filas, 1).setValues(vals);
+      return json({ ok: true, total: filas, cambiados: cambios.length });
     }
     if (accion === 'guardarNotaCliente') {
       const h = getOrCreate(ss, 'NotasClientes', ['Cliente','Nota','Actualizado']);
