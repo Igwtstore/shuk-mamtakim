@@ -1209,6 +1209,11 @@
     </div>
     <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
   </div>
+  <div class="admin-card" data-seccion="catalogo">
+    <div class="admin-titulo">🙈 Mostrar / ocultar productos</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Prendé o apagá productos de la tienda de a muchos. Muestra cuántos quedan en stock. Ocultar no borra nada — el producto y su historial se conservan.</div>
+    <button class="guardar-stock-btn" style="margin-top:0" onclick="abrirGestorVisibilidad()">🙈 Abrir gestor de visibilidad</button>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">✏️ Editar producto</div>
     <div class="nombre-campo" style="margin:0 0 0.6rem">
@@ -5327,6 +5332,82 @@ async function verBorrados(btn) {
     <div style="max-height:320px;overflow-y:auto;border:1px solid var(--gris-medio);border-radius:8px;padding:6px">${filas}</div>`;
 }
 
+// ─── GESTOR DE VISIBILIDAD (mostrar/ocultar productos en masa) ──────────────────
+let _gvProductos = [], _gvSel = {}, _gvFiltro = 'todos';
+async function abrirGestorVisibilidad() {
+  document.getElementById('gv-overlay').classList.add('open');
+  document.getElementById('gv-lista').innerHTML = '<div style="padding:1rem;text-align:center;color:var(--texto-suave)">Cargando productos...</div>';
+  _gvSel = {}; _gvFiltro = 'todos';
+  document.getElementById('gv-buscar').value = '';
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'getProductosAdmin' }));
+  _gvProductos = Array.isArray(r) ? r : [];
+  _gvProductos.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  gvRender();
+}
+function cerrarGestorVisibilidad() { document.getElementById('gv-overlay').classList.remove('open'); }
+function gvSetFiltro(f, btn) {
+  _gvFiltro = f;
+  document.querySelectorAll('#gv-overlay .filtro-estado-btn').forEach(b => b.classList.remove('activo'));
+  if (btn) btn.classList.add('activo');
+  gvRender();
+}
+function gvFiltrados() {
+  const q = (document.getElementById('gv-buscar').value || '').trim().toLowerCase();
+  return _gvProductos.filter(p => {
+    if (q && !(p.nombre || '').toLowerCase().includes(q)) return false;
+    if (_gvFiltro === 'visibles') return p.activo;
+    if (_gvFiltro === 'ocultos') return !p.activo;
+    if (_gvFiltro === 'sinstock') return (p.stock || 0) <= 0;
+    return true;
+  });
+}
+function gvRender() {
+  const cont = document.getElementById('gv-lista');
+  const lista = gvFiltrados();
+  if (!lista.length) { cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--texto-suave)">No hay productos para mostrar.</div>'; gvActualizarContador(); return; }
+  cont.innerHTML = lista.map(p => {
+    const sel = !!_gvSel[p.id];
+    const stockTxt = (p.stock || 0) > 0 ? `${p.stock} en stock` : 'sin stock';
+    const stockColor = (p.stock || 0) > 0 ? 'var(--texto-suave)' : '#c0392b';
+    const estado = p.activo ? '<span style="color:#1a7a3a;font-weight:600">👁️ visible</span>' : '<span style="color:#b8860b;font-weight:600">🙈 oculto</span>';
+    return `<label style="display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0.7rem;border-bottom:1px solid var(--gris-claro,#eee);cursor:pointer;background:${sel ? '#eef4fb' : '#fff'}">
+      <input type="checkbox" ${sel ? 'checked' : ''} onchange="gvToggle('${p.id}')">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.86rem;font-weight:600;color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
+        <div style="font-size:0.72rem;color:${stockColor}">${stockTxt} · ${estado}</div>
+      </div>
+    </label>`;
+  }).join('');
+  gvActualizarContador();
+}
+function gvToggle(id) { if (_gvSel[id]) delete _gvSel[id]; else _gvSel[id] = true; gvRender(); }
+function gvToggleAll(check) {
+  gvFiltrados().forEach(p => { if (check) _gvSel[p.id] = true; else delete _gvSel[p.id]; });
+  gvRender();
+}
+function gvActualizarContador() {
+  const n = Object.keys(_gvSel).length;
+  document.getElementById('gv-sel-count').textContent = n + ' seleccionado' + (n === 1 ? '' : 's');
+  const all = document.getElementById('gv-all');
+  const vis = gvFiltrados();
+  if (all) all.checked = vis.length > 0 && vis.every(p => _gvSel[p.id]);
+}
+async function gvAplicar(mostrar) {
+  const ids = Object.keys(_gvSel);
+  if (!ids.length) { showToast('Elegí al menos un producto'); return; }
+  const accion = mostrar ? 'mostrar' : 'ocultar';
+  if (!confirm(`¿${mostrar ? 'Mostrar' : 'Ocultar'} ${ids.length} producto${ids.length === 1 ? '' : 's'} en la tienda?`)) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'setVisibilidadMasiva', ids: ids.join(','), mostrar: mostrar ? '1' : '0' }), '');
+  if (r && r.ok) {
+    showToast(`✓ ${r.n} producto${r.n === 1 ? '' : 's'} ${mostrar ? 'visible' + (r.n === 1 ? '' : 's') : 'oculto' + (r.n === 1 ? '' : 's')}`);
+    // Reflejar en memoria local + refrescar catálogo de la tienda
+    _gvProductos.forEach(p => { if (_gvSel[p.id]) p.activo = mostrar; });
+    _gvSel = {};
+    gvRender();
+    cargarProductos();
+  } else { showToast('Error: ' + ((r && r.error) || 'no se pudo')); }
+}
+
 function setModo(m) {
   modo = m;
   document.getElementById('btn-mayorista').classList.toggle('activo', m === 'mayorista');
@@ -7774,6 +7855,33 @@ function cerrarEditPedido() {
 </div>
 
 <!-- MODAL EDITAR PEDIDO -->
+<div class="edit-overlay" id="gv-overlay" onclick="if(event.target.id==='gv-overlay')cerrarGestorVisibilidad()">
+  <div class="edit-modal">
+    <div class="edit-modal-header">
+      <span class="edit-modal-title">🙈 Mostrar / ocultar productos</span>
+      <button class="btn-cerrar-modal" onclick="cerrarGestorVisibilidad()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:0.9rem">✕</button>
+    </div>
+    <div class="edit-modal-body">
+      <input type="text" id="gv-buscar" placeholder="🔍 Buscar producto..." autocomplete="off" oninput="gvRender()"
+        style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box;outline:none;margin-bottom:0.5rem" />
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-bottom:0.5rem">
+        <button class="filtro-estado-btn activo" id="gv-f-todos" onclick="gvSetFiltro('todos',this)">Todos</button>
+        <button class="filtro-estado-btn" id="gv-f-visibles" onclick="gvSetFiltro('visibles',this)">👁️ Visibles</button>
+        <button class="filtro-estado-btn" id="gv-f-ocultos" onclick="gvSetFiltro('ocultos',this)">🙈 Ocultos</button>
+        <button class="filtro-estado-btn" id="gv-f-sinstock" onclick="gvSetFiltro('sinstock',this)">📭 Sin stock</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;font-size:0.78rem;color:var(--texto-suave)">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="gv-all" onchange="gvToggleAll(this.checked)"> Seleccionar todos los de la lista</label>
+        <span id="gv-sel-count">0 seleccionados</span>
+      </div>
+      <div id="gv-lista" style="border:1px solid var(--gris-medio);border-radius:10px;overflow:hidden"></div>
+    </div>
+    <div class="edit-modal-footer" style="flex-wrap:wrap">
+      <button class="edit-btn-save" style="background:#fff3e0;color:#b8860b;flex:1" onclick="gvAplicar(false)">🙈 Ocultar seleccionados</button>
+      <button class="edit-btn-save" style="background:#e8f5ee;color:#1a7a3a;flex:1" onclick="gvAplicar(true)">👁️ Mostrar seleccionados</button>
+    </div>
+  </div>
+</div>
 <div class="edit-overlay" id="edit-pedido-overlay" onclick="if(event.target.id==='edit-pedido-overlay')cerrarEditPedido()">
   <div class="edit-modal">
     <div class="edit-modal-header">

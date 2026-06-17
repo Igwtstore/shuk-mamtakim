@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -903,6 +903,30 @@ function doGet(e) {
         }
       }
       return json({ error: 'producto no encontrado' });
+    }
+    if (accion === 'getProductosAdmin') {
+      // Todos los productos del Stock, INCLUIDOS los ocultos (para el gestor masivo de visibilidad).
+      const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json([]);
+      const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+      return json(d.filter(r => r[0] !== '' && r[1]).map(r => ({
+        id: r[0].toString(), nombre: (r[1] || '').toString(), stock: parseInt(r[5]) || 0,
+        activo: (r[7] || 'SI').toString().toUpperCase() !== 'NO',
+        categoria: (r[8] || 'Varios').toString(), dueno: (r[14] || '').toString()
+      })));
+    }
+    if (accion === 'setVisibilidadMasiva') {
+      // Muestra/oculta muchos productos de una sola vez (col 8 'activo' = SI/NO).
+      const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json({ error: 'sin hoja Stock' });
+      const ids = dec(e.parameter.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!ids.length) return json({ error: 'sin ids' });
+      const valor = e.parameter.mostrar === '1' ? 'SI' : 'NO';
+      const set = {}; ids.forEach(x => { set[x] = true; });
+      const datos = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues();
+      let n = 0;
+      for (let i = 0; i < datos.length; i++) {
+        if (set[datos[i][0].toString()]) { h.getRange(i + 2, 8).setValue(valor); n++; }
+      }
+      return json({ ok: true, n: n, mostrar: valor === 'SI' });
     }
     if (accion === 'leerStockRaw') {
       // Diagnóstico de solo lectura: devuelve la fila cruda de un producto tal como
