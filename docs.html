@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v2.58</title>
+<title>Shuk Mamtakim — Documentación v2.59</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 2.58 · Junio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 2.59 · Junio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -288,6 +288,8 @@
       <div class="feature-card"><div class="title">💸 Gastos / Rendiciones</div><div class="desc">Registro de egresos asignados a cada columna de caja. Transferencias incluidas.</div></div>
       <div class="feature-card nuevo"><div class="title">🖨️ Remito PDF<span class="badge-new">nuevo</span></div><div class="desc">Comprobante profesional con banner del Shuk, foto de cada producto, columnas de precio unitario y subtotal. Imprimible o guardable como PDF.</div></div>
       <div class="feature-card nuevo"><div class="title">⬇️ Exportar CSV<span class="badge-new">nuevo</span></div><div class="desc">Exportación de ventas a CSV para análisis externo.</div></div>
+      <div class="feature-card nuevo"><div class="title">🙈 Mostrar/ocultar productos<span class="badge-new">v2.59</span></div><div class="desc">Gestor masivo (Catálogo): prendé o apagá muchos productos de la tienda de una. Muestra el stock de cada uno, filtros (visibles/ocultos/sin stock) y buscador. Ocultar no borra nada.</div></div>
+      <div class="feature-card nuevo"><div class="title">📋 Registro de borrados<span class="badge-new">v2.59</span></div><div class="desc">En Dinero: todo lo que se elimina (pedidos, productos, compras, en Shuk y Candy) queda anotado con su contenido, fecha y quién lo borró.</div></div>
     </div>
   </div>
 
@@ -321,6 +323,8 @@
   <div class="subsection">
     <h3>Pestaña: 👥 Clientes</h3>
     <p>Historial con: nombre, tipo, cantidad de pedidos, total gastado, fecha última compra, nota de cliente y botón WhatsApp con link según tipo.</p>
+    <h3>Registro de clientes <span class="badge-new">v2.59</span></h3>
+    <p>El cliente se registra <strong>solo</strong> en su primera compra (registro canónico, sin duplicar aunque varíe mayúsculas/acentos). Al cargar un pedido el nombre se <strong>autocompleta</strong> desde los existentes. Desde ✏️ Editar de un pedido se puede <strong>reasignar el cliente</strong>: actualiza el nombre y arrastra la deuda y los pagos de ese pedido al cliente correcto.</p>
   </div>
 </div>
 
@@ -365,6 +369,13 @@
         <tr><td>Venta USD pagada en ARS</td><td>Monto convertido con tipo de cambio, comisión calculada en pesos</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="subsection">
+    <h3>⚖️ Ajuste de cobro — redondeo / pago sin vuelto <span class="badge-new">v2.59</span></h3>
+    <p>Al confirmar el cobro aparece <strong>"¿Cuánto recibiste en pesos?"</strong> (solo si hay parte en pesos). Si el monto recibido difiere del total, el reparto Pitzujim/golosinas se reescala a lo realmente recibido y la <strong>comisión se recalcula sobre eso</strong>: si entró menos (redondeo / se perdona), la comisión baja; si entró de más (no había vuelto), sube. No queda deuda fantasma. Guarda el reparto original, así re-confirmar no escala dos veces y se puede <strong>deshacer</strong> (poniendo el monto exacto). El ajuste queda informado en la tarjeta del pedido (<code>⚖️ Ajuste de cobro: −$500</code>).</p>
+    <h3>💵 A qué caja entró cada cobro <span class="badge-new">v2.59</span></h3>
+    <p>La tarjeta de un pedido cobrado muestra a qué caja fue cada parte y, si la venta era en dólares y se cobró en pesos, la conversión completa: <code>U$S 296,40 × $1.450 = $429.780 → MP GABY</code>. Respeta la vista Jony/Myri.</p>
   </div>
 
   <div class="subsection">
@@ -619,6 +630,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v2.59</td><td>Jun 2026</td><td><strong>Plata más clara, clientes ordenados y catálogo a control.</strong> ⚖️ <strong>Ajuste de cobro:</strong> al confirmar el cobro podés indicar cuánto recibiste de verdad en pesos — si el cliente debía $113.500 y pagó $113.000, se perdona la diferencia (no queda deuda fantasma) y la comisión se recalcula sobre lo recibido (menos plata → menos comisión, y al revés si pagó de más por falta de vuelto). Guarda el original para re-confirmar sin doble escala y poder deshacer; el ajuste se informa en la tarjeta. 💵 <strong>A qué caja entró cada cobro:</strong> la tarjeta del pedido cobrado muestra a qué caja fue cada parte y, si la venta era en dólares y se cobró en pesos, la conversión completa (<code>U$S 296,40 × $1.450 = $429.780 → MP GABY</code>). 🆕 <strong>Registro de clientes:</strong> alta automática del cliente en su primera compra (sin duplicar por mayúsculas/acentos), autocompletado al cargar el pedido, y reasignar el cliente de una venta desde ✏️ Editar (la deuda y los pagos siguen al cliente correcto). 🗑️ <strong>Registro de borrados:</strong> todo lo que se elimina (pedidos, productos, compras, en Shuk y Candy) queda anotado con su contenido, fecha y quién — Panel → Dinero → "📋 Registro de borrados". 🙈 <strong>Mostrar/ocultar productos en masa:</strong> gestor en Catálogo para prender o apagar muchos productos de la tienda de una; muestra el stock de cada uno, filtros (visibles/ocultos/sin stock) y buscador.</td></tr>
       <tr><td>v2.58</td><td>Jun 2026</td><td><strong>Modo "apagar la tienda".</strong> Desde Panel → Estado de la tienda elegís: 🟢 Abierta (normal) · 🟡 Solo cotización (el cliente arma el pedido pero NO se descuenta stock; entra como cotización y vos la Aceptás desde el panel y ahí baja el stock) · 🔴 Cerrada (no puede pedir, ve un aviso con tu WhatsApp). Mensaje opcional para el cliente. Las cotizaciones no cuentan en caja, cuenta corriente ni dashboard hasta aceptarse. <strong>Candy Shop:</strong> candado anti doble-clic al registrar venta (no más duplicados) + herramienta de limpieza de duplicados.</td></tr>
       <tr><td>v2.57</td><td>Jun 2026</td><td><strong>Caja honesta + cobros más claros.</strong> 🔑 Regla de oro: un pedido NO entra a la caja (efectivo/MP/USD) hasta que confirmás el cobro — los pendientes van a Cuenta Corriente. La caja ahora muestra solo la plata real. 🧾 Comprobante de pago: al confirmar el cobro podés adjuntar la foto de la transferencia/MP; queda guardada y se ve con "Ver comprobante". 🔍 En la Caja, cada movimiento es clickeable y despliega el detalle del pedido (productos + total), respetando la vista Jony/Miri; además muestra N° de pedido, cliente y fecha. # de pedido visible también en la lista de Ventas. 🖼️📄 Catálogo: dos botones para exportar — "con fotos" (imprimir) y "lista de precios" (PDF sin fotos).</td></tr>
       <tr><td>v2.56</td><td>Jun 2026</td><td><strong>Shuki: memoria de cliente + descripciones que cargás vos.</strong> El bot ahora reconoce al cliente por su número: lo saluda por su nombre, lo recuerda entre llamadas y tiene en cuenta lo que compró antes ("¿te llevo las pecan Lotus como la otra vez?"). Además, en Editar producto hay un campo nuevo "🎤 Descripción para Shuki": lo que escribas ahí es lo que el bot dice cuando le preguntan cómo es un producto (ej: "nueces pecán rebozadas con pasta de la galletita Lotus"). Si no cargás nada, describe igual con lo que sabe.</td></tr>
@@ -658,7 +670,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v2.58 · Junio 2026 · Uso interno
+  Documentación v2.59 · Junio 2026 · Uso interno
 </div>
 
 </div>
