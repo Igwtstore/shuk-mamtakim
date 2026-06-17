@@ -28,7 +28,7 @@ const PROTECTED_HIJOS = [
   'registrarVentaHijos','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
-  'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado',
+  'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
   'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA'
@@ -883,6 +883,7 @@ function doGet(e) {
     if (accion === 'limpiarVentasHijosDia'){ return json(limpiarVentasHijosDia(ss, e.parameter)); }
     if (accion === 'arreglarVentasHijosDia'){ return json(arreglarVentasHijosDia(ss, e.parameter)); }
     if (accion === 'editarVentaHijos')     { return json(editarVentaHijos(ss, e.parameter)); }
+    if (accion === 'auditarHijos')         { return json(auditarHijos(ss, e.parameter)); }
     if (accion === 'getProveedoresHijos')  { return json(getProveedoresHijos(ss)); }
     if (accion === 'agregarProveedorHijos'){ return json(agregarProveedorHijos(ss, e.parameter)); }
     if (accion === 'editarProveedorHijos') { return json(editarProveedorHijos(ss, e.parameter)); }
@@ -1211,6 +1212,41 @@ function ventasPeriodo(ss, p) {
       };
     })
     .filter(r => r !== null);
+}
+
+// AUDITORÍA (solo lectura): detecta ventas duplicadas del chico.
+// Dos filas son "sospechosas de duplicado" si tienen mismo cliente + producto + cantidad +
+// precio + misma fecha al MINUTO (una venta normal nunca genera 2 filas del mismo producto;
+// y una compra real repetida cae en otro minuto). NO borra nada: solo marca para que decidas.
+function auditarHijos(ss, p) {
+  const h = ss.getSheetByName('VentasHijos');
+  if (!h || h.getLastRow() < 2) return { ok: true, duplicados: [] };
+  const hijo = (p.hijo || '').toString().trim();
+  const data = h.getRange(2, 1, h.getLastRow() - 1, 11).getValues();
+  const grupos = {};
+  for (let i = 0; i < data.length; i++) {
+    const r = data[i];
+    if (hijo && r[1] !== hijo) continue;
+    const fechaMin = (r[0] && typeof r[0].getTime === 'function')
+      ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy HH:mm')
+      : r[0].toString().trim().substring(0, 16);
+    const key = [r[1], (r[7] || '').toString().trim().toLowerCase(), (r[3] || '').toString().trim(),
+                 (r[2] || '').toString().trim().toLowerCase(), r[4], r[5], fechaMin].join('|');
+    (grupos[key] = grupos[key] || []).push({
+      rowIndex: i + 2, fecha: fechaMin, cliente: (r[7] || '').toString(),
+      producto: (r[2] || '').toString(), cantidad: parseInt(r[4]) || 1,
+      precio: parseFloat(r[5]) || 0, total: parseFloat(r[6]) || 0,
+      saldoPendiente: parseFloat(r[10]) || 0
+    });
+  }
+  const duplicados = [];
+  Object.keys(grupos).forEach(k => {
+    const g = grupos[k];
+    if (g.length > 1) duplicados.push({ items: g, repetidos: g.length - 1 });
+  });
+  // Más recientes primero (por la fecha del primer item)
+  duplicados.sort((a, b) => (b.items[0].fecha).localeCompare(a.items[0].fecha));
+  return { ok: true, duplicados: duplicados, totalGrupos: duplicados.length };
 }
 
 function eliminarVentaHijos(ss, p) {
