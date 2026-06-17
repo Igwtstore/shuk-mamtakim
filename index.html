@@ -1671,8 +1671,9 @@
     </div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante (opcional — foto de transferencia/MP)</label>
-      <input type="file" id="cobro-comprobante" accept="image/*" style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files[0] ? '✓ '+this.files[0].name : ''" />
+      <input type="file" id="cobro-comprobante" accept="image/*" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
       <div id="cobro-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
+      <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:0.15rem">Podés adjuntar varios (ej. pagos a cuenta). Se suman a los que ya tenga el pedido.</div>
     </div>
     <div id="cobro-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
       <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">Tipo de cambio — U$S 1 = $</label>
@@ -1729,6 +1730,11 @@
           <option value="MP_JONY">MP JONY</option>
         </optgroup>
       </select>
+    </div>
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante(s) (opcional)</label>
+      <input type="file" id="pago-comprobante" accept="image/*" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('pago-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
+      <div id="pago-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarPagoModal()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
@@ -2679,6 +2685,15 @@ const _CAJA_LABEL = {
 };
 function cajaLabel(c) { return _CAJA_LABEL[c] || c || ''; }
 
+// Comprobantes de un pedido (uno o varios, separados por salto de línea) → links para la tarjeta.
+function comprobanteLinks(c) {
+  const urls = (c || '').split('\n').map(s => s.trim()).filter(Boolean);
+  if (!urls.length) return '';
+  if (urls.length === 1) return `<a href="${esc(urls[0])}" target="_blank" style="font-size:0.68rem;color:var(--azul);font-weight:600;text-decoration:none">🧾 Ver comprobante</a>`;
+  return `<span style="font-size:0.68rem;color:var(--azul);font-weight:600">🧾 Comprobantes: </span>` +
+    urls.map((u, i) => `<a href="${esc(u)}" target="_blank" style="font-size:0.68rem;color:var(--azul);font-weight:700;text-decoration:none;margin-right:5px">${i + 1}</a>`).join('');
+}
+
 // Detalle de COBRO para la tarjeta del pedido: muestra a qué caja entró cada parte y, si la
 // venta era en U$S pero se cobró en pesos, la conversión (U$S X × $tc = $Y). Transparencia total.
 // Solo para pedidos realmente cobrados (caja de verdad). En vista Miri oculta la parte de Jony.
@@ -2909,7 +2924,7 @@ async function renderPedidos() {
             <span class="estado-pill estado-${estado}">${estado}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
             ${cobrado ? `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>` : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`}
-            ${v.comprobante ? `<a href="${esc(v.comprobante)}" target="_blank" style="font-size:0.68rem;color:var(--azul);font-weight:600;text-decoration:none">🧾 Ver comprobante</a>` : ''}
+            ${comprobanteLinks(v.comprobante)}
           </div>
         </div>
         ${avisoVenc}
@@ -4700,7 +4715,7 @@ function verDetalleMovimientoCaja(vid) {
     <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${d.fecha} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
     <div style="font-size:0.85rem;line-height:1.4">${cuerpo}</div>
     ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total</span><span>${totalTxt}</span></div>` : ''}
-    ${d.comprobante ? `<a href="${esc(d.comprobante)}" target="_blank" style="display:block;text-align:center;margin-top:10px;padding:0.5rem;background:var(--verde-claro,#e8f5ee);color:var(--verde);border-radius:8px;font-weight:700;text-decoration:none">🧾 Ver comprobante de pago</a>` : ''}`;
+    ${(d.comprobante || '').split('\n').map(s => s.trim()).filter(Boolean).map((u, i, a) => `<a href="${esc(u)}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:0.5rem;background:var(--verde-claro,#e8f5ee);color:var(--verde);border-radius:8px;font-weight:700;text-decoration:none">🧾 Ver comprobante${a.length > 1 ? ' ' + (i + 1) : ' de pago'}</a>`).join('')}`;
   let ov = document.getElementById('caja-detalle-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -6948,6 +6963,8 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD) {
   document.getElementById('pago-usd').value = '';
   document.getElementById('pago-pitz').value = '';
   document.getElementById('pago-gol').value = '';
+  const pci = document.getElementById('pago-comprobante'); if (pci) pci.value = '';
+  const pcs = document.getElementById('pago-comprobante-st'); if (pcs) pcs.textContent = '';
   remPitz = Math.round(remPitz||0); remGolARS = Math.round(remGolARS||0); remGolUSD = parseFloat(remGolUSD||0);
   if (esPedido) {
     // Default Pitzujim-primero: prellena Pitzujim con lo que falta, golosinas en 0
@@ -6982,11 +6999,31 @@ async function confirmarPagoCuenta() {
   const usd = parseFloat(document.getElementById('pago-usd').value) || 0;
   if (ars <= 0 && usd <= 0) { showToast('Ingresá un monto'); return; }
   const caja = document.getElementById('pago-caja').value;
+  const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
   const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pagoPedidoId, montoARS:ars, montoUSD:usd, montoPitz, caja, nota:'Pago a cuenta' });
+  if (comprobante) params.set('comprobante', comprobante);
   cerrarPagoModal();
   const r = await apiWrite(params, '💵 Pago registrado ✓');
   if (r.ok) refreshAdmin();
 }
+// Sube uno o varios archivos a Cloudinary y devuelve las URLs separadas por salto de línea.
+async function subirComprobantes(fileInput) {
+  if (!fileInput || !fileInput.files || !fileInput.files.length) return '';
+  const urls = [];
+  showToast('📎 Subiendo comprobante(s)…');
+  for (const file of Array.from(fileInput.files)) {
+    try {
+      const fd = new FormData();
+      fd.append('file', file); fd.append('upload_preset', CLOUDINARY_PRESET); fd.append('folder', 'shuk-comprobantes');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.secure_url) urls.push(data.secure_url);
+    } catch (e) { /* sigue con los demás */ }
+  }
+  if (!urls.length) showToast('⚠️ No se pudo subir el/los comprobante(s)');
+  return urls.join('\n');
+}
+
 async function confirmarCobroModal() {
   if (!_cobroId) return;
   const jw = document.getElementById('cobro-jony-wrap');
@@ -6994,20 +7031,8 @@ async function confirmarCobroModal() {
   const cajaJony = jw.style.display !== 'none' ? document.getElementById('cobro-caja-jony').value : '';
   const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
-  // Subir comprobante a Cloudinary si adjuntaron uno
-  let comprobante = '';
-  const fileInp = document.getElementById('cobro-comprobante');
-  const file = fileInp && fileInp.files[0];
-  if (file) {
-    showToast('📎 Subiendo comprobante…');
-    try {
-      const fd = new FormData();
-      fd.append('file', file); fd.append('upload_preset', CLOUDINARY_PRESET); fd.append('folder', 'shuk-comprobantes');
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
-      const data = await res.json();
-      comprobante = data.secure_url || '';
-    } catch (e) { showToast('⚠️ No se pudo subir el comprobante, igual confirmo el cobro'); }
-  }
+  // Subir uno o varios comprobantes a Cloudinary. Se ACUMULAN a los que ya tenga el pedido.
+  const comprobante = await subirComprobantes(document.getElementById('cobro-comprobante'));
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
   if (comprobante) params.set('comprobante', comprobante);
   // Ajuste de cobro: mandamos lo realmente recibido (pesos) solo si difiere de lo esperado.

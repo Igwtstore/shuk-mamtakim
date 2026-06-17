@@ -441,7 +441,11 @@ function doGet(e) {
           h.getRange(i+1,18).setValue(dec(e.parameter.cajaMyri||''));
           const tc = parseFloat(e.parameter.tipoCambio||0);
           h.getRange(i+1,19).setValue(tc);
-          if (e.parameter.comprobante) h.getRange(i+1,22).setValue(dec(e.parameter.comprobante));   // URL del comprobante de pago
+          if (e.parameter.comprobante) {   // comprobante(s): se ACUMULAN a los que ya tenga el pedido
+            const prevC = (datos[i][21] || '').toString().trim();
+            const nuevoC = dec(e.parameter.comprobante).trim();
+            h.getRange(i+1,22).setValue(prevC ? (prevC + '\n' + nuevoC) : nuevoC);
+          }
 
           // ── AJUSTE DE COBRO (redondeo / falta de vuelto) ────────────────────────
           // El cliente pagó distinto al total (ej: debía $113.500, pagó $113.000). En vez de
@@ -628,9 +632,23 @@ function doGet(e) {
       const montoUSD = parseFloat(e.parameter.montoUSD||0) || 0;
       const montoPitz = parseFloat(e.parameter.montoPitz||0) || 0;  // parte ARS que es Pitzujim (resto = golosinas)
       if (montoARS === 0 && montoUSD === 0) return json({error:'monto vacío'});
+      const comprobante = dec(e.parameter.comprobante || '');
+      const pedidoId = dec(e.parameter.pedidoId || '');
       const row = h.getLastRow() + 1;
-      h.appendRow([fecha, dec(e.parameter.cliente||''), dec(e.parameter.pedidoId||''), montoARS, montoUSD, dec(e.parameter.caja||''), dec(e.parameter.nota||'Pago a cuenta'), montoPitz]);
+      h.appendRow([fecha, dec(e.parameter.cliente||''), pedidoId, montoARS, montoUSD, dec(e.parameter.caja||''), dec(e.parameter.nota||'Pago a cuenta'), montoPitz, comprobante]);
       h.getRange(row,1).setNumberFormat('@');
+      if (h.getRange(1,9).getValue() !== 'Comprobante') h.getRange(1,9).setValue('Comprobante');
+      // Acumular el/los comprobante(s) del pago en el pedido (Ventas col 22) para verlos en su tarjeta.
+      if (comprobante && pedidoId) {
+        const hv = ss.getSheetByName('Ventas');
+        if (hv && hv.getLastRow() >= 2) {
+          const dv = hv.getDataRange().getValues();
+          for (let k = 1; k < dv.length; k++) {
+            const cid = dv[k][0] instanceof Date ? dv[k][0].toISOString() : dv[k][0].toString().trim();
+            if (cid === pedidoId) { const prev = (dv[k][21] || '').toString().trim(); hv.getRange(k+1, 22).setValue(prev ? (prev + '\n' + comprobante) : comprobante); break; }
+          }
+        }
+      }
       return ok();
     }
     if (accion === 'getPagos') {
