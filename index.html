@@ -2730,7 +2730,7 @@ async function renderCuentaCorriente() {
     const soloMiri = esVistaMiri();
     const [ventas, pagos, clientesTel] = await Promise.all([
       apiGet('ventas'),
-      soloMiri ? Promise.resolve([]) : apiGet('getPagos').catch(() => []),
+      apiGet('getPagos').catch(() => []),   // también en vista Myri: aplica la PARTE GOLOSINAS de cada pago
       apiGet('getClientes').catch(() => [])
     ]);
     const telPorCliente = {};
@@ -2749,11 +2749,14 @@ async function renderCuentaCorriente() {
     let cc = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !esCobradoReal(v));
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony) — clave NORMALIZADA para que crucen aunque difiera la grafía
+    // En vista Myri, de cada pago solo cuenta la parte GOLOSINAS (montoARS − montoPitz); la parte
+    // Pitzujim es de Jony. El USD siempre es golosinas. En vista Jony cuenta el pago completo.
+    const pagoARSvista = p => soloMiri ? ((parseFloat(p.montoARS)||0) - (parseFloat(p.montoPitz)||0)) : (parseFloat(p.montoARS)||0);
     const pagadoPorCliente = {};
     (pagos || []).forEach(p => {
       const k = normCliente(p.cliente);
       if (!pagadoPorCliente[k]) pagadoPorCliente[k] = { ars: 0, usd: 0 };
-      pagadoPorCliente[k].ars += parseFloat(p.montoARS)||0;
+      pagadoPorCliente[k].ars += pagoARSvista(p);
       pagadoPorCliente[k].usd += parseFloat(p.montoUSD)||0;
     });
     // Agrupar por cliente NORMALIZADO (en vista Miri usa solo los montos de Miri)
@@ -4749,6 +4752,8 @@ function _mostrarOverlayDetalle(html) {
 // luego los pagos GENERALES (sin pedidoId) al pedido más VIEJO primero (FIFO). Devuelve cada
 // pedido con su saldo restante (remARS/remUSD). Así un pedido ya cubierto deja de figurar.
 function _imputarPedidos(pedidos, pagos, soloMiri) {
+  // En vista Myri, de cada pago solo cuenta la parte golosinas (montoARS − montoPitz). USD siempre golosinas.
+  const pARS = p => soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
   const items = (pedidos || []).map(v => ({
     v,
     remARS: soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0),
@@ -4756,9 +4761,9 @@ function _imputarPedidos(pedidos, pagos, soloMiri) {
   }));
   (pagos || []).filter(p => p.pedidoId).forEach(p => {
     const it = items.find(x => String(x.v.id) === String(p.pedidoId));
-    if (it) { it.remARS -= parseFloat(p.montoARS) || 0; it.remUSD -= parseFloat(p.montoUSD) || 0; }
+    if (it) { it.remARS -= pARS(p); it.remUSD -= parseFloat(p.montoUSD) || 0; }
   });
-  let poolARS = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + (parseFloat(p.montoARS) || 0), 0);
+  let poolARS = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + pARS(p), 0);
   let poolUSD = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + (parseFloat(p.montoUSD) || 0), 0);
   const parseF = f => { const m = (f || '').split(' ')[0].split('/'); return m.length < 3 ? 0 : new Date(+m[2], +m[1] - 1, +m[0]).getTime(); };
   items.sort((a, b) => parseF(a.v.fecha) - parseF(b.v.fecha));   // más viejo primero
@@ -4799,7 +4804,10 @@ function verDetalleDeudor(i) {
   if (d.pagos && d.pagos.length) {
     html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta recibidos</div>`;
     d.pagos.forEach(p => {
-      const t = [(parseFloat(p.montoARS) || 0) > 0 ? money(p.montoARS) : '', (parseFloat(p.montoUSD) || 0) > 0 ? 'U$S ' + parseFloat(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
+      // En vista Myri solo la parte golosinas del pago (la Pitzujim es de Jony).
+      const ars = soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
+      const t = [ars > 0 ? money(ars) : '', (parseFloat(p.montoUSD) || 0) > 0 ? 'U$S ' + parseFloat(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
+      if (!t) return;
       html += `<div style="display:flex;justify-content:space-between;font-size:0.76rem;padding:2px 0"><span style="color:var(--texto-suave)">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}</span><span style="font-weight:700;color:var(--verde)">− ${t}</span></div>`;
     });
   }
