@@ -541,7 +541,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <!-- STEP 1: CLIENTE -->
     <div class="wizard-step active" id="ws-0">
       <div class="wizard-label">¿A quién le vendiste?</div>
-      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente (opcional)" autocomplete="off" enterkeyhint="next" oninput="filtrarSugerencias(); this.placeholder='Nombre del cliente (opcional)';" onkeydown="if(event.key==='Enter') wizardNext()">
+      <input class="wizard-input" id="w-cliente" type="text" placeholder="Nombre del cliente (opcional)" autocomplete="off" enterkeyhint="next" oninput="filtrarSugerencias(); mostrarDeudaCliente(); this.placeholder='Nombre del cliente (opcional)';" onkeydown="if(event.key==='Enter') wizardNext()">
+      <div id="w-cliente-deuda" style="margin-top:8px"></div>
       <div class="cliente-sugerencias" id="cliente-sugerencias"></div>
     </div>
     <!-- STEP 2: PRODUCTOS -->
@@ -581,7 +582,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
       <div class="pago-cuenta-input" id="pago-cuenta-wrap">
         <div class="pago-cuenta-label">¿Cuánto pagó?</div>
-        <input class="pago-monto-input" id="w-monto-parcial" type="number" placeholder="Ej: 2000" min="0" enterkeyhint="done" onkeydown="if(event.key==='Enter') confirmarVentaWizard()">
+        <input class="pago-monto-input" id="w-monto-parcial" type="number" placeholder="Ej: 2000" min="0" enterkeyhint="done" oninput="previewACuenta()" onkeydown="if(event.key==='Enter') confirmarVentaWizard()">
+        <div id="w-cuenta-preview" style="margin-top:8px"></div>
       </div>
       <div class="pago-cuenta-input" id="pago-masque-wrap">
         <div class="pago-cuenta-label">¿Cuánto pagó?</div>
@@ -2186,9 +2188,10 @@ let deudoresCache = [];
 const WIZARD_TITLES = ['¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
 
 function abrirWizard() {
-  wStep = 0; wCliente = ''; wProductosSeleccionados = {}; wPago = '';
+  wStep = 0; wCliente = ''; wVentaId = ''; wProductosSeleccionados = {}; wPago = '';
   document.getElementById('w-cliente').value = '';
   document.getElementById('w-monto-parcial').value = '';
+  ['w-cliente-deuda', 'w-cuenta-preview'].forEach(id => { const e = document.getElementById(id); if (e) e.innerHTML = ''; });
   document.getElementById('pago-cuenta-wrap').classList.remove('open');
   renderWizardStep(0);
   renderSugerencias('');
@@ -2267,9 +2270,45 @@ function renderSugerencias(q) {
     </div>`).join('');
 }
 
+// Deuda actual de un cliente, desde la cache de deudores (sin pegarle al server).
+function _saldoCacheCliente(nombre) {
+  const n = (nombre || '').trim().toLowerCase();
+  if (!n) return 0;
+  const d = deudoresCache.find(x => (x.cliente || '').trim().toLowerCase() === n);
+  return d ? d.saldo : 0;
+}
+// #1 — Muestra al lado del nombre cuánto debe ese cliente (o si le debemos cambio).
+function mostrarDeudaCliente() {
+  const el = document.getElementById('w-cliente-deuda');
+  if (!el) return;
+  const nom = (document.getElementById('w-cliente').value || '').trim();
+  const saldo = _saldoCacheCliente(nom);
+  if (saldo > 0) el.innerHTML = `<div style="background:#fde8e8;border:1px solid #f0c0c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#c0392b">⚠️ ${nom} ya debe ${fmt(saldo)}</div>`;
+  else if (saldo < 0) el.innerHTML = `<div style="background:#e8f0ff;border:1px solid #c0d0f0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#2c6fad">💰 A ${nom} le debemos ${fmt(-saldo)} de cambio</div>`;
+  else el.innerHTML = '';
+}
+// #2 — En vivo, mientras tipea cuánto pagó: qué queda debiendo (y el total con lo de antes).
+function previewACuenta() {
+  const el = document.getElementById('w-cuenta-preview');
+  if (!el) return;
+  const total = calcTotal();
+  const pago = parseFloat(document.getElementById('w-monto-parcial').value) || 0;
+  const resto = total - pago;
+  const previa = Math.max(0, _saldoCacheCliente(wCliente || (document.getElementById('w-cliente').value || '')));
+  if (resto > 0) {
+    const totalCon = previa > 0 ? ` · con lo de antes debería <b>${fmt(previa + resto)}</b>` : '';
+    el.innerHTML = `<div style="background:#fff3e0;border:1px solid #f0c896;border-radius:10px;padding:8px 12px;font-size:0.85rem;color:#b8860b">⏳ Queda debiendo <b>${fmt(resto)}</b> de esta venta${totalCon}</div>`;
+  } else if (resto < 0) {
+    el.innerHTML = `<div style="background:#e8f0ff;border:1px solid #c0d0f0;border-radius:10px;padding:8px 12px;font-size:0.85rem;color:#2c6fad">💰 Pagó de más: cambio <b>${fmt(-resto)}</b></div>`;
+  } else {
+    el.innerHTML = `<div style="background:#e8f5ee;border:1px solid #b2d8c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;color:#2e8b57">✓ Pagó justo, sin deuda</div>`;
+  }
+}
+
 function seleccionarCliente(nombre) {
   wCliente = nombre;
   document.getElementById('w-cliente').value = nombre;
+  mostrarDeudaCliente();
   renderProductosGrid();
   renderWizardStep(1);
 }
