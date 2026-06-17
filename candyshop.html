@@ -2006,9 +2006,19 @@ function renderCompras(compras) {
         </div>
         <div class="item-right"><div class="item-price">${fmt(c.total)}</div></div>
       </div>
-      <div id="compra-det-${i}" style="display:none;padding:2px 0 10px 4px">${det}</div>
+      <div id="compra-det-${i}" style="display:none;padding:2px 0 10px 4px">${det}
+        <button onclick="borrarCompra('${(c.id || '').replace(/'/g, "\\'")}')" style="margin-top:8px;width:100%;padding:8px;background:#fde8e8;border:none;border-radius:10px;color:#c0392b;font-size:0.82rem;font-weight:700;cursor:pointer">🗑️ Borrar esta compra (resta del depósito y recalcula costo)</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function borrarCompra(id) {
+  if (!id) return;
+  if (!confirm('¿Borrar esta compra?\n\nSe va a restar del depósito y recalcular el costo de esos productos.')) return;
+  const r = await api('eliminarCompraHijos', { compraId: id });
+  if (r?.ok) { mostrarToast('🗑️ Compra borrada'); cargarCompras(); }
+  else mostrarToast('❌ ' + (r?.error || 'error'), '#c0392b');
 }
 
 function toggleCompra(i) {
