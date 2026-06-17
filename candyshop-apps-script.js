@@ -256,7 +256,7 @@ function doGet(e) {
         if (gananciaPitz > 0) hG.appendRow([fecha, 'ganancia_pitzujim', 'Pitzujim — ' + dec(e.parameter.cliente), Math.round(gananciaPitz)]);
       }
       if (comiARSv > 0) hG.appendRow([fecha, 'comision_miri', 'Comisión Miri — ' + dec(e.parameter.cliente), Math.round(comiARSv)]);
-      return json({ok:true, nVenta});
+      return json({ok:true, nVenta, id});
     }
     if (accion === 'actualizarEstado') {
       const h = ss.getSheetByName('Ventas'); if (!h) return json({error:'sin hoja'});
