@@ -397,14 +397,57 @@ function doGet(e) {
     if (accion === 'confirmarCobro') {
       const h = ss.getSheetByName('Ventas'); if (!h) return json({error:'sin hoja'});
       const datos = h.getDataRange().getValues();
+      const CAJAS_ARS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS'];
       for (let i = 1; i < datos.length; i++) {
         const cellId = datos[i][0] instanceof Date ? datos[i][0].toISOString() : datos[i][0].toString().trim();
         if (cellId === e.parameter.id) {
           // soloMyri: vista de Myri — solo actualiza su caja, no toca la de Jony (col 17)
           if (e.parameter.soloMyri !== '1') h.getRange(i+1,17).setValue(dec(e.parameter.cajaJony||''));
           h.getRange(i+1,18).setValue(dec(e.parameter.cajaMyri||''));
-          h.getRange(i+1,19).setValue(parseFloat(e.parameter.tipoCambio||0));
+          const tc = parseFloat(e.parameter.tipoCambio||0);
+          h.getRange(i+1,19).setValue(tc);
           if (e.parameter.comprobante) h.getRange(i+1,22).setValue(dec(e.parameter.comprobante));   // URL del comprobante de pago
+
+          // ── AJUSTE DE COBRO (redondeo / falta de vuelto) ────────────────────────
+          // El cliente pagó distinto al total (ej: debía $113.500, pagó $113.000). En vez de
+          // dejar una deuda fantasma, se ajusta el cobro: el split se reescala a lo realmente
+          // recibido y la comisión sigue (menos plata → menos comisión, y viceversa).
+          // OrigSplit (col 24) guarda el split original para que re-confirmar siempre escale
+          // desde la base real, no desde un valor ya ajustado.
+          if (e.parameter.recibido !== undefined && e.parameter.recibido !== '') {
+            const recibido = Math.round(parseFloat(e.parameter.recibido) || 0);
+            // Base = split original (col 24 si ya existe; si no, el split actual de cols 12-16).
+            const origStr = (datos[i][23] || '').toString();
+            let bJ, bM, bU, bCA, bCU;
+            if (origStr && origStr.indexOf('|') !== -1) {
+              const p = origStr.split('|').map(parseFloat);
+              bJ = p[0]||0; bM = p[1]||0; bU = p[2]||0; bCA = p[3]||0; bCU = p[4]||0;
+            } else {
+              bJ = parseFloat(datos[i][11])||0; bM = parseFloat(datos[i][12])||0; bU = parseFloat(datos[i][13])||0;
+              bCA = parseFloat(datos[i][14])||0; bCU = parseFloat(datos[i][15])||0;
+            }
+            const cajaM = dec(e.parameter.cajaMyri||'');
+            const usdEnPesos = bU > 0 && tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1;
+            const esperado = Math.round(bJ + bM + (usdEnPesos ? bU * tc : 0));
+            if (esperado > 0 && recibido > 0 && Math.abs(recibido - esperado) >= 1) {
+              const f = recibido / esperado;
+              const nJ = Math.round(bJ * f), nM = Math.round(bM * f), nU = Math.round(bU * f * 100) / 100;
+              const nCA = Math.round(nM * 0.15), nCU = Math.round(nU * 0.15 * 100) / 100;
+              // Guardar la base original ANTES de pisar (solo la primera vez).
+              if (!origStr) { h.getRange(i+1,24).setNumberFormat('@'); h.getRange(i+1,24).setValue([bJ,bM,bU,bCA,bCU].join('|')); }
+              h.getRange(i+1,12).setValue(nJ); h.getRange(i+1,13).setValue(nM); h.getRange(i+1,14).setValue(nU);
+              h.getRange(i+1,15).setValue(nCA); h.getRange(i+1,16).setValue(nCU);
+              h.getRange(i+1,23).setValue(recibido - esperado);   // ajuste con signo
+              return ok();
+            } else {
+              // recibido == esperado: sin ajuste. Si había uno previo, lo deshace (restaura base).
+              if (origStr) {
+                h.getRange(i+1,12).setValue(bJ); h.getRange(i+1,13).setValue(bM); h.getRange(i+1,14).setValue(bU);
+                h.getRange(i+1,15).setValue(bCA); h.getRange(i+1,16).setValue(bCU);
+              }
+              h.getRange(i+1,23).setValue(0);
+            }
+          }
           return ok();
         }
       }
@@ -627,7 +670,7 @@ function doGet(e) {
     }
     if (accion === 'ventas') {
       const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return json([]);
-      const nc = Math.min(22, h.getLastColumn());
+      const nc = Math.min(24, h.getLastColumn());
       return json(h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
         id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
         fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
@@ -636,7 +679,7 @@ function doGet(e) {
         nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
         usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
         cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
-        comprobante:r[21]||''
+        comprobante:r[21]||'', ajuste: r[22]||0
       })));
     }
     if (accion === 'gastos') {

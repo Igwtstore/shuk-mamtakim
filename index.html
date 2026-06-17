@@ -1653,6 +1653,11 @@
       <input type="number" id="cobro-tc" placeholder="ej: 1200" min="1" oninput="cobro_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
       <div id="cobro-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
     </div>
+    <div id="cobro-ajuste-wrap" style="display:none;margin-bottom:0.75rem;background:#eef4fb;border-radius:8px;padding:0.75rem">
+      <label style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span></label>
+      <input type="number" id="cobro-recibido" min="0" oninput="cobro_recalcAjuste()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #b9d2ee;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+      <div id="cobro-ajuste-result" style="font-size:0.78rem;margin-top:0.4rem;font-weight:600"></div>
+    </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarModalCobro()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
       <button onclick="confirmarCobroModal()" style="flex:2;padding:0.75rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;">Confirmar</button>
@@ -2667,8 +2672,14 @@ function detalleCobro(v, soloMiri) {
     if (cajaEnPesos && tc > 0) partes.push(`U$S ${usdM.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdM * tc)} → <b>${cajaLabel(cajaM)}</b>`);
     else partes.push(`U$S ${usdM.toFixed(2)} → <b>${cajaLabel(cajaM)}</b>`);
   }
-  if (!partes.length) return '';
-  return `<div style="font-size:0.72rem;margin-top:0.3rem;color:#1a7a3a;background:#eef7ee;border-radius:8px;padding:0.35rem 0.6rem">💵 ${partes.join(' &nbsp;·&nbsp; ')}</div>`;
+  const aj = parseFloat(v.ajuste || 0);
+  let ajLinea = '';
+  if (aj !== 0) {
+    const menos = aj < 0;
+    ajLinea = `<div style="font-size:0.72rem;margin-top:0.25rem;color:${menos ? '#b8730a' : '#1a7a3a'};background:${menos ? '#fff3d6' : '#eef7ee'};border-radius:8px;padding:0.35rem 0.6rem">⚖️ Ajuste de cobro: ${menos ? '−' : '+'}$ ${Math.abs(Math.round(aj)).toLocaleString('es-AR')} ${menos ? '(redondeo / perdonado — bajó la comisión)' : '(pagó de más / sin vuelto — subió la comisión)'}</div>`;
+  }
+  if (!partes.length) return ajLinea;
+  return `<div style="font-size:0.72rem;margin-top:0.3rem;color:#1a7a3a;background:#eef7ee;border-radius:8px;padding:0.35rem 0.6rem">💵 ${partes.join(' &nbsp;·&nbsp; ')}</div>${ajLinea}`;
 }
 
 async function renderCuentaCorriente() {
@@ -6661,11 +6672,11 @@ function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
     .catch(() => setTimeout(renderNotificaciones, 1500));
 }
 
-let _cobroId = null, _cobroUsdM = 0;
+let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0;
 const COBRO_ARS_COLS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS'];
 
 function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
-  _cobroId = id; _cobroUsdM = usdM;
+  _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0;
   const jw = document.getElementById('cobro-jony-wrap');
   const mw = document.getElementById('cobro-myri-wrap');
   // En vista Myri NO se muestra la parte de Jony (Pitzujim) — privacidad.
@@ -6681,14 +6692,45 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
   document.getElementById('cobro-tc-result').textContent = '';
   const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
   const cs = document.getElementById('cobro-comprobante-st'); if (cs) cs.textContent = '';
-  cobro_onSelectChange();
+  const cr = document.getElementById('cobro-recibido'); if (cr) cr.value = '';
+  cobro_onSelectChange();   // ajusta TC y, al final, el bloque de "monto recibido"
   document.getElementById('cobro-modal').style.display = 'flex';
+}
+// Total en pesos que se espera cobrar, según la caja elegida (si la golosina U$S entra a una
+// caja en pesos, suma su conversión a tc). Si no hay parte en pesos, devuelve 0 (oculta el ajuste).
+function cobro_esperadoPesos() {
+  const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
+  const tc = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
+  const usdEnPesos = _cobroUsdM > 0 && tc > 0 && COBRO_ARS_COLS.includes(cajaMyri);
+  return Math.round(_cobroArsJ + _cobroArsM + (usdEnPesos ? _cobroUsdM * tc : 0));
+}
+// Muestra el campo "monto recibido" cuando hay cobro en pesos, prellena con lo esperado
+// y avisa el ajuste (de menos = redondeo/perdón; de más = pagó sin vuelto → sube comisión).
+function cobro_recalcAjuste() {
+  const wrap = document.getElementById('cobro-ajuste-wrap');
+  const res = document.getElementById('cobro-ajuste-result');
+  const inp = document.getElementById('cobro-recibido');
+  if (!wrap || !res || !inp) return;
+  const esperado = cobro_esperadoPesos();
+  if (esperado <= 0) { wrap.style.display = 'none'; res.textContent = ''; return; }
+  wrap.style.display = 'block';
+  inp.placeholder = esperado.toLocaleString('es-AR');
+  const recibido = inp.value === '' ? esperado : Math.round(parseFloat(inp.value) || 0);
+  const dif = recibido - esperado;
+  if (inp.value === '' || dif === 0) {
+    res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${esperado.toLocaleString('es-AR')} · sin ajuste</span>`;
+  } else if (dif < 0) {
+    res.innerHTML = `<span style="color:#c0392b">Recibís $ ${Math.abs(dif).toLocaleString('es-AR')} menos · se perdona, la comisión baja</span>`;
+  } else {
+    res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>`;
+  }
 }
 function cobro_onSelectChange() {
   const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
   const needsTC = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
   document.getElementById('cobro-tc-wrap').style.display = needsTC ? 'block' : 'none';
   if (needsTC) cobro_calcularTC();
+  cobro_recalcAjuste();
 }
 function cobro_calcularTC() {
   const tc = parseFloat(document.getElementById('cobro-tc').value) || 0;
@@ -6698,6 +6740,7 @@ function cobro_calcularTC() {
     const comi = Math.round(arsEquiv * 0.15);
     res.textContent = `= $ ${arsEquiv.toLocaleString('es-AR')} · Comi $: $ ${comi.toLocaleString('es-AR')}`;
   } else { res.textContent = ''; }
+  cobro_recalcAjuste();
 }
 function cerrarModalCobro() {
   document.getElementById('cobro-modal').style.display = 'none';
@@ -6779,6 +6822,17 @@ async function confirmarCobroModal() {
   }
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
   if (comprobante) params.set('comprobante', comprobante);
+  // Ajuste de cobro: mandamos lo realmente recibido (pesos) solo si difiere de lo esperado.
+  const recInp = document.getElementById('cobro-recibido');
+  if (recInp && recInp.value !== '') {
+    const esperado = cobro_esperadoPesos();
+    const recibido = Math.round(parseFloat(recInp.value) || 0);
+    if (esperado > 0 && recibido > 0 && recibido !== esperado) {
+      const dif = recibido - esperado;
+      if (!confirm(`Vas a registrar un ajuste de ${dif < 0 ? '-' : '+'}$${Math.abs(dif).toLocaleString('es-AR')}.\n\nEsperado: $${esperado.toLocaleString('es-AR')} · Recibido: $${recibido.toLocaleString('es-AR')}\nLa comisión se recalcula sobre lo recibido. ¿Confirmar?`)) return;
+      params.set('recibido', String(recibido));
+    }
+  }
   // En vista Myri solo se cobra su parte; no tocar la caja de Jony.
   if (esVistaMiri()) params.set('soloMyri', '1');
   cerrarModalCobro();
