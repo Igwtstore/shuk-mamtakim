@@ -1259,8 +1259,17 @@ function eliminarVentaHijos(ss, p) {
   const row = h.getRange(rowIndex, 1, 1, 11).getValues()[0];
   if (row[1] !== p.hijo) return { error: 'no autorizado' };
   const saldo = parseFloat(row[10]) || 0;
-  if (saldo > 0 && row[7]) {
-    registrarMovimientoCC(ss, row[1], row[7].toString(), -saldo, 'anulacion', row[2]);
+  const cliente = (row[7] || '').toString();
+  // Aviso: si esta venta CON nombre ya fue (parcial o totalmente) pagada, revertir su deuda
+  // dejaría el saldo del cliente NEGATIVO (le "deberíamos"). Pedimos confirmación explícita.
+  if (saldo > 0 && cliente && p.confirmar !== '1') {
+    const saldoActual = getSaldoCliente(ss, row[1], cliente);
+    if (saldoActual < saldo - 0.01) {
+      return { needsConfirm: true, yaPagado: Math.round(saldo - saldoActual), saldoVenta: Math.round(saldo), cliente: cliente };
+    }
+  }
+  if (saldo > 0 && cliente) {
+    registrarMovimientoCC(ss, row[1], cliente, -saldo, 'anulacion', row[2]);
   }
   h.deleteRow(rowIndex);
   return { ok: true };

@@ -3051,7 +3051,13 @@ async function borrarDuplicadoHijo(rowIndex, btn) {
   if (!confirm('¿Borrar esta copia duplicada? La deuda se ajusta sola.')) return;
   const out = document.getElementById('auditoria-hijos');
   out.style.pointerEvents = 'none'; out.style.opacity = '0.5';   // bloquea todo mientras procesa (el rowIndex se corre al borrar)
-  const res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
+  let res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
+  if (res?.needsConfirm) {
+    out.style.pointerEvents = ''; out.style.opacity = '';
+    if (!confirm(`⚠️ Ojo: esta copia de ${res.cliente} ya está pagada. Si la borrás, le puede quedar saldo a favor (negativo). ¿Borrar igual?`)) return;
+    out.style.pointerEvents = 'none'; out.style.opacity = '0.5';
+    res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex, confirmar: 1 });
+  }
   out.style.pointerEvents = ''; out.style.opacity = '';
   if (res?.ok) { mostrarToast('🗑️ Copia borrada'); cargarDatos(); revisarTodoHijos(); }   // re-audita con índices frescos
   else mostrarToast('❌ ' + (res?.error || 'error'), '#c0392b');
@@ -3059,7 +3065,11 @@ async function borrarDuplicadoHijo(rowIndex, btn) {
 
 async function eliminarVenta(rowIndex) {
   if (!confirm('¿Eliminar esta venta? Se revertirá el saldo de la cuenta corriente si corresponde.')) return;
-  const res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
+  let res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
+  if (res?.needsConfirm) {
+    if (!confirm(`⚠️ Ojo: esta venta de ${res.cliente} YA está pagada ($${(res.yaPagado||0).toLocaleString('es-AR')} de $${(res.saldoVenta||0).toLocaleString('es-AR')}).\n\nSi la borrás, al cliente le va a quedar saldo a favor (la deuda queda en negativo). ¿Borrar igual?`)) return;
+    res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex, confirmar: 1 });
+  }
   if (res?.ok) { mostrarToast('🗑️ Venta eliminada'); cargarDatos(); if (tabActual === 'historia') cargarHistoria(); }
   else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
 }
