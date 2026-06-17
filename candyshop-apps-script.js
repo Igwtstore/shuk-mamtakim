@@ -601,7 +601,7 @@ function doGet(e) {
         0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||'')]);
       const stockIni = parseInt(e.parameter.stock||0);
       if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
-      return ok();
+      return json({ ok: true, id: maxId+1 });
     }
     if (accion === 'actualizarOferta') {
       const h = ss.getSheetByName('Stock'); if (!h) return json({error:'sin hoja Stock'});
