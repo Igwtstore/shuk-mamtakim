@@ -5838,8 +5838,25 @@ async function cargarClientesDatalist() {
   const dl = document.getElementById('clientes-datalist');
   if (!dl) return;
   try {
-    const ventas = await apiGet('ventas');
-    const nombres = [...new Set(ventas.map(v => v.cliente).filter(Boolean))].sort();
+    // Registro canónico (getClientes) + nombres de ventas, deduplicado por nombre normalizado
+    // quedándose con la grafía más prolija. Así no se ofrecen duplicados (edu/Edu/EDU).
+    const [ventas, clientes] = await Promise.all([
+      apiGet('ventas').catch(() => []),
+      fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'getClientes' })).catch(() => [])
+    ]);
+    const fuentes = [
+      ...(Array.isArray(clientes) ? clientes.map(c => c.nombre) : []),
+      ...(Array.isArray(ventas) ? ventas.map(v => v.cliente) : [])
+    ].filter(Boolean);
+    const norm = typeof normCliente === 'function' ? normCliente : (s => (s || '').toLowerCase().trim());
+    const mejor = {};
+    fuentes.forEach(n => {
+      const k = norm(n);
+      if (!k) return;
+      // Grafía más linda: prefiere la que tiene mayúsculas/acentos (más larga sin trim de espacios internos)
+      if (!mejor[k] || (n.trim().length >= mejor[k].length && /[A-ZÁÉÍÓÚÑ]/.test(n))) mejor[k] = n.trim();
+    });
+    const nombres = Object.values(mejor).sort((a, b) => a.localeCompare(b, 'es'));
     dl.innerHTML = nombres.map(n => `<option value="${esc(n)}">`).join('');
   } catch(e) {}
 }
@@ -7283,6 +7300,7 @@ function abrirEditarPedido(v) {
   _editLineas.forEach(l => { if (l.prodId) _editQtysOrig[l.prodId] = (_editQtysOrig[l.prodId] || 0) + (l.qty || 0); });
 
   document.getElementById('ep-titulo').textContent = `Pedido #${v.nVenta} — ${v.cliente}`;
+  document.getElementById('ep-cliente').value = v.cliente || '';
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
   poblarSelectorProductos();
   document.getElementById('ep-descuento').value = '';
@@ -7503,6 +7521,19 @@ async function guardarEditPedido() {
   const tipo = document.getElementById('ep-tipo').value;
   const desc = parseFloat(document.getElementById('ep-descuento').value) || 0;
 
+  // Reasignación de cliente: solo si realmente cambió el nombre. Si difiere, confirmamos
+  // (mueve la deuda y los pagos de este pedido al cliente nuevo).
+  const clienteNuevo = (document.getElementById('ep-cliente').value || '').trim();
+  const clienteViejo = (_editPedidoActual.cliente || '').trim();
+  const reasignar = clienteNuevo && clienteNuevo !== clienteViejo;
+  if (reasignar) {
+    // Si es otra persona (no solo un cambio de grafía), confirmamos: mueve deuda y pagos.
+    const soloGrafia = (typeof normCliente === 'function') && normCliente(clienteNuevo) === normCliente(clienteViejo);
+    if (!soloGrafia && !confirm(`¿Reasignar el pedido #${_editPedidoActual.nVenta} de "${clienteViejo}" a "${clienteNuevo}"?\n\nLa deuda y los pagos de este pedido pasan al cliente nuevo.`)) {
+      btn.textContent = 'Guardar cambios'; btn.disabled = false; return;
+    }
+  }
+
   // Reconstruir string de productos con nuevos precios
   const nuevasLineas = _editLineas.map(l => {
     const descProd = (l.desc || 0) / 100;
@@ -7565,6 +7596,7 @@ async function guardarEditPedido() {
     comiARS: eComiARS,
     comiUSD: eComiUSD.toFixed(2)
   });
+  if (reasignar) params.set('cliente', clienteNuevo);
   // Una cotización todavía no descontó stock: no se mandan deltas ni se ajusta el catálogo local.
   const esCotiz = (_editPedidoActual.estado || '') === 'cotizacion';
   if (deltas.length && !esCotiz) params.set('stockDeltas', deltas.join(','));
@@ -7663,6 +7695,10 @@ function cerrarEditPedido() {
       <button class="btn-cerrar-modal" onclick="cerrarEditPedido()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:0.9rem">✕</button>
     </div>
     <div class="edit-modal-body">
+      <div class="edit-section-label">Cliente <span style="font-weight:400;color:var(--texto-suave)">(podés corregirlo o reasignarlo)</span></div>
+      <input type="text" id="ep-cliente" list="clientes-datalist" autocomplete="off" placeholder="Nombre del cliente"
+        style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.92rem;box-sizing:border-box;outline:none;margin-bottom:0.6rem" />
+
       <div class="edit-section-label">Tipo de cliente</div>
       <select class="edit-tipo-select" id="ep-tipo" onchange="onTipoChange()">
         <option>Minorista</option>

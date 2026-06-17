@@ -70,6 +70,28 @@ function logBorrado_(ss, tipo, detalle, quien) {
   } catch (err) { Logger.log('[borrado] ' + err); }
 }
 
+// Alta automática del cliente en el registro canónico 'Clientes' (sin duplicar, por nombre
+// normalizado). Construye el maestro de clientes a medida que se cargan pedidos. Si ya existe
+// (misma grafía normalizada) no hace nada. Nunca rompe la operación principal.
+function altaClienteAuto_(ss, nombre, tipo) {
+  try {
+    const nom = (nombre || '').toString().trim();
+    if (!nom || nom === '__TEST__') return;
+    const key = normCli_(nom);
+    if (!key) return;
+    const h = getOrCreate(ss, 'Clientes', ['Fecha', 'Nombre', 'Telefono', 'Tipo', 'Nota', 'UltimoAcceso']);
+    const last = h.getLastRow();
+    if (last >= 2) {
+      const nombres = h.getRange(2, 2, last - 1, 1).getValues();
+      for (let i = 0; i < nombres.length; i++) {
+        if (normCli_((nombres[i][0] || '').toString()) === key) return; // ya existe
+      }
+    }
+    const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+    h.appendRow([fecha, nom, '', tipo || 'Minorista', '', fecha]);
+  } catch (err) { Logger.log('[altaCliente] ' + err); }
+}
+
 // Así, aunque se borren pedidos, el número no se reusa (evita # duplicados).
 function siguienteNVenta_(h) {
   const last = h.getLastRow();
@@ -268,6 +290,8 @@ function doGet(e) {
         if (gananciaPitz > 0) hG.appendRow([fecha, 'ganancia_pitzujim', 'Pitzujim — ' + dec(e.parameter.cliente), Math.round(gananciaPitz)]);
       }
       if (comiARSv > 0) hG.appendRow([fecha, 'comision_miri', 'Comisión Miri — ' + dec(e.parameter.cliente), Math.round(comiARSv)]);
+      // Alta automática del cliente en el registro canónico (no duplica; nunca rompe la venta).
+      altaClienteAuto_(ss, dec(e.parameter.cliente), dec(e.parameter.tipo));
       return json({ok:true, nVenta, id});
     }
     if (accion === 'actualizarEstado') {
@@ -314,6 +338,24 @@ function doGet(e) {
         if (cellId === e.parameter.id) {
           if (e.parameter.productos) h.getRange(i+1,5).setValue(dec(e.parameter.productos));
           if (e.parameter.tipo)      h.getRange(i+1,4).setValue(dec(e.parameter.tipo));
+          // Reasignación de cliente: actualiza el nombre del pedido (col 3) y arrastra los pagos
+          // de ESTE pedido (por PedidoId) al cliente nuevo, para que la deuda quede consolidada.
+          if (e.parameter.cliente !== undefined && dec(e.parameter.cliente).trim()) {
+            const clienteNuevo = dec(e.parameter.cliente).trim();
+            const clienteAnterior = (datos[i][2] || '').toString().trim();
+            if (normCli_(clienteNuevo) !== normCli_(clienteAnterior) || clienteNuevo !== clienteAnterior) {
+              h.getRange(i+1, 3).setValue(clienteNuevo);
+              const pedId = (datos[i][0] || '').toString().trim();
+              const hP = ss.getSheetByName('Pagos');
+              if (hP && hP.getLastRow() >= 2 && pedId) {
+                const pg = hP.getRange(2, 2, hP.getLastRow() - 1, 2).getValues(); // Cliente, PedidoId
+                for (let k = 0; k < pg.length; k++) {
+                  if ((pg[k][1] || '').toString().trim() === pedId) hP.getRange(k + 2, 2).setValue(clienteNuevo);
+                }
+              }
+              altaClienteAuto_(ss, clienteNuevo, dec(e.parameter.tipo) || (datos[i][3] || '').toString());
+            }
+          }
           if (e.parameter.totalARS !== undefined) h.getRange(i+1,9).setValue(parseFloat(e.parameter.totalARS)||0);
           if (e.parameter.totalUSD !== undefined) h.getRange(i+1,10).setValue(parseFloat(e.parameter.totalUSD)||0);
           if (e.parameter.arsJONY  !== undefined) h.getRange(i+1,12).setValue(parseFloat(e.parameter.arsJONY)||0);
