@@ -1070,6 +1070,14 @@ function eliminarProductoHijo(ss, p) {
 }
 
 function registrarVentaHijos(ss, p) {
+  // Anti-duplicado: si esta línea ya se registró (mismo ventaId), no la escribe de nuevo.
+  // Cubre reintentos por red caída (el request llegó pero la respuesta se perdió).
+  if (p.ventaId) {
+    const c = CacheService.getScriptCache();
+    const k = 'vh_' + dec(p.ventaId);
+    if (c.get(k)) return { ok: true, dup: true };
+    c.put(k, '1', 900);
+  }
   const h = getOrCreate(ss, 'VentasHijos', ['Fecha','Hijo','Producto','Codigo','Cantidad','Precio','Total','Cliente','EsDebe','PagoParcial','SaldoPendiente']);
   // Soporte para fecha personalizada (ventas retroactivas)
   const fecha = p.fecha ? new Date(p.fecha + 'T12:00:00') : new Date();
@@ -1116,6 +1124,12 @@ function registrarPagoCliente(ss, p) {
 function registrarVueltoCC(ss, p) {
   // El cliente pagó de más — le debemos cambio (monto negativo en CC)
   if (!p.cliente || !p.monto) return { ok: false };
+  if (p.ventaId) {
+    const c = CacheService.getScriptCache();
+    const k = 'vh_' + dec(p.ventaId);
+    if (c.get(k)) return { ok: true, dup: true };
+    c.put(k, '1', 900);
+  }
   registrarMovimientoCC(ss, p.hijo, dec(p.cliente), -(parseFloat(p.monto)||0), 'vuelto', dec(p.producto||''));
   return { ok: true };
 }

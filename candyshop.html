@@ -2170,6 +2170,7 @@ let wStep = 0;
 let wCliente = '';
 let wProductosSeleccionados = {}; // { codigo: { ...producto, qty } }
 let wPago = ''; // 'total' | 'cuenta' | 'nopago'
+let wVentaId = '';   // id único de la venta: el backend lo usa para NO duplicar si se reintenta
 let deudoresCache = [];
 
 const WIZARD_TITLES = ['¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
@@ -2417,6 +2418,11 @@ async function confirmarVentaWizard() {
     saldo = montoPago - total; esDebe = 'NO';
   }
 
+  // ID estable de esta venta: si la red falla a mitad y se reintenta, el backend NO duplica.
+  // Se genera una vez y se mantiene hasta que la venta se complete bien (reset al final).
+  if (!wVentaId) wVentaId = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+
+  let idx = 0;
   for (const p of Object.values(wProductosSeleccionados)) {
     const precio = p.precioCustom ?? p.precioVenta;
     const productTotal = precio * p.qty;
@@ -2433,13 +2439,15 @@ async function confirmarVentaWizard() {
       cliente: wCliente,
       esDebe: esDebe,
       pagoParcial: wPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: productSaldo
+      saldoPendiente: productSaldo,
+      ventaId: wVentaId + '_' + (idx++)   // único por línea, estable entre reintentos
     });
   }
   if (wPago === 'masque' && wCliente && saldo > 0) {
     const prodLabel = Object.values(wProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
-    await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo, producto: prodLabel });
+    await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo, producto: prodLabel, ventaId: wVentaId + '_v' });
   }
+  wVentaId = '';   // venta completada OK → la próxima usa un id nuevo
 
   cerrarWizard();
   // Pequeña espera para que el Sheet procese
