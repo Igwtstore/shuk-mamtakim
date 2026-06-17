@@ -1014,7 +1014,7 @@ function renderDashboard(ventas, catalogo, deudores = []) {
     const key = cli.toLowerCase() + '|' + (v.hora || '');
     if (!grupos.has(key)) grupos.set(key, { cliente: cli, hora: v.hora || '', lineas: [], total: 0, gan: 0, pend: 0 });
     const g = grupos.get(key);
-    g.lineas.push({ cantidad: v.cantidad, producto: v.producto, subtotal: subtotal });
+    g.lineas.push({ ...v, subtotal });   // guarda rowIndex/codigo/precio/cliente/saldo para editar/borrar
     g.total += subtotal; g.gan += gan; g.pend += pendiente;
   });
 
@@ -1046,9 +1046,17 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   const cards = Array.from(grupos.values()).reverse().map(g => {
     const clienteLC = g.cliente.toLowerCase();
     const cambioTag = conVuelto.has(clienteLC) ? '<span class="badge badge-cambio">CAMBIO</span>' : '';
-    const lineasHtml = g.lineas.map(l =>
-      `<div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#555;padding:1px 0">
-        <span>${l.cantidad}x ${l.producto}</span><span>${fmt(l.subtotal)}</span></div>`).join('');
+    const lineasHtml = g.lineas.map(l => {
+      const cod = (l.codigo||'').replace(/'/g,"\\'");
+      const nom = (l.producto||'').replace(/'/g,"\\'");
+      const cli = (l.cliente||'').replace(/'/g,"\\'");
+      const botones = l.rowIndex ? `
+        <button onclick="abrirEditarVenta(${l.rowIndex},'${cod}','${nom}',${l.cantidad||1},${l.precio||0},'${cli}',${l.saldoPendiente||0})" title="Corregir" style="background:none;border:none;cursor:pointer;font-size:0.95rem;padding:0 1px">✏️</button>
+        <button onclick="eliminarVenta(${l.rowIndex})" title="Borrar" style="background:none;border:none;cursor:pointer;font-size:0.95rem;padding:0 1px">🗑️</button>` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;color:#555;padding:1px 0">
+        <span>${l.cantidad}x ${l.producto}</span>
+        <span style="display:flex;align-items:center;gap:4px"><span>${fmt(l.subtotal)}</span>${botones}</span></div>`;
+    }).join('');
     return `<div style="border:1px solid #eee;border-left:4px solid #2e8b57;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-weight:700;color:#5c3d1e">👤 ${g.cliente}${cambioTag}<span style="font-weight:400;color:#aaa;font-size:0.78rem"> · ${g.hora}</span></div>
@@ -3004,7 +3012,7 @@ async function confirmarEditarVenta() {
   });
   btn.disabled = false; btn.textContent = 'Guardar cambios';
   cerrarEditVenta();
-  if (res?.ok) { mostrarToast('✅ Venta actualizada'); cargarHistoria(); }
+  if (res?.ok) { mostrarToast('✅ Venta actualizada'); cargarDatos(); if (tabActual === 'historia') cargarHistoria(); }
   else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
 }
 
@@ -3014,7 +3022,7 @@ function cerrarEditVentaSiAfuera(e) { if (e.target.id === 'edit-venta-overlay') 
 async function eliminarVenta(rowIndex) {
   if (!confirm('¿Eliminar esta venta? Se revertirá el saldo de la cuenta corriente si corresponde.')) return;
   const res = await api('eliminarVentaHijos', { hijo: usuario, rowIndex });
-  if (res?.ok) { mostrarToast('🗑️ Venta eliminada'); cargarHistoria(); }
+  if (res?.ok) { mostrarToast('🗑️ Venta eliminada'); cargarDatos(); if (tabActual === 'historia') cargarHistoria(); }
   else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
 }
 
