@@ -30,7 +30,7 @@ const PROTECTED_HIJOS = [
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
-  'registrarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
+  'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
   'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA'
 ];
 
@@ -889,6 +889,7 @@ function doGet(e) {
     if (accion === 'editarProveedorHijos') { return json(editarProveedorHijos(ss, e.parameter)); }
     if (accion === 'eliminarProveedorHijos'){ return json(eliminarProveedorHijos(ss, e.parameter)); }
     if (accion === 'registrarCompraHijos') { return json(registrarCompraHijos(ss, e.parameter)); }
+    if (accion === 'eliminarCompraHijos')  { return json(eliminarCompraHijos(ss, e.parameter)); }
     if (accion === 'getComprasHijos')      { return json(getComprasHijos(ss)); }
     if (accion === 'getDepositoHijos')     { return json(getDepositoHijos(ss)); }
     if (accion === 'panelHijos')           { return json(panelHijos(ss, e.parameter)); }
@@ -1667,6 +1668,26 @@ function registrarCompraHijos(ss, p) {
     actualizarCostoPromedio_(ss, it.codigo);
   });
   return { ok:true, id };
+}
+
+// Borra una compra entera (por CompraID): revierte el depósito (resta lo que había sumado)
+// y recalcula el costo promedio de los productos afectados. Para corregir una compra mal cargada.
+function eliminarCompraHijos(ss, p) {
+  const h = ss.getSheetByName('ComprasHijos'); if (!h || h.getLastRow() < 2) return { error: 'sin hoja' };
+  const id = (p.compraId || '').toString().trim();
+  if (!id) return { error: 'falta compraId' };
+  const data = h.getDataRange().getValues();
+  const codigos = {}; let borradas = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][0].toString() === id) {
+      ajustarDeposito_(ss, data[i][4].toString(), data[i][5] ? data[i][5].toString() : '', -(parseInt(data[i][6]) || 0));
+      codigos[data[i][4].toString()] = true;
+      h.deleteRow(i + 1);
+      borradas++;
+    }
+  }
+  Object.keys(codigos).forEach(c => actualizarCostoPromedio_(ss, c));
+  return { ok: true, borradas: borradas };
 }
 
 function getComprasHijos(ss) {
