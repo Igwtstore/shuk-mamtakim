@@ -1177,7 +1177,9 @@ function ventasHoyHijos(ss, p) {
   const h = ss.getSheetByName('VentasHijos'); if (!h || h.getLastRow() < 2) return [];
   const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
   return h.getRange(2,1,h.getLastRow()-1,11).getValues()
-    .filter(r => {
+    .map((r, idx) => ({ r: r, rowIndex: idx + 2 }))   // guardar la fila REAL antes de filtrar (la usan editar/borrar)
+    .filter(o => {
+      const r = o.r;
       if (!r[0]) return false;
       let fechaStr;
       if (r[0] && typeof r[0].getTime === 'function') {
@@ -1187,8 +1189,8 @@ function ventasHoyHijos(ss, p) {
       }
       return r[1] === p.hijo && fechaStr === hoyStr;
     })
-    .map(r => ({ producto:r[2], codigo:r[3], cantidad:r[4], precio:r[5], cliente:r[7], saldoPendiente:r[10],
-      hora: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : (r[0]||'').toString().trim().substring(11,16) }));
+    .map(o => { const r = o.r; return { rowIndex: o.rowIndex, producto:r[2], codigo:r[3], cantidad:r[4], precio:r[5], cliente:r[7], saldoPendiente:r[10],
+      hora: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : (r[0]||'').toString().trim().substring(11,16) }; });
 }
 
 function ventasPeriodo(ss, p) {
