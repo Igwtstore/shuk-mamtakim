@@ -15,7 +15,7 @@ const PROTECTED_ACTIONS = [
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
-  'setEstadoTienda','aceptarCotizacion',
+  'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
   'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw'
 ];
@@ -740,6 +740,20 @@ function doGet(e) {
     if (accion === 'bandejaListar')  { return json(bandejaListar(ss)); }
     if (accion === 'bandejaUsar')    { return json(bandejaUsar(ss, e.parameter)); }
     if (accion === 'procesarBandeja'){ return json(procesarBandeja(ss)); }
+    if (accion === 'eliminarProducto') {
+      // Borra un producto del Stock de Shuk por id (deja registro en MovimientosStock).
+      const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
+      const datos = h.getDataRange().getValues();
+      for (let i = datos.length - 1; i >= 1; i--) {
+        if (datos[i][0].toString() === e.parameter.id) {
+          const stk = parseInt(datos[i][5]) || 0;
+          registrarMovStock_(ss, e.parameter.id, (datos[i][1] || '').toString(), -stk, stk, 0, 'Producto eliminado del catálogo');
+          h.deleteRow(i + 1);
+          return ok();
+        }
+      }
+      return json({ error: 'no encontrado' });
+    }
     if (accion === 'editarProducto') {
       // Edita campos puntuales de un producto del Stock de Shuk (solo los que vengan)
       const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
