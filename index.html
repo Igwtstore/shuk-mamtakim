@@ -2640,6 +2640,37 @@ function esCobradoReal(v) {
   return real(v.cajaJony) || real(v.cajaMyri);
 }
 
+// Nombre lindo de cada caja (igual etiqueta que en Caja · movimientos).
+const _CAJA_LABEL = {
+  MP_JONY: 'MP JONY', EFT_JONY: 'EFT $ JONY', MP_GABY: 'MP GABY', EFT_MYRI: 'EFT $ MYRI',
+  ETF_USD_MYRI: 'ETF U$S MYRI', COMI_ARS_JONY: 'Comi $ JONY', COMI_USD_JONY: 'Comi U$S JONY',
+  CTA_CTE_ARS: 'Cta Cte $', CTA_CTE_USD: 'Cta Cte U$S'
+};
+function cajaLabel(c) { return _CAJA_LABEL[c] || c || ''; }
+
+// Detalle de COBRO para la tarjeta del pedido: muestra a qué caja entró cada parte y, si la
+// venta era en U$S pero se cobró en pesos, la conversión (U$S X × $tc = $Y). Transparencia total.
+// Solo para pedidos realmente cobrados (caja de verdad). En vista Miri oculta la parte de Jony.
+function detalleCobro(v, soloMiri) {
+  if (!esCobradoReal(v)) return '';
+  const arsJ = parseFloat(v.arsJONY || 0), arsM = parseFloat(v.arsMyri || 0), usdM = parseFloat(v.usdMyri || 0);
+  const tc = parseFloat(v.tipoCambio || 0);
+  const cajaJ = v.cajaJony || '', cajaM = v.cajaMyri || '';
+  const esReal = c => !!c && !String(c).startsWith('CTA_CTE');
+  const $ars = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const partes = [];
+  if (!soloMiri && arsJ > 0 && esReal(cajaJ)) partes.push(`${$ars(arsJ)} → <b>${cajaLabel(cajaJ)}</b>`);
+  if (arsM > 0 && esReal(cajaM)) partes.push(`${$ars(arsM)} → <b>${cajaLabel(cajaM)}</b>`);
+  if (usdM > 0 && esReal(cajaM)) {
+    // Si la caja destino es en pesos y hay tipo de cambio: mostrar la conversión completa.
+    const cajaEnPesos = !/USD|U\$S/.test(cajaM) && cajaM !== 'ETF_USD_MYRI';
+    if (cajaEnPesos && tc > 0) partes.push(`U$S ${usdM.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdM * tc)} → <b>${cajaLabel(cajaM)}</b>`);
+    else partes.push(`U$S ${usdM.toFixed(2)} → <b>${cajaLabel(cajaM)}</b>`);
+  }
+  if (!partes.length) return '';
+  return `<div style="font-size:0.72rem;margin-top:0.3rem;color:#1a7a3a;background:#eef7ee;border-radius:8px;padding:0.35rem 0.6rem">💵 ${partes.join(' &nbsp;·&nbsp; ')}</div>`;
+}
+
 async function renderCuentaCorriente() {
   const lista = document.getElementById('cc-lista');
   const badge = document.getElementById('cc-total-badge');
@@ -2848,6 +2879,7 @@ async function renderPedidos() {
         ${_nCeros && (estado === 'pendiente' || estado === 'preparando') && !soloMiri ? `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:10px;padding:0.5rem 0.8rem;margin:0.5rem 0;font-size:0.85rem;font-weight:800;color:#c0392b">⚠️ ${_nCeros === 1 ? 'Hay un producto a precio $0' : 'Hay ' + _nCeros + ' productos a precio $0'} — tocá ✏️ Editar para corregirlo</div>` : ''}
         <div style="margin:0.4rem 0">${productLines || (soloMiri ? '' : v.productos)}</div>
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
+        ${detalleCobro(v, soloMiri)}
         ${_notasClientes[v.cliente] ? `<div style="font-size:0.75rem;background:#fdf3e3;border-left:3px solid var(--dorado);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.3rem;color:#7a5a1a">👤 ${esc(_notasClientes[v.cliente])}</div>` : ''}
         ${v.notas && v.notas !== 'Manual' ? `<div style="font-size:0.75rem;background:#e8f5ee;border-left:3px solid var(--verde);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.2rem;color:#1a5a2e">📝 ${esc(v.notas)}</div>` : ''}
         <div class="pedido-acciones">
