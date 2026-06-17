@@ -4870,7 +4870,11 @@ async function renderCaja() {
       const desc = `Pago cta ${p.cliente||''} ${p.fecha||''}`;
       if (aRS > 0 && p.caja) {
         movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
-        movs.push({ desc: `↳ baja Cta Cte`, col: 'CTA_CTE_ARS', val: -aRS, mon: 'ARS', tipo: 'venta' });
+        // La baja de la Cta Cte se parte en Pitzujim (dueno J) y golosinas, según el pago,
+        // para que el desglose cierre y Myri no vea la parte de Pitzujim.
+        const pitzPay = Math.min(parseFloat(p.montoPitz) || 0, aRS);
+        if (pitzPay > 0) movs.push({ desc: `↳ baja Cta Cte (Pitzujim)`, col: 'CTA_CTE_ARS', val: -pitzPay, mon: 'ARS', tipo: 'venta', dueno: 'J' });
+        if (aRS - pitzPay > 0) movs.push({ desc: `↳ baja Cta Cte`, col: 'CTA_CTE_ARS', val: -(aRS - pitzPay), mon: 'ARS', tipo: 'venta' });
       }
       if (uSD > 0 && p.caja) {
         movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta' });
@@ -5009,7 +5013,22 @@ async function renderCaja() {
       </div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.5rem">Para registrar un retiro usá el formulario <strong>Rendición / retiro</strong> seleccionando la caja correspondiente.</div>
     </div>`;
-    cont.innerHTML = tabla + (soloMiri ? '' : controlJony);
+    // Desglose de la Cuenta Corriente $ (solo vista Jony): cuánto del pendiente es Pitzujim (tuyo)
+    // y cuánto golosinas (Myri). Pitzujim = movimientos marcados dueno:'J'; golosinas = el resto.
+    // Así la suma SIEMPRE cierra con el total de la columna Cta Cte $.
+    let desgloseCC = '';
+    if (!soloMiri) {
+      const ctaTotal = totalsARS['CTA_CTE_ARS'] || 0;
+      if (Math.abs(ctaTotal) >= 1) {
+        const ctaPitz = movs.filter(m => m.col === 'CTA_CTE_ARS' && m.dueno === 'J').reduce((s, m) => s + m.val, 0);
+        const ctaGol = ctaTotal - ctaPitz;
+        desgloseCC = `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.4rem;padding:0.4rem 0.6rem;background:var(--gris);border-radius:8px">
+          <b>Cuenta corriente $</b> $ ${Math.round(ctaTotal).toLocaleString('es-AR')} — de eso:
+          <span style="color:var(--verde)">Pitzujim (tuyo) $ ${Math.round(ctaPitz).toLocaleString('es-AR')}</span> ·
+          golosinas (Myri) $ ${Math.round(ctaGol).toLocaleString('es-AR')}</div>`;
+      }
+    }
+    cont.innerHTML = tabla + desgloseCC + (soloMiri ? '' : controlJony);
   } catch(e) {
     cont.innerHTML = '<div class="sinpedidos">Error al cargar movimientos.</div>';
   }
