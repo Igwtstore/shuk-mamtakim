@@ -2783,11 +2783,14 @@ async function renderCuentaCorriente() {
     // Datos para el popup de detalle por deudor (pedidos + pagos a cuenta + saldo).
     window._ccData = {};
     entries.forEach((d, i) => {
+      const pagosCli = (pagos || []).filter(p => normCliente(p.cliente) === normCliente(d.nombre));
       window._ccData[i] = { nombre: d.nombre, pedidos: d.pedidos, totalARS: d.totalARS, totalUSD: d.totalUSD, soloMiri,
-        pagos: (pagos || []).filter(p => normCliente(p.cliente) === normCliente(d.nombre)) };
+        pagos: pagosCli, items: _imputarPedidos(d.pedidos, pagosCli, soloMiri) };
     });
     lista.innerHTML = entries.map((data, i) => {
       const cliente = data.nombre;
+      // Cantidad de pedidos que TODAVÍA tienen saldo (después de imputar pagos a cuenta).
+      const nped = _itemsConSaldo(window._ccData[i].items).length || data.pedidos.length;
       const totStr = [
         data.totalARS > 0 ? '$ ' + Math.round(data.totalARS).toLocaleString('es-AR') : '',
         data.totalUSD > 0 ? 'U$S ' + data.totalUSD.toFixed(2) : ''
@@ -2800,7 +2803,7 @@ async function renderCuentaCorriente() {
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
           <div>
             <div style="font-weight:700;color:var(--azul);font-size:0.9rem">${esc(cliente)}</div>
-            <button onclick="verDetalleDeudor(${i})" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--azul);text-decoration:underline;cursor:pointer">${data.pedidos.length} pedido${data.pedidos.length!==1?'s':''} · ver detalle</button>
+            <button onclick="verDetalleDeudor(${i})" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--azul);text-decoration:underline;cursor:pointer">${nped} pedido${nped!==1?'s':''} · ver detalle</button>
           </div>
           <div style="text-align:right">
             <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
@@ -4690,6 +4693,7 @@ function _lineasPedidoVista(productosStr, soloMiri) {
     const m = l.match(/•\s*\d+x\s+(.+?)\s+—/);
     if (!m) return true;
     const nombre = m[1].split(' · ')[0].trim();
+    if (/pitzujim/i.test(nombre)) return false;   // Pitzujim es de Jony — nunca en vista Miri (fallback por nombre)
     const prod = productos.find(p => p.nombre === nombre);
     return !prod || prod.dueno !== 'Jony';   // ocultar lo de Jony en vista Miri
   });
@@ -4741,37 +4745,67 @@ function _mostrarOverlayDetalle(html) {
   ov.appendChild(box);
 }
 
-// Popup de detalle de un deudor: sus pedidos pendientes (con líneas y total), pagos a cuenta y saldo.
+// Imputa los pagos a los pedidos de un deudor: primero los pagos atados a un pedido (pedidoId),
+// luego los pagos GENERALES (sin pedidoId) al pedido más VIEJO primero (FIFO). Devuelve cada
+// pedido con su saldo restante (remARS/remUSD). Así un pedido ya cubierto deja de figurar.
+function _imputarPedidos(pedidos, pagos, soloMiri) {
+  const items = (pedidos || []).map(v => ({
+    v,
+    remARS: soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0),
+    remUSD: soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0)
+  }));
+  (pagos || []).filter(p => p.pedidoId).forEach(p => {
+    const it = items.find(x => String(x.v.id) === String(p.pedidoId));
+    if (it) { it.remARS -= parseFloat(p.montoARS) || 0; it.remUSD -= parseFloat(p.montoUSD) || 0; }
+  });
+  let poolARS = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + (parseFloat(p.montoARS) || 0), 0);
+  let poolUSD = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + (parseFloat(p.montoUSD) || 0), 0);
+  const parseF = f => { const m = (f || '').split(' ')[0].split('/'); return m.length < 3 ? 0 : new Date(+m[2], +m[1] - 1, +m[0]).getTime(); };
+  items.sort((a, b) => parseF(a.v.fecha) - parseF(b.v.fecha));   // más viejo primero
+  items.forEach(it => {
+    if (poolARS > 0 && it.remARS > 0) { const ap = Math.min(poolARS, it.remARS); it.remARS -= ap; poolARS -= ap; }
+    if (poolUSD > 0 && it.remUSD > 0) { const ap = Math.min(poolUSD, it.remUSD); it.remUSD -= ap; poolUSD -= ap; }
+  });
+  return items;
+}
+function _itemsConSaldo(items) { return (items || []).filter(it => it.remARS > 1 || it.remUSD > 0.01); }
+
+// Popup de detalle de un deudor: pedidos CON SALDO (con líneas y saldo), pagos a cuenta y saldo total.
 function verDetalleDeudor(i) {
   const d = (window._ccData || {})[i];
   if (!d) return;
   const soloMiri = d.soloMiri;
   const money = n => '$ ' + Math.round(n).toLocaleString('es-AR');
-  const renderLineas = productos => (productos || '').split(' || ').filter(Boolean).map(l => {
-    const m = l.match(/^•\s*(.+?)\s+—\s+.+?\s+c\/u\s+=\s+(.+)$/);
-    const nombre = m ? m[1] : l.replace(/^•\s*/, '');
-    const subT = m ? m[2].trim() : '';
-    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--gris)"><span style="flex:1;font-size:0.8rem">${esc(nombre)}</span><span style="font-weight:700;white-space:nowrap;font-size:0.8rem">${esc(subT)}</span></div>`;
-  }).join('');
+  const items = _itemsConSaldo(d.items);
   let html = `<div style="font-weight:800;font-size:1.05rem;color:var(--azul);margin-bottom:8px">💳 ${esc(d.nombre)}</div>`;
-  d.pedidos.forEach(v => {
-    const tA = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
-    const tU = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
-    const totTxt = [tA > 0 ? money(tA) : '', tU > 0 ? 'U$S ' + tU.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+  items.forEach(it => {
+    const v = it.v;
+    const fullA = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+    const fullU = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
+    const parcial = (it.remARS < fullA - 1) || (it.remUSD < fullU - 0.01);
+    const totTxt = [it.remARS > 1 ? money(it.remARS) : '', it.remUSD > 0.01 ? 'U$S ' + it.remUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+    const lineas = _lineasPedidoVista(v.productos, soloMiri).map(l => {
+      const m = l.match(/^•\s*(.+?)\s+—\s+.+?\s+c\/u\s+=\s+(.+)$/);
+      const nombre = m ? m[1] : l.replace(/^•\s*/, '');
+      const subT = m ? m[2].trim() : '';
+      return `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--gris)"><span style="flex:1;font-size:0.8rem">${esc(nombre)}</span><span style="font-weight:700;white-space:nowrap;font-size:0.8rem">${esc(subT)}</span></div>`;
+    }).join('');
     html += `<div style="border:1px solid var(--gris-medio);border-radius:10px;padding:0.55rem 0.7rem;margin-bottom:0.5rem">
       <div style="font-weight:700;font-size:0.85rem">Pedido #${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${v.fecha || ''} · ⏳ pendiente</span></div>
-      <div style="margin-top:4px">${renderLineas(v.productos)}</div>
-      <div style="display:flex;justify-content:space-between;margin-top:5px;padding-top:4px;border-top:1.5px solid var(--azul);font-weight:700;font-size:0.82rem"><span>Total</span><span>${totTxt}</span></div>
+      <div style="margin-top:4px">${lineas}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;padding-top:4px;border-top:1.5px solid var(--azul);font-weight:700;font-size:0.82rem"><span>${parcial ? 'Saldo del pedido (pagó parte)' : 'Total'}</span><span>${totTxt}</span></div>
     </div>`;
   });
   if (d.pagos && d.pagos.length) {
-    html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta</div>`;
+    html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta recibidos</div>`;
     d.pagos.forEach(p => {
       const t = [(parseFloat(p.montoARS) || 0) > 0 ? money(p.montoARS) : '', (parseFloat(p.montoUSD) || 0) > 0 ? 'U$S ' + parseFloat(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
-      html += `<div style="display:flex;justify-content:space-between;font-size:0.76rem;padding:2px 0"><span style="color:var(--texto-suave)">${esc(p.fecha || '')}</span><span style="font-weight:700;color:var(--verde)">− ${t}</span></div>`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:0.76rem;padding:2px 0"><span style="color:var(--texto-suave)">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}</span><span style="font-weight:700;color:var(--verde)">− ${t}</span></div>`;
     });
   }
-  const sTxt = [d.totalARS > 0 ? money(d.totalARS) : '', d.totalUSD > 0.01 ? 'U$S ' + d.totalUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+  const sARS = items.reduce((s, it) => s + Math.max(0, it.remARS), 0);
+  const sUSD = items.reduce((s, it) => s + Math.max(0, it.remUSD), 0);
+  const sTxt = [sARS > 1 ? money(sARS) : '', sUSD > 0.01 ? 'U$S ' + sUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
   html += `<div style="display:flex;justify-content:space-between;margin-top:0.5rem;padding:0.5rem 0.7rem;background:#fdecea;border-radius:8px;font-weight:800;color:#c0392b"><span>Saldo que debe</span><span>${sTxt}</span></div>`;
   _mostrarOverlayDetalle(html);
 }
