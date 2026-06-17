@@ -4949,13 +4949,16 @@ async function renderCaja() {
         const colUSD = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : fp === 'Efectivo' ? 'ETF_USD_MYRI' : null);
         const tc = parseFloat(v.tipoCambio || 0);
         if (colUSD) {
+          // Si la golosina U$S se cobró a una caja de JONY, él tiene la plata y se la debe a Myri
+          // (igual que el caso en pesos). Marcamos myriNet para que figure en "Jony te debe".
+          const esCajaJony = ['MP_JONY', 'EFT_JONY'].includes(colUSD);
           if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
             const arsEquiv = Math.round(usdM * tc);
             const comiARS_conv = Math.round(arsEquiv * 0.15);
-            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`, vid: v.id });
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`, vid: v.id, corte: v.corte, myriNet: esCajaJony ? (arsEquiv - comiARS_conv) : undefined });
             if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi', srcCol: colUSD });
           } else {
-            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta', vid: v.id });
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta', vid: v.id, corte: v.corte, myriNetUSD: esCajaJony ? (usdM - comiU) : undefined });
             if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi', srcCol: colUSD });
           }
         }
