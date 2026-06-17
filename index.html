@@ -4787,7 +4787,7 @@ async function renderCaja() {
   // En vista Miri solo se muestran sus cajas y se oculta el control de Jony
   const soloMiri = esVistaMiri();
   const MIRI_COLS = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI','CTA_CTE_ARS','CTA_CTE_USD'];
-  const cols = soloMiri ? COLS.filter(c => MIRI_COLS.includes(c.key)) : COLS;
+  let cols = soloMiri ? COLS.filter(c => MIRI_COLS.includes(c.key)) : COLS;
   try {
     const [ventas, gastos, rendiciones, pagosCuenta] = await Promise.all([
       apiGet('ventas'),
@@ -4815,7 +4815,8 @@ async function renderCaja() {
       // que eligió el cliente es solo una intención, no plata en mano.
       const cobrado = !!(v.cajaJony || v.cajaMyri);
       if (!cobrado) {
-        if (arsJ > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id });
+        // dueno:'J' = parte de Jony (Pitzujim) → NO se muestra en la vista de Myri.
+        if (arsJ > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id, dueno: 'J' });
         if (arsM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsM, mon: 'ARS', tipo: 'venta', vid: v.id });
         if (usdM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_USD', val: usdM, mon: 'USD', tipo: 'venta', vid: v.id });
         return;
@@ -4824,7 +4825,7 @@ async function renderCaja() {
       const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       if (arsJ > 0 && cajaJ) {
-        movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id });
+        movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id, dueno: 'J' });
       }
       if (arsM > 0 && cajaM) {
         const pagoFueAMyri = ['MP_GABY','EFT_MYRI','CTA_CTE_ARS'].includes(cajaM);
@@ -4877,16 +4878,24 @@ async function renderCaja() {
       }
     });
 
-    // En vista Miri: sus cajas + sus golosinas que cobró JONY (él tiene la plata, se la debe).
-    // Antes estas ventas NO le aparecían (estaban en cajas de Jony) → Myri no veía ventas suyas.
+    // Vista Miri: SOLO lo de ella (golosinas). NUNCA Pitzujim (de Jony) ni comisión.
+    // Sus golosinas que cobró Jony van a una columna propia "Jony te debe" (no a Cta Cte de clientes).
     let movsVis;
     if (soloMiri) {
-      movsVis = movs.filter(m => MIRI_COLS.includes(m.col));
+      movsVis = [];
+      let hayJonyDebe = false;
       movs.forEach(m => {
+        if (m.tipo === 'comi') return;        // comisión: es de Jony
+        if (m.dueno === 'J') return;          // Pitzujim: es de Jony → Myri no lo ve
+        // Golosinas que Jony cobró en su caja (no liquidadas): él se las debe a Myri.
         if (m.myriNet !== undefined && ['MP_JONY', 'EFT_JONY'].includes(m.col) && !m.corte && m.myriNet > 0) {
-          movsVis.push({ desc: m.desc + ' · cobrado por Jony (te lo debe)', col: 'CTA_CTE_ARS', val: m.myriNet, mon: 'ARS', tipo: 'venta', vid: m.vid });
+          hayJonyDebe = true;
+          movsVis.push({ desc: m.desc + ' · cobrado por Jony', col: 'JONY_DEBE', val: m.myriNet, mon: 'ARS', tipo: 'venta', vid: m.vid });
+          return;
         }
+        if (MIRI_COLS.includes(m.col)) movsVis.push(m);
       });
+      if (hayJonyDebe) cols = cols.concat([{ key: 'JONY_DEBE', label: '⚠️ Jony te debe', mon: 'ARS' }]);
     } else {
       movsVis = movs;
     }
