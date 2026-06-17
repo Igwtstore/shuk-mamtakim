@@ -57,6 +57,25 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
 
+  /* Caja · movimientos: encabezado y saldos fijos + grilla con líneas para leer sin perderse */
+  .caja-scroll { max-height: 65vh; overflow: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--gris-medio); border-radius: 10px; margin-top: 0.5rem; }
+  .caja-tabla { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.72rem; min-width: 650px; }
+  .caja-tabla th, .caja-tabla td { border-right: 1px solid var(--gris-medio); border-bottom: 1px solid var(--gris-medio); padding: 0.4rem 0.5rem; white-space: nowrap; }
+  .caja-tabla th:last-child, .caja-tabla td:last-child { border-right: none; }
+  /* Encabezado de cajas: pegado arriba */
+  .caja-tabla thead th { position: sticky; top: 0; z-index: 3; background: var(--azul); color: #fff; text-align: right; }
+  .caja-tabla thead th:first-child { text-align: left; z-index: 4; left: 0; }
+  /* Saldos: pegados abajo */
+  .caja-tabla tfoot td { position: sticky; bottom: 0; z-index: 3; }
+  .caja-tabla tfoot tr.fila-saldo td { background: var(--gris); border-top: 2px solid var(--azul); }
+  .caja-tabla tfoot tr.fila-neto td { background: var(--verde-claro); }
+  .caja-tabla tfoot td:first-child { z-index: 4; left: 0; }
+  /* Primera columna (concepto): pegada a la izquierda al hacer scroll horizontal */
+  .caja-tabla tbody td:first-child { position: sticky; left: 0; z-index: 1; background: var(--blanco); text-align: left; }
+  .caja-tabla tbody tr:nth-child(even) td:first-child { background: var(--gris); }
+  .caja-tabla tbody tr:nth-child(even) td { background: #fafafa; }
+  .caja-tabla td.num { text-align: right; font-weight: 600; }
+
   :root {
     --azul: #1a1a2e;
     --verde: #1a7a3c;
@@ -4809,7 +4828,13 @@ async function renderCaja() {
         const pagoFueAMyri = ['MP_GABY','EFT_MYRI','CTA_CTE_ARS'].includes(cajaM);
         // myriNet = lo que le corresponde a MYRI de este pago
         const myriNet = pagoFueAMyri ? arsM : arsM - comiA;
-        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet, vid: v.id });
+        // Si la golosina entró a TU caja (no a la de Myri), tu comisión ya está adentro de
+        // ese monto (no se desglosa como línea aparte para no duplicar el saldo físico).
+        // Lo aclaramos en una nota para que la auditoría cierre y se VEA la comisión.
+        const subComi = (!pagoFueAMyri && comiA > 0)
+          ? `incluye tu comisión $ ${Math.round(comiA).toLocaleString('es-AR')} · de Myri $ ${Math.round(myriNet).toLocaleString('es-AR')}`
+          : '';
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet, vid: v.id, sub: subComi });
         if (comiA > 0 && pagoFueAMyri) {
           movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
         }
@@ -4867,12 +4892,12 @@ async function renderCaja() {
     const colColor = { venta: 'var(--verde)', comi: 'var(--dorado)', gasto: 'var(--rojo)', rendicion: 'var(--texto-suave)' };
 
     const tabla = `
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:0.5rem">
-    <table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:650px">
+    <div class="caja-scroll">
+    <table class="caja-tabla">
       <thead>
-        <tr style="background:var(--azul);color:white">
-          <th style="text-align:left;padding:0.45rem 0.5rem;white-space:nowrap">Movimiento</th>
-          ${cols.map(c => `<th style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">${c.label}</th>`).join('')}
+        <tr>
+          <th>Movimiento</th>
+          ${cols.map(c => `<th>${c.label}</th>`).join('')}
         </tr>
       </thead>
       <tbody>
@@ -4880,18 +4905,18 @@ async function renderCaja() {
           const d = m.vid ? (_det[m.vid] || {}) : {};
           const sub2 = m.sub || (d.fecha || '');
           return `
-        <tr style="border-bottom:1px solid var(--gris-medio);${m.vid ? 'cursor:pointer' : ''}" ${m.vid ? `onclick="verDetalleMovimientoCaja('${m.vid}')" title="Ver detalle del pedido"` : ''}>
-          <td style="padding:0.35rem 0.5rem;color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${d.cliente ? ` · ${esc(d.cliente)}` : ''}${sub2 ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${sub2}</span>` : ''}</td>
+        <tr style="${m.vid ? 'cursor:pointer' : ''}" ${m.vid ? `onclick="verDetalleMovimientoCaja('${m.vid}')" title="Ver detalle del pedido"` : ''}>
+          <td style="color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${d.cliente ? ` · ${esc(d.cliente)}` : ''}${sub2 ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${sub2}</span>` : ''}</td>
           ${cols.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
-            return `<td style="text-align:right;padding:0.35rem 0.5rem;font-weight:600;color:${color};white-space:nowrap">${m.val < 0 ? '-' : ''}${fmt(m.val, m.mon)}</td>`;
+            return `<td class="num" style="color:${color}">${m.val < 0 ? '-' : ''}${fmt(m.val, m.mon)}</td>`;
           }).join('')}
         </tr>`; }).join('') : `<tr><td colspan="${cols.length + 1}" style="text-align:center;padding:1rem;color:var(--texto-suave)">Sin movimientos</td></tr>`}
       </tbody>
       <tfoot>
-        <tr style="background:var(--gris);font-weight:700;border-top:2px solid var(--azul)">
-          <td style="padding:0.5rem;color:var(--azul);font-weight:700">SALDO FÍSICO</td>
+        <tr class="fila-saldo" style="font-weight:700">
+          <td style="color:var(--azul);font-weight:700">SALDO FÍSICO</td>
           ${cols.map(c => {
             const aVal = totalsARS[c.key] || 0;
             const uVal = totalsUSD[c.key] || 0;
@@ -4899,11 +4924,11 @@ async function renderCaja() {
             if (aVal !== 0) { const col = aVal >= 0 ? 'var(--verde)' : 'var(--rojo)'; parts.push(`<span style="color:${col}">${aVal < 0 ? '-' : ''}${fmt(aVal,'ARS')}</span>`); }
             if (uVal !== 0) { const col = uVal >= 0 ? 'var(--verde)' : 'var(--rojo)'; parts.push(`<span style="color:${col}">${uVal < 0 ? '-' : ''}${fmt(uVal,'USD')}</span>`); }
             if (!parts.length) parts.push('<span style="color:var(--texto-suave)">$ 0</span>');
-            return `<td style="text-align:right;padding:0.5rem;white-space:nowrap">${parts.join('<br>')}</td>`;
+            return `<td style="text-align:right">${parts.join('<br>')}</td>`;
           }).join('')}
         </tr>
-        <tr style="background:var(--verde-claro);border-top:1px solid #b2d8c0">
-          <td style="padding:0.45rem 0.5rem;color:var(--verde);font-weight:700;font-size:0.78rem">NETO MYRI</td>
+        <tr class="fila-neto">
+          <td style="color:var(--verde);font-weight:700;font-size:0.78rem">NETO MYRI</td>
           ${(() => {
             const mpG = movs.filter(m => m.col==='MP_GABY' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
             const eftM = movs.filter(m => m.col==='EFT_MYRI' && m.mon==='ARS').reduce((s,m)=>s+m.val,0);
@@ -4915,19 +4940,22 @@ async function renderCaja() {
             const netoG = mpG - comiGaby;
             const netoE = eftM - comiEFT;
             const netoU = usdM - comiUSD;
-            // MYRI money held by JONY
-            const myriEnJonyARS = movs
-              .filter(m => ['EFT_JONY','MP_JONY'].includes(m.col) && m.mon==='ARS' && m.tipo==='venta' && m.myriNet !== undefined)
+            // Plata de MYRI que quedó en una caja de JONY (golosinas cobradas a tu caja).
+            // Se muestra en la columna real (MP_JONY o EFT_JONY), no siempre en EFT.
+            const myriEnCaja = col => movs
+              .filter(m => m.col===col && m.mon==='ARS' && m.tipo==='venta' && m.myriNet !== undefined)
               .reduce((s,m) => s + m.myriNet, 0);
+            const myriEnEFT = myriEnCaja('EFT_JONY'), myriEnMP = myriEnCaja('MP_JONY');
             return cols.map(c => {
               let v, mon, label;
               if (c.key === 'MP_GABY')      { v = netoG; mon = 'ARS'; label = 'En GABY'; }
               else if (c.key === 'EFT_MYRI') { v = netoE; mon = 'ARS'; label = 'Físico'; }
               else if (c.key === 'ETF_USD_MYRI') { v = netoU; mon = 'USD'; label = 'Físico'; }
-              else if (c.key === 'EFT_JONY' && myriEnJonyARS > 0) { v = myriEnJonyARS; mon = 'ARS'; label = '⚠️ En JONY'; }
+              else if (c.key === 'EFT_JONY' && myriEnEFT > 0) { v = myriEnEFT; mon = 'ARS'; label = '⚠️ De Myri'; }
+              else if (c.key === 'MP_JONY' && myriEnMP > 0) { v = myriEnMP; mon = 'ARS'; label = '⚠️ De Myri'; }
               else return '<td></td>';
               const color = v >= 0 ? 'var(--verde)' : 'var(--rojo)';
-              return `<td style="text-align:right;padding:0.45rem 0.5rem;white-space:nowrap">
+              return `<td style="text-align:right">
                 <div style="font-size:0.62rem;color:var(--texto-suave);font-weight:400">${label}</div>
                 <div style="font-weight:700;font-size:0.78rem;color:${color}">${v < 0 ? '-' : ''}${fmt(v, mon)}</div>
               </td>`;
