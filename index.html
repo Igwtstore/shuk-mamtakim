@@ -947,9 +947,11 @@
         <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">A retirar (90%)</div><div class="dash-num" id="gan-retiro" style="color:var(--azul)">—</div></div>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        <button onclick="abrirRetiroModal()" style="padding:0.5rem 1.2rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">Registrar retiro</button>
+        <button onclick="hacerCorteFlow()" style="padding:0.5rem 1.2rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">✂️ Hacer corte (cerrar período)</button>
         <button onclick="abrirSaldoInicialModal()" style="padding:0.5rem 1rem;background:var(--gris);color:var(--texto-suave);border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;cursor:pointer">Saldo inicial</button>
       </div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.5rem">La ganancia es <b>en vivo</b>: solo cuenta comisión y Pitzujim ya <b>cobrados</b> del período actual. Al hacer el corte, esas ventas quedan liquidadas y vuelve a cero.</div>
+      <div id="cortes-historial" style="margin-top:0.6rem"></div>
     </div>
     <!-- Registrar compra -->
     <div class="admin-card" style="margin-bottom:0.75rem">
@@ -4834,7 +4836,7 @@ async function renderCaja() {
         const subComi = (!pagoFueAMyri && comiA > 0)
           ? `incluye tu comisión $ ${Math.round(comiA).toLocaleString('es-AR')} · de Myri $ ${Math.round(myriNet).toLocaleString('es-AR')}`
           : '';
-        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet, vid: v.id, sub: subComi });
+        movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet, vid: v.id, sub: subComi, corte: v.corte });
         if (comiA > 0 && pagoFueAMyri) {
           movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
         }
@@ -4875,8 +4877,19 @@ async function renderCaja() {
       }
     });
 
-    // En vista Miri, descartar movimientos de cajas de Jony
-    const movsVis = soloMiri ? movs.filter(m => MIRI_COLS.includes(m.col)) : movs;
+    // En vista Miri: sus cajas + sus golosinas que cobró JONY (él tiene la plata, se la debe).
+    // Antes estas ventas NO le aparecían (estaban en cajas de Jony) → Myri no veía ventas suyas.
+    let movsVis;
+    if (soloMiri) {
+      movsVis = movs.filter(m => MIRI_COLS.includes(m.col));
+      movs.forEach(m => {
+        if (m.myriNet !== undefined && ['MP_JONY', 'EFT_JONY'].includes(m.col) && !m.corte && m.myriNet > 0) {
+          movsVis.push({ desc: m.desc + ' · cobrado por Jony (te lo debe)', col: 'CTA_CTE_ARS', val: m.myriNet, mon: 'ARS', tipo: 'venta', vid: m.vid });
+        }
+      });
+    } else {
+      movsVis = movs;
+    }
     window._cajaDetalles = _det;   // para desplegar el detalle al clickear un movimiento
 
     const totalsARS = {}, totalsUSD = {};
@@ -4943,7 +4956,7 @@ async function renderCaja() {
             // Plata de MYRI que quedó en una caja de JONY (golosinas cobradas a tu caja).
             // Se muestra en la columna real (MP_JONY o EFT_JONY), no siempre en EFT.
             const myriEnCaja = col => movs
-              .filter(m => m.col===col && m.mon==='ARS' && m.tipo==='venta' && m.myriNet !== undefined)
+              .filter(m => m.col===col && m.mon==='ARS' && m.tipo==='venta' && m.myriNet !== undefined && !m.corte)
               .reduce((s,m) => s + m.myriNet, 0);
             const myriEnEFT = myriEnCaja('EFT_JONY'), myriEnMP = myriEnCaja('MP_JONY');
             return cols.map(c => {
@@ -5023,6 +5036,7 @@ async function renderCuentaSocios() {
 
   const MYRI_ARS = ['MP_GABY','EFT_MYRI'];   // cajas de Myri en pesos
   ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
+    if (v.corte) return;   // ya liquidado en un corte → no cuenta en el período actual
     if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
     const fp = (v.formaPago||'').trim();
     const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
@@ -6317,18 +6331,19 @@ function cargarProductosJonySelect() {
 }
 
 async function renderGanancias() {
-  const [resG, resC] = await Promise.all([
-    fetch(APPS_SCRIPT_URL + '?accion=getGanancias').catch(() => null),
-    fetch(APPS_SCRIPT_URL + '?accion=getCompras').catch(() => null)
+  // getGanancias es acción protegida → con sesión (token). Ahora es EN VIVO: comisión + Pitzujim
+  // SOLO de ventas cobradas del período actual (desde el último corte).
+  const [ganData, compras] = await Promise.all([
+    fetchConSesion(APPS_SCRIPT_URL + '?accion=getGanancias').catch(() => ({balance:0,movimientos:[]})),
+    fetchConSesion(APPS_SCRIPT_URL + '?accion=getCompras').catch(() => [])
   ]);
-  const ganData = resG ? await resG.json().catch(() => ({balance:0,movimientos:[]})) : {balance:0,movimientos:[]};
-  const compras = resC ? await resC.json().catch(() => []) : [];
-  const balance = ganData.balance || 0;
+  const balance = (ganData && ganData.balance) || 0;
+  const balanceUSD = (ganData && ganData.balanceUSD) || 0;
   const diezmo = Math.round(balance * 0.10);
   const retiro = Math.round(balance - diezmo);
-  document.getElementById('gan-total').textContent = '$ ' + Math.round(balance).toLocaleString('es-AR');
-  document.getElementById('gan-diezmo').textContent = '$ ' + diezmo.toLocaleString('es-AR');
-  document.getElementById('gan-retiro').textContent = '$ ' + retiro.toLocaleString('es-AR');
+  document.getElementById('gan-total').textContent = '$ ' + Math.round(balance).toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + balanceUSD.toFixed(2) : '');
+  document.getElementById('gan-diezmo').textContent = '$ ' + diezmo.toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + (balanceUSD*0.1).toFixed(2) : '');
+  document.getElementById('gan-retiro').textContent = '$ ' + retiro.toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + (balanceUSD*0.9).toFixed(2) : '');
   // Movimientos combinados (ganancias + compras recientes)
   const movs = [...(ganData.movimientos||[])].reverse();
   const lista = document.getElementById('gan-movimientos');
@@ -6346,6 +6361,7 @@ async function renderGanancias() {
     </div>`).join('');
   // Calcular costo promedio por producto (de compras)
   document.getElementById('compra-unitario').textContent = '';
+  renderCortesHistorial();
 }
 
 function calcularCostoUnitario() {
@@ -6375,25 +6391,45 @@ async function guardarCompra() {
   renderGanancias();
 }
 
-function abrirRetiroModal() {
-  const balance = parseFloat(document.getElementById('gan-total').textContent.replace(/[^0-9]/g,'')) || 0;
-  if (balance <= 0) { showToast('No hay ganancias acumuladas para retirar'); return; }
-  const diezmo = Math.round(balance * 0.10);
-  const retiro = balance - diezmo;
-  const conf = confirm(`Confirmar retiro:\n\nGanancia acumulada: $ ${balance.toLocaleString('es-AR')}\nDiezmo (10%): $ ${diezmo.toLocaleString('es-AR')}\nA retirar: $ ${retiro.toLocaleString('es-AR')}\n\n¿Confirmás?`);
-  if (!conf) return;
-  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarRetiro', balance, nota: 'Retiro de ganancias' }))
-    .then(r => r.json())
-    .then(() => { showToast('Retiro registrado ✓'); renderGanancias(); })
-    .catch(() => showToast('Error al registrar'));
+// CORTE de período: cierra la ganancia cobrada del período, calcula el diezmo, marca esas ventas
+// como liquidadas (vuelven a cero ganancia Y lo que le debés a Myri por ellas) y lo registra.
+async function hacerCorteFlow() {
+  const g = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getGanancias').catch(() => null);
+  if (!g) { showToast('No se pudo leer la ganancia'); return; }
+  const gARS = Math.round(g.balance || 0), gUSD = g.balanceUSD || 0;
+  if (gARS <= 0 && gUSD <= 0) { showToast('No hay ganancia cobrada para cerrar en este período'); return; }
+  const diezmoARS = Math.round(gARS * 0.10), retiroARS = gARS - diezmoARS;
+  let msg = `✂️ CORTE DE PERÍODO\n\nGanancia cobrada: $ ${gARS.toLocaleString('es-AR')}`;
+  if (gUSD) msg += ` + U$S ${gUSD.toFixed(2)}`;
+  msg += `\nDiezmo (10%): $ ${diezmoARS.toLocaleString('es-AR')}`;
+  if (gUSD) msg += ` + U$S ${(gUSD * 0.1).toFixed(2)}`;
+  msg += `\nA retirar (90%): $ ${retiroARS.toLocaleString('es-AR')}`;
+  if (gUSD) msg += ` + U$S ${(gUSD * 0.9).toFixed(2)}`;
+  msg += `\n\nEsto LIQUIDA las ventas cobradas del período: la ganancia y lo que le debés a Myri por ellas vuelven a CERO.\nAcordate de pasar el diezmo, retirar tu parte y saldar con Myri (Cuenta entre socios).\n\n¿Hacer el corte?`;
+  if (!confirm(msg)) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'hacerCorte', nota: 'Corte de período' }), '');
+  if (r && r.ok) {
+    showToast(`✓ Corte hecho · ganancia $${(r.gananciaARS || 0).toLocaleString('es-AR')} · diezmo $${(r.diezmoARS || 0).toLocaleString('es-AR')} · ${r.ventas} ventas`);
+    renderGanancias(); setTimeout(() => refreshAdmin(), 1200);
+  } else showToast('Error al hacer el corte');
+}
+
+async function renderCortesHistorial() {
+  const cont = document.getElementById('cortes-historial');
+  if (!cont) return;
+  const cortes = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getCortes').catch(() => []);
+  if (!Array.isArray(cortes) || !cortes.length) { cont.innerHTML = ''; return; }
+  cont.innerHTML = `<div style="font-size:0.75rem;font-weight:700;color:var(--azul);margin-bottom:0.3rem">✂️ Cortes anteriores</div>` +
+    cortes.slice(0, 10).map(c => `<div style="font-size:0.72rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
+      <b>${esc(c.fecha)}</b> · ganancia $ ${Math.round(c.gananciaARS).toLocaleString('es-AR')}${c.gananciaUSD ? ' + U$S ' + c.gananciaUSD.toFixed(2) : ''} · diezmo $ ${Math.round(c.diezmoARS).toLocaleString('es-AR')} · ${c.ventas} ventas${c.pagadoMyriARS ? ' · pagado a Myri $ ' + Math.round(c.pagadoMyriARS).toLocaleString('es-AR') : ''}
+    </div>`).join('');
 }
 
 function abrirSaldoInicialModal() {
   const monto = prompt('Ingresá el saldo inicial acumulado ($):');
   if (!monto || isNaN(parseFloat(monto))) return;
-  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'setSaldoInicial', monto: parseFloat(monto) }))
-    .then(() => { showToast('Saldo inicial guardado ✓'); renderGanancias(); })
-    .catch(() => showToast('Error'));
+  apiWrite(new URLSearchParams({ accion: 'setSaldoInicial', monto: parseFloat(monto) }), 'Saldo inicial guardado ✓')
+    .then(() => renderGanancias());
 }
 
 async function renderDashboard() {

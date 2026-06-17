@@ -11,7 +11,7 @@ const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
-  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas','getBorrados',
+  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas','getBorrados','hacerCorte','getCortes',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
@@ -90,6 +90,40 @@ function altaClienteAuto_(ss, nombre, tipo) {
     const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
     h.appendRow([fecha, nom, '', tipo || 'Minorista', '', fecha]);
   } catch (err) { Logger.log('[altaCliente] ' + err); }
+}
+
+// Ganancia de Jony del PERÍODO actual (desde el último corte): comisión + ganancia Pitzujim,
+// SOLO de ventas COBRADAS (caja real) y NO liquidadas (col 26 'Corte' vacía). Replica EXACTO la
+// lógica de comisión de la caja (incluye golosinas U$S cobradas en pesos → comisión en pesos).
+// Es la FUENTE ÚNICA del diezmo: cuenta solo lo cobrado y se auto-corrige al borrar/editar/ajustar.
+function gananciaJonyPeriodo_(ss) {
+  const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, items: [] };
+  const h = ss.getSheetByName('Ventas');
+  if (!h || h.getLastRow() < 2) return out;
+  const CAJAS_ARS = ['MP_GABY', 'EFT_MYRI', 'EFT_JONY', 'MP_JONY', 'CTA_CTE_ARS'];
+  const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+  const real = c => !!c && !String(c).startsWith('CTA_CTE');
+  for (let i = 0; i < d.length; i++) {
+    const r = d[i];
+    const estado = (r[7] || '').toString().trim();
+    if (estado === 'cancelado' || estado === 'cotizacion') continue;
+    if (!(real(r[16]) || real(r[17]))) continue;           // no cobrado → no cuenta (regla del usuario)
+    if ((r[25] || '').toString().trim()) continue;          // ya liquidado en un corte
+    const arsM = parseFloat(r[12]) || 0, usdM = parseFloat(r[13]) || 0;
+    const comiARS = parseFloat(r[14]) || 0, comiUSD = parseFloat(r[15]) || 0;
+    const cajaM = (r[17] || '').toString(), tc = parseFloat(r[18]) || 0;
+    const pitz = parseFloat(r[24]) || 0;                    // col 25 GananciaPitz
+    let cARS = 0, cUSD = 0;
+    if (arsM > 0) cARS += comiARS || Math.round(arsM * 0.15);
+    if (usdM > 0) {
+      if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
+      else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
+    }
+    out.comisionARS += cARS; out.comisionUSD += cUSD; out.pitz += pitz;
+    out.items.push({ nVenta: r[10], cliente: (r[2] || '').toString(), comiARS: cARS, comiUSD: cUSD, pitz: pitz,
+      fecha: r[1] instanceof Date ? Utilities.formatDate(r[1], TZ, 'dd/MM/yyyy HH:mm') : (r[1] || '').toString() });
+  }
+  return out;
 }
 
 // Así, aunque se borren pedidos, el número no se reusa (evita # duplicados).
@@ -275,21 +309,22 @@ function doGet(e) {
           });
         }
       }
-      // Trackear ganancias automáticamente
+      // Ganancia Pitzujim (profit = precio − costo prom.): se GUARDA en la fila (col 25) para que
+      // el cálculo de ganancia/diezmo EN VIVO (solo sobre lo cobrado) la lea sin recomputar costos.
+      // Ya NO se escribe comisión/ganancia al log GananciasJony: se derivan en vivo (regla: después de cobrar).
       const jonyItems = dec(e.parameter.jonyItems||'');
-      const comiARSv = parseFloat(e.parameter.comiARS||0);
-      const hG = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
+      let gananciaPitz = 0;
       if (jonyItems) {
-        let gananciaPitz = 0;
         jonyItems.split(',').forEach(it => {
           const parts = it.split(':');
           const pid = parts[0]; const qty = parseFloat(parts[1])||0; const precio = parseFloat(parts[2])||0;
           const avgCosto = getCostoPromedio(ss, pid);
           if (avgCosto > 0) gananciaPitz += (precio - avgCosto) * qty;
         });
-        if (gananciaPitz > 0) hG.appendRow([fecha, 'ganancia_pitzujim', 'Pitzujim — ' + dec(e.parameter.cliente), Math.round(gananciaPitz)]);
       }
-      if (comiARSv > 0) hG.appendRow([fecha, 'comision_miri', 'Comisión Miri — ' + dec(e.parameter.cliente), Math.round(comiARSv)]);
+      if (h.getRange(1, 25).getValue() !== 'GananciaPitz') h.getRange(1, 25).setValue('GananciaPitz');
+      if (h.getRange(1, 26).getValue() !== 'Corte') h.getRange(1, 26).setValue('Corte');
+      h.getRange(row, 25).setValue(Math.round(gananciaPitz));
       // Alta automática del cliente en el registro canónico (no duplica; nunca rompe la venta).
       altaClienteAuto_(ss, dec(e.parameter.cliente), dec(e.parameter.tipo));
       return json({ok:true, nVenta, id});
@@ -670,7 +705,7 @@ function doGet(e) {
     }
     if (accion === 'ventas') {
       const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return json([]);
-      const nc = Math.min(24, h.getLastColumn());
+      const nc = Math.min(26, h.getLastColumn());
       return json(h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
         id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
         fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
@@ -679,7 +714,7 @@ function doGet(e) {
         nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
         usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
         cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
-        comprobante:r[21]||'', ajuste: r[22]||0
+        comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString()
       })));
     }
     if (accion === 'gastos') {
@@ -768,14 +803,30 @@ function doGet(e) {
       })));
     }
     if (accion === 'getGanancias') {
+      // Comisión + Pitzujim EN VIVO (solo cobrado, período actual). Las entradas viejas
+      // 'comision_miri'/'ganancia_pitzujim' del log se IGNORAN (ahora son en vivo, no duplicar).
+      const per = gananciaJonyPeriodo_(ss);
+      const manual = [];
+      let manualARS = 0;
       const h = ss.getSheetByName('GananciasJony');
-      if (!h || h.getLastRow() < 2) return json({balance:0, movimientos:[]});
-      const rows = h.getRange(2,1,h.getLastRow()-1,4).getValues();
-      const movimientos = rows.map(r => ({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
-        tipo: r[1].toString(), descripcion: r[2].toString(), monto: parseFloat(r[3])||0
-      }));
-      return json({balance: movimientos.reduce((s,m) => s + m.monto, 0), movimientos});
+      if (h && h.getLastRow() >= 2) {
+        h.getRange(2, 1, h.getLastRow() - 1, 4).getValues().forEach(r => {
+          const tipo = (r[1] || '').toString();
+          if (tipo === 'comision_miri' || tipo === 'ganancia_pitzujim') return;   // legacy → en vivo
+          const monto = parseFloat(r[3]) || 0; manualARS += monto;
+          manual.push({ fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy HH:mm') : (r[0] || '').toString(),
+            tipo, descripcion: (r[2] || '').toString(), monto });
+        });
+      }
+      const liveMovs = [];
+      per.items.forEach(it => {
+        if (it.comiARS > 0 || it.comiUSD > 0) liveMovs.push({ fecha: it.fecha, tipo: 'comision_miri',
+          descripcion: 'Comisión ' + it.cliente + (it.comiUSD > 0 ? ' · U$S ' + it.comiUSD : ''), monto: it.comiARS });
+        if (it.pitz > 0) liveMovs.push({ fecha: it.fecha, tipo: 'ganancia_pitzujim', descripcion: 'Pitzujim — ' + it.cliente, monto: it.pitz });
+      });
+      const balance = per.comisionARS + per.pitz + manualARS;
+      return json({ balance, balanceUSD: per.comisionUSD, comisionARS: per.comisionARS, comisionUSD: per.comisionUSD,
+        pitz: per.pitz, movimientos: manual.concat(liveMovs) });
     }
     if (accion === 'registrarRetiro') {
       const h = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
@@ -786,6 +837,47 @@ function doGet(e) {
       h.appendRow([fecha, 'diezmo', 'Diezmo 10%', -diezmo]);
       h.appendRow([fecha, 'retiro', dec(e.parameter.nota||'Retiro de ganancias'), -retiro]);
       return json({ok:true, diezmo, retiro});
+    }
+    if (accion === 'hacerCorte') {
+      // CORTE de período: liquida la ganancia (comisión + Pitzujim) cobrada del período, calcula
+      // el diezmo, marca esas ventas como liquidadas (col 26) para que el período vuelva a CERO,
+      // y registra el corte (incluye lo pagado a Myri, que viene del cálculo de socios del front).
+      const per = gananciaJonyPeriodo_(ss);
+      const gananciaARS = Math.round(per.comisionARS + per.pitz);
+      const gananciaUSD = Math.round(per.comisionUSD * 100) / 100;
+      const diezmoARS = Math.round(gananciaARS * 0.10);
+      const diezmoUSD = Math.round(gananciaUSD * 0.10 * 100) / 100;
+      const corteId = 'C' + Date.now();
+      const h = ss.getSheetByName('Ventas');
+      let n = 0;
+      if (h && h.getLastRow() >= 2) {
+        const real = c => !!c && !String(c).startsWith('CTA_CTE');
+        const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+        if (h.getRange(1, 26).getValue() !== 'Corte') h.getRange(1, 26).setValue('Corte');
+        for (let i = 0; i < d.length; i++) {
+          const r = d[i]; const estado = (r[7] || '').toString().trim();
+          if (estado === 'cancelado' || estado === 'cotizacion') continue;
+          if (!(real(r[16]) || real(r[17]))) continue;
+          if ((r[25] || '').toString().trim()) continue;
+          h.getRange(i + 2, 26).setValue(corteId); n++;
+        }
+      }
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const hc = getOrCreate(ss, 'Cortes', ['Fecha', 'CorteId', 'GananciaARS', 'DiezmoARS', 'GananciaUSD', 'DiezmoUSD', 'PagadoMyriARS', 'PagadoMyriUSD', 'Ventas', 'Nota']);
+      hc.appendRow([fecha, corteId, gananciaARS, diezmoARS, gananciaUSD, diezmoUSD,
+        parseFloat(e.parameter.pagadoMyriARS || 0) || 0, parseFloat(e.parameter.pagadoMyriUSD || 0) || 0, n, dec(e.parameter.nota || '')]);
+      return json({ ok: true, corteId, gananciaARS, diezmoARS, gananciaUSD, diezmoUSD, ventas: n });
+    }
+    if (accion === 'getCortes') {
+      const h = ss.getSheetByName('Cortes');
+      if (!h || h.getLastRow() < 2) return json([]);
+      return json(h.getRange(2, 1, h.getLastRow() - 1, 10).getValues().map(r => ({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy HH:mm') : (r[0] || '').toString(),
+        corteId: (r[1] || '').toString(), gananciaARS: parseFloat(r[2]) || 0, diezmoARS: parseFloat(r[3]) || 0,
+        gananciaUSD: parseFloat(r[4]) || 0, diezmoUSD: parseFloat(r[5]) || 0,
+        pagadoMyriARS: parseFloat(r[6]) || 0, pagadoMyriUSD: parseFloat(r[7]) || 0,
+        ventas: parseFloat(r[8]) || 0, nota: (r[9] || '').toString()
+      })).reverse());
     }
     if (accion === 'setSaldoInicial') {
       const h = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
