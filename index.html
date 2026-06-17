@@ -1374,6 +1374,12 @@
     <button class="guardar-stock-btn" style="margin-top:0" onclick="previewMigracionSplits()">👀 Ver qué se corregiría</button>
     <div id="migracion-splits-resultado" style="margin-top:0.75rem"></div>
   </div>
+  <div class="admin-card" data-seccion="dinero">
+    <div class="admin-titulo">🔢 Renumerar pedidos</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Arregla los # de pedido duplicados (viejos). El # es solo la etiqueta — la plata no se toca. Hace backup y vista previa antes.</div>
+    <button class="guardar-stock-btn" style="margin-top:0" onclick="previewRenumerar(this)">👀 Ver qué cambiaría</button>
+    <div id="renumerar-resultado" style="margin-top:0.75rem"></div>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">🔄 Transferir entre cajas</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
@@ -5225,6 +5231,34 @@ async function aplicarMigracionSplits() {
   out.innerHTML = `<span style="color:var(--verde)">✓ Listo: ${hechos} de ${_migracionPendiente.length} pedido(s) corregidos. Backup hecho en Drive.</span>`;
   _migracionPendiente = [];
   setTimeout(() => refreshAdmin(), 1500);
+}
+
+// ─── RENUMERAR PEDIDOS (arregla # duplicados viejos) ───────────────────────────
+async function previewRenumerar(btn) {
+  const out = document.getElementById('renumerar-resultado');
+  if (btn) { btn.disabled = true; btn.textContent = 'Revisando...'; }
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'renumerarVentas', dry: '1' }));
+  if (btn) { btn.disabled = false; btn.textContent = '👀 Ver qué cambiaría'; }
+  if (!r || !r.ok) { out.innerHTML = '<div style="color:#c0392b;font-size:0.82rem">No se pudo revisar. Reintentá.</div>'; return; }
+  if (!r.totalCambios) { out.innerHTML = '<div style="color:var(--verde);font-size:0.85rem">✓ Los # ya están todos correctos, no hay nada que renumerar.</div>'; return; }
+  const filas = (r.cambios || []).slice(0, 15).map(c => `<div style="font-size:0.72rem;padding:2px 0">#${c.viejo} → <b>#${c.nuevo}</b> · ${esc(c.cliente)} <span style="color:var(--texto-suave)">(${c.fecha})</span></div>`).join('');
+  out.innerHTML = `<div style="font-size:0.8rem;font-weight:700;margin-bottom:4px;color:var(--azul)">${r.totalCambios} de ${r.total} pedidos cambian de #:</div>
+    <div style="max-height:240px;overflow-y:auto;border:1px solid var(--gris-medio);border-radius:8px;padding:6px">${filas}${r.totalCambios > 15 ? '<div style="font-size:0.7rem;color:var(--texto-suave)">…y ' + (r.totalCambios - 15) + ' más</div>' : ''}</div>
+    <div style="font-size:0.7rem;color:var(--texto-suave);margin:5px 0">El # es solo la etiqueta del pedido — la plata, las deudas y las cajas NO se tocan.</div>
+    <button class="guardar-stock-btn" style="margin-top:0.3rem;background:var(--azul)" onclick="aplicarRenumerar(this)">💾 Hacer backup y renumerar</button>`;
+}
+
+async function aplicarRenumerar(btn) {
+  if (!confirm('Se hace un backup y se renumeran los pedidos a 1, 2, 3…\n\nEl # cambia pero la plata NO. ¿Seguir?')) return;
+  const out = document.getElementById('renumerar-resultado');
+  if (btn) { btn.disabled = true; }
+  out.innerHTML = '💾 Haciendo backup...';
+  const bk = await apiWrite(new URLSearchParams({ accion: 'backupAhora' }), '');
+  if (!bk.ok) { out.innerHTML = '<span style="color:var(--rojo)">⚠️ No se pudo hacer el backup. No se renumeró nada.</span>'; return; }
+  out.innerHTML = 'Renumerando...';
+  const r = await apiWrite(new URLSearchParams({ accion: 'renumerarVentas' }), '');
+  out.innerHTML = r.ok ? `<span style="color:var(--verde)">✓ Listo: ${r.cambiados} pedidos renumerados. Backup hecho en Drive.</span>` : '<span style="color:var(--rojo)">Error al renumerar.</span>';
+  if (r.ok) setTimeout(() => refreshAdmin(), 1500);
 }
 
 function setModo(m) {
