@@ -5146,6 +5146,21 @@ async function renderCuentaSocios() {
   if (Math.abs(usd) >= 0.01) html += `<div style="flex:1;min-width:130px">${lineaSaldo(usd, fu, 'dólares')}</div>`;
   html += '</div>';
 
+  if (soloMiri) {
+    // Desglose para Myri: de dónde sale lo que le debe (o le deben) a Jony. + = le debe más a Jony.
+    const filaM = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
+      `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'#c0392b':'var(--verde)'};white-space:nowrap">${sign} ${f(val)}</span></div>`;
+    const hayDetalle = [comiDebe, pitzMyri, jonyTiene, movsARS, saldadoARS].some(x => Math.abs(x) >= 1);
+    if (hayDetalle) html += `<div style="background:var(--gris);border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
+      <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">De dónde sale este saldo con Jony:</div>
+      ${filaM('Comisión de tus ventas (15% para Jony)', comiDebe, '+')}
+      ${filaM('Ventas de Jony que cobraste vos (se las debés)', pitzMyri, '+')}
+      ${filaM('Tus golosinas que cobró Jony (te las debe)', jonyTiene, '−')}
+      ${movsARS > 0 ? filaM('Adelantos que te pagó Jony', movsARS, '+') : (movsARS < 0 ? filaM('Adelantos a tu favor', -movsARS, '−') : '')}
+      ${saldadoARS !== 0 ? filaM('Ya saldado', saldadoARS, '−') : ''}
+    </div>
+    <div style="font-size:0.66rem;color:var(--texto-suave);margin-bottom:0.5rem">La comisión es el 15% de tus ventas de golosinas (es de Jony). Lo que él cobró de lo tuyo, te lo descuenta. ${Math.abs(usd) >= 0.01 ? 'El saldo en dólares se muestra arriba aparte.' : ''}</div>`;
+  }
   if (!soloMiri) {
     // Desglose claro para Jony: de dónde sale el saldo (ventas cruzadas)
     const fila = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
