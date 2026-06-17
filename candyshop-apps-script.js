@@ -216,6 +216,9 @@ function doGet(e) {
         parseFloat(e.parameter.usdMyri||0), parseFloat(e.parameter.comiARS||0), parseFloat(e.parameter.comiUSD||0),
         '', '', 0, stockUpdates, vidVenta]);
       h.getRange(row, 1, 1, 2).setNumberFormat('@');
+      // Stock Updates como TEXTO: evita que "64:20" (id:cantidad de 1 producto) se convierta en hora
+      // y rompa la cancelación/devolución de stock. Se re-escribe forzando formato texto.
+      h.getRange(row, 20).setNumberFormat('@'); h.getRange(row, 20).setValue(stockUpdates);
       SpreadsheetApp.flush();
       try { lockVenta.releaseLock(); } catch (e) {}
       // En cotización NO se descuenta stock (se descuenta recién cuando se acepta desde el panel).
@@ -269,7 +272,8 @@ function doGet(e) {
           // Solo devolver stock si el pedido REALMENTE lo había descontado:
           // una cotización nunca descuenta (hasta aceptarse) y un pedido ya cancelado no debe devolver dos veces.
           if (dec(e.parameter.estado) === 'cancelado' && estadoPrev !== 'cancelado' && estadoPrev !== 'cotizacion') {
-            const su = datos[i][19] || '';
+            // Defensivo: si una venta vieja guardó stockUpdates como fecha (bug de formato), no romper.
+            const su = (datos[i][19] && typeof datos[i][19].split === 'function') ? datos[i][19] : '';
             if (su) {
               const sh = ss.getSheetByName('Stock');
               if (sh) {
@@ -333,7 +337,7 @@ function doGet(e) {
             }
           }
           // Mantener coherente la col Stock Updates (la usa la cancelación para devolver stock)
-          if (e.parameter.stockUpdatesNuevo !== undefined) h.getRange(i+1,20).setValue(dec(e.parameter.stockUpdatesNuevo));
+          if (e.parameter.stockUpdatesNuevo !== undefined) { h.getRange(i+1,20).setNumberFormat('@'); h.getRange(i+1,20).setValue(dec(e.parameter.stockUpdatesNuevo)); }
           return ok();
         }
       }
@@ -2621,6 +2625,7 @@ function botConfirmar_(ss, s, prods, tel, sim) {
   h.appendRow([idV, fecha, cliente, 'Minorista', lineas.join('\n'), 'A coordinar', '📱 Pedido por SMS', 'pendiente',
     total, 0, nVenta, 0, 0, 0, 0, 0, '', '', 0, stockUpdates, 'sms_' + tel]);  // nVenta = siguienteNVenta_
   h.getRange(row, 1, 1, 2).setNumberFormat('@');
+  h.getRange(row, 20).setNumberFormat('@'); h.getRange(row, 20).setValue(stockUpdates);   // stockUpdates como texto
   // Descontar stock + registrar movimiento
   const sh = ss.getSheetByName('Stock');
   if (sh) {
@@ -2774,6 +2779,7 @@ function registrarPedidoVoz_(ss, itemsStr, cliente, direccion, tel, dry) {
   h.appendRow([idV, fecha, cli, 'Minorista', lineas.join('\n'), 'A coordinar', notas, 'pendiente',
     total, 0, nVenta, 0, 0, 0, 0, 0, '', '', 0, suArr.join(','), 'voz_' + (tel || '')]);
   h.getRange(row, 1, 1, 2).setNumberFormat('@');
+  h.getRange(row, 20).setNumberFormat('@'); h.getRange(row, 20).setValue(suArr.join(','));   // stockUpdates como texto
   // Descontar stock + registrar movimiento
   const sh = ss.getSheetByName('Stock');
   if (sh) {
