@@ -11,7 +11,7 @@ const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
-  'registrarMovSocio','getMovsSocios',
+  'registrarMovSocio','getMovsSocios','backupAhora',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
@@ -437,6 +437,14 @@ function doGet(e) {
       h.appendRow([fecha, dec(e.parameter.desc||'Movimiento entre socios'), montoARS, montoUSD]);
       h.getRange(row,1).setNumberFormat('@');
       return ok();
+    }
+    if (accion === 'backupAhora') {
+      try {
+        const folder = getBackupFolder_();
+        const fecha = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH'h'mm");
+        DriveApp.getFileById(SPREADSHEET_ID).makeCopy('Backup Shuk (manual) ' + fecha, folder);
+        return json({ ok: true, nombre: 'Backup Shuk (manual) ' + fecha });
+      } catch (err) { return json({ error: String(err) }); }
     }
     if (accion === 'getMovsSocios') {
       const h = ss.getSheetByName('MovsSocios');

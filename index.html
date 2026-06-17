@@ -1367,6 +1367,12 @@
     <button class="guardar-stock-btn" style="margin-top:0" onclick="auditarSistema()">🔍 Revisar todo</button>
     <div id="auditoria-resultado" style="margin-top:0.75rem"></div>
   </div>
+  <div class="admin-card" data-seccion="dinero">
+    <div class="admin-titulo">🔧 Recalcular reparto Jony/Myri</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Arregla pedidos viejos cuyo reparto Pitzujim/golosinas quedó mal (por ediciones). Hace backup y te muestra una vista previa antes de tocar nada.</div>
+    <button class="guardar-stock-btn" style="margin-top:0" onclick="previewMigracionSplits()">👀 Ver qué se corregiría</button>
+    <div id="migracion-splits-resultado" style="margin-top:0.75rem"></div>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">🔄 Transferir entre cajas</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
@@ -5126,6 +5132,81 @@ async function confirmarUsarPlataMyri() {
   }
   btn.disabled = false; btn.textContent = 'Confirmar';
   if (okAll) { showToast('Registrado ✓'); cerrarUsarPlataMyri(); setTimeout(() => refreshAdmin(), 800); }
+}
+
+// ─── MIGRACIÓN: recalcular el reparto Jony/Myri de pedidos viejos ───────────────
+// Recalcula el split desde el string de productos (Pitzujim → Jony, resto → Myri, USD → Myri).
+function _recomputeSplit(v) {
+  const lineas = parsearLineasPedido(v.productos || '');
+  let arsJ = 0, arsM = 0, usdM = 0, descG = 0;
+  lineas.forEach(l => {
+    const raw = (l.raw || l.nombre || '');
+    const mg = raw.match(/Descuento global:\s*([\d.]+)\s*%/i);
+    if (mg) { descG = parseFloat(mg[1]) || 0; return; }
+    const sub = (parseFloat(l.precio) || 0) * (l.qty || 0);
+    if (sub <= 0) return;
+    if (l.moneda === 'U$S') { usdM += sub; return; }
+    const nom = (l.nombre || '');
+    const p = productos.find(x => (x.nombre || '').trim().toLowerCase() === nom.trim().toLowerCase());
+    const esJony = /pitzujim/i.test(nom) || (p && p.dueno === 'Jony');
+    if (esJony) arsJ += sub; else arsM += sub;
+  });
+  if (descG > 0 && descG <= 100) { const fg = 1 - descG / 100; arsJ *= fg; arsM *= fg; usdM *= fg; }
+  return { arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM), usdMyri: +usdM.toFixed(2), comiARS: Math.round(arsM * 0.15), comiUSD: +(usdM * 0.15).toFixed(2) };
+}
+
+let _migracionPendiente = [];
+async function previewMigracionSplits() {
+  const out = document.getElementById('migracion-splits-resultado');
+  out.innerHTML = 'Analizando pedidos...';
+  const ventas = await apiGet('ventas').catch(() => null);
+  if (!Array.isArray(ventas)) { out.innerHTML = '<span style="color:var(--rojo)">Error al leer pedidos.</span>'; return; }
+  _migracionPendiente = [];
+  ventas.forEach(v => {
+    if (!v.id) return;
+    const nuevo = _recomputeSplit(v);
+    const viejo = {
+      arsJONY: Math.round(parseFloat(v.arsJONY) || 0),
+      arsMyri: Math.round(parseFloat(v.arsMyri) || 0),
+      usdMyri: +(parseFloat(v.usdMyri) || 0).toFixed(2)
+    };
+    const dif = Math.abs(nuevo.arsJONY - viejo.arsJONY) > 1 || Math.abs(nuevo.arsMyri - viejo.arsMyri) > 1 || Math.abs(nuevo.usdMyri - viejo.usdMyri) > 0.01;
+    if (dif) _migracionPendiente.push({ v, nuevo, viejo });
+  });
+  if (!_migracionPendiente.length) { out.innerHTML = '<span style="color:var(--verde)">✓ Todos los pedidos tienen el reparto correcto. No hay nada que corregir.</span>'; return; }
+  const fp = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const filas = _migracionPendiente.map(({ v, nuevo, viejo }) =>
+    `<div style="font-size:0.72rem;padding:5px 0;border-bottom:1px solid var(--gris-medio)">
+      <b>#${v.nVenta || '?'} · ${esc(v.cliente || 's/nombre')}</b><br>
+      Golosinas Myri: <span style="color:var(--rojo);text-decoration:line-through">${fp(viejo.arsMyri)}</span> → <span style="color:var(--verde);font-weight:700">${fp(nuevo.arsMyri)}</span>
+    </div>`).join('');
+  out.innerHTML = `<div style="font-size:0.8rem;font-weight:700;margin-bottom:4px;color:var(--azul)">${_migracionPendiente.length} pedido(s) a corregir:</div>
+    <div style="max-height:280px;overflow-y:auto;border:1px solid var(--gris-medio);border-radius:8px;padding:6px">${filas}</div>
+    <button class="guardar-stock-btn" style="margin-top:0.6rem;background:var(--azul)" onclick="aplicarMigracionSplits()">💾 Hacer backup y aplicar</button>`;
+}
+
+async function aplicarMigracionSplits() {
+  if (!_migracionPendiente.length) return;
+  if (!confirm(`Se hará un backup de la planilla y se corregirá el reparto de ${_migracionPendiente.length} pedido(s).\n\n¿Seguir?`)) return;
+  const out = document.getElementById('migracion-splits-resultado');
+  out.innerHTML = '💾 Haciendo backup...';
+  const bk = await apiWrite(new URLSearchParams({ accion: 'backupAhora' }), '');
+  if (!bk.ok) { out.innerHTML = '<span style="color:var(--rojo)">⚠️ No se pudo hacer el backup. No se aplicó nada.</span>'; return; }
+  let hechos = 0;
+  for (const item of _migracionPendiente) {
+    const { v, nuevo } = item;
+    const p = new URLSearchParams({
+      accion: 'actualizarPedido', id: v.id,
+      arsJONY: nuevo.arsJONY, arsMyri: nuevo.arsMyri, usdMyri: nuevo.usdMyri.toFixed(2),
+      comiARS: nuevo.comiARS, comiUSD: nuevo.comiUSD.toFixed(2)
+    });
+    const r = await apiWrite(p, '');
+    if (r.ok) hechos++;
+    out.innerHTML = `Aplicando correcciones... ${hechos}/${_migracionPendiente.length}`;
+  }
+  out.innerHTML = `<span style="color:var(--verde)">✓ Listo: ${hechos} de ${_migracionPendiente.length} pedido(s) corregidos. Backup hecho en Drive.</span>`;
+  _migracionPendiente = [];
+  setTimeout(() => refreshAdmin(), 1500);
 }
 
 function setModo(m) {
