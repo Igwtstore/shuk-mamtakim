@@ -11,7 +11,7 @@ const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
-  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas',
+  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas','getBorrados',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
@@ -61,6 +61,15 @@ function autorizarPermisos() {
 }
 
 // Próximo # de venta: máximo histórico de la col 11 + 1, NUNCA la cantidad de filas.
+// Registro de borrados: deja constancia de qué se eliminó y su contenido (auditoría).
+// Nunca rompe la operación principal.
+function logBorrado_(ss, tipo, detalle, quien) {
+  try {
+    const h = getOrCreate(ss, 'Borrados', ['Fecha', 'Tipo', 'Detalle', 'Por']);
+    h.appendRow([Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), tipo, (detalle || '').toString().substring(0, 2000), (quien || '').toString()]);
+  } catch (err) { Logger.log('[borrado] ' + err); }
+}
+
 // Así, aunque se borren pedidos, el número no se reusa (evita # duplicados).
 function siguienteNVenta_(h) {
   const last = h.getLastRow();
@@ -485,6 +494,12 @@ function doGet(e) {
         movimientos
       });
     }
+    if (accion === 'getBorrados') {
+      const h = ss.getSheetByName('Borrados');
+      if (!h || h.getLastRow() < 2) return json([]);
+      const rows = h.getRange(2, 1, h.getLastRow() - 1, 4).getValues();
+      return json(rows.map(r => ({ fecha: (r[0] || '').toString(), tipo: (r[1] || '').toString(), detalle: (r[2] || '').toString(), por: (r[3] || '').toString() })).reverse());
+    }
     // Pago a cuenta: pago parcial de un cliente con deuda en cuenta corriente.
     if (accion === 'registrarPagoCuenta') {
       const h = getOrCreate(ss, 'Pagos', ['Fecha','Cliente','PedidoId','MontoARS','MontoUSD','Caja','Nota','MontoPitz']);
@@ -769,6 +784,7 @@ function doGet(e) {
         if (datos[i][0].toString() === e.parameter.id) {
           const stk = parseInt(datos[i][5]) || 0;
           registrarMovStock_(ss, e.parameter.id, (datos[i][1] || '').toString(), -stk, stk, 0, 'Producto eliminado del catálogo');
+          logBorrado_(ss, 'producto Shuk', `${datos[i][1]} (id ${datos[i][0]}, stock ${stk})`, '');
           h.deleteRow(i + 1);
           return ok();
         }
@@ -1105,7 +1121,7 @@ function eliminarProductoHijo(ss, p) {
   const h = ss.getSheetByName('CatalogoHijos'); if (!h) return { error:'sin hoja' };
   const datos = h.getDataRange().getValues();
   for (let i = datos.length - 1; i >= 1; i--) {
-    if (datos[i][0].toString() === dec(p.codigo)) { h.deleteRow(i+1); return { ok: true }; }
+    if (datos[i][0].toString() === dec(p.codigo)) { logBorrado_(ss, 'producto CS', `${datos[i][1]} (cod ${datos[i][0]})`, p.hijo || ''); h.deleteRow(i+1); return { ok: true }; }
   }
   return { error:'no encontrado' };
 }
@@ -1325,6 +1341,7 @@ function eliminarVentaHijos(ss, p) {
   if (saldo > 0 && cliente) {
     registrarMovimientoCC(ss, row[1], cliente, -saldo, 'anulacion', row[2]);
   }
+  logBorrado_(ss, 'venta CS', `${row[4]}x ${row[2]} ($${row[6]})` + (cliente ? ` · ${cliente}` : '') + (saldo > 0 ? ` · debía $${saldo}` : ''), row[1]);
   h.deleteRow(rowIndex);
   return { ok: true };
 }
@@ -1716,15 +1733,17 @@ function eliminarCompraHijos(ss, p) {
   const id = (p.compraId || '').toString().trim();
   if (!id) return { error: 'falta compraId' };
   const data = h.getDataRange().getValues();
-  const codigos = {}; let borradas = 0;
+  const codigos = {}; let borradas = 0; const items = [];
   for (let i = data.length - 1; i >= 1; i--) {
     if (data[i][0].toString() === id) {
       ajustarDeposito_(ss, data[i][4].toString(), data[i][5] ? data[i][5].toString() : '', -(parseInt(data[i][6]) || 0));
       codigos[data[i][4].toString()] = true;
+      items.push(`${data[i][6]}x ${data[i][5] || data[i][4]} ($${data[i][8]})`);
       h.deleteRow(i + 1);
       borradas++;
     }
   }
+  if (borradas) logBorrado_(ss, 'compra CS', `Compra ${id}: ` + items.join(', '), p.hijo || '');
   Object.keys(codigos).forEach(c => actualizarCostoPromedio_(ss, c));
   return { ok: true, borradas: borradas };
 }
@@ -2757,6 +2776,8 @@ function borrarVentas_(ss, idsStr) {
       devueltas.push(f.nVenta);
     }
   });
+  // Registro de borrados (antes de borrar las filas)
+  filas.forEach(f => logBorrado_(ss, 'venta Shuk', `#${f.nVenta} · ${f.cliente} · estado ${f.estado}`, ''));
   // Borrar filas de abajo hacia arriba (para no correr los índices)
   filas.sort((a, b) => b.row - a.row).forEach(f => { h.deleteRow(f.row); borradas.push(f.nVenta); });
   return { ok: true, borradas: borradas, stockDevuelto: devueltas };
