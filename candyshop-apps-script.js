@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','limpiarTestData'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -927,6 +927,25 @@ function doGet(e) {
         if (set[datos[i][0].toString()]) { h.getRange(i + 2, 8).setValue(valor); n++; }
       }
       return json({ ok: true, n: n, mostrar: valor === 'SI' });
+    }
+    if (accion === 'limpiarTestData') {
+      // Purga filas de PRUEBA (marcadores únicos) de las hojas afectadas. Lo usan los tests en
+      // su teardown para no dejar residuo en producción, y sirve para limpiar lo ya ensuciado.
+      // Seguro: ningún dato real contiene estos marcadores.
+      const marca = /__TEST__|REGTEST|REGCLI|AJTEST|VISTEST|BORRTEST|DIAG_/;
+      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock'];
+      const resultado = {};
+      hojas.forEach(nombre => {
+        const h = ss.getSheetByName(nombre);
+        if (!h || h.getLastRow() < 2) return;
+        const datos = h.getDataRange().getValues();
+        let borradas = 0;
+        for (let i = datos.length - 1; i >= 1; i--) {
+          if (datos[i].some(c => marca.test((c || '').toString()))) { h.deleteRow(i + 1); borradas++; }
+        }
+        if (borradas) resultado[nombre] = borradas;
+      });
+      return json({ ok: true, borradas: resultado });
     }
     if (accion === 'leerStockRaw') {
       // Diagnóstico de solo lectura: devuelve la fila cruda de un producto tal como
