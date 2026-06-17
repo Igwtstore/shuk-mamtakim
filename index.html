@@ -2780,7 +2780,13 @@ async function renderCuentaCorriente() {
     }
     badge.textContent = entries.length + ' deudor' + (entries.length !== 1 ? 'es' : '');
     badge.style.display = '';
-    lista.innerHTML = entries.map(data => {
+    // Datos para el popup de detalle por deudor (pedidos + pagos a cuenta + saldo).
+    window._ccData = {};
+    entries.forEach((d, i) => {
+      window._ccData[i] = { nombre: d.nombre, pedidos: d.pedidos, totalARS: d.totalARS, totalUSD: d.totalUSD, soloMiri,
+        pagos: (pagos || []).filter(p => normCliente(p.cliente) === normCliente(d.nombre)) };
+    });
+    lista.innerHTML = entries.map((data, i) => {
       const cliente = data.nombre;
       const totStr = [
         data.totalARS > 0 ? '$ ' + Math.round(data.totalARS).toLocaleString('es-AR') : '',
@@ -2794,7 +2800,7 @@ async function renderCuentaCorriente() {
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
           <div>
             <div style="font-weight:700;color:var(--azul);font-size:0.9rem">${esc(cliente)}</div>
-            <div style="font-size:0.72rem;color:var(--texto-suave)">${data.pedidos.length} pedido${data.pedidos.length!==1?'s':''}</div>
+            <button onclick="verDetalleDeudor(${i})" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--azul);text-decoration:underline;cursor:pointer">${data.pedidos.length} pedido${data.pedidos.length!==1?'s':''} · ver detalle</button>
           </div>
           <div style="text-align:right">
             <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
@@ -4716,6 +4722,11 @@ function verDetalleMovimientoCaja(vid) {
     <div style="font-size:0.85rem;line-height:1.4">${cuerpo}</div>
     ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total</span><span>${totalTxt}</span></div>` : ''}
     ${(d.comprobante || '').split('\n').map(s => s.trim()).filter(Boolean).map((u, i, a) => `<a href="${esc(u)}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:0.5rem;background:var(--verde-claro,#e8f5ee);color:var(--verde);border-radius:8px;font-weight:700;text-decoration:none">🧾 Ver comprobante${a.length > 1 ? ' ' + (i + 1) : ' de pago'}</a>`).join('')}`;
+  _mostrarOverlayDetalle(html);
+}
+
+// Overlay reutilizable para popups de detalle (caja, deudores, etc.).
+function _mostrarOverlayDetalle(html) {
   let ov = document.getElementById('caja-detalle-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -4728,6 +4739,41 @@ function verDetalleMovimientoCaja(vid) {
   box.style.cssText = 'background:var(--blanco,#fff);border-radius:12px;padding:1rem 1.1rem;max-width:440px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.25)';
   box.innerHTML = html + '<button onclick="document.getElementById(\'caja-detalle-overlay\').remove()" style="margin-top:14px;width:100%;padding:0.55rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>';
   ov.appendChild(box);
+}
+
+// Popup de detalle de un deudor: sus pedidos pendientes (con líneas y total), pagos a cuenta y saldo.
+function verDetalleDeudor(i) {
+  const d = (window._ccData || {})[i];
+  if (!d) return;
+  const soloMiri = d.soloMiri;
+  const money = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const renderLineas = productos => (productos || '').split(' || ').filter(Boolean).map(l => {
+    const m = l.match(/^•\s*(.+?)\s+—\s+.+?\s+c\/u\s+=\s+(.+)$/);
+    const nombre = m ? m[1] : l.replace(/^•\s*/, '');
+    const subT = m ? m[2].trim() : '';
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--gris)"><span style="flex:1;font-size:0.8rem">${esc(nombre)}</span><span style="font-weight:700;white-space:nowrap;font-size:0.8rem">${esc(subT)}</span></div>`;
+  }).join('');
+  let html = `<div style="font-weight:800;font-size:1.05rem;color:var(--azul);margin-bottom:8px">💳 ${esc(d.nombre)}</div>`;
+  d.pedidos.forEach(v => {
+    const tA = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+    const tU = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
+    const totTxt = [tA > 0 ? money(tA) : '', tU > 0 ? 'U$S ' + tU.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+    html += `<div style="border:1px solid var(--gris-medio);border-radius:10px;padding:0.55rem 0.7rem;margin-bottom:0.5rem">
+      <div style="font-weight:700;font-size:0.85rem">Pedido #${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${v.fecha || ''} · ⏳ pendiente</span></div>
+      <div style="margin-top:4px">${renderLineas(v.productos)}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;padding-top:4px;border-top:1.5px solid var(--azul);font-weight:700;font-size:0.82rem"><span>Total</span><span>${totTxt}</span></div>
+    </div>`;
+  });
+  if (d.pagos && d.pagos.length) {
+    html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta</div>`;
+    d.pagos.forEach(p => {
+      const t = [(parseFloat(p.montoARS) || 0) > 0 ? money(p.montoARS) : '', (parseFloat(p.montoUSD) || 0) > 0 ? 'U$S ' + parseFloat(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
+      html += `<div style="display:flex;justify-content:space-between;font-size:0.76rem;padding:2px 0"><span style="color:var(--texto-suave)">${esc(p.fecha || '')}</span><span style="font-weight:700;color:var(--verde)">− ${t}</span></div>`;
+    });
+  }
+  const sTxt = [d.totalARS > 0 ? money(d.totalARS) : '', d.totalUSD > 0.01 ? 'U$S ' + d.totalUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+  html += `<div style="display:flex;justify-content:space-between;margin-top:0.5rem;padding:0.5rem 0.7rem;background:#fdecea;border-radius:8px;font-weight:800;color:#c0392b"><span>Saldo que debe</span><span>${sTxt}</span></div>`;
+  _mostrarOverlayDetalle(html);
 }
 
 // 🔍 Auditoría: corre chequeos automáticos sobre ventas y stock, lista las alertas.
