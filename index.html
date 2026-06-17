@@ -1380,6 +1380,12 @@
     <button class="guardar-stock-btn" style="margin-top:0" onclick="previewRenumerar(this)">👀 Ver qué cambiaría</button>
     <div id="renumerar-resultado" style="margin-top:0.75rem"></div>
   </div>
+  <div class="admin-card" data-seccion="dinero">
+    <div class="admin-titulo">📋 Registro de borrados</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Todo lo que se borró (pedidos, productos, compras) queda anotado acá con su contenido.</div>
+    <button class="guardar-stock-btn" style="margin-top:0" onclick="verBorrados(this)">📋 Ver últimos borrados</button>
+    <div id="borrados-resultado" style="margin-top:0.75rem"></div>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">🔄 Transferir entre cajas</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
@@ -5259,6 +5265,23 @@ async function aplicarRenumerar(btn) {
   const r = await apiWrite(new URLSearchParams({ accion: 'renumerarVentas' }), '');
   out.innerHTML = r.ok ? `<span style="color:var(--verde)">✓ Listo: ${r.cambiados} pedidos renumerados. Backup hecho en Drive.</span>` : '<span style="color:var(--rojo)">Error al renumerar.</span>';
   if (r.ok) setTimeout(() => refreshAdmin(), 1500);
+}
+
+async function verBorrados(btn) {
+  const out = document.getElementById('borrados-resultado');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'getBorrados' }));
+  if (btn) { btn.disabled = false; btn.textContent = '📋 Ver últimos borrados'; }
+  if (!Array.isArray(r)) { out.innerHTML = '<div style="color:#c0392b;font-size:0.82rem">No se pudo cargar. Reintentá.</div>'; return; }
+  if (!r.length) { out.innerHTML = '<div style="color:var(--texto-suave);font-size:0.85rem">Todavía no se borró nada. ✨</div>'; return; }
+  const icono = t => /producto/.test(t) ? '📦' : /compra/.test(t) ? '🛒' : '🧾';
+  const filas = r.slice(0, 100).map(b => `<div style="font-size:0.74rem;padding:5px 0;border-bottom:1px solid var(--gris-claro,#eee)">
+      <span style="margin-right:4px">${icono(b.tipo)}</span><b>${esc(b.tipo)}</b>
+      <span style="color:var(--texto-suave)">· ${esc(b.fecha)}${b.por ? ' · ' + esc(b.por) : ''}</span>
+      <div style="margin-left:20px;color:#333">${esc(b.detalle)}</div>
+    </div>`).join('');
+  out.innerHTML = `<div style="font-size:0.8rem;font-weight:700;margin-bottom:4px;color:var(--azul)">${r.length} borrado${r.length === 1 ? '' : 's'} (más recientes primero):</div>
+    <div style="max-height:320px;overflow-y:auto;border:1px solid var(--gris-medio);border-radius:8px;padding:6px">${filas}</div>`;
 }
 
 function setModo(m) {
