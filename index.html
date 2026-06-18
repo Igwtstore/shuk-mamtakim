@@ -7247,17 +7247,36 @@ function diasDesdePedido(fechaStr) {
 const _apiCache = {};
 // Fetch al backend que, si la sesión venció (el token de Supabase dura 1 hora),
 // renueva el token y reintenta UNA vez. Lo usan lecturas y escrituras.
+// ── Limitador de concurrencia ──────────────────────────────────────
+// El panel abre disparando ~12 tarjetas a la vez; cada llamada a Apps Script tarda 2-4s.
+// Mandar todo junto satura el navegador (máx ~6 conexiones) y el servidor → algunas devuelven
+// HTML ("no mostró ningún valor"). Encolamos: máximo _MAX_CONCURRENTE pedidos a la vez.
+const _MAX_CONCURRENTE = 4;
+let _enVuelo = 0;
+const _colaPedidos = [];
+function _tomarTurno() {
+  if (_enVuelo < _MAX_CONCURRENTE) { _enVuelo++; return Promise.resolve(); }
+  return new Promise(res => _colaPedidos.push(res));
+}
+function _liberarTurno() {
+  _enVuelo--;
+  if (_colaPedidos.length && _enVuelo < _MAX_CONCURRENTE) { _enVuelo++; _colaPedidos.shift()(); }
+}
+
 // Una llamada. Lee como texto y parsea: si Apps Script devuelve HTML (error transitorio "La
 // secuencia se completó pero no mostró ningún valor"), NO rompe: devuelve {__transitorio:true}.
 // Refresca el token y reintenta UNA vez ante 'no autorizado' (seguro: una llamada con token malo
 // NO se ejecutó). NO reintenta el transitorio acá: eso lo hace apiGet (solo lecturas), porque
-// reintentar una ESCRITURA ambigua podría duplicar plata.
+// reintentar una ESCRITURA ambigua podría duplicar plata. Pasa por el limitador de concurrencia.
 async function fetchConSesion(url) {
   const hacer = async () => {
-    const r = await fetch(url);
-    const txt = await r.text();
-    try { return JSON.parse(txt); }
-    catch { return { __transitorio: true }; }
+    await _tomarTurno();
+    try {
+      const r = await fetch(url);
+      const txt = await r.text();
+      try { return JSON.parse(txt); }
+      catch { return { __transitorio: true }; }
+    } finally { _liberarTurno(); }
   };
   let data = await hacer();
   if (data && data.error && String(data.error).indexOf('no autorizado') !== -1) {
