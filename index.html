@@ -1535,6 +1535,16 @@
       <span>📊 Caja — movimientos recientes</span>
       <button onclick="exportarVentasCSV()" style="font-size:0.72rem;padding:0.3rem 0.8rem;background:var(--azul);color:white;border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⬇ Exportar CSV</button>
     </div>
+    <!-- Extracto por caja (estilo resumen bancario, para conciliar — ej. MP GABY para Myri) -->
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;background:var(--gris-claro,#f4f3ef);border-radius:8px;padding:0.5rem 0.6rem;margin-bottom:0.7rem">
+      <span style="font-size:0.74rem;font-weight:700;color:var(--azul)">📄 Extracto:</span>
+      <select id="extracto-caja" style="font-size:0.74rem;padding:0.25rem 0.4rem;border:1px solid var(--gris-medio);border-radius:6px"></select>
+      <span style="font-size:0.72rem;color:var(--texto-suave)">desde</span>
+      <input type="date" id="extracto-desde" style="font-size:0.74rem;padding:0.2rem 0.3rem;border:1px solid var(--gris-medio);border-radius:6px">
+      <span style="font-size:0.72rem;color:var(--texto-suave)">hasta</span>
+      <input type="date" id="extracto-hasta" style="font-size:0.74rem;padding:0.2rem 0.3rem;border:1px solid var(--gris-medio);border-radius:6px">
+      <button onclick="exportarExtractoCaja()" style="font-size:0.72rem;padding:0.3rem 0.8rem;background:var(--verde);color:white;border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:700">⬇ Descargar (CSV)</button>
+    </div>
     <div id="caja-contenido"><div class="sinpedidos">Cargando movimientos...</div></div>
   </div>
   </div><!-- cierre admin-tab-panel -->
@@ -5020,6 +5030,17 @@ async function renderCaja() {
       }
     });
 
+    // Fecha de cada movimiento (para el "Extracto por caja"): de ventas la del pedido (_det),
+    // del resto la que viene en el propio texto. No cambia ningún monto, solo agrega el dato.
+    movs.forEach(m => {
+      if (!m.fecha) {
+        if (m.vid && _det[m.vid]) m.fecha = _det[m.vid].fecha || '';
+        else { const mm = (m.desc || '').match(/\d{2}\/\d{2}\/\d{4}(?: \d{2}:\d{2})?/); m.fecha = mm ? mm[0] : ''; }
+      }
+    });
+    window._cajaMovs = movs;   // fuente para el extracto descargable (mismo cálculo que la tarjeta)
+    _poblarExtractoCajas(cols);   // llena el selector del extracto (solo cajas reales, según la vista)
+
     // Vista Miri: SOLO lo de ella (golosinas). NUNCA Pitzujim (de Jony) ni comisión.
     // Sus golosinas que cobró Jony van a una columna propia "Jony te debe" (no a Cta Cte de clientes).
     let movsVis;
@@ -6810,6 +6831,77 @@ function verificarStockBajo() {
       <span style="font-size:0.85rem;font-weight:700;color:${p.stock <= 1 ? 'var(--rojo)' : 'var(--dorado)'}">⚠️ ${p.stock} ud.</span>
     </div>`
   ).join('');
+}
+
+// Llena el selector de cajas del extracto (excluye Cta Cte / virtuales: no son cuentas de banco).
+// Respeta la vista (en Miri vienen solo sus cajas). Default: MP GABY si está. Fechas: mes actual.
+function _poblarExtractoCajas(cols) {
+  const sel = document.getElementById('extracto-caja');
+  if (!sel) return;
+  const reales = (cols || []).filter(c => c.key.indexOf('CTA_CTE') === -1 && c.key !== 'JONY_DEBE');
+  const prev = sel.value;
+  sel.innerHTML = reales.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
+  if (prev && reales.some(c => c.key === prev)) sel.value = prev;
+  else if (reales.some(c => c.key === 'MP_GABY')) sel.value = 'MP_GABY';
+  const d = document.getElementById('extracto-desde'), h = document.getElementById('extracto-hasta');
+  if (d && !d.value) { const x = new Date(); d.value = `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-01`; }
+  if (h && !h.value) { const x = new Date(); h.value = `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; }
+}
+
+// "dd/MM/yyyy HH:mm" → "yyyy-mm-dd" (para comparar con los <input type=date>). '' si no parsea.
+function _fechaMovISO(f) {
+  const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+
+// Extracto de una caja (estilo resumen bancario): cada movimiento con saldo acumulado, para conciliar.
+function exportarExtractoCaja() {
+  const sel = document.getElementById('extracto-caja');
+  const caja = sel ? sel.value : '';
+  const label = sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : caja;
+  const desde = document.getElementById('extracto-desde').value;   // yyyy-mm-dd
+  const hasta = document.getElementById('extracto-hasta').value;
+  if (!caja) { showToast('Elegí una caja'); return; }
+  const movs = (window._cajaMovs || []).filter(m => m.col === caja);
+  if (!movs.length) { showToast('Sin movimientos en esa caja'); return; }
+  // Filtrar por rango (incluye los sin fecha por las dudas) y ordenar cronológicamente.
+  const enRango = movs.filter(m => {
+    const iso = _fechaMovISO(m.fecha);
+    if (!iso) return true;
+    if (desde && iso < desde) return false;
+    if (hasta && iso > hasta) return false;
+    return true;
+  }).sort((a, b) => (_fechaMovISO(a.fecha) + (a.fecha||'')).localeCompare(_fechaMovISO(b.fecha) + (b.fecha||'')));
+  if (!enRango.length) { showToast('Sin movimientos en ese período'); return; }
+
+  const esUSD = enRango.every(m => m.mon === 'USD') || /U\$S/.test(label);
+  const sym = esUSD ? 'U$S ' : '$ ';
+  const nMon = v => sym + (esUSD ? Math.abs(v).toFixed(2) : Math.abs(Math.round(v)).toLocaleString('es-AR'));
+  let saldo = 0, totIn = 0, totOut = 0;
+  const filas = enRango.map(m => {
+    const v = parseFloat(m.val) || 0;
+    saldo += v;
+    if (v >= 0) totIn += v; else totOut += -v;
+    const detalle = (m.desc || '').replace(/\s+#/, ' #').replace(/"/g, '""');
+    return [
+      `"${(m.fecha || '').toString()}"`,
+      `"${detalle}"`,
+      v > 0 ? nMon(v) : '',
+      v < 0 ? nMon(v) : '',
+      (esUSD ? saldo.toFixed(2) : Math.round(saldo).toLocaleString('es-AR'))
+    ];
+  });
+  const headers = ['Fecha', 'Detalle', 'Entró', 'Salió', 'Saldo'];
+  const totalRow = ['', '"TOTAL del período"', nMon(totIn), totOut ? nMon(totOut) : '', (esUSD ? saldo.toFixed(2) : Math.round(saldo).toLocaleString('es-AR'))];
+  const meta = [`Extracto de caja: ${label}`, desde && hasta ? `Período: ${desde} a ${hasta}` : 'Período: todo', `Generado: ${new Date().toLocaleString('es-AR')}`];
+  const csv = [...meta.map(x => `"${x}"`), '', headers.join(','), ...filas.map(r => r.join(',')), totalRow.join(',')].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `extracto_${(label || caja).replace(/[^\w]+/g, '-')}_${(desde||'')}_${(hasta||'')}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Extracto descargado ✓');
 }
 
 async function exportarVentasCSV() {
