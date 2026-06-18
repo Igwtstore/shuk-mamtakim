@@ -2848,7 +2848,7 @@ async function renderCuentaCorriente() {
       </div>`;
     }).join('');
   } catch(e) {
-    lista.innerHTML = '<div class="sinpedidos">Error al cargar</div>';
+    lista.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕 <a onclick="invalidarCache();renderCuentaCorriente()" style="color:var(--azul);font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
   }
 }
 
@@ -7247,9 +7247,19 @@ function diasDesdePedido(fechaStr) {
 const _apiCache = {};
 // Fetch al backend que, si la sesión venció (el token de Supabase dura 1 hora),
 // renueva el token y reintenta UNA vez. Lo usan lecturas y escrituras.
+// Una llamada. Lee como texto y parsea: si Apps Script devuelve HTML (error transitorio "La
+// secuencia se completó pero no mostró ningún valor"), NO rompe: devuelve {__transitorio:true}.
+// Refresca el token y reintenta UNA vez ante 'no autorizado' (seguro: una llamada con token malo
+// NO se ejecutó). NO reintenta el transitorio acá: eso lo hace apiGet (solo lecturas), porque
+// reintentar una ESCRITURA ambigua podría duplicar plata.
 async function fetchConSesion(url) {
-  const hacer = () => fetch(url).then(r => r.json());
-  const data = await hacer();
+  const hacer = async () => {
+    const r = await fetch(url);
+    const txt = await r.text();
+    try { return JSON.parse(txt); }
+    catch { return { __transitorio: true }; }
+  };
+  let data = await hacer();
   if (data && data.error && String(data.error).indexOf('no autorizado') !== -1) {
     try {
       const g = await _sb.auth.getSession();
@@ -7260,7 +7270,7 @@ async function fetchConSesion(url) {
       }
       if (tok) _authToken = tok;
     } catch (e) {}
-    return hacer();
+    data = await hacer();
   }
   return data;
 }
@@ -7269,8 +7279,16 @@ function apiGet(accion, ttl = 8000) {
   const now = Date.now();
   const c = _apiCache[accion];
   if (c && (now - c.t) < ttl) return c.p;
-  const p = fetchConSesion(APPS_SCRIPT_URL + '?accion=' + accion)
-    .catch(e => { delete _apiCache[accion]; throw e; });
+  // Lectura idempotente → reintenta el error transitorio del web app (HTML) con backoff hasta 3 veces.
+  const conReintento = async () => {
+    for (let intento = 0; intento < 3; intento++) {
+      const data = await fetchConSesion(APPS_SCRIPT_URL + '?accion=' + accion);
+      if (data && !data.__transitorio) return data;   // respuesta válida (incluye {error:...} de negocio)
+      if (intento < 2) await new Promise(res => setTimeout(res, 400 * (intento + 1)));
+    }
+    throw new Error('servidor ocupado, reintentá');
+  };
+  const p = conReintento().catch(e => { delete _apiCache[accion]; throw e; });
   _apiCache[accion] = { p, t: now };
   return p;
 }
@@ -7282,6 +7300,9 @@ async function apiWrite(params, okMsg) {
   invalidarCache();
   try {
     const data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => ({}));
+    // Respuesta transitoria (HTML) en una ESCRITURA: no sabemos si se ejecutó → NO afirmar éxito,
+    // NO reintentar solos (evita duplicar plata). El usuario verifica antes de repetir.
+    if (data && data.__transitorio) { showToast('⚠️ El servidor tardó. Revisá si se guardó antes de reintentar.'); return { error: 'transitorio' }; }
     if (data && data.error) { showToast('⚠️ ' + data.error); return { error: data.error }; }
     if (okMsg) showToast(okMsg);
     return Object.assign({ ok: true }, data);
