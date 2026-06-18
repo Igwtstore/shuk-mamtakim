@@ -1090,7 +1090,11 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   // de esa compra; la deuda que vale es la de la cuenta corriente (pestaña Deudores).
   const cards = Array.from(grupos.values()).reverse().map(g => {
     const clienteLC = normCli(g.cliente);
-    const cambioTag = conVuelto.has(clienteLC) ? '<span class="badge badge-cambio">CAMBIO</span>' : '';
+    // Diferenciar por color: 🔴 debe · 🔵 le debemos cambio · 🟢 al día
+    const debe = conDeuda.has(clienteLC), vuelto = conVuelto.has(clienteLC);
+    const borde = debe ? '#e05c2a' : (vuelto ? '#2c6fad' : '#2e8b57');
+    const cambioTag = vuelto ? '<span class="badge" style="background:#e8f0ff;color:#2c6fad;margin-left:6px">💰 CAMBIO</span>'
+      : (debe ? '<span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:6px">⚠️ DEBE</span>' : '');
     const lineasHtml = g.lineas.map(l => {
       const cod = (l.codigo||'').replace(/'/g,"\\'");
       const nom = (l.producto||'').replace(/'/g,"\\'");
@@ -1102,9 +1106,9 @@ function renderDashboard(ventas, catalogo, deudores = []) {
         <span>${l.cantidad}x ${l.producto}</span>
         <span style="display:flex;align-items:center;gap:4px"><span>${fmt(l.subtotal)}</span>${botones}</span></div>`;
     }).join('');
-    return `<div style="border:1px solid #eee;border-left:4px solid #2e8b57;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-weight:700;color:#5c3d1e">👤 ${g.cliente}${cambioTag}<span style="font-weight:400;color:#aaa;font-size:0.78rem"> · ${g.hora}</span></div>
+    return `<div style="border:1px solid #ece6da;border-left:5px solid ${borde};border-radius:12px;padding:12px 14px;margin-bottom:16px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid #f0ebe3">
+        <div style="font-size:1.02rem;font-weight:800;color:${borde}">👤 ${g.cliente}${cambioTag}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${g.hora}</span></div>
         <div style="text-align:right"><div style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</div>${g.gan>0?`<div style="font-size:0.75rem;color:#2e8b57">+${fmt(g.gan)}</div>`:''}</div>
       </div>
       ${lineasHtml}
@@ -2526,37 +2530,29 @@ async function confirmarVentaWizard() {
   // Se genera una vez y se mantiene hasta que la venta se complete bien (reset al final).
   if (!wVentaId) wVentaId = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
 
-  let idx = 0;
-  for (const p of Object.values(wProductosSeleccionados)) {
+  // TODA la venta en UNA sola llamada (antes era 1 request por producto → lentísimo).
+  const items = Object.values(wProductosSeleccionados).map(p => {
     const precio = p.precioCustom ?? p.precioVenta;
     const productTotal = precio * p.qty;
     let productSaldo = 0;
     if (wPago === 'nopago') productSaldo = productTotal;
     else if (wPago === 'cuenta' && saldo > 0) productSaldo = total > 0 ? Math.round((productTotal / total) * saldo) : 0;
-    await api('registrarVentaHijos', {
-      hijo: usuario,
-      productoNombre: p.nombre,
-      productoCodigo: p.codigo,
-      cantidad: p.qty,
-      precio: precio,
-      total: productTotal,
-      cliente: wCliente,
-      esDebe: esDebe,
-      pagoParcial: wPago === 'cuenta' ? montoPago : 0,
-      saldoPendiente: productSaldo,
-      ventaId: wVentaId + '_' + (idx++)   // único por línea, estable entre reintentos
-    });
-  }
+    return { productoNombre: p.nombre, productoCodigo: p.codigo, cantidad: p.qty, precio: precio, total: productTotal, saldoPendiente: productSaldo };
+  });
+  const loteParams = {
+    hijo: usuario, cliente: wCliente, esDebe: esDebe,
+    pagoParcial: wPago === 'cuenta' ? montoPago : 0,
+    ventaId: wVentaId, items: JSON.stringify(items)
+  };
   if (wPago === 'masque' && wCliente && saldo > 0) {
-    const prodLabel = Object.values(wProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
-    await api('registrarVueltoCC', { hijo: usuario, cliente: wCliente, monto: saldo, producto: prodLabel, ventaId: wVentaId + '_v' });
+    loteParams.vueltoMonto = saldo;
+    loteParams.vueltoProducto = Object.values(wProductosSeleccionados).map(p => p.nombre + (p.qty > 1 ? ' x' + p.qty : '')).join(', ');
   }
+  await api('registrarVentaLote', loteParams);
   wVentaId = '';   // venta completada OK → la próxima usa un id nuevo
 
   cerrarWizard();
-  // Pequeña espera para que el Sheet procese
   document.getElementById('fab-venta').style.setProperty('display','flex','important');
-  await new Promise(r => setTimeout(r, 1200));
   await cargarDatos();
   const tabHoy = document.querySelector('.tab');
   if (tabHoy) showTab('dashboard', tabHoy);
@@ -3364,10 +3360,10 @@ function renderHistoria(ventas) {
                 </div>
               </div>`;
             }).join('');
-            return `<div style="border-left:3px solid #2e8b57;margin:6px 0 8px;padding-left:6px">
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;font-weight:700;color:#5c3d1e;padding:2px 0">
-                <span>👤 ${g.cliente}<span style="font-weight:400;color:#aaa"> · ${g.hora}</span></span>
-                <span>${fmt(g.total)}</span>
+            return `<div style="border:1px solid #f0ebe3;border-left:4px solid #2e8b57;border-radius:10px;margin:12px 0;padding:8px 10px;background:#fff">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0 7px;margin-bottom:4px;border-bottom:1px solid #f0ebe3">
+                <span style="font-size:0.98rem;font-weight:800;color:#5c3d1e">👤 ${g.cliente}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${g.hora}</span></span>
+                <span style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</span>
               </div>
               ${lineas}
             </div>`;

@@ -25,7 +25,7 @@ const ENFORCE_HIJOS = true;   // Etapa B: estricto — rechaza acciones de hijos
 const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker del bot
 // 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
 const PROTECTED_HIJOS = [
-  'registrarVentaHijos','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
+  'registrarVentaHijos','registrarVentaLote','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
   'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
@@ -1227,6 +1227,7 @@ function doGet(e) {
     // ─── SISTEMA HIJOS ────────────────────────────────────────────────────────
     if (accion === 'getCatalogoHijos')     { return json(getCatalogoHijos(ss)); }
     if (accion === 'registrarVentaHijos')  { return json(registrarVentaHijos(ss, e.parameter)); }
+    if (accion === 'registrarVentaLote')   { return json(registrarVentaLote(ss, e.parameter)); }
     if (accion === 'registrarConsumoHijos'){ return json(registrarConsumoHijos(ss, e.parameter)); }
     if (accion === 'registrarPagoCliente') { return json(registrarPagoCliente(ss, e.parameter)); }
     if (accion === 'registrarVueltoCC')    { return json(registrarVueltoCC(ss, e.parameter)); }
@@ -1454,6 +1455,43 @@ function registrarVentaHijos(ss, p) {
     registrarMovimientoCC(ss, p.hijo, dec(p.cliente), parseFloat(p.saldoPendiente), 'deuda', prodLabel);
   }
   return { ok: true };
+}
+
+// Registra TODA la venta (varias líneas) en UNA sola llamada → guardado rápido (antes era 1 request
+// por producto, lentísimo). p.items = JSON de líneas; params compartidos: hijo, cliente, esDebe,
+// pagoParcial, ventaId, fecha; opcional vuelto (vueltoMonto/vueltoProducto para "pagó de más").
+function registrarVentaLote(ss, p) {
+  if (p.ventaId) {
+    const c = CacheService.getScriptCache(); const k = 'vh_' + dec(p.ventaId);
+    if (c.get(k)) return { ok: true, dup: true };
+    c.put(k, '1', 900);
+  }
+  let items;
+  try { items = JSON.parse(dec(p.items || '[]')); } catch (e) { return { error: 'items inválido' }; }
+  if (!items.length) return { error: 'sin items' };
+  const h = getOrCreate(ss, 'VentasHijos', ['Fecha','Hijo','Producto','Codigo','Cantidad','Precio','Total','Cliente','EsDebe','PagoParcial','SaldoPendiente']);
+  const fecha = p.fecha ? new Date(p.fecha + 'T12:00:00') : new Date();
+  const cliente = dec(p.cliente || ''); const esDebe = p.esDebe || 'NO';
+  const pagoParcial = parseFloat(p.pagoParcial) || 0;
+  // Escribe TODAS las filas de una (setValues), sin un roundtrip por producto.
+  const rows = items.map(it => [fecha, p.hijo, dec(it.productoNombre || ''), dec(it.productoCodigo || ''),
+    parseInt(it.cantidad) || 1, parseFloat(it.precio) || 0, parseFloat(it.total) || 0,
+    cliente, esDebe, pagoParcial, parseFloat(it.saldoPendiente) || 0]);
+  const startRow = h.getLastRow() + 1;
+  h.getRange(startRow, 1, rows.length, 11).setValues(rows);
+  // Cuenta corriente: una deuda por línea con saldo (preserva el nombre del producto).
+  items.forEach(it => {
+    const sp = parseFloat(it.saldoPendiente) || 0;
+    if (sp > 0 && cliente) {
+      const q = parseInt(it.cantidad) || 1;
+      registrarMovimientoCC(ss, p.hijo, cliente, sp, 'deuda', dec(it.productoNombre) + (q > 1 ? ' x' + q : ''));
+    }
+  });
+  if (p.vueltoMonto && cliente) {
+    registrarMovimientoCC(ss, p.hijo, cliente, -(parseFloat(p.vueltoMonto) || 0), 'vuelto', dec(p.vueltoProducto || ''));
+  }
+  SpreadsheetApp.flush();
+  return { ok: true, n: rows.length };
 }
 
 // Registra algo que el chico se comió o regaló (sale del stock, no es una venta).
