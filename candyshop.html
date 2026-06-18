@@ -3285,6 +3285,9 @@ function renderHistoria(ventas) {
 
   const costoMap = {};
   catalogoCache.forEach(p => { costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0; });
+  // Estado de deuda ACTUAL por cliente (de la cuenta corriente) para colorear: rojo debe / azul cambio.
+  const conDeudaH = new Set((deudoresCache || []).filter(d => d.saldo > 0).map(d => normCli(d.cliente)));
+  const conVueltoH = new Set((deudoresCache || []).filter(d => d.saldo < 0).map(d => normCli(d.cliente)));
 
   const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
@@ -3360,9 +3363,14 @@ function renderHistoria(ventas) {
                 </div>
               </div>`;
             }).join('');
-            return `<div style="border:1px solid #f0ebe3;border-left:4px solid #2e8b57;border-radius:10px;margin:12px 0;padding:8px 10px;background:#fff">
+            const _cliN = normCli(g.cliente);
+            const _debe = conDeudaH.has(_cliN), _vue = conVueltoH.has(_cliN);
+            const _borde = _debe ? '#e05c2a' : (_vue ? '#2c6fad' : '#2e8b57');
+            const _badge = _vue ? '<span class="badge" style="background:#e8f0ff;color:#2c6fad;margin-left:6px">💰 CAMBIO</span>'
+              : (_debe ? '<span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:6px">⚠️ DEBE</span>' : '');
+            return `<div style="border:1px solid #f0ebe3;border-left:4px solid ${_borde};border-radius:10px;margin:12px 0;padding:8px 10px;background:#fff">
               <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0 7px;margin-bottom:4px;border-bottom:1px solid #f0ebe3">
-                <span style="font-size:0.98rem;font-weight:800;color:#5c3d1e">👤 ${g.cliente}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${g.hora}</span></span>
+                <span style="font-size:0.98rem;font-weight:800;color:${_borde}">👤 ${g.cliente}${_badge}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${g.hora}</span></span>
                 <span style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</span>
               </div>
               ${lineas}
