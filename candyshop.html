@@ -2567,8 +2567,8 @@ function renderDeudores(deudores) {
       <div class="deudor-detail" id="dd-d${i}">
         <div class="deudor-cobrar">
           <input class="cobrar-input" type="number" id="cobrar-monto-d${i}" placeholder="¿Cuánto pagó?">
-          <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', 'd${i}')">Cobrar</button>
-          <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', 'd${i}')">Todo</button>
+          <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', 'd${i}', this)">Cobrar</button>
+          <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', 'd${i}', this)">Todo</button>
         </div>
         <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
       </div>
@@ -2596,8 +2596,8 @@ function renderDeudores(deudores) {
         <div style="font-size:0.85rem;color:#666;padding:6px 0">Le debés ${fmt(Math.abs(d.saldo))} de cambio</div>
         <div class="deudor-cobrar">
           <input class="cobrar-input" type="number" id="vuelto-monto-v${i}" placeholder="¿Cuánto le diste?">
-          <button class="btn-cobrar" style="background:linear-gradient(135deg,#2c6fad,#1a4f8a)" onclick="darVueltoParcial('${d.cliente.replace(/'/g,"\\'")}', 'v${i}')">Dar</button>
-          <button class="btn-cobrar-todo" style="color:#2c6fad;border-color:#b2cce8" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}')">Todo</button>
+          <button class="btn-cobrar" style="background:linear-gradient(135deg,#2c6fad,#1a4f8a)" onclick="darVueltoParcial('${d.cliente.replace(/'/g,"\\'")}', 'v${i}', this)">Dar</button>
+          <button class="btn-cobrar-todo" style="color:#2c6fad;border-color:#b2cce8" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}', this)">Todo</button>
         </div>
         <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
       </div>
@@ -2607,18 +2607,22 @@ function renderDeudores(deudores) {
   el.innerHTML = html;
 }
 
-async function pagarVuelto(cliente) {
+async function pagarVuelto(cliente, btn) {
   const d = deudoresCache.find(x => x.cliente === cliente);
   const monto = d ? Math.abs(d.saldo) : 0;
   if (!monto) return;
-  await api('registrarPagoVuelto', { hijo: usuario, cliente, monto });
+  if (btn) btn.disabled = true;
+  const pagoId = 'pvall_' + normCli(cliente) + '_' + Date.now();
+  await api('registrarPagoVuelto', { hijo: usuario, cliente, monto, pagoId });
   cargarDatos();
 }
 
-async function darVueltoParcial(cliente, i) {
+async function darVueltoParcial(cliente, i, btn) {
   const monto = parseFloat(document.getElementById('vuelto-monto-' + i).value) || 0;
   if (!monto) return;
-  await api('registrarPagoVuelto', { hijo: usuario, cliente, monto });
+  if (btn) btn.disabled = true;
+  const pagoId = 'pv_' + normCli(cliente) + '_' + monto + '_' + Date.now();
+  await api('registrarPagoVuelto', { hijo: usuario, cliente, monto, pagoId });
   cargarDatos();
 }
 
@@ -2630,15 +2634,19 @@ function toggleDeudor(i) {
   }
 }
 
-async function cobrarDeuda(cliente, i) {
+async function cobrarDeuda(cliente, i, btn) {
   const monto = parseFloat(document.getElementById('cobrar-monto-' + i).value) || 0;
   if (!monto) return;
-  await api('registrarPagoCliente', { hijo: usuario, cliente, monto });
+  if (btn) btn.disabled = true;   // anti doble-clic
+  const pagoId = 'pg_' + normCli(cliente) + '_' + monto + '_' + Date.now();
+  await api('registrarPagoCliente', { hijo: usuario, cliente, monto, pagoId });
   cargarDatos();
 }
 
-async function cobrarTodo(cliente, i) {
-  await api('registrarPagoCliente', { hijo: usuario, cliente, monto: 'todo' });
+async function cobrarTodo(cliente, i, btn) {
+  if (btn) btn.disabled = true;   // anti doble-clic (este era el que duplicaba el pago)
+  const pagoId = 'pgall_' + normCli(cliente) + '_' + Date.now();
+  await api('registrarPagoCliente', { hijo: usuario, cliente, monto: 'todo', pagoId });
   cargarDatos();
 }
 

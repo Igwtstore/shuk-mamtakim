@@ -200,6 +200,29 @@ function doGet(e) {
       if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
       return json(borrarVentas_(ss, dec(e.parameter.ids || '')));
     }
+    if (accion === 'quitarDuplicadosPagoCC') {
+      // Limpia PAGOS duplicados en la cuenta corriente de Candy (mismo hijo+cliente+tipo+monto en
+      // el MISMO minuto). Solo tipos de PAGO (no deudas: dos productos al mismo precio son legítimos).
+      // Si dry=1, solo informa. Requiere el secreto.
+      if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
+      const h = ss.getSheetByName('CCHijos'); if (!h || h.getLastRow() < 2) return json({ ok: true, dups: [], quitadas: 0 });
+      const TIPOS = ['pago', 'pago_vuelto', 'vuelto'];
+      const datos = h.getRange(2, 1, h.getLastRow() - 1, 6).getValues();
+      const seen = {}; const dups = [];
+      for (let i = 0; i < datos.length; i++) {
+        const r = datos[i]; const tipo = (r[4] || '').toString();
+        if (TIPOS.indexOf(tipo) === -1) continue;
+        const min = r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'yyyyMMddHHmm') : (r[0] || '').toString();
+        const key = (r[1] || '') + '|' + normCli_((r[2] || '').toString()) + '|' + tipo + '|' + r[3] + '|' + min;
+        if (seen[key]) dups.push({ row: i + 2, hijo: r[1], cliente: (r[2] || '').toString(), tipo, monto: parseFloat(r[3]) || 0, fecha: min });
+        else seen[key] = true;
+      }
+      let quitadas = 0;
+      if (e.parameter.dry !== '1') {
+        dups.map(d => d.row).sort((a, b) => b - a).forEach(rn => { h.deleteRow(rn); quitadas++; });
+      }
+      return json({ ok: true, dups, quitadas });
+    }
     if (accion === 'tts') {
       // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
       if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET)) return json({ error: 'no autorizado' });
@@ -1456,6 +1479,12 @@ function getConsumoHoy(ss, p) {
 }
 
 function registrarPagoCliente(ss, p) {
+  // Anti-duplicado: doble clic / reintento de red NO debe registrar el pago dos veces.
+  if (p.pagoId) {
+    const c = CacheService.getScriptCache(); const k = 'pago_' + dec(p.pagoId);
+    if (c.get(k)) return { ok: true, dup: true };
+    c.put(k, '1', 900);
+  }
   const hijo = p.hijo; const cliente = dec(p.cliente);
   const saldoActual = getSaldoCliente(ss, hijo, cliente);
   const montoPago = p.monto === 'todo' ? saldoActual : parseFloat(p.monto)||0;
@@ -1479,6 +1508,11 @@ function registrarVueltoCC(ss, p) {
 function registrarPagoVuelto(ss, p) {
   // Le devolvimos el cambio al cliente (cancela el vuelto pendiente)
   if (!p.monto) return { ok: false };
+  if (p.pagoId) {
+    const c = CacheService.getScriptCache(); const k = 'pago_' + dec(p.pagoId);
+    if (c.get(k)) return { ok: true, dup: true };
+    c.put(k, '1', 900);
+  }
   const saldo = getSaldoCliente(ss, p.hijo, dec(p.cliente));
   const monto = p.monto === 'todo' ? Math.abs(saldo) : parseFloat(p.monto)||0;
   registrarMovimientoCC(ss, p.hijo, dec(p.cliente), monto, 'pago_vuelto');
@@ -1518,11 +1552,15 @@ function consultarDeudaCliente(ss, p) {
   const saldo = getSaldoCliente(ss, p.hijo, dec(p.cliente));
   const h = ss.getSheetByName('CCHijos'); const detalle = [];
   if (h && h.getLastRow() > 1) {
-    h.getRange(2,1,h.getLastRow()-1,5).getValues()
-      .filter(r => r[1] === p.hijo && normCli_(r[2]) === normCli_(dec(p.cliente)) && parseFloat(r[3]) > 0)
-      .slice(-5).forEach(r => detalle.push({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM') : r[0].toString(),
-        producto: r[4]||'deuda', monto: parseFloat(r[3])
+    // TODOS los movimientos (deudas +, pagos/vueltos −), no solo las deudas → así el saldo cuadra
+    // con lo que se ve. Últimos 30, del más viejo al más nuevo.
+    h.getRange(2,1,h.getLastRow()-1,6).getValues()
+      .filter(r => r[1] === p.hijo && normCli_(r[2]) === normCli_(dec(p.cliente)))
+      .slice(-30).forEach(r => detalle.push({
+        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM') : (r[0]||'').toString(),
+        tipo: (r[4]||'').toString(),                    // deuda | pago | vuelto | anulacion | correccion
+        producto: (r[5]||r[4]||'').toString(),
+        monto: parseFloat(r[3])||0                      // con signo
       }));
   }
   return { saldo, detalle };
