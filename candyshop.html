@@ -959,14 +959,20 @@ function renderPanel(d) {
 // 1) Pinta al instante lo último guardado en el teléfono, 2) trae todo el panel
 // en UNA llamada (panelHijos) y refresca pantalla + cache. silent=true salta el
 // pintado inicial (la pantalla ya tiene contenido).
+// Una respuesta es un PANEL REAL solo si trae catálogo (nunca está vacío de verdad: hay productos).
+// Un catálogo vacío = respuesta rota → no la mostramos ni la cacheamos (evita el falso "Todo en cero").
+function _panelValido(d) { return d && !d.error && Array.isArray(d.catalogo) && d.catalogo.length > 0; }
+
 async function cargarDatos(silent = false) {
   const gen = _reqGen, quien = usuario;
   const cacheKey = 'cs_panel_' + usuario;
+  let pintadoValido = false;
   if (!silent) {
     let pintado = false;
     try {
       const c = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-      if (c) { renderPanel(c); pintado = true; }
+      if (_panelValido(c)) { renderPanel(c); pintado = true; pintadoValido = true; }
+      else if (c) { localStorage.removeItem(cacheKey); }   // caché envenenada (sin catálogo) → tirarla
     } catch {}
     if (!pintado) {
       ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
@@ -975,27 +981,28 @@ async function cargarDatos(silent = false) {
     }
   }
   let d = await api('panelHijos', { hijo: usuario });
-  // Plan B: si el batch falla (deploy a medias, error puntual), llamadas individuales
-  if (!d || d.error) {
+  // Plan B: si el batch falla o vino roto (sin catálogo), llamadas individuales. Solo armo el panel
+  // si TODAS cargaron (catálogo + deudores + ventas son arrays): null = falló → no cacheo un falso vacío.
+  if (!_panelValido(d)) {
     const [ventas, deudores, catalogo, stockDia] = await Promise.all([
       api('ventasHoy', { hijo: usuario }),
       api('consultarDeudores', { hijo: usuario }),
       api('getCatalogoHijos'),
       api('getStockDia', { hijo: usuario })
     ]);
-    if (catalogo && !catalogo.error) d = { ventas, deudores, catalogo, stockDia, visitas: null };
+    if (Array.isArray(catalogo) && catalogo.length && Array.isArray(deudores) && Array.isArray(ventas))
+      d = { ventas, deudores, catalogo, stockDia: stockDia || {}, visitas: null };
+    else d = null;
   }
   if (gen !== _reqGen || quien !== usuario) return;   // cambió de perfil mientras cargaba → no pisar la pantalla del nuevo
-  if (d && !d.error) {
+  if (_panelValido(d)) {
     renderPanel(d);
     try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
     if (_diaVistoCandy) aplicarDiaCandy();   // si estás mirando un día pasado, re-renderizalo (con caches frescas)
-  } else if (!silent) {
+  } else if (!silent && !pintadoValido) {
+    // Falló de verdad y NO hay datos buenos en pantalla → ofrecer reintentar (nunca un falso vacío).
     const msg = '<div class="empty">No se pudo cargar 😕 <a onclick="cargarDatos()" style="color:#5c3d1e;font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
-    ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el.querySelector('.spinner')) el.innerHTML = msg;
-    });
+    ['ventas-list','deudores-list','catalogo-list'].forEach(id => { document.getElementById(id).innerHTML = msg; });
   }
 }
 
