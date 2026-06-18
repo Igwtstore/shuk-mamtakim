@@ -368,6 +368,7 @@ function doGet(e) {
         'Saldo cargado' + (nota ? ': ' + nota : ''), 'pendiente', totalARS, totalUSD, nVenta,
         arsJONY, arsMyri, usdMyri, comiARS, comiUSD, '', '', 0, '']);
       h.getRange(row, 1, 1, 2).setNumberFormat('@');
+      if (h.getMaxColumns() < 27) h.insertColumnsAfter(h.getMaxColumns(), 27 - h.getMaxColumns());   // la hoja puede tener solo 26 columnas
       if (h.getRange(1, 27).getValue() !== 'SinComision') h.getRange(1, 27).setValue('SinComision');
       if (sinComi) h.getRange(row, 27).setValue('SI');
       SpreadsheetApp.flush();
