@@ -379,7 +379,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="consumo-list" style="margin-top:8px"></div>
     </div>
     <div class="card">
-      <div class="card-title">Ventas de hoy</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <div class="card-title" id="ventas-list-titulo" style="margin:0">Ventas de hoy</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="date" id="dia-picker" onchange="onDiaPickerChange()" style="font-size:0.82rem;padding:4px 6px;border:1.5px solid #e6ddcf;border-radius:8px;font-family:inherit;color:#5c3d1e">
+          <button id="btn-volver-hoy" onclick="volverAHoy()" style="display:none;background:#5c3d1e;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer">Hoy</button>
+        </div>
+      </div>
       <div id="ventas-list"><div class="spinner">Cargando...</div></div>
     </div>
   </div>
@@ -819,6 +825,35 @@ const APPS_URL = 'https://script.google.com/macros/s/AKfycbxO71AD5tBy1KpWCP0K9-u
 let _kidsToken = '';   // token de sesión Supabase del panel, se manda al backend
 let usuario = null;
 let catalogoCache = [];
+let _diaVistoCandy = null;   // null = hoy; 'dd/MM/yyyy' = viendo un día pasado en el Dashboard
+
+function _hoyDDMM() { const d = new Date(); return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); }
+function _isoToDDMM(iso) { const [y,m,d] = iso.split('-'); return d + '/' + m + '/' + y; }
+
+async function onDiaPickerChange() {
+  const iso = document.getElementById('dia-picker').value;
+  if (!iso) { volverAHoy(); return; }
+  const fecha = _isoToDDMM(iso);
+  if (fecha === _hoyDDMM()) { volverAHoy(); return; }
+  _diaVistoCandy = fecha;
+  document.getElementById('btn-volver-hoy').style.display = '';
+  await aplicarDiaCandy();
+}
+// Renderiza un día PASADO en el formato del Dashboard (mismos totales + editar/borrar por rowIndex).
+async function aplicarDiaCandy() {
+  if (!_diaVistoCandy) return;
+  document.getElementById('ventas-list-titulo').textContent = '📅 Ventas del ' + _diaVistoCandy;
+  document.getElementById('ventas-list').innerHTML = '<div class="spinner">Cargando...</div>';
+  const ventas = await api('ventasHoy', { hijo: usuario, dia: _diaVistoCandy });
+  renderDashboard(ventas || [], catalogoCache, deudoresCache);
+}
+function volverAHoy() {
+  _diaVistoCandy = null;
+  const b = document.getElementById('btn-volver-hoy'); if (b) b.style.display = 'none';
+  const t = document.getElementById('ventas-list-titulo'); if (t) t.textContent = 'Ventas de hoy';
+  const dp = document.getElementById('dia-picker'); if (dp) dp.value = '';
+  cargarDatos();
+}
 let editandoCodigo = null;
 
 const fmt = n => '$' + Math.round(parseFloat(n)||0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
@@ -931,6 +966,7 @@ async function cargarDatos(silent = false) {
   if (d && !d.error) {
     renderPanel(d);
     try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
+    if (_diaVistoCandy) aplicarDiaCandy();   // si estás mirando un día pasado, re-renderizalo (con caches frescas)
   } else if (!silent) {
     const msg = '<div class="empty">No se pudo cargar 😕 <a onclick="cargarDatos()" style="color:#5c3d1e;font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
     ['ventas-list','deudores-list','catalogo-list'].forEach(id => {
@@ -1033,7 +1069,7 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   document.getElementById('s-diezmo').textContent = fmt(ganancia * 0.1);
 
   const el = document.getElementById('ventas-list');
-  if (!ventas.length) { el.innerHTML = '<div class="empty">Sin ventas hoy todavía 😴</div>'; return; }
+  if (!ventas.length) { el.innerHTML = '<div class="empty">Sin ventas ' + (_diaVistoCandy ? 'ese día' : 'hoy todavía') + ' 😴</div>'; return; }
 
   // DEUDA REAL: sale de la cuenta corriente (deudores), que SÍ resta los pagos.
   // No usamos la deuda congelada de cada venta (esa no se actualiza cuando el cliente paga).
@@ -1042,9 +1078,9 @@ function renderDashboard(ventas, catalogo, deudores = []) {
   // Resumen claro: cuánto se vendió hoy, cuánto entró hoy, y cuánto te deben (total, real).
   const resumen = `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
     <div style="flex:1;min-width:90px;background:#f3f7ff;border-radius:10px;padding:8px 10px;text-align:center">
-      <div style="font-size:0.7rem;color:#888">Vendido hoy</div><div style="font-weight:800;color:#2c6fad">${fmt(vendido)}</div></div>
+      <div style="font-size:0.7rem;color:#888">Vendido${_diaVistoCandy ? '' : ' hoy'}</div><div style="font-weight:800;color:#2c6fad">${fmt(vendido)}</div></div>
     <div style="flex:1;min-width:90px;background:#f0fbf3;border-radius:10px;padding:8px 10px;text-align:center">
-      <div style="font-size:0.7rem;color:#888">Cobrado hoy</div><div style="font-weight:800;color:#2e8b57">${fmt(cobrado)}</div></div>
+      <div style="font-size:0.7rem;color:#888">Cobrado${_diaVistoCandy ? '' : ' hoy'}</div><div style="font-weight:800;color:#2e8b57">${fmt(cobrado)}</div></div>
     <div style="flex:1;min-width:90px;background:#fff4ef;border-radius:10px;padding:8px 10px;text-align:center">
       <div style="font-size:0.7rem;color:#888">Te deben (total)</div><div style="font-weight:800;color:#e05c2a">${fmt(deudaReal)}</div></div>
   </div>

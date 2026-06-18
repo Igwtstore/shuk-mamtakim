@@ -1568,7 +1568,8 @@ function consultarDeudaCliente(ss, p) {
 
 function ventasHoyHijos(ss, p) {
   const h = ss.getSheetByName('VentasHijos'); if (!h || h.getLastRow() < 2) return [];
-  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  // Por defecto HOY; con p.dia (dd/MM/yyyy) devuelve las ventas de ESE día (mismo formato, con rowIndex).
+  const hoyStr = (p && p.dia && /^\d{2}\/\d{2}\/\d{4}$/.test(p.dia)) ? p.dia : Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
   return h.getRange(2,1,h.getLastRow()-1,11).getValues()
     .map((r, idx) => ({ r: r, rowIndex: idx + 2 }))   // guardar la fila REAL antes de filtrar (la usan editar/borrar)
     .filter(o => {
