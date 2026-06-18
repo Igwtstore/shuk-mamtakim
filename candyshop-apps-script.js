@@ -223,6 +223,13 @@ function doGet(e) {
       }
       return json({ ok: true, dups, quitadas });
     }
+    if (accion === 'reasignarVentaHijo') {
+      // Reasigna ventas de un perfil a otro (ej: una venta que pasó papá quedó cargada en Meir → moverla a Pa).
+      // Mueve las filas de VentasHijos (col Hijo) Y las filas de CC de esos clientes bajo el hijo viejo
+      // (la deuda/los pagos siguen a la venta). Requiere el secreto. Uso administrativo.
+      if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
+      return json(reasignarVentaHijo(ss, e.parameter));
+    }
     if (accion === 'tts') {
       // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
       if (!(sesionValida_(e.parameter.token) || e.parameter.secret === BOT_SECRET)) return json({ error: 'no autorizado' });
@@ -1794,6 +1801,47 @@ function editarVentaHijos(ss, p) {
     registrarMovimientoCC(ss, row[1], newCliente, newSaldo, 'correccion', newNombre);
   }
   return { ok: true };
+}
+
+// Mueve ventas de un perfil a otro. p.rowIndexes = JSON array de filas; p.hijo = perfil actual (seguridad);
+// p.nuevoHijo = destino. Mueve también las filas de CC de los clientes afectados (deuda/pagos siguen a la venta).
+function reasignarVentaHijo(ss, p) {
+  const nuevo = (p.nuevoHijo || '').toString().trim();
+  const viejo = (p.hijo || '').toString().trim();
+  if (!nuevo) return { error: 'falta nuevoHijo' };
+  const h = ss.getSheetByName('VentasHijos');
+  if (!h || h.getLastRow() < 2) return { error: 'sin hoja' };
+  let filas;
+  try { filas = JSON.parse(dec(p.rowIndexes || '[]')); } catch (err) { return { error: 'rowIndexes inválido' }; }
+  if (!Array.isArray(filas) || !filas.length) return { error: 'sin filas' };
+  const clientes = {};   // normalizado → grafía original (para mover su CC)
+  let movidas = 0;
+  filas.forEach(ri => {
+    ri = parseInt(ri);
+    if (!ri || ri < 2 || ri > h.getLastRow()) return;
+    const fila = h.getRange(ri, 1, 1, 11).getValues()[0];
+    if (viejo && fila[1] !== viejo) return;   // seguridad: solo mueve las del perfil esperado
+    const cli = (fila[7] || '').toString().trim();
+    if (cli) clientes[normCli_(cli)] = cli;
+    h.getRange(ri, 2).setValue(nuevo);
+    movidas++;
+  });
+  // Mover las filas de CC de esos clientes que estén bajo el hijo viejo.
+  let ccMovidas = 0;
+  if (viejo && Object.keys(clientes).length) {
+    const cc = ss.getSheetByName('CCHijos');
+    if (cc && cc.getLastRow() >= 2) {
+      const datos = cc.getRange(2, 1, cc.getLastRow() - 1, 3).getValues();   // Fecha, Hijo, Cliente
+      for (let i = 0; i < datos.length; i++) {
+        if (datos[i][1] === viejo && clientes[normCli_((datos[i][2] || '').toString())]) {
+          cc.getRange(i + 2, 2).setValue(nuevo);
+          ccMovidas++;
+        }
+      }
+    }
+  }
+  logBorrado_(ss, 'reasignar venta CS', `${movidas} venta(s) de ${viejo || '?'} → ${nuevo} (clientes: ${Object.values(clientes).join(', ')})`, nuevo);
+  return { ok: true, movidas, ccMovidas };
 }
 
 function getSaldoCliente(ss, hijo, cliente) {

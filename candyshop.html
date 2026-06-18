@@ -28,16 +28,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .user-btn span { font-size: 2.2rem; }
 .btn-meir { background: linear-gradient(135deg, #5ba3f5, #2c6fad); color: white; }
 .btn-iosi { background: linear-gradient(135deg, #f59b5b, #c45e20); color: white; }
+.btn-pa { background: linear-gradient(135deg, #5fc08a, #2e8b57); color: white; }
 
 /* ─── LAYOUT ─────────────────────────────────────────────────── */
 #panel { display: none; flex-direction: column; min-height: 100vh; }
 .topbar { padding: 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
 .topbar-meir { background: linear-gradient(135deg, #daeeff, #f5f0e8); }
 .topbar-iosi { background: linear-gradient(135deg, #ffeedd, #f5f0e8); }
+.topbar-pa { background: linear-gradient(135deg, #ddf5e8, #f5f0e8); }
 .topbar-left { display: flex; align-items: center; gap: 10px; }
 .avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 800; color: white; }
 .avatar-meir { background: linear-gradient(135deg, #5ba3f5, #2c6fad); }
 .avatar-iosi { background: linear-gradient(135deg, #f59b5b, #c45e20); }
+.avatar-pa { background: linear-gradient(135deg, #5fc08a, #2e8b57); }
 .topbar h2 { font-size: 1.1rem; font-weight: 800; color: #2d1a0a; }
 .topbar-date { font-size: 0.75rem; color: #999; }
 .topbar-actions { display: flex; gap: 8px; }
@@ -307,6 +310,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <button class="user-btn btn-iosi" onclick="login('Iosi')">
       <span>🧑</span>Iosi
     </button>
+    <button class="user-btn btn-pa" onclick="login('Pa')">
+      <span>👨</span>PA
+    </button>
   </div>
 </div>
 
@@ -342,7 +348,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <span class="tab-icon">🚚</span>Compras
     </button>
     <button class="tab" onclick="showTab('historia', this)">
-      <span class="tab-icon">🗓️</span>Historia
+      <span class="tab-icon">🗓️</span>Historial
     </button>
     <button class="tab" onclick="showTab('total', this)">
       <span class="tab-icon">👥</span>Total
@@ -828,6 +834,8 @@ let _kidsToken = '';   // token de sesión Supabase del panel, se manda al backe
 let usuario = null;
 let catalogoCache = [];
 let _diaVistoCandy = null;   // null = hoy; 'dd/MM/yyyy' = viendo un día pasado en el Dashboard
+let _reqGen = 0;             // sube en cada login/logout; descarta respuestas viejas de otro perfil
+const HIJOS = ['Meir', 'Iosi', 'Pa'];   // perfiles del Candy (Pa = papá, ayuda en ventas)
 
 function _hoyDDMM() { const d = new Date(); return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); }
 function _isoToDDMM(iso) { const [y,m,d] = iso.split('-'); return d + '/' + m + '/' + y; }
@@ -864,6 +872,7 @@ const fmt = n => '$' + Math.round(parseFloat(n)||0).toLocaleString('es-AR', { ma
 // ─── LOGIN ────────────────────────────────────────────────────────
 function login(nombre) {
   usuario = nombre;
+  _reqGen++;   // invalida cualquier respuesta en vuelo del perfil anterior
   sessionStorage.setItem('cs_usuario', nombre);
   localStorage.setItem('cs_usuario', nombre);
   document.getElementById('pantalla-clave').style.display = 'none';
@@ -898,23 +907,31 @@ function showTab(id, btn) {
 }
 
 // ─── API ──────────────────────────────────────────────────────────
+// Devuelve los datos, o null SOLO si falló de verdad tras varios reintentos.
+// Apps Script a veces responde un error transitorio (HTML "La secuencia se
+// completó pero no mostró ningún valor") bajo llamadas concurrentes → reintentamos.
 async function api(accion, extra = {}) {
-  try {
-    const call = async () => {
-      const p = new URLSearchParams({ accion, ...extra });
-      if (_kidsToken) p.set('token', _kidsToken);
-      const res = await fetch(APPS_URL + '?' + p.toString());
-      return await res.json();
-    };
-    let data = await call();
-    // Token vencido o todavía no cargado → refrescar sesión y reintentar una vez
+  const call = async () => {
+    const p = new URLSearchParams({ accion, ...extra });
+    if (_kidsToken) p.set('token', _kidsToken);
+    const res = await fetch(APPS_URL + '?' + p.toString());
+    const txt = await res.text();
+    try { return JSON.parse(txt); }
+    catch { return { __htmlError: true }; }   // no es JSON → error transitorio del web app
+  };
+  for (let intento = 0; intento < 3; intento++) {
+    let data;
+    try { data = await call(); } catch { data = { __htmlError: true }; }
+    // Token vencido o todavía no cargado → refrescar sesión y reintentar
     if (data && data.error === 'no autorizado') {
       const { data: s } = await sb.auth.getSession();
       const nuevoToken = s?.session?.access_token || '';
-      if (nuevoToken && nuevoToken !== _kidsToken) { _kidsToken = nuevoToken; data = await call(); }
+      if (nuevoToken && nuevoToken !== _kidsToken) { _kidsToken = nuevoToken; continue; }
     }
-    return data;
-  } catch { return null; }
+    if (data && !data.__htmlError) return data;   // respuesta válida (incluye {error:...} de negocio)
+    if (intento < 2) await new Promise(r => setTimeout(r, 400 * (intento + 1)));   // backoff
+  }
+  return null;   // se agotaron los reintentos → error real
 }
 
 async function recargarTodo(btn) {
@@ -943,6 +960,7 @@ function renderPanel(d) {
 // en UNA llamada (panelHijos) y refresca pantalla + cache. silent=true salta el
 // pintado inicial (la pantalla ya tiene contenido).
 async function cargarDatos(silent = false) {
+  const gen = _reqGen, quien = usuario;
   const cacheKey = 'cs_panel_' + usuario;
   if (!silent) {
     let pintado = false;
@@ -967,6 +985,7 @@ async function cargarDatos(silent = false) {
     ]);
     if (catalogo && !catalogo.error) d = { ventas, deudores, catalogo, stockDia, visitas: null };
   }
+  if (gen !== _reqGen || quien !== usuario) return;   // cambió de perfil mientras cargaba → no pisar la pantalla del nuevo
   if (d && !d.error) {
     renderPanel(d);
     try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
@@ -3342,20 +3361,44 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
 
 // ─── HISTORIA ────────────────────────────────────────────────────
 async function cargarHistoria() {
+  const gen = _reqGen, quien = usuario;
   document.getElementById('historia-list').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
-  const ventas = await api('ventasPeriodo', { hijo: usuario });
-  renderHistoria(ventas || []);
-}
-
-function renderHistoria(ventas) {
-  const el = document.getElementById('historia-list');
-  if (!ventas.length) {
-    el.innerHTML = '<div class="card"><div class="empty">Sin historial todavía</div></div>';
+  // Traigo las ventas de TODOS los perfiles: las del que mira (para el detalle) y el global (acumulado del pie).
+  const res = await Promise.all(HIJOS.map(h => api('ventasPeriodo', { hijo: h })));
+  if (gen !== _reqGen || quien !== usuario) return;   // cambió de perfil mientras cargaba → descartar
+  const idx = HIJOS.indexOf(quien);
+  const mias = idx >= 0 ? res[idx] : await api('ventasPeriodo', { hijo: quien });
+  if (mias === null) {   // error real (no vacío): NO pintar "sin historial"
+    document.getElementById('historia-list').innerHTML = '<div class="card"><div class="empty">No se pudo cargar 😕 <a onclick="cargarHistoria()" style="color:#5c3d1e;font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div></div>';
     return;
   }
+  const porHijo = {}; HIJOS.forEach((h, i) => { porHijo[h] = res[i] || []; });
+  renderHistoria(mias, porHijo, quien);
+}
 
+function renderHistoria(ventas, porHijo, quien) {
+  ventas = ventas || [];
+  const el = document.getElementById('historia-list');
   const costoMap = {};
   catalogoCache.forEach(p => { costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0; });
+
+  // Acumulado de TODOS los días (pie del historial): individual + global.
+  const _acum = vs => { let vendido = 0, ganancia = 0; (vs||[]).forEach(v => { const sub = (v.precio||0)*(v.cantidad||1); vendido += sub; ganancia += ((v.precio||0)-(costoMap[(v.codigo||'').toLowerCase()]||0))*(v.cantidad||1); }); return { vendido, ganancia, diezmo: ganancia*0.1 }; };
+  const _boxAcum = (titulo, color, a) => `<div style="background:#fff;border:1px solid #f0ebe3;border-left:4px solid ${color};border-radius:12px;padding:10px 12px;margin-top:10px">
+      <div style="font-weight:800;color:${color};font-size:0.95rem;margin-bottom:6px">${titulo}</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Vendido</span><b style="color:#5c3d1e">${fmt(a.vendido)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Ganancia</span><b style="color:#2e8b57">${fmt(a.ganancia)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Diezmo (10%)</span><b style="color:#b8860b">${fmt(a.diezmo)}</b></div>
+    </div>`;
+  let footer = '<div style="margin-top:16px;border-top:2px dashed #e8ddcf;padding-top:10px"><div style="font-size:0.82rem;color:#8a6d3b;font-weight:800;text-align:center;margin-bottom:2px">📊 Acumulado total</div>';
+  footer += _boxAcum('🧑 ' + (quien || usuario || 'Vos') + ' — total histórico', '#c45e20', _acum(ventas));
+  if (porHijo) footer += _boxAcum('👥 Todos juntos (global)', '#2c6fad', _acum([].concat(...HIJOS.map(h => porHijo[h] || []))));
+  footer += '</div>';
+
+  if (!ventas.length) {
+    el.innerHTML = '<div class="card"><div class="empty">Sin historial todavía</div></div>' + footer;
+    return;
+  }
   // Estado de deuda ACTUAL por cliente (de la cuenta corriente) para colorear: rojo debe / azul cambio.
   const conDeudaH = new Set((deudoresCache || []).filter(d => d.saldo > 0).map(d => normCli(d.cliente)));
   const conVueltoH = new Set((deudoresCache || []).filter(d => d.saldo < 0).map(d => normCli(d.cliente)));
@@ -3375,7 +3418,7 @@ function renderHistoria(ventas) {
     return parseFecha(b) - parseFecha(a);
   });
 
-  el.innerHTML = fechas.map((fecha, idx) => {
+  const diasHtml = fechas.map((fecha, idx) => {
     const vd = porDia[fecha];
     let cobrado = 0, enCC = 0, ganancia = 0, vendido = 0;
     const resumenMap = {};
@@ -3456,6 +3499,7 @@ function renderHistoria(ventas) {
       </div>
     </div>`;
   }).join('');
+  el.innerHTML = diasHtml + footer;
 }
 
 function toggleDia(idx) {
@@ -3465,18 +3509,23 @@ function toggleDia(idx) {
 // ─── TOTAL ───────────────────────────────────────────────────────
 async function cargarTotal() {
   document.getElementById('total-content').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
-  const [meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores] = await Promise.all([
+  const [meirVentas, iosiVentas, paVentas, meirStock, iosiStock, paStock, meirDeudores, iosiDeudores, paDeudores] = await Promise.all([
     api('ventasPeriodo', { hijo: 'Meir' }),
     api('ventasPeriodo', { hijo: 'Iosi' }),
+    api('ventasPeriodo', { hijo: 'Pa' }),
     api('getStockDia', { hijo: 'Meir' }),
     api('getStockDia', { hijo: 'Iosi' }),
+    api('getStockDia', { hijo: 'Pa' }),
     api('consultarDeudores', { hijo: 'Meir' }),
-    api('consultarDeudores', { hijo: 'Iosi' })
+    api('consultarDeudores', { hijo: 'Iosi' }),
+    api('consultarDeudores', { hijo: 'Pa' })
   ]);
-  renderTotal(meirVentas || [], iosiVentas || [], meirStock || {}, iosiStock || {}, meirDeudores || [], iosiDeudores || []);
+  renderTotal(meirVentas || [], iosiVentas || [], meirStock || {}, iosiStock || {}, meirDeudores || [], iosiDeudores || [],
+              paVentas || [], paStock || {}, paDeudores || []);
 }
 
-function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores) {
+function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores, paVentas, paStock, paDeudores) {
+  paVentas = paVentas || []; paStock = paStock || {}; paDeudores = paDeudores || [];
   const costoMap = {}, nombreMap = {};
   catalogoCache.forEach(p => {
     costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0;
@@ -3509,6 +3558,8 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
 
   const meir = calcStats(meirVentas);
   const iosi = calcStats(iosiVentas);
+  const pa = calcStats(paVentas);
+  const paActivo = pa.ventasTotal > 0;   // PA ayuda a veces: sus tarjetas aparecen solo si tiene ventas
 
   // ─── Cierre del día por chico ─────────────────────────────────
   const buildCierre = (ventas, stockDia, deudores) => {
@@ -3583,14 +3634,14 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
   };
 
   const comb = {
-    ventasHoy: meir.ventasHoy + iosi.ventasHoy,
-    cobradoHoy: meir.cobradoHoy + iosi.cobradoHoy,
-    gananciaHoy: meir.gananciaHoy + iosi.gananciaHoy,
-    diezmoHoy: meir.diezmoHoy + iosi.diezmoHoy,
-    cobradoTotal: meir.cobradoTotal + iosi.cobradoTotal,
-    gananciaTotal: meir.gananciaTotal + iosi.gananciaTotal,
-    diezmoTotal: meir.diezmoTotal + iosi.diezmoTotal,
-    ventasTotal: meir.ventasTotal + iosi.ventasTotal
+    ventasHoy: meir.ventasHoy + iosi.ventasHoy + pa.ventasHoy,
+    cobradoHoy: meir.cobradoHoy + iosi.cobradoHoy + pa.cobradoHoy,
+    gananciaHoy: meir.gananciaHoy + iosi.gananciaHoy + pa.gananciaHoy,
+    diezmoHoy: meir.diezmoHoy + iosi.diezmoHoy + pa.diezmoHoy,
+    cobradoTotal: meir.cobradoTotal + iosi.cobradoTotal + pa.cobradoTotal,
+    gananciaTotal: meir.gananciaTotal + iosi.gananciaTotal + pa.gananciaTotal,
+    diezmoTotal: meir.diezmoTotal + iosi.diezmoTotal + pa.diezmoTotal,
+    ventasTotal: meir.ventasTotal + iosi.ventasTotal + pa.ventasTotal
   };
 
   document.getElementById('total-content').innerHTML = `
@@ -3604,8 +3655,13 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
       <div style="font-size:0.78rem;color:#aaa;margin-bottom:10px">${fechaLabel}</div>
       ${buildCierre(iosiVentas, iosiStock, iosiDeudores)}
     </div>
+    ${paActivo ? `<div class="card">
+      <div class="card-title" style="color:#2e8b57">👨 PA — Cierre del día</div>
+      <div style="font-size:0.78rem;color:#aaa;margin-bottom:10px">${fechaLabel}</div>
+      ${buildCierre(paVentas, paStock, paDeudores)}
+    </div>` : ''}
     <div class="card">
-      <div class="card-title">Hoy — Meir + Iosi juntos</div>
+      <div class="card-title">Hoy — Meir + Iosi${paActivo ? ' + PA' : ''} juntos</div>
       <div class="stats">
         <div class="stat"><div class="stat-num">${comb.ventasHoy}</div><div class="stat-label">Ventas</div></div>
         <div class="stat blue"><div class="stat-num">${fmt(comb.cobradoHoy)}</div><div class="stat-label">Cobrado</div></div>
@@ -3634,6 +3690,16 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
           <div style="font-size:0.75rem;color:#2e8b57;font-weight:700;margin-top:2px">+${fmt(iosi.gananciaTotal)} gan.</div>
         </div>
       </div>
+      ${paActivo ? `<div class="total-kid-card">
+        <div class="total-kid-nombre" style="color:#2e8b57">👨 PA</div>
+        <div class="total-kid-monto">${fmt(pa.cobradoHoy)}</div>
+        <div class="total-kid-stat">cobrado hoy</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe3">
+          <div class="total-kid-monto" style="font-size:0.92rem">${fmt(pa.cobradoTotal)}</div>
+          <div class="total-kid-stat">histórico total</div>
+          <div style="font-size:0.75rem;color:#2e8b57;font-weight:700;margin-top:2px">+${fmt(pa.gananciaTotal)} gan.</div>
+        </div>
+      </div>` : ''}
     </div>
     <div class="card">
       <div class="card-title">Histórico total — Juntos</div>
@@ -3689,6 +3755,8 @@ function logout() {
   Object.keys(localStorage).filter(k => k.startsWith('cs_panel_') || k === 'cs_compras')
     .forEach(k => localStorage.removeItem(k));
   usuario = null;
+  _reqGen++;   // descarta respuestas en vuelo
+  const hl = document.getElementById('historia-list'); if (hl) hl.innerHTML = '';
   document.getElementById('fab-venta').style.display = 'none';
   document.getElementById('login').style.display = 'flex';
   document.getElementById('panel').style.display = 'none';
