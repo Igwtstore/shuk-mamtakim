@@ -360,6 +360,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="stat orange"><div class="stat-num" id="s-diezmo">—</div><div class="stat-label">Diezmo (10%)</div></div>
       </div>
     </div>
+    <div class="card" id="cierre-card" style="display:none"><div id="cierre-content"></div></div>
     <div class="card">
       <div class="card-title">👁️ Visitas a tu tienda</div>
       <div class="stats">
@@ -521,9 +522,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <span>📦 ¿Qué llevás hoy?</span>
       <button class="modal-close" onclick="cerrarCargaStock()">✕</button>
     </div>
-    <p style="font-size:0.82rem;color:#aaa;margin-bottom:14px">Ingresá cuántas unidades llevás de cada producto</p>
+    <p style="font-size:0.82rem;color:#aaa;margin-bottom:10px">Tu listita de hoy: escribí cuánto llevás de cada uno (sale del depósito).</p>
+    <button id="btn-mismo-ayer" onclick="llevarLoMismoQueAyer()" style="width:100%;padding:11px;margin-bottom:12px;background:#fff3e0;border:1.5px solid #f0c896;border-radius:12px;color:#b8860b;font-size:0.9rem;font-weight:700;cursor:pointer">📋 Llevar lo mismo que la última vez</button>
     <div id="stock-modal-list"></div>
-    <button class="btn-save" onclick="confirmarCargaStock()" style="margin-top:16px">Guardar stock</button>
+    <button class="btn-save" onclick="confirmarCargaStock()" style="margin-top:16px">Guardar mi listita</button>
     <button onclick="resetearStockDia()" style="margin-top:8px;width:100%;padding:10px;background:none;border:1.5px solid #e0d8cc;border-radius:12px;color:#aaa;font-size:0.85rem;cursor:pointer">🗑️ Borrar stock cargado hoy</button>
   </div>
 </div>
@@ -842,6 +844,7 @@ async function onDiaPickerChange() {
 // Renderiza un día PASADO en el formato del Dashboard (mismos totales + editar/borrar por rowIndex).
 async function aplicarDiaCandy() {
   if (!_diaVistoCandy) return;
+  const cc = document.getElementById('cierre-card'); if (cc) cc.style.display = 'none';   // el cierre es de hoy
   document.getElementById('ventas-list-titulo').textContent = '📅 Ventas del ' + _diaVistoCandy;
   document.getElementById('ventas-list').innerHTML = '<div class="spinner">Cargando...</div>';
   const ventas = await api('ventasHoy', { hijo: usuario, dia: _diaVistoCandy });
@@ -933,6 +936,7 @@ function renderPanel(d) {
   renderVisitasKid(d.visitas || {});
   renderConsumoHoy(d.consumo);
   renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache, arr(d.consumo));
+  renderCierreDia(arr(d.ventas), catalogoCache, d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.consumo));
 }
 
 // 1) Pinta al instante lo último guardado en el teléfono, 2) trae todo el panel
@@ -3175,28 +3179,57 @@ async function eliminarVenta(rowIndex) {
 // ─── STOCK DEL DÍA ────────────────────────────────────────────────
 let stockQtys = {}; // { codigo: qty }
 
-function abrirCargaStock() {
+let _depoDisp = {};   // codigo → unidades en depósito (para mostrar disponibilidad)
+async function abrirCargaStock() {
   if (!catalogoCache.length) { alert('Primero cargá los productos en Catálogo'); return; }
   stockQtys = {};
-  document.getElementById('stock-modal-list').innerHTML = catalogoCache.map(p => `
-    <div class="stock-load-item">
-      <div>
+  document.getElementById('stock-overlay').classList.add('open');
+  document.getElementById('stock-modal-list').innerHTML = '<div class="spinner" style="padding:20px 0">Cargando...</div>';
+  // Prellenar con lo que YA cargó hoy (la lista se EDITA, no se suma) + mostrar disponible en depósito.
+  const [hoy, dep] = await Promise.all([
+    api('getStockDia', { hijo: usuario }).catch(() => ({})),
+    api('getDepositoHijos').catch(() => ({}))
+  ]);
+  if (hoy && !hoy.error) stockQtys = Object.assign({}, hoy);
+  _depoDisp = {};
+  const depItems = (dep && dep.items) ? dep.items : (Array.isArray(dep) ? dep : []);
+  depItems.forEach(d => { _depoDisp[(d.codigo || '').toString()] = parseInt(d.cantidad) || 0; });
+  _renderStockLoadList();
+}
+function _renderStockLoadList() {
+  document.getElementById('stock-modal-list').innerHTML = catalogoCache.map(p => {
+    const q = stockQtys[p.codigo] || 0;
+    const disp = (_depoDisp[p.codigo] || 0) + q;   // en depósito quedan _depoDisp; +q porque q ya salió a esta lista
+    return `<div class="stock-load-item">
+      <div style="min-width:0">
         <div class="stock-load-nombre">${p.nombre}</div>
-        <div class="stock-load-precio">${fmt(p.precioVenta)}</div>
+        <div class="stock-load-precio">${fmt(p.precioVenta)} · <span style="color:#bbb">depósito: ${disp}</span></div>
       </div>
       <div class="qty-control">
         <button class="qty-btn-big" onclick="cambiarStockQty('${p.codigo}',-1)">−</button>
-        <span class="qty-num-big" id="sqty-${p.codigo}">0</span>
+        <input class="qty-num-big" id="sqty-${p.codigo}" type="number" inputmode="numeric" min="0" value="${q}" onchange="setStockQty('${p.codigo}', this.value)" style="width:44px;text-align:center;border:1.5px solid #e6ddcf;border-radius:8px;font-weight:800;font-size:1rem;-moz-appearance:textfield">
         <button class="qty-btn-big" onclick="cambiarStockQty('${p.codigo}',1)">+</button>
       </div>
-    </div>`).join('');
-  document.getElementById('stock-overlay').classList.add('open');
+    </div>`;
+  }).join('');
 }
-
+function setStockQty(codigo, val) {
+  stockQtys[codigo] = Math.max(0, parseInt(val) || 0);
+}
 function cambiarStockQty(codigo, delta) {
   stockQtys[codigo] = Math.max(0, (stockQtys[codigo] || 0) + delta);
   const el = document.getElementById('sqty-' + codigo);
-  if (el) el.textContent = stockQtys[codigo];
+  if (el) el.value = stockQtys[codigo];
+}
+async function llevarLoMismoQueAyer() {
+  const btn = document.getElementById('btn-mismo-ayer');
+  if (btn) { btn.disabled = true; btn.textContent = 'Trayendo...'; }
+  const r = await api('getUltimoStockDia', { hijo: usuario }).catch(() => null);
+  if (btn) { btn.disabled = false; btn.textContent = '📋 Llevar lo mismo que la última vez'; }
+  if (!r || !r.stock || !Object.keys(r.stock).length) { mostrarToast('No hay una carga anterior'); return; }
+  stockQtys = Object.assign({}, r.stock);
+  _renderStockLoadList();
+  mostrarToast('📋 Cargué lo del ' + (r.fecha || 'último día') + ' — editá si querés');
 }
 
 async function resetearStockDia() {
@@ -3211,14 +3244,14 @@ async function resetearStockDia() {
 }
 
 async function confirmarCargaStock() {
+  // La listita del día se REEMPLAZA (no se suma): setStockDia ajusta el depósito por la diferencia.
   const items = catalogoCache
     .filter(p => (stockQtys[p.codigo] || 0) > 0)
     .map(p => ({ codigo: p.codigo, nombre: p.nombre, cantidad: stockQtys[p.codigo] }));
-  if (!items.length) { alert('Ingresá al menos un producto'); return; }
   const btn = document.querySelector('#stock-overlay .btn-save');
   btn.textContent = 'Guardando...'; btn.disabled = true;
-  await api('cargarStock', { hijo: usuario, items: JSON.stringify(items) });
-  btn.textContent = 'Guardar stock'; btn.disabled = false;
+  await api('setStockDia', { hijo: usuario, items: JSON.stringify(items) });
+  btn.textContent = 'Guardar mi listita'; btn.disabled = false;
   cerrarCargaStock();
   await cargarDatos();
   const t = document.createElement('div');
@@ -3267,6 +3300,44 @@ function renderStockRestante(stockDia, ventas, catalogo, consumo = []) {
       </div>
     </div>`;
   }).join('');
+}
+
+// ─── CIERRE DEL DÍA (cuando vuelven a casa: cuánto llevaste, efectivo, deuda, queda, ganaste) ──
+function renderCierreDia(ventas, catalogo, stockDia, consumo) {
+  const card = document.getElementById('cierre-card');
+  const cont = document.getElementById('cierre-content');
+  if (!card || !cont) return;
+  if (_diaVistoCandy) { card.style.display = 'none'; return; }   // el cierre es del día de hoy
+  const precio = {}, costo = {};
+  (catalogo || []).forEach(p => { const c = (p.codigo || '').toLowerCase(); precio[c] = p.precioVenta || 0; costo[c] = p.costo || 0; });
+  let vendido = 0, cobrado = 0, ganancia = 0, deuda = 0; const vendidoQty = {};
+  (ventas || []).forEach(v => {
+    const sub = (v.precio || 0) * (v.cantidad || 1), pend = v.saldoPendiente || 0, c = (v.codigo || '').toLowerCase();
+    vendido += sub; cobrado += sub - pend; deuda += pend; ganancia += ((v.precio || 0) - (costo[c] || 0)) * (v.cantidad || 1);
+    const cod = (v.codigo || '').toString(); vendidoQty[cod] = (vendidoQty[cod] || 0) + (v.cantidad || 1);
+  });
+  const consumidoQty = {}; (consumo || []).forEach(x => { const cod = (x.codigo || '').toString(); consumidoQty[cod] = (consumidoQty[cod] || 0) + (parseInt(x.cantidad) || 0); });
+  const sd = (stockDia && !stockDia.error) ? stockDia : {};
+  const hayLista = Object.keys(sd).length > 0;
+  if (!hayLista && !(ventas || []).length) { card.style.display = 'none'; return; }
+  let llevadoVal = 0, quedaVal = 0, vendioFuera = false;
+  Object.keys(sd).forEach(cod => { const pv = precio[cod.toLowerCase()] || 0; llevadoVal += sd[cod] * pv; quedaVal += Math.max(0, sd[cod] - (vendidoQty[cod] || 0) - (consumidoQty[cod] || 0)) * pv; });
+  Object.keys(vendidoQty).forEach(cod => { if (hayLista && !(cod in sd)) vendioFuera = true; });
+  const cuadra = Math.abs(vendido - (cobrado + deuda)) < 1;
+  card.style.display = 'block';
+  const box = (bg, col, lbl, val) => `<div style="background:${bg};border-radius:10px;padding:8px"><div style="color:#888;font-size:0.72rem">${lbl}</div><div style="font-weight:800;color:${col}">${fmt(val)}</div></div>`;
+  let html = `<div class="card-title">🏠 Cierre del día</div>`;
+  if (!hayLista) html += `<div style="font-size:0.84rem;color:#b8860b;background:#fff3e0;border:1px solid #f0c896;border-radius:10px;padding:8px 10px;margin-bottom:10px">📋 Armá tu listita de "lo que llevás hoy" (botón 📦 arriba) y al volver vas a ver cuánto te tiene que quedar.</div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.86rem">`;
+  if (hayLista) html += box('#f3f7ff', '#2c6fad', '📦 Llevaste', llevadoVal);
+  html += box('#f0fbf3', '#2e8b57', '💵 Efectivo que tenés que tener', cobrado);
+  html += box('#fff4ef', '#e05c2a', '📋 Te deben (de hoy)', deuda);
+  if (hayLista) html += box('#f7f4ff', '#7a5fa0', '📦 Te queda para traer', quedaVal);
+  html += `</div>`;
+  html += `<div style="margin-top:10px;padding:8px 10px;border-radius:10px;text-align:center;font-weight:700;font-size:0.82rem;background:${cuadra ? '#e8f5ee' : '#fde8e8'};color:${cuadra ? '#2e8b57' : '#c0392b'}">${cuadra ? '✅' : '⚠️'} Vendiste ${fmt(vendido)} = Efectivo ${fmt(cobrado)} + Deuda ${fmt(deuda)}</div>`;
+  if (vendioFuera) html += `<div style="margin-top:6px;font-size:0.76rem;color:#b8860b;text-align:center">⚠️ Vendiste algo que no estaba en tu listita</div>`;
+  html += `<div style="margin-top:12px;text-align:center;background:linear-gradient(135deg,#fff7e6,#ffe9c7);border-radius:12px;padding:12px"><div style="font-size:0.8rem;color:#8a6d3b">🏆 Ganaste hoy</div><div style="font-size:1.7rem;font-weight:900;color:#e58e00">${fmt(ganancia)}</div></div>`;
+  cont.innerHTML = html;
 }
 
 // ─── HISTORIA ────────────────────────────────────────────────────

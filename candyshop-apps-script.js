@@ -27,7 +27,7 @@ const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker
 const PROTECTED_HIJOS = [
   'registrarVentaHijos','registrarVentaLote','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
-  'cargarStock','getStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
+  'cargarStock','setStockDia','getStockDia','getUltimoStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
@@ -1113,7 +1113,7 @@ function doGet(e) {
       // su teardown para no dejar residuo en producción, y sirve para limpiar lo ya ensuciado.
       // Seguro: ningún dato real contiene estos marcadores.
       const marca = /__TEST__|REGTEST|REGCLI|AJTEST|VISTEST|BORRTEST|DIAG_/;
-      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock'];
+      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos'];
       const resultado = {};
       hojas.forEach(nombre => {
         const h = ss.getSheetByName(nombre);
@@ -1238,7 +1238,9 @@ function doGet(e) {
     if (accion === 'ventasPeriodo')        { return json(ventasPeriodo(ss, e.parameter)); }
     if (accion === 'historialCliente')     { return json(historialCliente(ss, e.parameter)); }
     if (accion === 'cargarStock')          { return json(cargarStock(ss, e.parameter)); }
+    if (accion === 'setStockDia')          { return json(setStockDia(ss, e.parameter)); }
     if (accion === 'getStockDia')          { return json(getStockDia(ss, e.parameter)); }
+    if (accion === 'getUltimoStockDia')    { return json(getUltimoStockDia(ss, e.parameter)); }
     if (accion === 'resetearStockDia')     { return json(resetearStockDia(ss, e.parameter)); }
     if (accion === 'agregarProductoHijo')  { return json(agregarProductoHijo(ss, e.parameter)); }
     if (accion === 'editarProductoHijo')   { return json(editarProductoHijo(ss, e.parameter)); }
@@ -1858,6 +1860,56 @@ function getStockDia(ss, p) {
       stock[cod] = (stock[cod] || 0) + (parseInt(r[4]) || 0);
     });
   return stock;
+}
+
+// Lo que el chico se llevó la ÚLTIMA vez (día más reciente que NO sea hoy) → para "llevar lo mismo".
+function getUltimoStockDia(ss, p) {
+  const h = ss.getSheetByName('StockDiario');
+  if (!h || h.getLastRow() < 2) return { stock: {} };
+  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  const rows = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues()
+    .filter(r => r[0] && typeof r[0].getTime === 'function' && r[1] === p.hijo);
+  let ult = null;
+  rows.forEach(r => {
+    const f = Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy');
+    if (f === hoyStr) return;
+    if (!ult || r[0].getTime() > ult.t) ult = { f: f, t: r[0].getTime() };
+  });
+  if (!ult) return { stock: {} };
+  const stock = {};
+  rows.filter(r => Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === ult.f)
+    .forEach(r => { const cod = r[2].toString(); stock[cod] = (stock[cod] || 0) + (parseInt(r[4]) || 0); });
+  return { fecha: ult.f, stock: stock };
+}
+
+// REEMPLAZA la lista de HOY (lo que se lleva) por los items dados, ajustando el depósito por la
+// DIFERENCIA (devuelve lo viejo, toma lo nuevo) → no duplica al re-cargar. items = totales del día.
+function setStockDia(ss, p) {
+  const h = getOrCreate(ss, 'StockDiario', ['Fecha','Hijo','Codigo','Producto','Cantidad']);
+  let items; try { items = JSON.parse(dec(p.items || '[]')); } catch (e) { return { error: 'items inválido' }; }
+  const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  // 1) borrar las filas de HOY de este hijo, devolviendo su cantidad al depósito
+  if (h.getLastRow() >= 2) {
+    const datos = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues();
+    for (let i = datos.length - 1; i >= 0; i--) {
+      const r = datos[i];
+      if (r[0] && typeof r[0].getTime === 'function' && Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr && r[1] === p.hijo) {
+        const cant = parseInt(r[4]) || 0;
+        if (cant) ajustarDeposito_(ss, r[2].toString(), (r[3] || '').toString(), cant);   // devolver al depósito
+        h.deleteRow(i + 2);
+      }
+    }
+  }
+  // 2) escribir la lista nueva y tomarla del depósito
+  const fecha = new Date();
+  items.forEach(item => {
+    const cant = parseInt(item.cantidad) || 0;
+    if (item.codigo && cant > 0) {
+      h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', cant]);
+      ajustarDeposito_(ss, item.codigo, item.nombre || '', -cant);
+    }
+  });
+  return { ok: true, n: items.length };
 }
 
 function resetearStockDia(ss, p) {
