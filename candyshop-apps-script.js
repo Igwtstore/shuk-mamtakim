@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','limpiarTestData'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','limpiarTestData','panelAdmin'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -682,17 +682,17 @@ function doGet(e) {
       } catch (err) { return json({ error: String(err) }); }
     }
     if (accion === 'getMovsSocios') {
-      const h = ss.getSheetByName('MovsSocios');
-      if (!h || h.getLastRow() < 2) return json({totalARS:0, totalUSD:0, movimientos:[]});
-      const rows = h.getRange(2,1,h.getLastRow()-1,4).getValues();
-      const movimientos = rows.map(r => ({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
-        desc: (r[1]||'').toString(), montoARS: parseFloat(r[2])||0, montoUSD: parseFloat(r[3])||0
-      }));
+      return json(_movsSociosData(ss));
+    }
+    if (accion === 'panelAdmin') {
+      // Batch: todo lo que el panel admin pide al abrir, en UNA sola llamada (antes ~12 → saturaba).
       return json({
-        totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
-        totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
-        movimientos
+        ventas: _ventasData(ss),
+        gastos: _gastosData(ss),
+        rendiciones: _rendicionesData(ss),
+        pagos: _pagosData(ss),
+        clientes: _clientesData(ss),
+        movsSocios: _movsSociosData(ss)
       });
     }
     if (accion === 'getBorrados') {
@@ -729,16 +729,7 @@ function doGet(e) {
       return ok();
     }
     if (accion === 'getPagos') {
-      const h = ss.getSheetByName('Pagos');
-      if (!h || h.getLastRow() < 2) return json([]);
-      const rows = h.getRange(2,1,h.getLastRow()-1,8).getValues();
-      return json(rows.map(r => ({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
-        cliente: (r[1]||'').toString(), pedidoId: (r[2]||'').toString(),
-        montoARS: parseFloat(r[3])||0, montoUSD: parseFloat(r[4])||0,
-        caja: (r[5]||'').toString(), nota: (r[6]||'').toString(),
-        montoPitz: parseFloat(r[7])||0
-      })));
+      return json(_pagosData(ss));
     }
     if (accion === 'notificacion') {
       const h = getOrCreate(ss, 'Notificaciones', ['Fecha','Producto ID','Producto','Nombre','Telefono','Estado','Modo']);
@@ -799,33 +790,13 @@ function doGet(e) {
       return ok();
     }
     if (accion === 'ventas') {
-      const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return json([]);
-      const nc = Math.min(27, h.getLastColumn());
-      return json(h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
-        id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
-        fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
-        cliente:r[2], tipo:r[3], productos:r[4], formaPago:r[5], notas:r[6],
-        estado:r[7]||'pendiente', totalARS:r[8]||0, totalUSD:r[9]||0,
-        nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
-        usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
-        cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
-        comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString(), sinComision: (r[26]||'').toString()
-      })));
+      return json(_ventasData(ss));
     }
     if (accion === 'gastos') {
-      const h = ss.getSheetByName('Gastos'); if (!h || h.getLastRow() < 2) return json([]);
-      const nc = Math.min(6, h.getLastColumn());
-      return json(h.getRange(2,1,h.getLastRow()-1,nc).getValues().map(r => ({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
-        desc:r[1], monto:r[2], moneda:r[3], categoria:r[4], columna:r[5]||''
-      })));
+      return json(_gastosData(ss));
     }
     if (accion === 'rendiciones') {
-      const h = ss.getSheetByName('Rendiciones'); if (!h || h.getLastRow() < 2) return json([]);
-      return json(h.getRange(2,1,h.getLastRow()-1,5).getValues().map(r => ({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
-        desc:r[1], monto:r[2], moneda:r[3], columna:r[4]||''
-      })));
+      return json(_rendicionesData(ss));
     }
     if (accion === 'setStock') {
       var sh = ss.getSheetByName('Stock'); if (!sh) return json({error:'sin hoja'});
@@ -1004,17 +975,7 @@ function doGet(e) {
       return ok();
     }
     if (accion === 'getClientes') {
-      const h = ss.getSheetByName('Clientes');
-      if (!h || h.getLastRow() < 2) return json([]);
-      const rows = h.getRange(2,1,h.getLastRow()-1,6).getValues();
-      return json(rows.map(r => ({
-        fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
-        nombre: r[1].toString(),
-        telefono: r[2].toString(),
-        tipo: r[3].toString(),
-        nota: r[4].toString(),
-        ultimoAcceso: r[5] instanceof Date ? Utilities.formatDate(r[5],TZ,'dd/MM/yyyy HH:mm') : (r[5]||'').toString()
-      })));
+      return json(_clientesData(ss));
     }
     if (accion === 'registrarClienteMayorista') {
       const tel = dec(e.parameter.telefono||'').replace(/\D/g,'').slice(-10);
@@ -1976,6 +1937,70 @@ function resetearStockDia(ss, p) {
     }
   }
   return { ok: true };
+}
+
+// ── Helpers de datos del panel admin (Shuk) ─────────────────────────
+// Producen el VALOR (array/obj) sin envolver en json(): los usan los handlers individuales
+// (ventas/gastos/...) y el batch panelAdmin, sin duplicar lógica.
+function _ventasData(ss) {
+  const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return [];
+  const nc = Math.min(27, h.getLastColumn());
+  return h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
+    id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
+    fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
+    cliente:r[2], tipo:r[3], productos:r[4], formaPago:r[5], notas:r[6],
+    estado:r[7]||'pendiente', totalARS:r[8]||0, totalUSD:r[9]||0,
+    nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
+    usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
+    cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
+    comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString(), sinComision: (r[26]||'').toString()
+  }));
+}
+function _gastosData(ss) {
+  const h = ss.getSheetByName('Gastos'); if (!h || h.getLastRow() < 2) return [];
+  const nc = Math.min(6, h.getLastColumn());
+  return h.getRange(2,1,h.getLastRow()-1,nc).getValues().map(r => ({
+    fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+    desc:r[1], monto:r[2], moneda:r[3], categoria:r[4], columna:r[5]||''
+  }));
+}
+function _rendicionesData(ss) {
+  const h = ss.getSheetByName('Rendiciones'); if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,5).getValues().map(r => ({
+    fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+    desc:r[1], monto:r[2], moneda:r[3], columna:r[4]||''
+  }));
+}
+function _pagosData(ss) {
+  const h = ss.getSheetByName('Pagos'); if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,8).getValues().map(r => ({
+    fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+    cliente: (r[1]||'').toString(), pedidoId: (r[2]||'').toString(),
+    montoARS: parseFloat(r[3])||0, montoUSD: parseFloat(r[4])||0,
+    caja: (r[5]||'').toString(), nota: (r[6]||'').toString(),
+    montoPitz: parseFloat(r[7])||0
+  }));
+}
+function _clientesData(ss) {
+  const h = ss.getSheetByName('Clientes'); if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,6).getValues().map(r => ({
+    fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+    nombre: r[1].toString(), telefono: r[2].toString(), tipo: r[3].toString(), nota: r[4].toString(),
+    ultimoAcceso: r[5] instanceof Date ? Utilities.formatDate(r[5],TZ,'dd/MM/yyyy HH:mm') : (r[5]||'').toString()
+  }));
+}
+function _movsSociosData(ss) {
+  const h = ss.getSheetByName('MovsSocios');
+  if (!h || h.getLastRow() < 2) return { totalARS:0, totalUSD:0, movimientos:[] };
+  const movimientos = h.getRange(2,1,h.getLastRow()-1,4).getValues().map(r => ({
+    fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
+    desc: (r[1]||'').toString(), montoARS: parseFloat(r[2])||0, montoUSD: parseFloat(r[3])||0
+  }));
+  return {
+    totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
+    totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
+    movimientos
+  };
 }
 
 // Batch: todo lo que necesita el panel de los chicos en UNA sola llamada

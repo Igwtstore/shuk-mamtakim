@@ -5665,7 +5665,15 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
-  if (m === 'admin') { renderSocioBar(); setAdminTab(_adminTabActual); renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderCuentaSocios(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); renderStockTotal(); _llenarTrazarSelect(); startAdminPolling(); }
+  if (m === 'admin') {
+    renderSocioBar(); setAdminTab(_adminTabActual);
+    // 1 sola llamada (panelAdmin) precarga ventas/gastos/rendiciones/pagos/clientes/socios en el
+    // cache; recién después se disparan los renders (que pegan al cache, sin saturar con ~12 pedidos).
+    cargarPanelAdmin().finally(() => {
+      renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderCuentaSocios(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); renderStockTotal(); _llenarTrazarSelect();
+    });
+    startAdminPolling();
+  }
   else { stopAdminPolling(); renderCatalogo(); pintarBannerTienda(); }
 }
 
@@ -7312,6 +7320,21 @@ function apiGet(accion, ttl = 8000) {
   return p;
 }
 function invalidarCache() { for (const k in _apiCache) delete _apiCache[k]; }
+
+// Trae TODO el panel admin en UNA llamada y precarga el cache de cada acción, así los ~12 renders
+// que se disparan al abrir pegan al cache en vez de mandar una avalancha de pedidos al servidor.
+// Si falla, no rompe: cada render pide individual (con cola + reintento).
+async function cargarPanelAdmin() {
+  try {
+    const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=panelAdmin');
+    if (d && !d.__transitorio && !d.error) {
+      const now = Date.now();
+      const set = (k, v) => { if (v !== undefined) _apiCache[k] = { p: Promise.resolve(v), t: now }; };
+      set('ventas', d.ventas); set('gastos', d.gastos); set('rendiciones', d.rendiciones);
+      set('getPagos', d.pagos); set('getClientes', d.clientes); set('getMovsSocios', d.movsSocios);
+    }
+  } catch (e) { /* los renders piden individual */ }
+}
 
 // Escritura con confirmación real (lee la respuesta del server). Avisa si falla.
 // Devuelve {ok:true,...} o {error:...}. Invalida el cache para que el próximo render sea fresco.
