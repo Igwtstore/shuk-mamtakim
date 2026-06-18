@@ -1108,6 +1108,31 @@
     <div id="cc-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
   </div>
 
+  <div class="admin-card" data-seccion="ventas">
+    <div class="admin-titulo">➕ Cargar saldo a cuenta corriente</div>
+    <div style="font-size:0.76rem;color:var(--texto-suave);margin-bottom:0.6rem">Para un saldo viejo (del Excel) o una venta externa. Queda como deuda del cliente.</div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem">
+      <input type="text" id="saldo-cliente" placeholder="Nombre del cliente" list="clientes-datalist" autocomplete="off" style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box;outline:none" />
+      <div style="display:flex;gap:0.5rem">
+        <input type="number" id="saldo-ars" placeholder="Monto $" min="0" style="flex:1;min-width:90px;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box;outline:none" />
+        <input type="number" id="saldo-usd" placeholder="Monto U$S" min="0" step="0.01" style="flex:1;min-width:90px;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box;outline:none" />
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <select id="saldo-dueno" onchange="saldoDuenoChange()" style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;background:#fff">
+          <option value="Myri">Golosinas (Myri)</option>
+          <option value="Jony">Pitzujim (Jony)</option>
+        </select>
+        <select id="saldo-comision" style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;background:#fff">
+          <option value="no">NO saca comisión (ya se cobró)</option>
+          <option value="si">SÍ saca comisión (venta nueva)</option>
+        </select>
+      </div>
+      <input type="text" id="saldo-nota" placeholder="Nota (opcional): ej. saldo Excel mayo" style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;box-sizing:border-box;outline:none" />
+      <button class="guardar-stock-btn" style="margin-top:0" onclick="cargarSaldoCCSubmit(this)">➕ Cargar a cuenta corriente</button>
+      <div id="saldo-result" style="font-size:0.8rem"></div>
+    </div>
+  </div>
+
   <div class="admin-card">
     <div class="admin-titulo">📦 Pedidos</div>
     <input type="text" id="pedidos-buscar" placeholder="🔍 Buscar pedido (cliente, #, producto...)" autocomplete="off"
@@ -4913,8 +4938,10 @@ async function renderCaja() {
       const arsJ = parseFloat(v.arsJONY || 0);
       const arsM = parseFloat(v.arsMyri || 0);
       const usdM = parseFloat(v.usdMyri || 0);
-      const comiA = parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15);
-      const comiU = parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2));
+      // Saldo cargado SIN comisión (col 27): no se descuenta comisión nueva.
+      const _sinComi = (v.sinComision || '').toString().toUpperCase() === 'SI';
+      const comiA = _sinComi ? 0 : (parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15));
+      const comiU = _sinComi ? 0 : (parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2)));
       // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
       _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
                      lineas: _lineasPedidoVista(v.productos, soloMiri), comprobante: v.comprobante || '' };
@@ -4959,7 +4986,7 @@ async function renderCaja() {
           const esCajaJony = ['MP_JONY', 'EFT_JONY'].includes(colUSD);
           if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
             const arsEquiv = Math.round(usdM * tc);
-            const comiARS_conv = Math.round(arsEquiv * 0.15);
+            const comiARS_conv = _sinComi ? 0 : Math.round(arsEquiv * 0.15);
             movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`, vid: v.id, corte: v.corte, myriNet: esCajaJony ? (arsEquiv - comiARS_conv) : undefined });
             if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi', srcCol: colUSD });
           } else {
@@ -5179,8 +5206,9 @@ async function renderCuentaSocios() {
     if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
     const fp = (v.formaPago||'').trim();
     const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
-    const comiA = (parseFloat(v.comiARS)||0) || Math.round(arsM*0.15);
-    const comiU = (parseFloat(v.comiUSD)||0) || parseFloat((usdM*0.15).toFixed(2));
+    const _sinComiS = (v.sinComision||'').toString().toUpperCase() === 'SI';   // saldo cargado sin comisión
+    const comiA = _sinComiS ? 0 : ((parseFloat(v.comiARS)||0) || Math.round(arsM*0.15));
+    const comiU = _sinComiS ? 0 : ((parseFloat(v.comiUSD)||0) || parseFloat((usdM*0.15).toFixed(2)));
     // REGLA ESTRICTA: solo cuenta lo que tiene cobro CONFIRMADO (caja real elegida al confirmar).
     // No se deduce de la forma de pago: un pedido marcado 'Efectivo' sin confirmar NO se cuenta
     // (es deuda hasta que se confirme). Así coincide con deudores y el diagnóstico.
@@ -5201,7 +5229,7 @@ async function renderCuentaSocios() {
       const colUSD = v.cajaMyri || '';   // estricto: solo cobro confirmado
       const tc = parseFloat(v.tipoCambio)||0;
       if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
-        const arsEq = usdM * tc; const comiConv = Math.round(arsEq*0.15);
+        const arsEq = usdM * tc; const comiConv = _sinComiS ? 0 : Math.round(arsEq*0.15);
         if (MYRI_ARS.includes(colUSD)) comiDebe += comiConv;
         else if (JONY_BOXES_CC.includes(colUSD)) jonyTiene += (arsEq - comiConv);
       } else {
@@ -5602,6 +5630,30 @@ async function gvAplicar(mostrar) {
     gvRender();
     cargarProductos();
   } else { showToast('Error: ' + ((r && r.error) || 'no se pudo')); }
+}
+
+function saldoDuenoChange() { /* informativo: en Pitzujim ($) no hay comisión; la comisión es sobre golosinas */ }
+async function cargarSaldoCCSubmit(btn) {
+  const cliente = document.getElementById('saldo-cliente').value.trim();
+  const montoARS = parseFloat(document.getElementById('saldo-ars').value) || 0;
+  const montoUSD = parseFloat(document.getElementById('saldo-usd').value) || 0;
+  const dueno = document.getElementById('saldo-dueno').value;
+  const comision = document.getElementById('saldo-comision').value;
+  const nota = document.getElementById('saldo-nota').value.trim();
+  const res = document.getElementById('saldo-result');
+  if (!cliente) { res.innerHTML = '<span style="color:var(--rojo)">Falta el cliente</span>'; return; }
+  if (montoARS <= 0 && montoUSD <= 0) { res.innerHTML = '<span style="color:var(--rojo)">Ingresá un monto</span>'; return; }
+  const montoTxt = [montoARS > 0 ? '$ ' + montoARS.toLocaleString('es-AR') : '', montoUSD > 0 ? 'U$S ' + montoUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+  const comiTxt = comision === 'si' ? 'CON comisión (15% para Jony)' : 'SIN comisión nueva';
+  if (!confirm(`Cargar ${montoTxt} a la cuenta de ${cliente}\n\n${dueno === 'Jony' ? 'Pitzujim (Jony)' : 'Golosinas (Myri)'} · ${comiTxt}\n\n¿Confirmás?`)) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
+  const r = await apiWrite(new URLSearchParams({ accion: 'cargarSaldoCC', cliente, montoARS, montoUSD, dueno, comision, nota }), '');
+  if (btn) { btn.disabled = false; btn.textContent = '➕ Cargar a cuenta corriente'; }
+  if (r && r.ok) {
+    res.innerHTML = `<span style="color:var(--verde)">✓ Cargado a la cuenta de ${esc(cliente)} (#${r.nVenta})</span>`;
+    ['saldo-cliente', 'saldo-ars', 'saldo-usd', 'saldo-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    setTimeout(() => refreshAdmin(), 1200);
+  } else { res.innerHTML = `<span style="color:var(--rojo)">Error: ${(r && r.error) || 'no se pudo'}</span>`; }
 }
 
 function setModo(m) {

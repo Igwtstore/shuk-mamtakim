@@ -11,7 +11,7 @@ const PROTECTED_ACTIONS = [
   'ventas','gastos','rendiciones','getClientes','getPagos','getLiquidaciones',
   'getGanancias','getCompras','notasClientes','notificaciones','confirmarCobro','setStock',
   'saldarSocios','registrarPagoCuenta','actualizarEstado','actualizarPedido','editarNotaPedido',
-  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas','getBorrados','hacerCorte','getCortes',
+  'registrarMovSocio','getMovsSocios','backupAhora','renumerarVentas','getBorrados','hacerCorte','getCortes','cargarSaldoCC',
   'registrarRetiro','setSaldoInicial','registrarCompra','agregarCliente','editarCliente',
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
@@ -113,9 +113,10 @@ function gananciaJonyPeriodo_(ss) {
     const comiARS = parseFloat(r[14]) || 0, comiUSD = parseFloat(r[15]) || 0;
     const cajaM = (r[17] || '').toString(), tc = parseFloat(r[18]) || 0;
     const pitz = parseFloat(r[24]) || 0;                    // col 25 GananciaPitz
+    const sinComi = (r[26] || '').toString().toUpperCase() === 'SI';   // col 27: saldo cargado SIN comisión
     let cARS = 0, cUSD = 0;
-    if (arsM > 0) cARS += comiARS || Math.round(arsM * 0.15);
-    if (usdM > 0) {
+    if (arsM > 0 && !sinComi) cARS += comiARS || Math.round(arsM * 0.15);
+    if (usdM > 0 && !sinComi) {
       if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
       else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
     }
@@ -328,6 +329,51 @@ function doGet(e) {
       // Alta automática del cliente en el registro canónico (no duplica; nunca rompe la venta).
       altaClienteAuto_(ss, dec(e.parameter.cliente), dec(e.parameter.tipo));
       return json({ok:true, nVenta, id});
+    }
+    if (accion === 'cargarSaldoCC') {
+      // Carga manual de un saldo a la cuenta corriente de un cliente (saldo viejo del Excel o venta
+      // externa). Crea un "pedido" pendiente sin caja → figura como deuda en Cuenta Corriente.
+      // dueno: 'Myri' (golosinas) | 'Jony' (Pitzujim/pesos). comision: 'si' | 'no'.
+      // "no" = ya se cobró comisión antes → flag SinComision (no vuelve a descontar comisión).
+      const h = getOrCreate(ss, 'Ventas', ['ID','Fecha','Cliente','Tipo','Productos','Forma de Pago','Notas','Estado','Total ARS','Total USD','# Venta','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD','Caja Jony','Caja Myri','Tipo Cambio','Stock Updates']);
+      const cliente = dec(e.parameter.cliente || '');
+      if (!cliente) return json({ error: 'falta cliente' });
+      const montoARS = Math.round(parseFloat(e.parameter.montoARS || 0) || 0);
+      const montoUSD = parseFloat(e.parameter.montoUSD || 0) || 0;
+      if (montoARS <= 0 && montoUSD <= 0) return json({ error: 'monto vacío' });
+      const dueno = (e.parameter.dueno === 'Jony') ? 'Jony' : 'Myri';
+      const sacaComi = (e.parameter.comision || 'no') === 'si';
+      const nota = dec(e.parameter.nota || '');
+      let arsJONY = 0, arsMyri = 0, usdMyri = 0, comiARS = 0, comiUSD = 0, sinComi = '';
+      if (dueno === 'Jony') {
+        arsJONY = montoARS; usdMyri = montoUSD;   // USD siempre es golosinas (Myri); pesos = Pitzujim (Jony)
+        if (usdMyri > 0) { if (sacaComi) comiUSD = Math.round(usdMyri * 0.15 * 100) / 100; else sinComi = 'SI'; }
+      } else {
+        arsMyri = montoARS; usdMyri = montoUSD;
+        if (sacaComi) { comiARS = Math.round(arsMyri * 0.15); comiUSD = Math.round(usdMyri * 0.15 * 100) / 100; }
+        else sinComi = 'SI';
+      }
+      const totalARS = arsJONY + arsMyri, totalUSD = usdMyri;
+      const tag = (dueno === 'Jony' ? 'Pitzujim' : 'Golosinas') + (sacaComi ? '' : ' (sin comisión)');
+      const lineas = [];
+      if (montoARS > 0) lineas.push(`• Saldo cargado · ${nota || tag} — $ ${montoARS} c/u = $ ${montoARS}`);
+      if (montoUSD > 0) lineas.push(`• Saldo cargado · ${nota || tag} — U$S ${montoUSD.toFixed(2)} c/u = U$S ${montoUSD.toFixed(2)}`);
+      const lockSC = LockService.getScriptLock();
+      try { lockSC.waitLock(20000); } catch (e2) {}
+      const id = 'P' + Date.now().toString();
+      const fecha = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+      const nVenta = siguienteNVenta_(h);
+      const row = h.getLastRow() + 1;
+      h.appendRow([id, fecha, cliente, dueno === 'Jony' ? 'Mayorista' : 'Minorista', lineas.join(' || '), 'Cuenta corriente',
+        'Saldo cargado' + (nota ? ': ' + nota : ''), 'pendiente', totalARS, totalUSD, nVenta,
+        arsJONY, arsMyri, usdMyri, comiARS, comiUSD, '', '', 0, '']);
+      h.getRange(row, 1, 1, 2).setNumberFormat('@');
+      if (h.getRange(1, 27).getValue() !== 'SinComision') h.getRange(1, 27).setValue('SinComision');
+      if (sinComi) h.getRange(row, 27).setValue('SI');
+      SpreadsheetApp.flush();
+      try { lockSC.releaseLock(); } catch (e2) {}
+      altaClienteAuto_(ss, cliente, dueno === 'Jony' ? 'Mayorista' : 'Minorista');
+      return json({ ok: true, id, nVenta });
     }
     if (accion === 'actualizarEstado') {
       const h = ss.getSheetByName('Ventas'); if (!h) return json({error:'sin hoja'});
@@ -723,7 +769,7 @@ function doGet(e) {
     }
     if (accion === 'ventas') {
       const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return json([]);
-      const nc = Math.min(26, h.getLastColumn());
+      const nc = Math.min(27, h.getLastColumn());
       return json(h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
         id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
         fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
@@ -732,7 +778,7 @@ function doGet(e) {
         nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
         usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
         cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
-        comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString()
+        comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString(), sinComision: (r[26]||'').toString()
       })));
     }
     if (accion === 'gastos') {
