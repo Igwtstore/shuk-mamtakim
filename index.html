@@ -1684,6 +1684,11 @@
       <label style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span></label>
       <input type="number" id="cobro-recibido" min="0" oninput="cobro_recalcAjuste()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #b9d2ee;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       <div id="cobro-ajuste-result" style="font-size:0.78rem;margin-top:0.4rem;font-weight:600"></div>
+      <div id="cobro-menos-wrap" style="display:none;margin-top:0.5rem;font-size:0.78rem">
+        <div style="color:var(--azul);font-weight:600;margin-bottom:0.2rem">¿Qué hago con lo que falta?</div>
+        <label style="display:block;cursor:pointer;margin-bottom:0.15rem"><input type="radio" name="cobro-falta" value="perdonar" checked> Perdonar la diferencia (redondeo)</label>
+        <label style="display:block;cursor:pointer"><input type="radio" name="cobro-falta" value="ctacte"> Dejar el resto en cuenta corriente (pago parcial)</label>
+      </div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarModalCobro()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
@@ -2956,7 +2961,7 @@ async function renderPedidos() {
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`)}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
-          ${estado !== 'cotizacion' ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>` : ''}
+          ${estado !== 'cotizacion' ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${(v.cliente||'').replace(/'/g,"\\'")}')">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>` : ''}
           ${(estado !== 'cotizacion' && !cobrado && !soloMiri) ? (() => {
             const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0 };
             const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
@@ -5304,7 +5309,7 @@ async function renderCuentaSocios() {
       const tot = [aM>0?f(aM):'', uM>0?('U$S '+uM.toFixed(2)):''].filter(Boolean).join(' + ') || f(aJ);
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed #e0d4b8">
         <span style="font-size:0.7rem;color:#7a5a1a">${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${(v.formaPago||'').trim()} · ${tot}</span></span>
-        <button onclick="abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM})" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
+        <button onclick="abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM},'${(v.cliente||'').replace(/'/g,"\\'")}')" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
       </div>`;
     };
     html += `<div style="background:#f4f7fb;border:1px solid #e0e8f2;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
@@ -6966,11 +6971,11 @@ function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
     .catch(() => setTimeout(renderNotificaciones, 1500));
 }
 
-let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0;
+let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0, _cobroCliente = '';
 const COBRO_ARS_COLS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS'];
 
-function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
-  _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0;
+function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente) {
+  _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0; _cobroCliente = cliente || '';
   const jw = document.getElementById('cobro-jony-wrap');
   const mw = document.getElementById('cobro-myri-wrap');
   // En vista Myri NO se muestra la parte de Jony (Pitzujim) — privacidad.
@@ -6987,6 +6992,7 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM) {
   const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
   const cs = document.getElementById('cobro-comprobante-st'); if (cs) cs.textContent = '';
   const cr = document.getElementById('cobro-recibido'); if (cr) cr.value = '';
+  const rp = document.querySelector('input[name="cobro-falta"][value="perdonar"]'); if (rp) rp.checked = true;
   cobro_onSelectChange();   // ajusta TC y, al final, el bloque de "monto recibido"
   document.getElementById('cobro-modal').style.display = 'flex';
 }
@@ -7011,10 +7017,12 @@ function cobro_recalcAjuste() {
   inp.placeholder = esperado.toLocaleString('es-AR');
   const recibido = inp.value === '' ? esperado : Math.round(parseFloat(inp.value) || 0);
   const dif = recibido - esperado;
+  const menosWrap = document.getElementById('cobro-menos-wrap');
+  if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';   // solo si pagó de MENOS
   if (inp.value === '' || dif === 0) {
     res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${esperado.toLocaleString('es-AR')} · sin ajuste</span>`;
   } else if (dif < 0) {
-    res.innerHTML = `<span style="color:#c0392b">Recibís $ ${Math.abs(dif).toLocaleString('es-AR')} menos · se perdona, la comisión baja</span>`;
+    res.innerHTML = `<span style="color:#c0392b">Faltan $ ${Math.abs(dif).toLocaleString('es-AR')} — elegí abajo qué hacer</span>`;
   } else {
     res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>`;
   }
@@ -7122,6 +7130,23 @@ async function confirmarCobroModal() {
   const cajaJony = jw.style.display !== 'none' ? document.getElementById('cobro-caja-jony').value : '';
   const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
+  // Si pagó de MENOS y eligió "dejar el resto en cuenta corriente" → es un PAGO PARCIAL:
+  // no confirmamos el cobro completo; abrimos Pago a cuenta precargado y el resto queda debiendo.
+  const _recInp0 = document.getElementById('cobro-recibido');
+  if (_recInp0 && _recInp0.value !== '') {
+    const esp0 = cobro_esperadoPesos();
+    const rec0 = Math.round(parseFloat(_recInp0.value) || 0);
+    const eligioCtaCte = (document.querySelector('input[name="cobro-falta"]:checked') || {}).value === 'ctacte';
+    if (esp0 > 0 && rec0 > 0 && rec0 < esp0 && eligioCtaCte) {
+      cerrarModalCobro();
+      abrirPagoCuenta(_cobroCliente, _cobroId, _cobroArsJ, _cobroArsM, _cobroUsdM);
+      const pitz = Math.min(rec0, _cobroArsJ);
+      const gp = document.getElementById('pago-pitz'); if (gp) gp.value = pitz || '';
+      const gg = document.getElementById('pago-gol'); if (gg) gg.value = Math.max(0, rec0 - pitz) || '';
+      showToast('💵 Completá el pago parcial — el resto queda en cuenta corriente');
+      return;
+    }
+  }
   // Subir uno o varios comprobantes a Cloudinary. Se ACUMULAN a los que ya tenga el pedido.
   const comprobante = await subirComprobantes(document.getElementById('cobro-comprobante'));
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
