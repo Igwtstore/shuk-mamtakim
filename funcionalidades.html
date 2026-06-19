@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Todas las funcionalidades v2.65</title>
+<title>Shuk Mamtakim — Todas las funcionalidades v2.66</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -24,7 +24,7 @@
 <body>
 <div class="top">
   <h1>🍬 Shuk Mamtakim</h1>
-  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.65 · Junio 2026</p>
+  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.66 · Junio 2026</p>
 </div>
 <div class="wrap">
 
@@ -59,6 +59,7 @@
   <div class="item">💰 <b>Cobro con reparto automático</b> — al cobrar, el sistema separa solo qué parte es de Pitzujim (Jony) y qué parte de golosinas (Myri), y calcula la comisión.</div>
   <div class="item">🧮 <b>Pago a cuenta</b> — un cliente puede pagar una parte; el sistema lleva el saldo y reparte el pago entre los socios proporcionalmente (editable).</div>
   <div class="item">📒 <b>Cuenta corriente de mayoristas</b> — quién debe cuánto, con cuántos pedidos, y botón 💵 para registrar pagos a cuenta.</div>
+  <div class="item">💱 <b>Comisión en la moneda de cobro</b> <span class="new">v2.66</span> — si una venta en dólares se cobra en pesos, la comisión queda guardada en pesos (y si se cobra en dólares, en dólares). Antes el registro la guardaba en la moneda original de la venta aunque al mostrarla ya se convertía bien; ahora el dato queda consistente. Los totales mostrados no cambian.</div>
   <div class="item">🏷️ <b>Detalle del pedido con descuento</b> <span class="new">v2.65</span> — al ver el detalle de un movimiento en la Caja, si el pedido tenía descuento global ahora muestra Subtotal · Descuento −X% · Total (con descuento), igual a lo cobrado (antes mostraba el total sin descontar). En ventas en dólares cobradas en pesos, la comisión figura en pesos en todos lados.</div>
   <div class="item">📄 <b>Extracto de caja para conciliar</b> <span class="new">v2.64</span> — en "Caja — movimientos" hay un botón Extracto: elegís una caja (por defecto MP GABY) y un período (arranca en el mes actual) y bajás un CSV con cada movimiento — Fecha · Detalle (cliente + N° pedido) · Entró · Salió · Saldo acumulado — y el TOTAL. Ideal para que Myri lo ponga al lado del extracto del banco/Mercado Pago y vaya tildando. El total cuadra exacto con el saldo de la tarjeta. En "Solo Miri" solo aparecen sus cajas.</div>
   <div class="item">🚀 <b>El panel abre de una</b> <span class="new">v2.63</span> — antes, al abrir, cada tarjeta pedía sus datos por separado (~12 consultas juntas, cada una 2-4s) y en conexiones lentas se saturaba → "Error al cargar". Ahora todo el panel viene en <b>una sola llamada</b> que precarga los datos y las tarjetas se pintan al instante; las consultas restantes van en cola (de a 4) para no saturar. Abre parejo y confiable, también en celular.</div>
@@ -176,7 +177,7 @@
   <div class="item">📖 <b>Documentación versionada</b> — docs técnicas con historial de versiones en /docs.html, y este inventario en /funcionalidades.html.</div>
 </div>
 
-<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.65 · Junio 2026 — se actualiza con cada release</div>
+<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.66 · Junio 2026 — se actualiza con cada release</div>
 </div>
 </body>
 </html>
