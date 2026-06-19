@@ -943,7 +943,7 @@
       <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">💰 Balance acumulado</div>
       <div id="gan-balance-box" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem">
         <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Ganancia acumulada</div><div class="dash-num" id="gan-total" style="color:var(--verde)">—</div></div>
-        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Diezmo (10%)</div><div class="dash-num" id="gan-diezmo" style="color:#c0392b">—</div></div>
+        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Maaser (10%)</div><div class="dash-num" id="gan-diezmo" style="color:#c0392b">—</div></div>
         <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">A retirar (90%)</div><div class="dash-num" id="gan-retiro" style="color:var(--azul)">—</div></div>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -1250,7 +1250,7 @@
     <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:0.5rem">
       <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Quién es mi mejor cliente?</button>
       <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo viene este mes vs el anterior?</button>
-      <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cuánto diezmo acumulé?</button>
+      <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cuánto maaser acumulé?</button>
       <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo les va a los chicos?</button>
     </div>
     <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
@@ -5195,12 +5195,12 @@ async function renderCaja() {
         <div>
           <div style="font-size:0.75rem;color:var(--texto-suave)">Comisión total ganada $</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">$ ${Math.round(jonyARS).toLocaleString('es-AR')}</div>
-          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
+          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Maaser 10%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
         </div>
         <div>
           <div style="font-size:0.75rem;color:var(--texto-suave)">Comisión total ganada U$S</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">U$S ${jonyUSD.toFixed(2)}</div>
-          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: U$S ${diezmoUSD.toFixed(2)}</div>
+          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Maaser 10%: U$S ${diezmoUSD.toFixed(2)}</div>
         </div>
       </div>
       ${desgloseComi}
@@ -6618,7 +6618,7 @@ async function renderGanancias() {
   const lista = document.getElementById('gan-movimientos');
   if (!movs.length && !compras.length) { lista.innerHTML = '<div class="sinpedidos">Sin movimientos aún.</div>'; return; }
   const tipoColor = { ganancia_pitzujim:'#1a7a3c', comision_miri:'#2c6fad', saldo_inicial:'#7a5a1a', retiro:'#c0392b', diezmo:'#c0392b' };
-  const tipoLabel = { ganancia_pitzujim:'Pitzujim', comision_miri:'Comisión Miri', saldo_inicial:'Saldo inicial', retiro:'Retiro', diezmo:'Diezmo' };
+  const tipoLabel = { ganancia_pitzujim:'Pitzujim', comision_miri:'Comisión Miri', saldo_inicial:'Saldo inicial', retiro:'Retiro', diezmo:'Maaser' };
   lista.innerHTML = movs.map(m => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0.45rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem">
       <div>
@@ -6670,15 +6670,15 @@ async function hacerCorteFlow() {
   const diezmoARS = Math.round(gARS * 0.10), retiroARS = gARS - diezmoARS;
   let msg = `✂️ CORTE DE PERÍODO\n\nGanancia cobrada: $ ${gARS.toLocaleString('es-AR')}`;
   if (gUSD) msg += ` + U$S ${gUSD.toFixed(2)}`;
-  msg += `\nDiezmo (10%): $ ${diezmoARS.toLocaleString('es-AR')}`;
+  msg += `\nMaaser (10%): $ ${diezmoARS.toLocaleString('es-AR')}`;
   if (gUSD) msg += ` + U$S ${(gUSD * 0.1).toFixed(2)}`;
   msg += `\nA retirar (90%): $ ${retiroARS.toLocaleString('es-AR')}`;
   if (gUSD) msg += ` + U$S ${(gUSD * 0.9).toFixed(2)}`;
-  msg += `\n\nEsto LIQUIDA las ventas cobradas del período: la ganancia y lo que le debés a Myri por ellas vuelven a CERO.\nAcordate de pasar el diezmo, retirar tu parte y saldar con Myri (Cuenta entre socios).\n\n¿Hacer el corte?`;
+  msg += `\n\nEsto LIQUIDA las ventas cobradas del período: la ganancia y lo que le debés a Myri por ellas vuelven a CERO.\nAcordate de pasar el maaser, retirar tu parte y saldar con Myri (Cuenta entre socios).\n\n¿Hacer el corte?`;
   if (!confirm(msg)) return;
   const r = await apiWrite(new URLSearchParams({ accion: 'hacerCorte', nota: 'Corte de período' }), '');
   if (r && r.ok) {
-    showToast(`✓ Corte hecho · ganancia $${(r.gananciaARS || 0).toLocaleString('es-AR')} · diezmo $${(r.diezmoARS || 0).toLocaleString('es-AR')} · ${r.ventas} ventas`);
+    showToast(`✓ Corte hecho · ganancia $${(r.gananciaARS || 0).toLocaleString('es-AR')} · maaser $${(r.diezmoARS || 0).toLocaleString('es-AR')} · ${r.ventas} ventas`);
     renderGanancias(); setTimeout(() => refreshAdmin(), 1200);
   } else showToast('Error al hacer el corte');
 }
@@ -6690,7 +6690,7 @@ async function renderCortesHistorial() {
   if (!Array.isArray(cortes) || !cortes.length) { cont.innerHTML = ''; return; }
   cont.innerHTML = `<div style="font-size:0.75rem;font-weight:700;color:var(--azul);margin-bottom:0.3rem">✂️ Cortes anteriores</div>` +
     cortes.slice(0, 10).map(c => `<div style="font-size:0.72rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
-      <b>${esc(c.fecha)}</b> · ganancia $ ${Math.round(c.gananciaARS).toLocaleString('es-AR')}${c.gananciaUSD ? ' + U$S ' + c.gananciaUSD.toFixed(2) : ''} · diezmo $ ${Math.round(c.diezmoARS).toLocaleString('es-AR')} · ${c.ventas} ventas${c.pagadoMyriARS ? ' · pagado a Myri $ ' + Math.round(c.pagadoMyriARS).toLocaleString('es-AR') : ''}
+      <b>${esc(c.fecha)}</b> · ganancia $ ${Math.round(c.gananciaARS).toLocaleString('es-AR')}${c.gananciaUSD ? ' + U$S ' + c.gananciaUSD.toFixed(2) : ''} · maaser $ ${Math.round(c.diezmoARS).toLocaleString('es-AR')} · ${c.ventas} ventas${c.pagadoMyriARS ? ' · pagado a Myri $ ' + Math.round(c.pagadoMyriARS).toLocaleString('es-AR') : ''}
     </div>`).join('');
 }
 

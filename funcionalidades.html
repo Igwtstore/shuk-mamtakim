@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Todas las funcionalidades v2.67</title>
+<title>Shuk Mamtakim — Todas las funcionalidades v2.68</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -24,7 +24,7 @@
 <body>
 <div class="top">
   <h1>🍬 Shuk Mamtakim</h1>
-  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.67 · Junio 2026</p>
+  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.68 · Junio 2026</p>
 </div>
 <div class="wrap">
 
@@ -83,8 +83,8 @@
   <div class="item">🧾 <b>Gastos</b> — registrar egresos con categoría y de qué caja salen.</div>
   <div class="item">💸 <b>Retiros y rendiciones</b> — registrar plata que sale de las cajas (retiros personales, transferencias).</div>
   <div class="item">🤝 <b>Cuenta entre socios</b> — lleva sola quién le debe a quién entre Jony y Myri (por cobros cruzados) con saldo neto y botón "Saldar".</div>
-  <div class="item">🕍 <b>Diezmo automático</b> — calcula el 10% sobre comisión + ganancia de Pitzujim (usando costo promedio de compra), acumulado y por período.</div>
-  <div class="item">📈 <b>Ganancias</b> — balance acumulado de Jony: ganancia Pitzujim, comisiones, retiros, diezmo.</div>
+  <div class="item">🕍 <b>Maaser automático</b> — calcula el 10% sobre comisión + ganancia de Pitzujim (usando costo promedio de compra), acumulado y por período.</div>
+  <div class="item">📈 <b>Ganancias</b> — balance acumulado de Jony: ganancia Pitzujim, comisiones, retiros, maaser.</div>
 </div>
 
 <div class="sec">
@@ -128,8 +128,8 @@
 
 <div class="sec">
   <h2>🤖 IA y automatizaciones</h2>
-  <div class="item">🤖 <b>Preguntale a tu negocio</b> <span class="new">v2.3</span> — escribís en criollo ("¿quién es mi mejor cliente?", "¿cuánto diezmo acumulé?") y la IA responde leyendo tus datos reales: ventas, clientes, stock, gastos y Candy Shop. Con ejemplos de un toque. Oculta en vista Myri.</div>
-  <div class="item">🌙 <b>Cierre diario automático</b> <span class="new">v2.3</span> — cada noche a las 21 hs te llega por Telegram el resumen del día sin abrir el panel: pedidos y totales, gastos, visitas, carritos sin cerrar, stock bajo, y el día de Meir e Iosi (ventas, ganancia, diezmo, deudas). Cada chico recibe su mini-resumen si vendió.</div>
+  <div class="item">🤖 <b>Preguntale a tu negocio</b> <span class="new">v2.3</span> — escribís en criollo ("¿quién es mi mejor cliente?", "¿cuánto maaser acumulé?") y la IA responde leyendo tus datos reales: ventas, clientes, stock, gastos y Candy Shop. Con ejemplos de un toque. Oculta en vista Myri.</div>
+  <div class="item">🌙 <b>Cierre diario automático</b> <span class="new">v2.3</span> — cada noche a las 21 hs te llega por Telegram el resumen del día sin abrir el panel: pedidos y totales, gastos, visitas, carritos sin cerrar, stock bajo, y el día de Meir e Iosi (ventas, ganancia, maaser, deudas). Cada chico recibe su mini-resumen si vendió.</div>
   <div class="item">🔄 <b>Refresco inteligente</b> — el panel se actualiza solo cada 5 minutos, pero únicamente si lo tenés abierto (no gasta de fondo).</div>
 </div>
 
@@ -137,26 +137,26 @@
   <h2>🍬 Candy Shop — el negocio de Meir e Iosi</h2>
   <div class="item">🏪 <b>Tienda online propia</b> — cada chico tiene su catálogo con carrito; los pedidos llegan por WhatsApp a su teléfono.</div>
   <div class="item">🔐 <b>Panel con clave</b> — una clave compartida y cada uno elige su perfil. La sesión queda guardada: no pide la clave de nuevo.</div>
-  <div class="item">📊 <b>"Hoy"</b> — resumen del día: ventas, cobrado, ganancia y diezmo (10%), visitas a su tienda y stock restante de lo que llevaron.</div>
+  <div class="item">📊 <b>"Hoy"</b> — resumen del día: ventas, cobrado, ganancia y maaser (10%), visitas a su tienda y stock restante de lo que llevaron.</div>
   <div class="item">🧙 <b>Venta en 4 pasos</b> — wizard: ¿a quién? → ¿qué? → ¿cuántos? → ¿cómo pagó? (todo, a cuenta, no pagó, o pagó de más y le deben cambio).</div>
   <div class="item">🗓️ <b>Ventas pasadas</b> — cargar una venta de otro día, con calendario desde el 1° del mes.</div>
   <div class="item">📋 <b>Deudores en dos direcciones</b> — quién le debe a cada chico Y a quién le deben cambio, con historial por cliente y botón de saldar.</div>
   <div class="item">🖼️ <b>Fotos auto-encuadradas</b> <span class="new">v2.34</span> — si una foto se sube descentrada o con el fondo blanco desparejo, el sistema recorta los bordes y centra el producto solo, en el panel, los flyers y la tienda.</div>
-  <div class="item">📦 <b>Catálogo propio</b> — productos con foto, precio y costo; vista previa de ganancia y diezmo al cargarlo. El código se puede cambiar y se renombra solo en todo el historial.</div>
+  <div class="item">📦 <b>Catálogo propio</b> — productos con foto, precio y costo; vista previa de ganancia y maaser al cargarlo. El código se puede cambiar y se renombra solo en todo el historial.</div>
   <div class="item">🚚 <b>Compras a proveedor</b> — alta de proveedores, carga de compras con costos (se puede crear un producto nuevo sin salir del formulario) y el stock entra solo al depósito.</div>
   <div class="item">🏠 <b>Depósito valorizado</b> — la mercadería en casa con foto, unidades, valor a costo por producto y valor total invertido, ordenado A-Z. Al cargar el "stock del día" se descuenta; si se borra la carga, vuelve.</div>
-  <div class="item">📈 <b>Costo promedio automático</b> — cada compra recalcula el costo real del producto (promedio ponderado) → ganancia y diezmo más exactos.</div>
+  <div class="item">📈 <b>Costo promedio automático</b> — cada compra recalcula el costo real del producto (promedio ponderado) → ganancia y maaser más exactos.</div>
   <div class="item">🗓️ <b>Historial</b> — todas las ventas pasadas, con editar y borrar (ajustando las deudas solo), y el acumulado individual + global al pie.</div>
   <div class="item">👥 <b>Total</b> — vista combinada de los dos hermanos para comparar.</div>
   <div class="item">🎨 <b>Flyers con IA</b> <span class="new">v2.32</span> — eligen los productos, escriben su idea ("chocolates ricos, precios de amigo") y la IA la convierte en un flyer con onda: fotos reales, precios, colores propios de cada hermano, listo para compartir por WhatsApp con un toque. Pueden contar la idea hablando (🎙️ el sistema la escribe solo). Eligen todo: formato (post, cuadrado o historia para el estado), tema de temporada (cumple, Janucá, Purim, Pésaj...), diseño (grilla, héroe o lista), etiquetas (🔥 OFERTA, ✨ NUEVO) y precios promo tachados. Pueden pedir un fondo único dibujado por IA, mandárselo al WhatsApp con un toque (⚡ hasta hay un "flyer del día" que se arma solo), y cada flyer queda en "Mis flyers" para descargar, regenerar, archivar o eliminar.</div>
   <div class="item">⚡ <b>Apertura instantánea</b> — el panel muestra al instante lo último que viste y se actualiza por detrás; una sola llamada al servidor en vez de cinco.</div>
   <div class="item">📋 <b>Mi listita del día</b> <span class="new">v2.60</span> — cada chico arma en segundos lo que se lleva (con un número por producto, o el botón "📋 Llevar lo mismo que la última vez"). Eso descuenta del depósito de casa por la diferencia: si después la corrige, no se descuenta de más ni de menos. Reemplaza el papel y lápiz.</div>
   <div class="item">🏠 <b>Cierre del día (motivacional)</b> <span class="new">v2.60</span> — al terminar el día ve cuánto se llevó, cuánta plata tiene que tener, cuánto le deben, cuánto le queda para traer, y un "🏆 Ganaste hoy $X" real. Le avisa con un ✅/⚠️ si la cuenta cuadra (lo vendido = efectivo + deuda) para que todo "matchee" sin papelitos.</div>
-  <div class="item">📅 <b>Ver y editar días pasados</b> <span class="new">v2.60</span> — con un selector de fecha ve las ventas de cualquier día anterior en el mismo formato del día (ventas, ganancia, diezmo) y las puede editar o borrar, no solo mirarlas.</div>
+  <div class="item">📅 <b>Ver y editar días pasados</b> <span class="new">v2.60</span> — con un selector de fecha ve las ventas de cualquier día anterior en el mismo formato del día (ventas, ganancia, maaser) y las puede editar o borrar, no solo mirarlas.</div>
   <div class="item">🎨 <b>Ventas más claras</b> <span class="new">v2.60</span> — líneas más marcadas entre ventas, nombre del cliente más grande y en negrita, y cada venta pintada por estado: rojo "⚠️ DEBE", azul "💰 CAMBIO", verde al día — tanto en el día como en Historia.</div>
   <div class="item">🛡️ <b>Saldos a prueba de errores</b> <span class="new">v2.60</span> — candado anti doble-clic en cada cobro y vuelto (no se duplican los pagos) y guardado de la venta entera en una sola llamada (instantáneo). Se arregló y limpió el bug que corrompía la cuenta de los deudores.</div>
   <div class="item">🩹 <b>Historial confiable</b> <span class="new">v2.61</span> — se arregló el bug por el que el historial aparecía y desaparecía (cuando el servidor de Google tardaba o respondía un error pasajero, la app lo tomaba como "no hay ventas" y a veces hasta mostraba el perfil equivocado). Ahora reintenta ante un error pasajero, distingue error de vacío (muestra "Reintentar", no un falso "sin historial") y descarta respuestas viejas de otro perfil al cambiar de chico. El mismo arreglo cubre <b>Deudores</b>: ya no dice "¡Todo en cero!" si en realidad hay deudas (tira la info vieja/rota guardada en el teléfono y recarga la real).</div>
-  <div class="item">📊 <b>Acumulado en el Historial</b> <span class="new">v2.61</span> — al pie de "Historial" (antes "Historia") aparece el total histórico de cada uno (vendido, ganancia, diezmo) y el global de todos juntos.</div>
+  <div class="item">📊 <b>Acumulado en el Historial</b> <span class="new">v2.61</span> — al pie de "Historial" (antes "Historia") aparece el total histórico de cada uno (vendido, ganancia, maaser) y el global de todos juntos.</div>
   <div class="item">👨 <b>Perfil PA</b> <span class="new">v2.61</span> — papá es un tercer perfil del Candy (ayuda en las ventas). Sus ventas figuran en su propio panel y suman al global. Incluye una herramienta interna para reasignar una venta de un perfil a otro.</div>
 </div>
 
@@ -178,7 +178,7 @@
   <div class="item">📖 <b>Documentación versionada</b> — docs técnicas con historial de versiones en /docs.html, y este inventario en /funcionalidades.html.</div>
 </div>
 
-<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.67 · Junio 2026 — se actualiza con cada release</div>
+<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.68 · Junio 2026 — se actualiza con cada release</div>
 </div>
 </body>
 </html>

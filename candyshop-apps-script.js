@@ -968,7 +968,7 @@ function doGet(e) {
       const balance = parseFloat(dec(e.parameter.balance||0));
       const diezmo = Math.round(balance * 0.10);
       const retiro = Math.round(balance - diezmo);
-      h.appendRow([fecha, 'diezmo', 'Diezmo 10%', -diezmo]);
+      h.appendRow([fecha, 'diezmo', 'Maaser 10%', -diezmo]);
       h.appendRow([fecha, 'retiro', dec(e.parameter.nota||'Retiro de ganancias'), -retiro]);
       return json({ok:true, diezmo, retiro});
     }
@@ -2958,7 +2958,7 @@ function cierreDiario() {
   [['Meir', meir], ['Iosi', iosi]].forEach(par => {
     const nombre = par[0], d = par[1];
     msg += '• ' + nombre + ': ' + d.n + ' venta' + (d.n !== 1 ? 's' : '');
-    if (d.total > 0) msg += ' · ' + fmt(d.total) + ' (ganancia ' + fmt(d.ganancia) + ', diezmo ' + fmt(d.ganancia * 0.1) + ')';
+    if (d.total > 0) msg += ' · ' + fmt(d.total) + ' (ganancia ' + fmt(d.ganancia) + ', maaser ' + fmt(d.ganancia * 0.1) + ')';
     if (d.deudasNuevas > 0) msg += ' · deudas nuevas ' + fmt(d.deudasNuevas);
     msg += '\n';
   });
@@ -2970,7 +2970,7 @@ function cierreDiario() {
     const dest = par[0], d = par[1];
     if (d.n > 0) {
       enviarTelegram_(dest, '🌙 *Tu día de hoy*\n• Ventas: ' + d.n + ' · ' + fmt(d.total) +
-        '\n• Ganancia: ' + fmt(d.ganancia) + '\n• Diezmo (10%): ' + fmt(d.ganancia * 0.1) + '\n¡Buen trabajo! 💪');
+        '\n• Ganancia: ' + fmt(d.ganancia) + '\n• Maaser (10%): ' + fmt(d.ganancia * 0.1) + '\n¡Buen trabajo! 💪');
     }
   });
   Logger.log('Cierre diario enviado');

@@ -363,7 +363,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="stat"><div class="stat-num" id="s-ventas">—</div><div class="stat-label">Ventas</div></div>
         <div class="stat blue"><div class="stat-num" id="s-cobrado">—</div><div class="stat-label">Cobrado</div></div>
         <div class="stat green"><div class="stat-num" id="s-ganancia">—</div><div class="stat-label">Ganancia</div></div>
-        <div class="stat orange"><div class="stat-num" id="s-diezmo">—</div><div class="stat-label">Diezmo (10%)</div></div>
+        <div class="stat orange"><div class="stat-num" id="s-diezmo">—</div><div class="stat-label">Maaser (10%)</div></div>
       </div>
     </div>
     <div class="card" id="cierre-card" style="display:none"><div id="cierre-content"></div></div>
@@ -722,7 +722,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
     </div>
     <div id="ganancia-preview" style="background:#f0fff4; border-radius:10px; padding:10px 12px; margin-bottom:14px; display:none; font-size:0.85rem; color:#2e8b57;">
-      Ganancia: <strong id="gp-monto"></strong> · Diezmo: <strong id="gp-diezmo"></strong>
+      Ganancia: <strong id="gp-monto"></strong> · Maaser: <strong id="gp-diezmo"></strong>
     </div>
 
     <button class="btn-save" onclick="guardarProducto()">Guardar</button>
@@ -3395,7 +3395,7 @@ function renderHistoria(ventas, porHijo, quien) {
       <div style="font-weight:800;color:${color};font-size:0.95rem;margin-bottom:6px">${titulo}</div>
       <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Vendido</span><b style="color:#5c3d1e">${fmt(a.vendido)}</b></div>
       <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Ganancia</span><b style="color:#2e8b57">${fmt(a.ganancia)}</b></div>
-      <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Diezmo (10%)</span><b style="color:#b8860b">${fmt(a.diezmo)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Maaser (10%)</span><b style="color:#b8860b">${fmt(a.diezmo)}</b></div>
     </div>`;
   let footer = '<div style="margin-top:16px;border-top:2px dashed #e8ddcf;padding-top:10px"><div style="font-size:0.82rem;color:#8a6d3b;font-weight:800;text-align:center;margin-bottom:2px">📊 Acumulado total</div>';
   footer += _boxAcum('🧑 ' + (quien || usuario || 'Vos') + ' — total histórico', '#c45e20', _acum(ventas));
@@ -3673,7 +3673,7 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
         <div class="stat"><div class="stat-num">${comb.ventasHoy}</div><div class="stat-label">Ventas</div></div>
         <div class="stat blue"><div class="stat-num">${fmt(comb.cobradoHoy)}</div><div class="stat-label">Cobrado</div></div>
         <div class="stat green"><div class="stat-num">${fmt(comb.gananciaHoy)}</div><div class="stat-label">Ganancia</div></div>
-        <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoHoy)}</div><div class="stat-label">Diezmo</div></div>
+        <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoHoy)}</div><div class="stat-label">Maaser</div></div>
       </div>
     </div>
     <div class="total-kids-grid">
@@ -3714,7 +3714,7 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
         <div class="stat"><div class="stat-num">${comb.ventasTotal}</div><div class="stat-label">Ventas</div></div>
         <div class="stat blue"><div class="stat-num">${fmt(comb.cobradoTotal)}</div><div class="stat-label">Cobrado</div></div>
         <div class="stat green"><div class="stat-num">${fmt(comb.gananciaTotal)}</div><div class="stat-label">Ganancia</div></div>
-        <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoTotal)}</div><div class="stat-label">Diezmo</div></div>
+        <div class="stat orange"><div class="stat-num">${fmt(comb.diezmoTotal)}</div><div class="stat-label">Maaser</div></div>
       </div>
     </div>`;
 }
