@@ -257,12 +257,19 @@ function doGet(e) {
       // Recalcula la comisión canónica de CADA venta desde su propio dato (repara cualquier descuadre).
       const datos = h.getDataRange().getValues();
       const cambios = []; let cambiadas = 0;
+      // Reparar encabezado si un bug previo dejó un número en col 15/16 (deben decir 'Comi ARS'/'Comi USD').
+      let headerFix = null;
+      const h15 = datos[0] ? datos[0][14] : '', h16 = datos[0] ? datos[0][15] : '';
+      if (typeof h15 === 'number' || typeof h16 === 'number') {
+        headerFix = { de: [h15, h16], a: ['Comi ARS', 'Comi USD'] };
+        if (e.parameter.dry !== '1') { h.getRange(1, 15).setValue('Comi ARS'); h.getRange(1, 16).setValue('Comi USD'); }
+      }
       for (let i = 1; i < datos.length; i++) {
         const r = datos[i];
         const estado = (r[7] || '').toString().trim();
         if (estado === 'cancelado' || estado === 'cotizacion') continue;
+        // Comisión canónica de CADA venta desde su propio dato (sin parte de Myri → 0).
         const arsM = parseFloat(r[12]) || 0, usdM = parseFloat(r[13]) || 0;
-        if (arsM <= 0 && usdM <= 0) continue;   // sin parte de Myri → sin comisión que tocar
         const cajaM = (r[17] || '').toString(), tc = parseFloat(r[18]) || 0;
         const sinC = (r[26] || '').toString().toUpperCase() === 'SI';
         const cm = _comiEnMonedaCobro_(arsM, usdM, cajaM, tc, sinC);
@@ -277,7 +284,7 @@ function doGet(e) {
           }
         }
       }
-      return json({ ok: true, dry: e.parameter.dry === '1', cambiadas, cambios });
+      return json({ ok: true, dry: e.parameter.dry === '1', cambiadas, cambios, headerFix });
     }
     if (accion === 'tts') {
       // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
