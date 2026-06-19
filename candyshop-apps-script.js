@@ -96,6 +96,22 @@ function altaClienteAuto_(ss, nombre, tipo) {
 // SOLO de ventas COBRADAS (caja real) y NO liquidadas (col 26 'Corte' vacía). Replica EXACTO la
 // lógica de comisión de la caja (incluye golosinas U$S cobradas en pesos → comisión en pesos).
 // Es la FUENTE ÚNICA del diezmo: cuenta solo lo cobrado y se auto-corrige al borrar/editar/ajustar.
+// La comisión queda en la MONEDA EN QUE SE COBRÓ la venta (regla del usuario):
+// U$S cobrada en una caja en pesos (con tipo de cambio) → comisión en PESOS;
+// U$S cobrada en una caja en dólares → comisión en U$S. La parte ARS siempre es comisión en pesos.
+function _comiEnMonedaCobro_(arsMyri, usdMyri, cajaMyri, tc, sinComi) {
+  if (sinComi) return { comiARS: 0, comiUSD: 0 };
+  const CAJAS_ARS = ['MP_GABY', 'EFT_MYRI', 'EFT_JONY', 'MP_JONY', 'CTA_CTE_ARS'];
+  let cARS = Math.round((parseFloat(arsMyri) || 0) * 0.15);
+  let cUSD = 0;
+  const usd = parseFloat(usdMyri) || 0;
+  if (usd > 0) {
+    if (parseFloat(tc) > 0 && CAJAS_ARS.indexOf(cajaMyri) !== -1) cARS += Math.round(usd * parseFloat(tc) * 0.15);
+    else cUSD += Math.round(usd * 0.15 * 100) / 100;
+  }
+  return { comiARS: cARS, comiUSD: cUSD };
+}
+
 function gananciaJonyPeriodo_(ss) {
   const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, items: [] };
   const h = ss.getSheetByName('Ventas');
@@ -229,6 +245,37 @@ function doGet(e) {
       // (la deuda/los pagos siguen a la venta). Requiere el secreto. Uso administrativo.
       if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
       return json(reasignarVentaHijo(ss, e.parameter));
+    }
+    if (accion === 'normalizarComisionMoneda') {
+      // Migración: deja la comisión GUARDADA en la moneda en que se cobró cada venta (U$S cobrada en
+      // pesos → comisión en pesos). Los renders ya lo reconvertían, así que NO cambia ningún número
+      // mostrado; solo deja el dato crudo consistente. dry=1 para previsualizar. Requiere el secreto.
+      if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
+      const h = ss.getSheetByName('Ventas');
+      if (!h || h.getLastRow() < 2) return json({ ok: true, cambiadas: 0, cambios: [] });
+      const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+      const cambios = []; let cambiadas = 0;
+      for (let i = 0; i < d.length; i++) {
+        const r = d[i];
+        const estado = (r[7] || '').toString().trim();
+        if (estado === 'cancelado' || estado === 'cotizacion') continue;
+        const arsM = parseFloat(r[12]) || 0, usdM = parseFloat(r[13]) || 0;
+        if (usdM <= 0) continue;   // solo afecta a ventas con parte en U$S
+        const cajaM = (r[17] || '').toString(), tc = parseFloat(r[18]) || 0;
+        const sinC = (r[26] || '').toString().toUpperCase() === 'SI';
+        const cm = _comiEnMonedaCobro_(arsM, usdM, cajaM, tc, sinC);
+        const viejoA = parseFloat(r[14]) || 0, viejoU = parseFloat(r[15]) || 0;
+        if (Math.abs(cm.comiARS - viejoA) >= 1 || Math.abs(cm.comiUSD - viejoU) >= 0.01) {
+          cambios.push({ nVenta: r[10], cliente: (r[2] || '').toString(), cajaMyri: cajaM,
+            de: { comiARS: viejoA, comiUSD: viejoU }, a: cm });
+          if (e.parameter.dry !== '1') {
+            h.getRange(i + 1, 15).setValue(cm.comiARS);
+            h.getRange(i + 1, 16).setValue(cm.comiUSD);
+            cambiadas++;
+          }
+        }
+      }
+      return json({ ok: true, dry: e.parameter.dry === '1', cambiadas, cambios });
     }
     if (accion === 'tts') {
       // Texto → voz natural con OpenAI TTS. Devuelve mp3 en base64. Para la demo de voz.
@@ -548,7 +595,10 @@ function doGet(e) {
             if (esperado > 0 && recibido > 0 && Math.abs(recibido - esperado) >= 1) {
               const f = recibido / esperado;
               const nJ = Math.round(bJ * f), nM = Math.round(bM * f), nU = Math.round(bU * f * 100) / 100;
-              const nCA = Math.round(nM * 0.15), nCU = Math.round(nU * 0.15 * 100) / 100;
+              // Comisión en la moneda de cobro (U$S cobrada en pesos → comisión en pesos).
+              const _sc = (datos[i][26] || '').toString().toUpperCase() === 'SI';
+              const _cm = _comiEnMonedaCobro_(nM, nU, cajaM, tc, _sc);
+              const nCA = _cm.comiARS, nCU = _cm.comiUSD;
               // Guardar la base original ANTES de pisar (solo la primera vez).
               if (!origStr) { h.getRange(i+1,24).setNumberFormat('@'); h.getRange(i+1,24).setValue([bJ,bM,bU,bCA,bCU].join('|')); }
               h.getRange(i+1,12).setValue(nJ); h.getRange(i+1,13).setValue(nM); h.getRange(i+1,14).setValue(nU);
@@ -563,6 +613,15 @@ function doGet(e) {
               }
               h.getRange(i+1,23).setValue(0);
             }
+          }
+          // Comisión en la MONEDA DE COBRO: al confirmar la caja, si la venta era en U$S y se cobró
+          // en una caja en pesos, la comisión pasa a pesos (y al revés). Los renders ya lo reflejan;
+          // esto deja el dato GUARDADO consistente (cols 15/16). No corre si hubo ajuste (ya las seteó).
+          if (e.parameter.recibido === undefined || e.parameter.recibido === '') {
+            const _sc = (datos[i][26] || '').toString().toUpperCase() === 'SI';
+            const _cm = _comiEnMonedaCobro_(datos[i][12], datos[i][13], dec(e.parameter.cajaMyri || ''), tc, _sc);
+            h.getRange(i+1,15).setValue(_cm.comiARS);
+            h.getRange(i+1,16).setValue(_cm.comiUSD);
           }
           return ok();
         }
