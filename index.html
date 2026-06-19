@@ -4950,6 +4950,9 @@ async function renderCaja() {
 
     const movs = [];
     const _det = {};   // detalle de cada pedido (para desplegar al clickear un movimiento)
+    // Comisiones que NO van a la columna "Comi $ JONY" porque la golosina se cobró a TU caja
+    // (ya tenés esa comisión adentro). Sirven para mostrar el TOTAL ganado y el desglose transparente.
+    let comiYaEnJonyARS = 0, comiYaEnJonyUSD = 0;
     ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach((v, idx) => {
       const n = v.nVenta || (idx + 1);
       const fp = v.formaPago || '';
@@ -4995,6 +4998,8 @@ async function renderCaja() {
         movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: cajaM, val: arsM, mon: 'ARS', tipo: 'venta', myriNet, vid: v.id, sub: subComi, corte: v.corte });
         if (comiA > 0 && pagoFueAMyri) {
           movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiA, mon: 'ARS', tipo: 'comi', srcCol: cajaM });
+        } else if (comiA > 0 && !v.corte) {
+          comiYaEnJonyARS += comiA;   // golosina cobrada a TU caja → comisión ya tuya (no en la columna)
         }
       }
       if (usdM > 0) {
@@ -5007,11 +5012,17 @@ async function renderCaja() {
           if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
             const arsEquiv = Math.round(usdM * tc);
             const comiARS_conv = _sinComi ? 0 : Math.round(arsEquiv * 0.15);
-            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`, vid: v.id, corte: v.corte, myriNet: esCajaJony ? (arsEquiv - comiARS_conv) : undefined });
-            if (comiARS_conv > 0) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi', srcCol: colUSD });
+            const subU = (esCajaJony && comiARS_conv > 0)
+              ? `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')} · incluye tu comisión $ ${comiARS_conv.toLocaleString('es-AR')}`
+              : `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`;
+            movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: arsEquiv, mon: 'ARS', tipo: 'venta', sub: subU, vid: v.id, corte: v.corte, myriNet: esCajaJony ? (arsEquiv - comiARS_conv) : undefined });
+            // Si la golosina U$S se cobró a TU caja, la comisión ya es tuya → NO va a la columna (igual que en pesos).
+            if (comiARS_conv > 0 && !esCajaJony) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comiARS_conv, mon: 'ARS', tipo: 'comi', srcCol: colUSD });
+            else if (comiARS_conv > 0 && !v.corte) comiYaEnJonyARS += comiARS_conv;
           } else {
             movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: colUSD, val: usdM, mon: 'USD', tipo: 'venta', vid: v.id, corte: v.corte, myriNetUSD: esCajaJony ? (usdM - comiU) : undefined });
-            if (comiU > 0) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi', srcCol: colUSD });
+            if (comiU > 0 && !esCajaJony) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU, mon: 'USD', tipo: 'comi', srcCol: colUSD });
+            else if (comiU > 0 && !v.corte) comiYaEnJonyUSD += comiU;
           }
         }
       }
@@ -5160,26 +5171,39 @@ async function renderCaja() {
       </tfoot>
     </table>
     </div>`;
-    // Control personal JONY — solo comisiones de ventas MYRI (15%)
-    const jonyARS = totalsARS['COMI_ARS_JONY'] || 0;
-    const jonyUSD = totalsUSD['COMI_USD_JONY'] || 0;
+    // Control personal JONY — comisión TOTAL ganada (15% de las golosinas de Myri cobradas).
+    // = lo que Myri te está pagando (columna "Comi $ JONY", pendiente de cobrarle a ella)
+    //   + lo que YA entró a tus cajas (golosinas que cobraste vos; esa comisión ya es tuya).
+    // Así el número total coincide con la pestaña Ganancias y con la auditoría a mano, y es transparente.
+    const comiPendMyriARS = totalsARS['COMI_ARS_JONY'] || 0;
+    const comiPendMyriUSD = totalsUSD['COMI_USD_JONY'] || 0;
+    const jonyARS = comiPendMyriARS + comiYaEnJonyARS;   // TOTAL ganado en pesos
+    const jonyUSD = comiPendMyriUSD + comiYaEnJonyUSD;   // TOTAL ganado en U$S
     const diezmoARS = Math.round(jonyARS * 0.10);
     const diezmoUSD = parseFloat((jonyUSD * 0.10).toFixed(2));
+    const _fmtARS = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+    const desgloseComi = (comiYaEnJonyARS > 0 || comiYaEnJonyUSD > 0) ? `
+      <div style="font-size:0.72rem;color:var(--texto-suave);background:var(--gris);border-radius:8px;padding:0.5rem 0.7rem;margin-bottom:0.6rem;line-height:1.6">
+        🧮 <b>Comisión total ganada: ${_fmtARS(jonyARS)}${jonyUSD > 0 ? ' + U$S ' + jonyUSD.toFixed(2) : ''}</b> — de eso:<br>
+        ⏳ <b>Myri te está pagando</b> (pendiente de cobrarle): <span style="color:var(--azul)">${_fmtARS(comiPendMyriARS)}${comiPendMyriUSD > 0 ? ' + U$S ' + comiPendMyriUSD.toFixed(2) : ''}</span><br>
+        💰 <b>Ya entró a tus cajas</b> (golosinas que cobraste vos): <span style="color:var(--verde)">${_fmtARS(comiYaEnJonyARS)}${comiYaEnJonyUSD > 0 ? ' + U$S ' + comiYaEnJonyUSD.toFixed(2) : ''}</span>
+      </div>` : '';
     const controlJony = `
     <div style="margin-top:1.5rem;padding:1rem 1.25rem;background:#f0f0f8;border-radius:12px;border:1.5px solid #d0d0e8">
       <div style="font-size:0.72rem;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem">🔒 Control personal JONY</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.75rem">
         <div>
-          <div style="font-size:0.75rem;color:var(--texto-suave)">Comisiones acumuladas $</div>
+          <div style="font-size:0.75rem;color:var(--texto-suave)">Comisión total ganada $</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">$ ${Math.round(jonyARS).toLocaleString('es-AR')}</div>
           <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
         </div>
         <div>
-          <div style="font-size:0.75rem;color:var(--texto-suave)">Comisiones acumuladas U$S</div>
+          <div style="font-size:0.75rem;color:var(--texto-suave)">Comisión total ganada U$S</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">U$S ${jonyUSD.toFixed(2)}</div>
           <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Diezmo 10%: U$S ${diezmoUSD.toFixed(2)}</div>
         </div>
       </div>
+      ${desgloseComi}
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.5rem">Para registrar un retiro usá el formulario <strong>Rendición / retiro</strong> seleccionando la caja correspondiente.</div>
     </div>`;
     // Desglose de la Cuenta Corriente $ (solo vista Jony): cuánto del pendiente es Pitzujim (tuyo)
