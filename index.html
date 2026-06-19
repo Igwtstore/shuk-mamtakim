@@ -4763,11 +4763,20 @@ function verDetalleMovimientoCaja(vid) {
       <span style="font-weight:700;white-space:nowrap">${subT}</span></div>`;
   }).join('');
   const cuerpo = (d.lineas && d.lineas.length) ? filas : '<div style="color:var(--texto-suave)">(este pedido no tiene productos de tu parte)</div>';
-  const totalTxt = [totARS ? '$ ' + Math.round(totARS).toLocaleString('es-AR') : '', totUSD ? 'U$S ' + totUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+  // Si el pedido tiene descuento global, mostrarlo y dejar el Total NETO (lo que de verdad se cobró).
+  const dPct = parseFloat(d.descPct) || 0;
+  const netARS = dPct > 0 ? totARS * (1 - dPct / 100) : totARS;
+  const netUSD = dPct > 0 ? totUSD * (1 - dPct / 100) : totUSD;
+  const totalTxt = [netARS ? '$ ' + Math.round(netARS).toLocaleString('es-AR') : '', netUSD ? 'U$S ' + netUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+  const subtotalTxt = [totARS ? '$ ' + Math.round(totARS).toLocaleString('es-AR') : '', totUSD ? 'U$S ' + totUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+  const descBloque = dPct > 0 ? `
+    <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:4px;font-size:0.85rem;color:var(--texto-suave)"><span>Subtotal</span><span>${subtotalTxt}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:var(--rojo)"><span>🏷️ Descuento global −${dPct}%</span><span>− ${[totARS ? '$ ' + Math.round(totARS * dPct / 100).toLocaleString('es-AR') : '', totUSD ? 'U$S ' + (totUSD * dPct / 100).toFixed(2) : ''].filter(Boolean).join(' + ')}</span></div>` : '';
   const html = `<div style="font-weight:700;font-size:1rem;margin-bottom:2px">Pedido #${d.n} — ${esc(d.cliente || 's/nombre')}</div>
     <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${d.fecha} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
     <div style="font-size:0.85rem;line-height:1.4">${cuerpo}</div>
-    ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total</span><span>${totalTxt}</span></div>` : ''}
+    ${descBloque}
+    ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total${dPct > 0 ? ' (con descuento)' : ''}</span><span>${totalTxt}</span></div>` : ''}
     ${(d.comprobante || '').split('\n').map(s => s.trim()).filter(Boolean).map((u, i, a) => `<a href="${esc(u)}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:0.5rem;background:var(--verde-claro,#e8f5ee);color:var(--verde);border-radius:8px;font-weight:700;text-decoration:none">🧾 Ver comprobante${a.length > 1 ? ' ' + (i + 1) : ' de pago'}</a>`).join('')}`;
   _mostrarOverlayDetalle(html);
 }
@@ -4954,7 +4963,8 @@ async function renderCaja() {
       const comiU = _sinComi ? 0 : (parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2)));
       // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
       _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
-                     lineas: _lineasPedidoVista(v.productos, soloMiri), comprobante: v.comprobante || '' };
+                     lineas: _lineasPedidoVista(v.productos, soloMiri), comprobante: v.comprobante || '',
+                     descPct: (() => { const mm = (v.productos || '').match(/Descuento global:\s*([\d.]+)\s*%/i); return mm ? parseFloat(mm[1]) || 0 : 0; })() };
       // 🔑 REGLA DE ORO: un pedido NO cobrado nunca entra a la caja física.
       // Va a "cuenta corriente / pendiente" hasta que confirmes el cobro. La forma de pago
       // que eligió el cliente es solo una intención, no plata en mano.
