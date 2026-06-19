@@ -253,14 +253,16 @@ function doGet(e) {
       if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
       const h = ss.getSheetByName('Ventas');
       if (!h || h.getLastRow() < 2) return json({ ok: true, cambiadas: 0, cambios: [] });
-      const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+      // getDataRange: datos[0]=encabezado (fila 1), datos[i]=fila i+1 → se escribe en i+1 (sin off-by-one).
+      // Recalcula la comisión canónica de CADA venta desde su propio dato (repara cualquier descuadre).
+      const datos = h.getDataRange().getValues();
       const cambios = []; let cambiadas = 0;
-      for (let i = 0; i < d.length; i++) {
-        const r = d[i];
+      for (let i = 1; i < datos.length; i++) {
+        const r = datos[i];
         const estado = (r[7] || '').toString().trim();
         if (estado === 'cancelado' || estado === 'cotizacion') continue;
         const arsM = parseFloat(r[12]) || 0, usdM = parseFloat(r[13]) || 0;
-        if (usdM <= 0) continue;   // solo afecta a ventas con parte en U$S
+        if (arsM <= 0 && usdM <= 0) continue;   // sin parte de Myri → sin comisión que tocar
         const cajaM = (r[17] || '').toString(), tc = parseFloat(r[18]) || 0;
         const sinC = (r[26] || '').toString().toUpperCase() === 'SI';
         const cm = _comiEnMonedaCobro_(arsM, usdM, cajaM, tc, sinC);
