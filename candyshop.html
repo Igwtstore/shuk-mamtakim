@@ -1142,6 +1142,7 @@ function renderDashboard(ventas, catalogo, deudores = []) {
         <div style="text-align:right"><div style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</div>${g.gan>0?`<div style="font-size:0.75rem;color:#2e8b57">+${fmt(g.gan)}</div>`:''}</div>
       </div>
       ${lineasHtml}
+      ${g.pend > 0 ? `<div style="margin-top:7px;font-size:0.8rem;font-weight:600;color:#b8860b;background:#fff7e6;border:1px solid #f0d9a8;border-radius:9px;padding:6px 10px">${g.pend < g.total ? `💵 Pagó ${fmt(g.total - g.pend)} · ⏳ Debe ${fmt(g.pend)} de esta venta` : `⏳ No pagó · debe ${fmt(g.pend)} de esta venta`}</div>` : ''}
     </div>`;
   }).join('');
 
