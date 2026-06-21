@@ -3379,7 +3379,7 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
   html += box('#fff4ef', '#e05c2a', '📋 Te deben (de hoy)', deuda);
   if (hayLista) html += box('#f7f4ff', '#7a5fa0', '📦 Te queda para traer', quedaVal);
   html += `</div>`;
-  html += `<div style="margin-top:10px;padding:8px 10px;border-radius:10px;text-align:center;font-weight:700;font-size:0.82rem;background:${cuadra ? '#e8f5ee' : '#fde8e8'};color:${cuadra ? '#2e8b57' : '#c0392b'}">${cuadra ? '✅' : '⚠️'} Vendiste ${fmt(vendido)} = Efectivo ${fmt(cobrado)} + Deuda ${fmt(deuda)}</div>`;
+  html += `<div style="margin-top:10px;padding:8px 10px;border-radius:10px;text-align:center;font-weight:700;font-size:0.82rem;background:${cuadra ? '#e8f5ee' : '#fde8e8'};color:${cuadra ? '#2e8b57' : '#c0392b'}">${cuadra ? '✅' : '⚠️'} Vendiste ${fmt(vendido)} = Cobrado ${fmt(cobrado)} + Deuda ${fmt(deuda)}</div>`;
   if (vendioFuera) html += `<div style="margin-top:6px;font-size:0.76rem;color:#b8860b;text-align:center">⚠️ Vendiste algo que no estaba en tu listita</div>`;
   html += `<div style="margin-top:12px;text-align:center;background:linear-gradient(135deg,#fff7e6,#ffe9c7);border-radius:12px;padding:12px"><div style="font-size:0.8rem;color:#8a6d3b">🏆 Ganaste hoy</div><div style="font-size:1.7rem;font-weight:900;color:#e58e00">${fmt(ganancia)}</div></div>`;
   cont.innerHTML = html;
