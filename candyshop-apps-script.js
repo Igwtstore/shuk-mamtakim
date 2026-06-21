@@ -112,6 +112,40 @@ function _comiEnMonedaCobro_(arsMyri, usdMyri, cajaMyri, tc, sinComi) {
   return { comiARS: cARS, comiUSD: cUSD };
 }
 
+// Asegura que la hoja Stock tenga la columna 18 'Moneda' ($ | U$S): header + default '$' en
+// filas viejas (si no, el gviz CSV puede truncar una columna trailing vacía). Idempotente: solo
+// escribe si hace falta. La moneda es texto puro, no cae en el bug de números-como-texto del gviz.
+function _asegurarColMoneda_(ss) {
+  const h = ss.getSheetByName('Stock'); if (!h) return;
+  if (h.getMaxColumns() < 18) h.insertColumnsAfter(h.getMaxColumns(), 18 - h.getMaxColumns());
+  if (!h.getRange(1, 18).getValue()) h.getRange(1, 18).setValue('Moneda');
+  const last = h.getLastRow();
+  if (last >= 2) {
+    // Default por CONVENCIÓN vieja según el dueño (col 15): Myri→U$S, Jony→$. Así migrar la
+    // columna NO cambia el comportamiento histórico (las golosinas de Myri seguían en dólares).
+    const duenos = h.getRange(2, 15, last - 1, 1).getValues();
+    const rng = h.getRange(2, 18, last - 1, 1);
+    const vals = rng.getValues();
+    let cambio = false;
+    for (let i = 0; i < vals.length; i++) {
+      const v = (vals[i][0] || '').toString().trim();
+      if (v !== '$' && v !== 'U$S') {
+        const dueno = (duenos[i][0] || 'Miri').toString().trim();
+        vals[i][0] = (dueno === 'Jony') ? '$' : 'U$S';
+        cambio = true;
+      }
+    }
+    if (cambio) { rng.setNumberFormat('@'); rng.setValues(vals); }
+  }
+}
+
+// Asegura que la hoja Ventas tenga la columna 28 'USD Jony' (cubeta de dólares de Jony). Idempotente.
+function _asegurarColUsdJony_(h) {
+  if (!h) return;
+  if (h.getMaxColumns() < 28) h.insertColumnsAfter(h.getMaxColumns(), 28 - h.getMaxColumns());
+  if (h.getRange(1, 28).getValue() !== 'USD Jony') h.getRange(1, 28).setValue('USD Jony');
+}
+
 function gananciaJonyPeriodo_(ss) {
   const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, items: [] };
   const h = ss.getSheetByName('Ventas');
@@ -371,6 +405,9 @@ function doGet(e) {
       // Stock Updates como TEXTO: evita que "64:20" (id:cantidad de 1 producto) se convierta en hora
       // y rompa la cancelación/devolución de stock. Se re-escribe forzando formato texto.
       h.getRange(row, 20).setNumberFormat('@'); h.getRange(row, 20).setValue(stockUpdates);
+      // Cubeta usdJONY (col 28): dólares de Jony de sus propios productos. Simétrico a arsJONY.
+      _asegurarColUsdJony_(h);
+      h.getRange(row, 28).setValue(parseFloat(e.parameter.usdJONY||0));
       SpreadsheetApp.flush();
       try { lockVenta.releaseLock(); } catch (e) {}
       // En cotización NO se descuenta stock (se descuenta recién cuando se acepta desde el panel).
@@ -430,16 +467,16 @@ function doGet(e) {
       const dueno = (e.parameter.dueno === 'Jony') ? 'Jony' : 'Myri';
       const sacaComi = (e.parameter.comision || 'no') === 'si';
       const nota = dec(e.parameter.nota || '');
-      let arsJONY = 0, arsMyri = 0, usdMyri = 0, comiARS = 0, comiUSD = 0, sinComi = '';
+      let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0, comiARS = 0, comiUSD = 0, sinComi = '';
       if (dueno === 'Jony') {
-        arsJONY = montoARS; usdMyri = montoUSD;   // USD siempre es golosinas (Myri); pesos = Pitzujim (Jony)
-        if (usdMyri > 0) { if (sacaComi) comiUSD = Math.round(usdMyri * 0.15 * 100) / 100; else sinComi = 'SI'; }
+        // Pesos Y dólares son de Jony (sus productos). Sus ventas NUNCA generan comisión.
+        arsJONY = montoARS; usdJONY = montoUSD; sinComi = 'SI';
       } else {
         arsMyri = montoARS; usdMyri = montoUSD;
         if (sacaComi) { comiARS = Math.round(arsMyri * 0.15); comiUSD = Math.round(usdMyri * 0.15 * 100) / 100; }
         else sinComi = 'SI';
       }
-      const totalARS = arsJONY + arsMyri, totalUSD = usdMyri;
+      const totalARS = arsJONY + arsMyri, totalUSD = usdMyri + usdJONY;
       const tag = (dueno === 'Jony' ? 'Pitzujim' : 'Golosinas') + (sacaComi ? '' : ' (sin comisión)');
       const lineas = [];
       if (montoARS > 0) lineas.push(`• Saldo cargado · ${nota || tag} — $ ${montoARS} c/u = $ ${montoARS}`);
@@ -457,6 +494,7 @@ function doGet(e) {
       if (h.getMaxColumns() < 27) h.insertColumnsAfter(h.getMaxColumns(), 27 - h.getMaxColumns());   // la hoja puede tener solo 26 columnas
       if (h.getRange(1, 27).getValue() !== 'SinComision') h.getRange(1, 27).setValue('SinComision');
       if (sinComi) h.getRange(row, 27).setValue('SI');
+      if (usdJONY > 0) { _asegurarColUsdJony_(h); h.getRange(row, 28).setValue(usdJONY); }
       SpreadsheetApp.flush();
       try { lockSC.releaseLock(); } catch (e2) {}
       altaClienteAuto_(ss, cliente, dueno === 'Jony' ? 'Mayorista' : 'Minorista');
@@ -531,6 +569,7 @@ function doGet(e) {
           if (e.parameter.usdMyri  !== undefined) h.getRange(i+1,14).setValue(parseFloat(e.parameter.usdMyri)||0);
           if (e.parameter.comiARS  !== undefined) h.getRange(i+1,15).setValue(parseFloat(e.parameter.comiARS)||0);
           if (e.parameter.comiUSD  !== undefined) h.getRange(i+1,16).setValue(parseFloat(e.parameter.comiUSD)||0);
+          if (e.parameter.usdJONY  !== undefined) { _asegurarColUsdJony_(h); h.getRange(i+1,28).setValue(parseFloat(e.parameter.usdJONY)||0); }
           // Ajuste de stock por la edición (productos agregados/quitados/cantidades cambiadas).
           // delta positivo = devolver al stock, negativo = descontar.
           // OJO: una cotización todavía NO descontó stock, así que sus deltas NO se aplican
@@ -888,11 +927,13 @@ function doGet(e) {
       let maxId = 0;
       for (let i = 1; i < datos.length; i++) { const id = parseInt(datos[i][0])||0; if (id > maxId) maxId = id; }
       const pMayNum = parseFloat(dec(e.parameter.pMay||'').replace(',', '.'));
+      _asegurarColMoneda_(ss);
+      const monedaNueva = (e.parameter.moneda === 'U$S') ? 'U$S' : '$';
       h.appendRow([maxId+1, dec(e.parameter.nombre), dec(e.parameter.desc),
         isNaN(pMayNum) ? '' : pMayNum, parseFloat(e.parameter.pMin||0),
         parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
         dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
-        0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||'')]);
+        0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||''), monedaNueva]);
       const stockIni = parseInt(e.parameter.stock||0);
       if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
       return json({ ok: true, id: maxId+1 });
@@ -1096,7 +1137,8 @@ function doGet(e) {
       // Edita campos puntuales de un producto del Stock de Shuk (solo los que vengan)
       const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
       const datos = h.getDataRange().getValues();
-      const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15, descBot: 17 };
+      _asegurarColMoneda_(ss);
+      const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15, descBot: 17, moneda: 18 };
       for (let i = 1; i < datos.length; i++) {
         if (datos[i][0].toString() === e.parameter.id) {
           const numericos = { precioMay: 1, precioMin: 1, stock: 1 };
@@ -1123,11 +1165,16 @@ function doGet(e) {
     if (accion === 'getProductosAdmin') {
       // Todos los productos del Stock, INCLUIDOS los ocultos (para el gestor masivo de visibilidad).
       const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json([]);
+      _asegurarColMoneda_(ss);   // crea/puebla la columna Moneda (idempotente) para que venga en la lista
       const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
       return json(d.filter(r => r[0] !== '' && r[1]).map(r => ({
         id: r[0].toString(), nombre: (r[1] || '').toString(), stock: parseInt(r[5]) || 0,
         activo: (r[7] || 'SI').toString().toUpperCase() !== 'NO',
-        categoria: (r[8] || 'Varios').toString(), dueno: (r[14] || '').toString()
+        categoria: (r[8] || 'Varios').toString(), dueno: (r[14] || '').toString(),
+        moneda: ((r[17] || '$').toString() === 'U$S') ? 'U$S' : '$',
+        precioMay: r[3], precioMin: parseFloat(r[4]) || 0, desc: (r[2] || '').toString(),
+        visible: (r[9] || 'Ambos').toString(), imagen: (r[6] || '').toString(),
+        descBot: (r[16] || '').toString()
       })));
     }
     if (accion === 'setVisibilidadMasiva') {
@@ -2031,7 +2078,7 @@ function resetearStockDia(ss, p) {
 // (ventas/gastos/...) y el batch panelAdmin, sin duplicar lógica.
 function _ventasData(ss) {
   const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return [];
-  const nc = Math.min(27, h.getLastColumn());
+  const nc = Math.min(28, h.getLastColumn());
   return h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
     id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
     fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
@@ -2040,7 +2087,8 @@ function _ventasData(ss) {
     nVenta:r[10]||(idx+1), arsJONY:r[11]||0, arsMyri:r[12]||0,
     usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
     cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
-    comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString(), sinComision: (r[26]||'').toString()
+    comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString(), sinComision: (r[26]||'').toString(),
+    usdJONY: r[27]||0
   }));
 }
 function _gastosData(ss) {
@@ -3129,6 +3177,7 @@ function botLeerProductos_(ss) {
       id: d[i][0].toString(), nombre: (d[i][1]||'').toString(), desc: (d[i][2]||'').toString(),
       precioMin: parseFloat(d[i][4])||0, stock: stock,
       categoria: (d[i][8]||'Varios').toString(), dueno: (d[i][14]||'Miri').toString(),
+      moneda: ((d[i][17]||'$').toString() === 'U$S') ? 'U$S' : '$',
       descBot: (d[i][16]||'').toString()   // descripción rica para Shuki (col 17, opcional)
     });
   }

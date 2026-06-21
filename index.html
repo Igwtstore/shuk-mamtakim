@@ -1192,11 +1192,18 @@
         </div>
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:140px">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Dueño</label>
-          <select id="np-dueno" onchange="actualizarLabelPmay()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+          <select id="np-dueno" onchange="duenoAltaChange()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="Miri">Miri</option>
             <option value="Jony">Jony</option>
+          </select>
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
+          <label>Moneda (mayorista)</label>
+          <select id="np-moneda" onchange="actualizarLabelPmay()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+            <option value="$">$ Pesos</option>
+            <option value="U$S">U$S Dólares</option>
           </select>
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:180px">
@@ -1285,8 +1292,11 @@
         <div class="nombre-campo" style="margin:0;flex:1;min-width:80px"><label>Stock</label><input type="number" id="ep-stock" /></div>
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Dueño</label>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:110px"><label>Dueño</label>
           <select id="ep-dueno" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Miri</option><option>Jony</option></select>
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:110px"><label>Moneda (may.)</label>
+          <select id="ep-moneda" onchange="epMonedaChange()" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option value="$">$ Pesos</option><option value="U$S">U$S Dólares</option></select>
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:160px"><label>Visible para</label>
           <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option><option value="Oculto">🙈 Oculto (solo ventas internas)</option></select>
@@ -1676,6 +1686,7 @@
         <optgroup label="Cajas JONY">
           <option value="MP_JONY">MP JONY</option>
           <option value="EFT_JONY">EFT $ JONY</option>
+          <option value="ETF_USD_JONY">ETF U$S JONY</option>
         </optgroup>
         <optgroup label="Cobrado por MYRI (queda debiéndote)">
           <option value="MP_GABY">MP GABY</option>
@@ -1683,6 +1694,7 @@
         </optgroup>
         <optgroup label="Cuenta corriente">
           <option value="CTA_CTE_ARS">Cta Cte $</option>
+          <option value="CTA_CTE_USD">Cta Cte U$S</option>
         </optgroup>
       </select>
     </div>
@@ -1768,6 +1780,7 @@
         <optgroup label="Cajas JONY">
           <option value="EFT_JONY">EFT $ JONY</option>
           <option value="MP_JONY">MP JONY</option>
+          <option value="ETF_USD_JONY">ETF U$S JONY</option>
         </optgroup>
       </select>
     </div>
@@ -1953,7 +1966,8 @@ async function cargarProductos() {
       precioPack: parseFloat((r[13]||'0').replace(',','.')),
       dueno: (r[14]||'').trim(),
       visibleOferta: (r[15]||'Ambos').trim(),
-      descBot: (r[16]||'').trim()
+      descBot: (r[16]||'').trim(),
+      moneda: ((r[17]||'$').trim() === 'U$S') ? 'U$S' : '$'
     })).filter(p => p.activo && p.id);
     // Sugerencias de categoría para el alta de productos (las del catálogo + las estándar)
     const dlCat = document.getElementById('categorias-productos-list');
@@ -2555,22 +2569,26 @@ function enviarPedido(_stockVerificado) {
     return;
   }
 
-  let arsJONY = 0, arsMyri = 0, usdMyri = 0;
+  // Reparto 2×2: dueño (Jony/Myri) × moneda ($/U$S). En mayorista la moneda la define el producto;
+  // en minorista todo es pesos. La comisión (15%) es SOLO sobre lo de Myri.
+  let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0;
   const lineas = items.map(item => {
-    const esPitz = item.dueno === 'Jony';
+    const esJony = item.dueno === 'Jony';
+    // Default por convención para productos sin el campo moneda aún (Jony→$, Myri→U$S).
+    const monedaProd = item.moneda || (esJony ? '$' : 'U$S');
     let precioUnit, moneda;
     if (modo === 'mayorista') {
-      if (esPitz) {
-        precioUnit = Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.')));
-        moneda = '$'; arsJONY += precioUnit * item.qty;
-      } else {
+      moneda = (monedaProd === 'U$S') ? 'U$S' : '$';
+      if (moneda === 'U$S') {
         precioUnit = parseFloat((item.precioMay||'0').toString().replace(',','.'));
-        moneda = 'U$S'; usdMyri += precioUnit * item.qty;
+        if (esJony) usdJONY += precioUnit * item.qty; else usdMyri += precioUnit * item.qty;
+      } else {
+        precioUnit = Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.')));
+        if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
       }
     } else {
       precioUnit = Math.round(item.precioMin); moneda = '$';
-      if (esPitz) arsJONY += precioUnit * item.qty;
-      else arsMyri += precioUnit * item.qty;
+      if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
     }
     const subtotal = moneda === 'U$S' ? (precioUnit * item.qty).toFixed(2) : Math.round(precioUnit * item.qty).toLocaleString('es-AR');
     const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
@@ -2581,7 +2599,7 @@ function enviarPedido(_stockVerificado) {
   const comiARS = Math.round(arsMyri * 0.15);
   const comiUSD = parseFloat((usdMyri * 0.15).toFixed(2));
   const totalARS = arsJONY + arsMyri;
-  const totalUSD = usdMyri;
+  const totalUSD = usdMyri + usdJONY;
 
   const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
   const totalLine = totalARS > 0 && totalUSD > 0
@@ -2595,7 +2613,7 @@ function enviarPedido(_stockVerificado) {
   try { _hist.push(_ahora); localStorage.setItem('shuk_pedido_hist', JSON.stringify(_hist)); } catch {}
   track('pedido', { nombre });
   registrarPedido(nombre, items, tipoCliente);
-  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido);
+  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY);
 
   items.forEach(item => {
     const p = productos.find(x => x.id === item.id);
@@ -2638,7 +2656,7 @@ function mostrarConfirmacionWA(msg) {
   document.body.appendChild(modal);
 }
 
-function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido) {
+function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY) {
   const productos_str = (lineas || items.map(i => `${i.qty}x ${i.nombre}`)).join(' || ');
   const stockUpdates = items.map(i => `${i.id}:${i.qty}`).join(',');
   const jonyItems = items
@@ -2655,7 +2673,7 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     totalARS: Math.round(totalARS || 0), totalUSD: (totalUSD || 0).toFixed(2),
     stockUpdates, jonyItems,
     arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
-    usdMyri: (usdMyri || 0).toFixed(2),
+    usdMyri: (usdMyri || 0).toFixed(2), usdJONY: (usdJONY || 0).toFixed(2),
     comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
     notas: (_estadoTienda === 'cotizacion' ? '🟡 COTIZACIÓN · ' : '') + (notaPedido || ''),
     vid: _vid()
@@ -2719,7 +2737,7 @@ function esCobradoReal(v) {
 
 // Nombre lindo de cada caja (igual etiqueta que en Caja · movimientos).
 const _CAJA_LABEL = {
-  MP_JONY: 'MP JONY', EFT_JONY: 'EFT $ JONY', MP_GABY: 'MP GABY', EFT_MYRI: 'EFT $ MYRI',
+  MP_JONY: 'MP JONY', EFT_JONY: 'EFT $ JONY', ETF_USD_JONY: 'ETF U$S JONY', MP_GABY: 'MP GABY', EFT_MYRI: 'EFT $ MYRI',
   ETF_USD_MYRI: 'ETF U$S MYRI', COMI_ARS_JONY: 'Comi $ JONY', COMI_USD_JONY: 'Comi U$S JONY',
   CTA_CTE_ARS: 'Cta Cte $', CTA_CTE_USD: 'Cta Cte U$S'
 };
@@ -2739,13 +2757,15 @@ function comprobanteLinks(c) {
 // Solo para pedidos realmente cobrados (caja de verdad). En vista Miri oculta la parte de Jony.
 function detalleCobro(v, soloMiri) {
   if (!esCobradoReal(v)) return '';
-  const arsJ = parseFloat(v.arsJONY || 0), arsM = parseFloat(v.arsMyri || 0), usdM = parseFloat(v.usdMyri || 0);
+  const arsJ = parseFloat(v.arsJONY || 0), arsM = parseFloat(v.arsMyri || 0), usdM = parseFloat(v.usdMyri || 0), usdJ = parseFloat(v.usdJONY || 0);
   const tc = parseFloat(v.tipoCambio || 0);
   const cajaJ = v.cajaJony || '', cajaM = v.cajaMyri || '';
   const esReal = c => !!c && !String(c).startsWith('CTA_CTE');
   const $ars = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const cajaJusd = (cajaJ === 'ETF_USD_JONY') ? cajaJ : 'ETF_USD_JONY';   // dólares de Jony → su caja U$S
   const partes = [];
   if (!soloMiri && arsJ > 0 && esReal(cajaJ)) partes.push(`${$ars(arsJ)} → <b>${cajaLabel(cajaJ)}</b>`);
+  if (!soloMiri && usdJ > 0) partes.push(`U$S ${usdJ.toFixed(2)} → <b>${cajaLabel(cajaJusd)}</b>`);
   if (arsM > 0 && esReal(cajaM)) partes.push(`${$ars(arsM)} → <b>${cajaLabel(cajaM)}</b>`);
   if (usdM > 0 && esReal(cajaM)) {
     // Si la caja destino es en pesos y hay tipo de cambio: mostrar la conversión completa.
@@ -2996,7 +3016,7 @@ async function renderPedidos() {
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`)}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
-          ${estado !== 'cotizacion' ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${(v.cliente||'').replace(/'/g,"\\'")}')">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>` : ''}
+          ${estado !== 'cotizacion' ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${(v.cliente||'').replace(/'/g,"\\'")}',${parseFloat(v.usdJONY||0)})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>` : ''}
           ${(estado !== 'cotizacion' && !cobrado && !soloMiri) ? (() => {
             const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0 };
             const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
@@ -4018,24 +4038,33 @@ function renderManualProductos() {
   actualizarTotalManual();
 }
 
+// Precio unitario + moneda de un producto según el modo: en mayorista la moneda la define el
+// producto (campo moneda; default por convención Jony→$, Myri→U$S); en minorista siempre pesos.
+function _precioMoneda(p, modo) {
+  const esJ = (p.dueno === 'Jony');
+  const monedaProd = p.moneda || (esJ ? '$' : 'U$S');
+  if (modo === 'Mayorista' || modo === 'mayorista') {
+    if (monedaProd === 'U$S') return { precioUnit: parseFloat((p.precioMay||'0').toString().replace(',','.')), moneda: 'U$S' };
+    return { precioUnit: Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))), moneda: '$' };
+  }
+  return { precioUnit: Math.round(p.precioMin), moneda: '$' };
+}
+
 function actualizarTotalManual() {
   const tipo = document.getElementById('manual-tipo').value;
-  let arsJ = 0, arsM = 0, usdM = 0;
+  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0;
   _manualElegibles().forEach(p => {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
-    const esPitz = p.dueno === 'Jony';
-    if (tipo === 'Mayorista') {
-      if (esPitz) arsJ += Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))) * qty;
-      else usdM += parseFloat((p.precioMay||'0').toString().replace(',','.')) * qty;
-    } else {
-      if (esPitz) arsJ += Math.round(p.precioMin) * qty;
-      else arsM += Math.round(p.precioMin) * qty;
-    }
+    const esJ = p.dueno === 'Jony';
+    const { precioUnit, moneda } = _precioMoneda(p, tipo);
+    const monto = precioUnit * qty;
+    if (moneda === 'U$S') { if (esJ) usdJ += monto; else usdM += monto; }
+    else { if (esJ) arsJ += monto; else arsM += monto; }
   });
   const parts = [];
   if (arsJ + arsM > 0) parts.push(`$ ${Math.round(arsJ + arsM).toLocaleString('es-AR')}`);
-  if (usdM > 0) parts.push(`U$S ${usdM.toFixed(2)}`);
+  if (usdM + usdJ > 0) parts.push(`U$S ${(usdM + usdJ).toFixed(2)}`);
   document.getElementById('manual-total').textContent = 'Total: ' + (parts.join(' + ') || '$ 0');
   renderManualSeleccion();
 }
@@ -4051,12 +4080,7 @@ function renderManualSeleccion() {
   wrap.style.display = '';
   lista.innerHTML = items.map(p => {
     const qty = _manualQtys[p.id];
-    const esPitz = p.dueno === 'Jony';
-    let precioUnit, moneda;
-    if (tipo === 'Mayorista') {
-      if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; }
-      else { precioUnit = parseFloat((p.precioMay||'0').toString().replace(',','.')); moneda = 'U$S'; }
-    } else { precioUnit = Math.round(p.precioMin); moneda = '$'; }
+    const { precioUnit, moneda } = _precioMoneda(p, tipo);
     const sub = precioUnit * qty;
     const subStr = moneda === 'U$S' ? `U$S ${sub.toFixed(2)}` : `$ ${Math.round(sub).toLocaleString('es-AR')}`;
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;border-bottom:1px solid #d8ecdf">
@@ -4100,7 +4124,7 @@ function cargarPedidoManual() {
     _enviandoManual = false;
     return;
   }
-  let arsJ = 0, arsM = 0, usdM = 0;
+  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0;
   const selectedItems = [];
   const lineas = [];
   const stockUpdates = [];
@@ -4108,15 +4132,11 @@ function cargarPedidoManual() {
   _manualElegibles().forEach(p => {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
-    const esPitz = p.dueno === 'Jony';
-    let precioUnit, moneda;
-    if (tipo === 'Mayorista') {
-      if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; arsJ += precioUnit * qty; }
-      else { precioUnit = parseFloat((p.precioMay||'0').toString().replace(',','.')); moneda = 'U$S'; usdM += precioUnit * qty; }
-    } else {
-      precioUnit = Math.round(p.precioMin); moneda = '$';
-      if (esPitz) arsJ += precioUnit * qty; else arsM += precioUnit * qty;
-    }
+    const esJ = p.dueno === 'Jony';
+    const { precioUnit, moneda } = _precioMoneda(p, tipo);
+    const monto = precioUnit * qty;
+    if (moneda === 'U$S') { if (esJ) usdJ += monto; else usdM += monto; }
+    else { if (esJ) arsJ += monto; else arsM += monto; }
     const subtotal = moneda === 'U$S' ? (precioUnit * qty).toFixed(2) : Math.round(precioUnit * qty).toLocaleString('es-AR');
     const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
     const descCorta = p.desc ? ` · ${p.desc.substring(0, 45)}` : '';
@@ -4130,14 +4150,14 @@ function cargarPedidoManual() {
   const comiARS = Math.round(arsM * 0.15);
   const comiUSD = parseFloat((usdM * 0.15).toFixed(2));
   const totalARS = arsJ + arsM;
-
+  const totalUSD = usdM + usdJ;
 
   const params = new URLSearchParams({
     accion: 'venta', cliente, tipo, formaPago: pago, notas: 'Manual',
     productos: lineas.join(' || '),
-    totalARS: Math.round(totalARS), totalUSD: usdM.toFixed(2),
+    totalARS: Math.round(totalARS), totalUSD: totalUSD.toFixed(2),
     arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM),
-    usdMyri: usdM.toFixed(2), comiARS, comiUSD,
+    usdMyri: usdM.toFixed(2), usdJONY: usdJ.toFixed(2), comiARS, comiUSD,
     stockUpdates: stockUpdates.join(',')
   });
 
@@ -4363,7 +4383,10 @@ function irAEditarProducto(id) {
 }
 
 function cargarProductoEditor(id) {
-  const p = productos.find(x => String(x.id) === String(id));
+  // Busca en el catálogo en vivo; si no está (producto oculto/sin stock no cargado en `productos`),
+  // cae al listado completo del gestor de visibilidad (_gvProductos, de getProductosAdmin).
+  const p = productos.find(x => String(x.id) === String(id))
+         || (typeof _gvProductos !== 'undefined' ? _gvProductos : []).find(x => String(x.id) === String(id));
   const form = document.getElementById('ep-form');
   if (!p) { form.style.display = 'none'; _epId = null; return; }
   _epId = p.id;
@@ -4374,11 +4397,11 @@ function cargarProductoEditor(id) {
   { const eb = document.getElementById('ep-descbot'); if (eb) eb.value = p.descBot || ''; }
   document.getElementById('ep-categoria').value = p.categoria || '';
   document.getElementById('ep-pmay').value = p.precioMay || '';
-  const epPmayLabel = document.getElementById('ep-pmay-label');
-  if (epPmayLabel) epPmayLabel.textContent = p.dueno === 'Jony' ? 'P. Mayorista ($ pesos)' : 'P. Mayorista (U$S)';
   document.getElementById('ep-pmin').value = p.precioMin || '';
   document.getElementById('ep-stock').value = p.stock || 0;
   document.getElementById('ep-dueno').value = p.dueno || 'Miri';
+  document.getElementById('ep-moneda').value = (p.moneda === 'U$S') ? 'U$S' : '$';
+  epMonedaChange();
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
   document.getElementById('ep-nuevas').value = '';
   document.getElementById('ep-status').textContent = '';
@@ -4459,6 +4482,7 @@ async function guardarEdicionProducto() {
     precioMin: document.getElementById('ep-pmin').value.trim().replace(',', '.') || '0',
     stock: document.getElementById('ep-stock').value || '0',
     dueno: document.getElementById('ep-dueno').value,
+    moneda: document.getElementById('ep-moneda').value === 'U$S' ? 'U$S' : '$',
     visible: document.getElementById('ep-visible').value,
     imagen: _epFotos.join(',') || '__VACIO__'
   }), '💾 Producto actualizado ✓');
@@ -4648,6 +4672,7 @@ async function guardarNuevoProducto() {
   }
   const visible = document.getElementById('np-visible').value || 'Ambos';
   const dueno = document.getElementById('np-dueno').value || 'Miri';
+  const moneda = document.getElementById('np-moneda').value === 'U$S' ? 'U$S' : '$';
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
   // Subir foto si hay una seleccionada
   let imagenId = '';
@@ -4660,7 +4685,7 @@ async function guardarNuevoProducto() {
   }
   // Guardar en Google Sheet via Apps Script
   const params = new URLSearchParams({
-    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible, dueno
+    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible, dueno, moneda
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(r => r.json())
@@ -4736,9 +4761,10 @@ function _lineasPedidoVista(productosStr, soloMiri) {
     const m = l.match(/•\s*\d+x\s+(.+?)\s+—/);
     if (!m) return true;
     const nombre = m[1].split(' · ')[0].trim();
-    if (/pitzujim/i.test(nombre)) return false;   // Pitzujim es de Jony — nunca en vista Miri (fallback por nombre)
     const prod = productos.find(p => p.nombre === nombre);
-    return !prod || prod.dueno !== 'Jony';   // ocultar lo de Jony en vista Miri
+    // El campo dueño manda; el nombre ('pitzujim') solo si el producto ya no está en el catálogo.
+    if (prod) return prod.dueno !== 'Jony';      // ocultar lo de Jony en vista Miri
+    return !/pitzujim/i.test(nombre);            // sin producto: red de seguridad por nombre
   });
 }
 
@@ -4927,6 +4953,7 @@ async function renderCaja() {
   const COLS = [
     { key: 'MP_JONY',       label: 'MP JONY',       mon: 'ARS' },
     { key: 'EFT_JONY',      label: 'EFT $ JONY',    mon: 'ARS' },
+    { key: 'ETF_USD_JONY',  label: 'ETF U$S JONY',  mon: 'USD' },
     { key: 'MP_GABY',       label: 'MP GABY',        mon: 'ARS' },
     { key: 'EFT_MYRI',      label: 'EFT $ MYRI',    mon: 'ARS' },
     { key: 'ETF_USD_MYRI',  label: 'ETF U$S MYRI',  mon: 'USD' },
@@ -4960,6 +4987,7 @@ async function renderCaja() {
       const arsJ = parseFloat(v.arsJONY || 0);
       const arsM = parseFloat(v.arsMyri || 0);
       const usdM = parseFloat(v.usdMyri || 0);
+      const usdJ = parseFloat(v.usdJONY || 0);   // dólares de Jony (sus propios productos, sin comisión)
       // Saldo cargado SIN comisión (col 27): no se descuenta comisión nueva.
       const _sinComi = (v.sinComision || '').toString().toUpperCase() === 'SI';
       const comiA = _sinComi ? 0 : (parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15));
@@ -4975,6 +5003,7 @@ async function renderCaja() {
       if (!cobrado) {
         // dueno:'J' = parte de Jony (Pitzujim) → NO se muestra en la vista de Myri.
         if (arsJ > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id, dueno: 'J' });
+        if (usdJ > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_USD', val: usdJ, mon: 'USD', tipo: 'venta', vid: v.id, dueno: 'J' });
         if (arsM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_ARS', val: arsM, mon: 'ARS', tipo: 'venta', vid: v.id });
         if (usdM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_USD', val: usdM, mon: 'USD', tipo: 'venta', vid: v.id });
         return;
@@ -4984,6 +5013,11 @@ async function renderCaja() {
       const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       if (arsJ > 0 && cajaJ) {
         movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id, dueno: 'J' });
+      }
+      if (usdJ > 0) {
+        // Dólares de Jony (sus propios productos): a su caja en U$S. Sin comisión (es de él).
+        const cajaJusd = (cajaJ === 'ETF_USD_JONY') ? cajaJ : (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : 'ETF_USD_JONY');
+        movs.push({ desc: `Vta #${n} ${f}`, col: cajaJusd, val: usdJ, mon: 'USD', tipo: 'venta', vid: v.id, dueno: 'J' });
       }
       if (arsM > 0 && cajaM) {
         const pagoFueAMyri = ['MP_GABY','EFT_MYRI','CTA_CTE_ARS'].includes(cajaM);
@@ -5388,11 +5422,11 @@ async function renderCuentaSocios() {
     const _revisar = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion'
       && !esCobradoReal(v) && _metodoPago(v.formaPago) && !pedidosConPago.has(String(v.id)));
     const _filaRev = v => {
-      const aJ = parseFloat(v.arsJONY)||0, aM = parseFloat(v.arsMyri)||0, uM = parseFloat(v.usdMyri)||0;
+      const aJ = parseFloat(v.arsJONY)||0, aM = parseFloat(v.arsMyri)||0, uM = parseFloat(v.usdMyri)||0, uJ = parseFloat(v.usdJONY)||0;
       const tot = [aM>0?f(aM):'', uM>0?('U$S '+uM.toFixed(2)):''].filter(Boolean).join(' + ') || f(aJ);
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed #e0d4b8">
         <span style="font-size:0.7rem;color:#7a5a1a">${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${(v.formaPago||'').trim()} · ${tot}</span></span>
-        <button onclick="abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM},'${(v.cliente||'').replace(/'/g,"\\'")}')" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
+        <button onclick="abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM},'${(v.cliente||'').replace(/'/g,"\\'")}',${uJ})" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
       </div>`;
     };
     html += `<div style="background:#f4f7fb;border:1px solid #e0e8f2;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
@@ -5495,21 +5529,23 @@ async function confirmarUsarPlataMyri() {
 // Recalcula el split desde el string de productos (Pitzujim → Jony, resto → Myri, USD → Myri).
 function _recomputeSplit(v) {
   const lineas = parsearLineasPedido(v.productos || '');
-  let arsJ = 0, arsM = 0, usdM = 0, descG = 0;
+  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0, descG = 0;
   lineas.forEach(l => {
     const raw = (l.raw || l.nombre || '');
     const mg = raw.match(/Descuento global:\s*([\d.]+)\s*%/i);
     if (mg) { descG = parseFloat(mg[1]) || 0; return; }
     const sub = (parseFloat(l.precio) || 0) * (l.qty || 0);
     if (sub <= 0) return;
-    if (l.moneda === 'U$S') { usdM += sub; return; }
     const nom = (l.nombre || '');
     const p = productos.find(x => (x.nombre || '').trim().toLowerCase() === nom.trim().toLowerCase());
-    const esJony = /pitzujim/i.test(nom) || (p && p.dueno === 'Jony');
+    // El campo dueño MANDA cuando el producto está en el catálogo; el nombre ('pitzujim') solo
+    // es red de seguridad para productos viejos que ya no están en el catálogo.
+    const esJony = p ? (p.dueno === 'Jony') : /pitzujim/i.test(nom);
+    if (l.moneda === 'U$S') { if (esJony) usdJ += sub; else usdM += sub; return; }
     if (esJony) arsJ += sub; else arsM += sub;
   });
-  if (descG > 0 && descG <= 100) { const fg = 1 - descG / 100; arsJ *= fg; arsM *= fg; usdM *= fg; }
-  return { arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM), usdMyri: +usdM.toFixed(2), comiARS: Math.round(arsM * 0.15), comiUSD: +(usdM * 0.15).toFixed(2) };
+  if (descG > 0 && descG <= 100) { const fg = 1 - descG / 100; arsJ *= fg; arsM *= fg; usdM *= fg; usdJ *= fg; }
+  return { arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM), usdMyri: +usdM.toFixed(2), usdJONY: +usdJ.toFixed(2), comiARS: Math.round(arsM * 0.15), comiUSD: +(usdM * 0.15).toFixed(2) };
 }
 
 let _migracionPendiente = [];
@@ -5525,9 +5561,10 @@ async function previewMigracionSplits() {
     const viejo = {
       arsJONY: Math.round(parseFloat(v.arsJONY) || 0),
       arsMyri: Math.round(parseFloat(v.arsMyri) || 0),
-      usdMyri: +(parseFloat(v.usdMyri) || 0).toFixed(2)
+      usdMyri: +(parseFloat(v.usdMyri) || 0).toFixed(2),
+      usdJONY: +(parseFloat(v.usdJONY) || 0).toFixed(2)
     };
-    const dif = Math.abs(nuevo.arsJONY - viejo.arsJONY) > 1 || Math.abs(nuevo.arsMyri - viejo.arsMyri) > 1 || Math.abs(nuevo.usdMyri - viejo.usdMyri) > 0.01;
+    const dif = Math.abs(nuevo.arsJONY - viejo.arsJONY) > 1 || Math.abs(nuevo.arsMyri - viejo.arsMyri) > 1 || Math.abs(nuevo.usdMyri - viejo.usdMyri) > 0.01 || Math.abs(nuevo.usdJONY - viejo.usdJONY) > 0.01;
     if (dif) _migracionPendiente.push({ v, nuevo, viejo });
   });
   if (!_migracionPendiente.length) { out.innerHTML = '<span style="color:var(--verde)">✓ Todos los pedidos tienen el reparto correcto. No hay nada que corregir.</span>'; return; }
@@ -5555,6 +5592,7 @@ async function aplicarMigracionSplits() {
     const p = new URLSearchParams({
       accion: 'actualizarPedido', id: v.id,
       arsJONY: nuevo.arsJONY, arsMyri: nuevo.arsMyri, usdMyri: nuevo.usdMyri.toFixed(2),
+      usdJONY: nuevo.usdJONY.toFixed(2),
       comiARS: nuevo.comiARS, comiUSD: nuevo.comiUSD.toFixed(2)
     });
     const r = await apiWrite(p, '');
@@ -5649,17 +5687,26 @@ function gvRender() {
     const stockTxt = (p.stock || 0) > 0 ? `${p.stock} en stock` : 'sin stock';
     const stockColor = (p.stock || 0) > 0 ? 'var(--texto-suave)' : '#c0392b';
     const estado = p.activo ? '<span style="color:#1a7a3a;font-weight:600">👁️ visible</span>' : '<span style="color:#b8860b;font-weight:600">🙈 oculto</span>';
+    const duenoTxt = p.dueno ? ` · ${esc(p.dueno)} ${p.moneda === 'U$S' ? 'U$S' : '$'}` : '';
     return `<label style="display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0.7rem;border-bottom:1px solid var(--gris-claro,#eee);cursor:pointer;background:${sel ? '#eef4fb' : '#fff'}">
       <input type="checkbox" ${sel ? 'checked' : ''} onchange="gvToggle('${p.id}')">
       <div style="flex:1;min-width:0">
         <div style="font-size:0.86rem;font-weight:600;color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
-        <div style="font-size:0.72rem;color:${stockColor}">${stockTxt} · ${estado}</div>
+        <div style="font-size:0.72rem;color:${stockColor}">${stockTxt} · ${estado}${duenoTxt}</div>
       </div>
+      <button type="button" onclick="event.preventDefault();event.stopPropagation();gvEditar('${p.id}')" title="Editar producto" style="border:none;background:var(--gris,#f0ebe3);border-radius:7px;padding:5px 9px;cursor:pointer;font-size:0.9rem">✏️</button>
     </label>`;
   }).join('');
   gvActualizarContador();
 }
 function gvToggle(id) { if (_gvSel[id]) delete _gvSel[id]; else _gvSel[id] = true; gvRender(); }
+// Editar un producto desde el gestor de visibilidad (sirve para ocultos / sin stock que no
+// están en el catálogo en vivo): cierra el gestor y abre el editor con sus datos.
+function gvEditar(id) {
+  cerrarGestorVisibilidad();
+  cargarProductoEditor(id);
+  setTimeout(() => document.getElementById('ep-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+}
 function gvToggleAll(check) {
   gvFiltrados().forEach(p => { if (check) _gvSel[p.id] = true; else delete _gvSel[p.id]; });
   gvRender();
@@ -6194,15 +6241,30 @@ function renderSocioBar() {
   aplicarBloqueoDuenoMiri();
 }
 
-// Los productos de Jony (Pitzujim) se venden en pesos también al por mayor:
-// la etiqueta y el placeholder del precio mayorista se adaptan al dueño elegido.
-function actualizarLabelPmay() {
+// Editor de producto: la etiqueta del precio mayorista sigue a la moneda elegida.
+function epMonedaChange() {
+  const m = document.getElementById('ep-moneda')?.value || '$';
+  const label = document.getElementById('ep-pmay-label');
+  if (label) label.textContent = (m === 'U$S') ? 'P. Mayorista (U$S)' : 'P. Mayorista ($ pesos)';
+}
+
+// Al cambiar el dueño, preselecciona la moneda típica (Jony→$, Myri→U$S) pero queda editable.
+function duenoAltaChange() {
   const dueno = document.getElementById('np-dueno')?.value || 'Miri';
+  const m = document.getElementById('np-moneda');
+  if (m) m.value = (dueno === 'Jony') ? '$' : 'U$S';
+  actualizarLabelPmay();
+}
+
+// La etiqueta y el placeholder del precio mayorista se adaptan a la MONEDA elegida
+// (independiente del dueño: cualquiera puede vender en $ o en U$S).
+function actualizarLabelPmay() {
+  const moneda = document.getElementById('np-moneda')?.value || '$';
   const label = document.getElementById('np-pmay-label');
   const inp = document.getElementById('np-pmay');
   if (!label || !inp) return;
-  if (dueno === 'Jony') { label.textContent = 'Precio Mayorista ($ pesos)'; inp.placeholder = '63000'; }
-  else { label.textContent = 'Precio Mayorista (U$S)'; inp.placeholder = '5.80'; }
+  if (moneda === 'U$S') { label.textContent = 'Precio Mayorista (U$S)'; inp.placeholder = '5.80'; }
+  else { label.textContent = 'Precio Mayorista ($ pesos)'; inp.placeholder = '63000'; }
 }
 
 // En vista Miri, el alta de producto queda forzada a dueño Miri.
@@ -6211,6 +6273,9 @@ function aplicarBloqueoDuenoMiri() {
   if (!sel) return;
   if (esVistaMiri()) { sel.value = 'Miri'; sel.disabled = true; }
   else { sel.disabled = false; }
+  // Sincroniza la moneda típica del dueño actual (Miri→U$S, Jony→$); queda editable.
+  // Solo corre al (re)montar la barra de socio, no mientras se tipea un alta.
+  if (!sel.dataset.monedaInit) { sel.dataset.monedaInit = '1'; duenoAltaChange(); }
 }
 
 // Jony cambia la vista. Re-renderiza el panel y el tab activo con el nuevo filtro.
@@ -7157,18 +7222,21 @@ function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
     .catch(() => setTimeout(renderNotificaciones, 1500));
 }
 
-let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0, _cobroCliente = '';
+let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0, _cobroUsdJ = 0, _cobroCliente = '';
 const COBRO_ARS_COLS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS'];
 
-function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente) {
-  _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0; _cobroCliente = cliente || '';
+function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
+  _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0; _cobroUsdJ = usdJ || 0; _cobroCliente = cliente || '';
   const jw = document.getElementById('cobro-jony-wrap');
   const mw = document.getElementById('cobro-myri-wrap');
-  // En vista Myri NO se muestra la parte de Jony (Pitzujim) — privacidad.
+  // En vista Myri NO se muestra la parte de Jony (Pitzujim / sus productos) — privacidad.
   const ocultarJony = esVistaMiri();
-  jw.style.display = (arsJ > 0 && !ocultarJony) ? 'block' : 'none';
+  jw.style.display = ((arsJ > 0 || usdJ > 0) && !ocultarJony) ? 'block' : 'none';
   mw.style.display = (arsM > 0 || usdM > 0) ? 'block' : 'none';
-  if (arsJ > 0) document.getElementById('cobro-jony-amt').textContent = '$ ' + Math.round(arsJ).toLocaleString('es-AR');
+  const jonyAmts = [];
+  if (arsJ > 0) jonyAmts.push('$ ' + Math.round(arsJ).toLocaleString('es-AR'));
+  if (usdJ > 0) jonyAmts.push('U$S ' + parseFloat(usdJ).toFixed(2));
+  document.getElementById('cobro-jony-amt').textContent = jonyAmts.join(' + ');
   const myriAmts = [];
   if (arsM > 0) myriAmts.push('$ ' + Math.round(arsM).toLocaleString('es-AR'));
   if (usdM > 0) myriAmts.push('U$S ' + parseFloat(usdM).toFixed(2));
@@ -7232,7 +7300,7 @@ function cobro_calcularTC() {
 }
 function cerrarModalCobro() {
   document.getElementById('cobro-modal').style.display = 'none';
-  _cobroId = null; _cobroUsdM = 0;
+  _cobroId = null; _cobroUsdM = 0; _cobroUsdJ = 0;
 }
 
 // ─── PAGO A CUENTA ────────────────────────────────────────────────────────────
@@ -8220,20 +8288,22 @@ async function guardarEditPedido() {
   idsTodos.forEach(id => { suMap[id] = qtysAhora[id] || 0; });
   const suNuevo = Object.keys(suMap).filter(k => suMap[k] > 0).map(k => k + ':' + suMap[k]).join(',');
 
-  // RECALCULAR el split Jony/Myri desde los productos REALES (no escalar el viejo, que distorsiona).
-  // Jony = Pitzujim (por dueño en catálogo o por nombre); Myri = el resto. USD = golosinas de Myri.
+  // RECALCULAR el split 2×2 (dueño × moneda) desde los productos REALES (no escalar el viejo).
+  // Dueño manda por el catálogo; el nombre ('pitzujim') solo si el producto ya no existe.
+  // La comisión (15%) es SOLO sobre lo de Myri (arsMyri/usdMyri).
   const _esJonyLinea = l => {
     const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
-    return (p && p.dueno === 'Jony') || /pitzujim/i.test(l.nombre || '');
+    return p ? (p.dueno === 'Jony') : /pitzujim/i.test(l.nombre || '');
   };
-  let eArsJ = 0, eArsM = 0, eUsdM = 0;
+  let eArsJ = 0, eArsM = 0, eUsdM = 0, eUsdJ = 0;
   _editLineas.forEach(l => {
     const sub = (parseFloat(l.precio) || 0) * (l.qty || 0) * (1 - (l.desc || 0) / 100);
-    if (l.moneda === 'U$S') eUsdM += sub;
-    else if (_esJonyLinea(l)) eArsJ += sub;
+    const esJ = _esJonyLinea(l);
+    if (l.moneda === 'U$S') { if (esJ) eUsdJ += sub; else eUsdM += sub; }
+    else if (esJ) eArsJ += sub;
     else eArsM += sub;
   });
-  if (desc > 0 && desc <= 100) { const fg = 1 - desc / 100; eArsJ *= fg; eArsM *= fg; eUsdM *= fg; }
+  if (desc > 0 && desc <= 100) { const fg = 1 - desc / 100; eArsJ *= fg; eArsM *= fg; eUsdM *= fg; eUsdJ *= fg; }
   const eComiARS = Math.round(eArsM * 0.15);
   const eComiUSD = parseFloat((eUsdM * 0.15).toFixed(2));
 
@@ -8245,10 +8315,11 @@ async function guardarEditPedido() {
     tipo,
     totalARS: Math.round(totalARS),
     totalUSD: totalUSD.toFixed(2),
-    // Split recalculado desde los productos reales (Pitzujim → Jony, resto → Myri, USD → Myri)
+    // Split 2×2 recalculado desde los productos reales (dueño × moneda; comisión solo sobre Myri)
     arsJONY: Math.round(eArsJ),
     arsMyri: Math.round(eArsM),
     usdMyri: eUsdM.toFixed(2),
+    usdJONY: eUsdJ.toFixed(2),
     comiARS: eComiARS,
     comiUSD: eComiUSD.toFixed(2)
   });
