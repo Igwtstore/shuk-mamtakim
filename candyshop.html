@@ -951,7 +951,7 @@ const arr = x => Array.isArray(x) ? x : [];
 
 function renderPanel(d) {
   catalogoCache = arr(d.catalogo);
-  renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores));
+  renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores), arr(d.consumo));
   renderDeudores(arr(d.deudores));
   renderCatalogo(catalogoCache);
   renderVisitasKid(d.visitas || {});
@@ -1059,12 +1059,15 @@ function renderConsumoHoy(consumo) {
   const el = document.getElementById('consumo-list'); if (!el) return;
   const list = arr(consumo);
   if (!list.length) { el.innerHTML = ''; return; }
-  el.innerHTML = list.slice().reverse().map(c => {
+  const totalCosto = list.reduce((s, c) => s + (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0), 0);
+  const filas = list.slice().reverse().map(c => {
     const icon = c.motivo === 'regalo' ? '🎁' : (c.motivo === 'otro' ? '📝' : '😋');
+    const cst = (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0);
     return `<div style="display:flex;justify-content:space-between;font-size:0.84rem;color:#666;padding:4px 0;border-top:1px solid #f0ebe3">
       <span>${icon} ${c.cantidad}× ${c.producto}${c.nota ? ` <span style="color:#aaa">· ${c.nota}</span>` : ''}</span>
-      <span style="color:#bbb;font-size:0.78rem">${c.hora || ''}</span></div>`;
+      <span style="color:#bbb;font-size:0.78rem">${cst > 0 ? '−' + fmt(cst) : (c.hora || '')}</span></div>`;
   }).join('');
+  el.innerHTML = `<div style="font-size:0.78rem;font-weight:700;color:#e05c2a;padding:4px 0">😋 Comido / regalado hoy: −${fmt(totalCosto)} <span style="font-weight:400;color:#aaa">(se descuenta de la ganancia)</span></div>${filas}`;
 }
 
 // Normaliza nombre de cliente (mayúsc/minúsc + espacios + acentos) — igual que el backend y Shuk.
@@ -1073,9 +1076,11 @@ function normCli(s) {
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
-function renderDashboard(ventas, catalogo, deudores = []) {
+function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
   const costoMap = {};
   catalogo.forEach(p => { costoMap[p.codigo?.toLowerCase()] = p.costo || 0; });
+  // Lo comido/regalado descuenta su COSTO de la ganancia del día.
+  const consumoCosto = arr(consumo).reduce((s, c) => s + (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0), 0);
   const conDeuda = new Set(deudores.filter(d => d.saldo > 0).map(d => normCli(d.cliente)));
   const conVuelto = new Set(deudores.filter(d => d.saldo < 0).map(d => normCli(d.cliente)));
 
@@ -1097,10 +1102,11 @@ function renderDashboard(ventas, catalogo, deudores = []) {
     g.total += subtotal; g.gan += gan; g.pend += pendiente;
   });
 
+  const gananciaNeta = ganancia - consumoCosto;   // descontado lo comido/regalado
   document.getElementById('s-ventas').textContent = grupos.size;
   document.getElementById('s-cobrado').textContent = fmt(cobrado);
-  document.getElementById('s-ganancia').textContent = fmt(ganancia);
-  document.getElementById('s-diezmo').textContent = fmt(ganancia * 0.1);
+  document.getElementById('s-ganancia').textContent = fmt(gananciaNeta);
+  document.getElementById('s-diezmo').textContent = fmt(gananciaNeta * 0.1);
 
   const el = document.getElementById('ventas-list');
   if (!ventas.length) { el.innerHTML = '<div class="empty">Sin ventas ' + (_diaVistoCandy ? 'ese día' : 'hoy todavía') + ' 😴</div>'; return; }
@@ -3360,7 +3366,9 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
     if ((v.metodoPago || 'efectivo') === 'mp') mp += cobradoEsta; else efectivo += cobradoEsta;
     const cod = (v.codigo || '').toString(); vendidoQty[cod] = (vendidoQty[cod] || 0) + (v.cantidad || 1);
   });
-  const consumidoQty = {}; (consumo || []).forEach(x => { const cod = (x.codigo || '').toString(); consumidoQty[cod] = (consumidoQty[cod] || 0) + (parseInt(x.cantidad) || 0); });
+  const consumidoQty = {}; let consumoCosto = 0;
+  (consumo || []).forEach(x => { const cod = (x.codigo || '').toString(); consumidoQty[cod] = (consumidoQty[cod] || 0) + (parseInt(x.cantidad) || 0); consumoCosto += (parseFloat(x.costo) || 0) * (parseInt(x.cantidad) || 0); });
+  ganancia -= consumoCosto;   // lo comido/regalado descuenta su costo de la ganancia
   const sd = (stockDia && !stockDia.error) ? stockDia : {};
   const hayLista = Object.keys(sd).length > 0;
   if (!hayLista && !(ventas || []).length) { card.style.display = 'none'; return; }
@@ -3381,6 +3389,7 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
   html += `</div>`;
   html += `<div style="margin-top:10px;padding:8px 10px;border-radius:10px;text-align:center;font-weight:700;font-size:0.82rem;background:${cuadra ? '#e8f5ee' : '#fde8e8'};color:${cuadra ? '#2e8b57' : '#c0392b'}">${cuadra ? '✅' : '⚠️'} Vendiste ${fmt(vendido)} = Cobrado ${fmt(cobrado)} + Deuda ${fmt(deuda)}</div>`;
   if (vendioFuera) html += `<div style="margin-top:6px;font-size:0.76rem;color:#b8860b;text-align:center">⚠️ Vendiste algo que no estaba en tu listita</div>`;
+  if (consumoCosto > 0) html += `<div style="margin-top:8px;font-size:0.8rem;color:#e05c2a;text-align:center">😋 Comido / regalado: −${fmt(consumoCosto)} <span style="color:#aaa">(ya descontado de la ganancia)</span></div>`;
   html += `<div style="margin-top:12px;text-align:center;background:linear-gradient(135deg,#fff7e6,#ffe9c7);border-radius:12px;padding:12px"><div style="font-size:0.8rem;color:#8a6d3b">🏆 Ganaste hoy</div><div style="font-size:1.7rem;font-weight:900;color:#e58e00">${fmt(ganancia)}</div></div>`;
   cont.innerHTML = html;
 }
@@ -3389,9 +3398,12 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
 async function cargarHistoria() {
   const gen = _reqGen, quien = usuario;
   document.getElementById('historia-list').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
-  // Traigo las ventas de TODOS los perfiles: las del que mira (para el detalle) y el global (acumulado del pie).
-  const res = await Promise.all(HIJOS.map(h => api('ventasPeriodo', { hijo: h })));
+  // Traigo las ventas de TODOS los perfiles + todo el consumo (1 sola llamada): para el detalle del
+  // que mira y el acumulado global, con la ganancia ya descontando lo comido/regalado.
+  const all = await Promise.all([...HIJOS.map(h => api('ventasPeriodo', { hijo: h })), api('getConsumoPeriodo', {})]);
   if (gen !== _reqGen || quien !== usuario) return;   // cambió de perfil mientras cargaba → descartar
+  const res = all.slice(0, HIJOS.length);
+  const consumoAll = arr(all[HIJOS.length]);
   const idx = HIJOS.indexOf(quien);
   const mias = idx >= 0 ? res[idx] : await api('ventasPeriodo', { hijo: quien });
   if (mias === null) {   // error real (no vacío): NO pintar "sin historial"
@@ -3399,17 +3411,24 @@ async function cargarHistoria() {
     return;
   }
   const porHijo = {}; HIJOS.forEach((h, i) => { porHijo[h] = res[i] || []; });
-  renderHistoria(mias, porHijo, quien);
+  renderHistoria(mias, porHijo, quien, consumoAll);
 }
 
-function renderHistoria(ventas, porHijo, quien) {
+function renderHistoria(ventas, porHijo, quien, consumoAll = []) {
   ventas = ventas || [];
   const el = document.getElementById('historia-list');
   const costoMap = {};
   catalogoCache.forEach(p => { costoMap[(p.codigo || '').toLowerCase()] = p.costo || 0; });
 
-  // Acumulado de TODOS los días (pie del historial): individual + global.
-  const _acum = vs => { let vendido = 0, ganancia = 0; (vs||[]).forEach(v => { const sub = (v.precio||0)*(v.cantidad||1); vendido += sub; ganancia += ((v.precio||0)-(costoMap[(v.codigo||'').toLowerCase()]||0))*(v.cantidad||1); }); return { vendido, ganancia, diezmo: ganancia*0.1 }; };
+  // Consumo (comido/regalado): su costo descuenta la ganancia. Por día (del que mira) y total.
+  const _costoConsumo = cs => arr(cs).reduce((s, c) => s + (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0), 0);
+  const consumoMias = arr(consumoAll).filter(c => c.hijo === quien);
+  const consumoCostoPorDia = {}; consumoMias.forEach(c => { consumoCostoPorDia[c.fecha] = (consumoCostoPorDia[c.fecha] || 0) + (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0); });
+  const consumoCostoMias = _costoConsumo(consumoMias);
+  const consumoCostoTodos = _costoConsumo(consumoAll);
+
+  // Acumulado de TODOS los días (pie del historial): individual + global. Ganancia NETA (− consumo).
+  const _acum = (vs, consumoCosto = 0) => { let vendido = 0, ganancia = 0; (vs||[]).forEach(v => { const sub = (v.precio||0)*(v.cantidad||1); vendido += sub; ganancia += ((v.precio||0)-(costoMap[(v.codigo||'').toLowerCase()]||0))*(v.cantidad||1); }); ganancia -= consumoCosto; return { vendido, ganancia, diezmo: ganancia*0.1 }; };
   const _boxAcum = (titulo, color, a) => `<div style="background:#fff;border:1px solid #f0ebe3;border-left:4px solid ${color};border-radius:12px;padding:10px 12px;margin-top:10px">
       <div style="font-weight:800;color:${color};font-size:0.95rem;margin-bottom:6px">${titulo}</div>
       <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Vendido</span><b style="color:#5c3d1e">${fmt(a.vendido)}</b></div>
@@ -3417,8 +3436,8 @@ function renderHistoria(ventas, porHijo, quien) {
       <div style="display:flex;justify-content:space-between;font-size:0.86rem;padding:2px 0"><span style="color:#8a6d3b">Maaser (10%)</span><b style="color:#b8860b">${fmt(a.diezmo)}</b></div>
     </div>`;
   let footer = '<div style="margin-top:16px;border-top:2px dashed #e8ddcf;padding-top:10px"><div style="font-size:0.82rem;color:#8a6d3b;font-weight:800;text-align:center;margin-bottom:2px">📊 Acumulado total</div>';
-  footer += _boxAcum('🧑 ' + (quien || usuario || 'Vos') + ' — total histórico', '#c45e20', _acum(ventas));
-  if (porHijo) footer += _boxAcum('👥 Todos juntos (global)', '#2c6fad', _acum([].concat(...HIJOS.map(h => porHijo[h] || []))));
+  footer += _boxAcum('🧑 ' + (quien || usuario || 'Vos') + ' — total histórico', '#c45e20', _acum(ventas, consumoCostoMias));
+  if (porHijo) footer += _boxAcum('👥 Todos juntos (global)', '#2c6fad', _acum([].concat(...HIJOS.map(h => porHijo[h] || [])), consumoCostoTodos));
   footer += '</div>';
 
   if (!ventas.length) {
@@ -3459,6 +3478,7 @@ function renderHistoria(ventas, porHijo, quien) {
       const key = v.producto || '?';
       resumenMap[key] = (resumenMap[key] || 0) + (v.cantidad || 1);
     });
+    ganancia -= (consumoCostoPorDia[fecha] || 0);   // descontar lo comido/regalado de ese día
     const diezmo = ganancia * 0.1;
     const resumen = Object.entries(resumenMap).map(([p, q]) => `${q}× ${p}`).join(' · ');
     const [d, m, y] = fecha.split('/');
@@ -3535,7 +3555,7 @@ function toggleDia(idx) {
 // ─── TOTAL ───────────────────────────────────────────────────────
 async function cargarTotal() {
   document.getElementById('total-content').innerHTML = '<div class="spinner" style="padding:30px 0">Cargando...</div>';
-  const [meirVentas, iosiVentas, paVentas, meirStock, iosiStock, paStock, meirDeudores, iosiDeudores, paDeudores] = await Promise.all([
+  const [meirVentas, iosiVentas, paVentas, meirStock, iosiStock, paStock, meirDeudores, iosiDeudores, paDeudores, consumoAll] = await Promise.all([
     api('ventasPeriodo', { hijo: 'Meir' }),
     api('ventasPeriodo', { hijo: 'Iosi' }),
     api('ventasPeriodo', { hijo: 'Pa' }),
@@ -3544,13 +3564,14 @@ async function cargarTotal() {
     api('getStockDia', { hijo: 'Pa' }),
     api('consultarDeudores', { hijo: 'Meir' }),
     api('consultarDeudores', { hijo: 'Iosi' }),
-    api('consultarDeudores', { hijo: 'Pa' })
+    api('consultarDeudores', { hijo: 'Pa' }),
+    api('getConsumoPeriodo', {})
   ]);
   renderTotal(meirVentas || [], iosiVentas || [], meirStock || {}, iosiStock || {}, meirDeudores || [], iosiDeudores || [],
-              paVentas || [], paStock || {}, paDeudores || []);
+              paVentas || [], paStock || {}, paDeudores || [], arr(consumoAll));
 }
 
-function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores, paVentas, paStock, paDeudores) {
+function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores, iosiDeudores, paVentas, paStock, paDeudores, consumoAll = []) {
   paVentas = paVentas || []; paStock = paStock || {}; paDeudores = paDeudores || [];
   const costoMap = {}, nombreMap = {};
   catalogoCache.forEach(p => {
@@ -3563,7 +3584,14 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
   const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const fechaLabel = `${DIAS[hoy.getDay()]} ${hoyFmt}`;
 
-  const calcStats = ventas => {
+  // Consumo (comido/regalado) por hijo: su costo descuenta la ganancia (total y de hoy).
+  const consumoDe = hijo => {
+    let total = 0, hoyC = 0;
+    arr(consumoAll).filter(c => c.hijo === hijo).forEach(c => { const cst = (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0); total += cst; if (c.fecha === hoyFmt) hoyC += cst; });
+    return { total, hoy: hoyC };
+  };
+
+  const calcStats = (ventas, consumo = { total: 0, hoy: 0 }) => {
     let cobradoTotal = 0, gananciaTotal = 0, ventasTotal = 0;
     let vendidoHoy = 0, cobradoHoy = 0, enCCHoy = 0, gananciaHoy = 0, ventasHoy = 0;
     ventas.forEach(v => {
@@ -3578,13 +3606,14 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
         gananciaHoy += gan; ventasHoy++;
       }
     });
+    gananciaTotal -= consumo.total; gananciaHoy -= consumo.hoy;   // descontar lo comido/regalado
     return { cobradoTotal, gananciaTotal, diezmoTotal: gananciaTotal * 0.1, ventasTotal,
              vendidoHoy, cobradoHoy, enCCHoy, gananciaHoy, diezmoHoy: gananciaHoy * 0.1, ventasHoy };
   };
 
-  const meir = calcStats(meirVentas);
-  const iosi = calcStats(iosiVentas);
-  const pa = calcStats(paVentas);
+  const meir = calcStats(meirVentas, consumoDe('Meir'));
+  const iosi = calcStats(iosiVentas, consumoDe('Iosi'));
+  const pa = calcStats(paVentas, consumoDe('Pa'));
   const paActivo = pa.ventasTotal > 0;   // PA ayuda a veces: sus tarjetas aparecen solo si tiene ventas
 
   // ─── Cierre del día por chico ─────────────────────────────────

@@ -26,7 +26,7 @@ const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker
 // 'getCatalogoHijos' y 'visitas' quedan FUERA (la tienda pública de los clientes los usa).
 const PROTECTED_HIJOS = [
   'registrarVentaHijos','registrarVentaLote','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
-  'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente',
+  'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente','getConsumoPeriodo',
   'cargarStock','setStockDia','getStockDia','getUltimoStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
@@ -1265,6 +1265,7 @@ function doGet(e) {
     if (accion === 'registrarVentaHijos')  { return json(registrarVentaHijos(ss, e.parameter)); }
     if (accion === 'registrarVentaLote')   { return json(registrarVentaLote(ss, e.parameter)); }
     if (accion === 'registrarConsumoHijos'){ return json(registrarConsumoHijos(ss, e.parameter)); }
+    if (accion === 'getConsumoPeriodo')    { return json(getConsumoPeriodo(ss, e.parameter)); }
     if (accion === 'registrarPagoCliente') { return json(registrarPagoCliente(ss, e.parameter)); }
     if (accion === 'registrarVueltoCC')    { return json(registrarVueltoCC(ss, e.parameter)); }
     if (accion === 'registrarPagoVuelto')  { return json(registrarPagoVuelto(ss, e.parameter)); }
@@ -1553,6 +1554,18 @@ function getConsumoHoy(ss, p) {
     })
     .map(r => ({ producto:r[2], codigo:r[3], cantidad:r[4], costo:r[5], motivo:r[6], nota:r[7],
       hora: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : '' }));
+}
+
+// Todo el consumo (me lo comí / regalé) con fecha + hijo, para descontar la ganancia por período
+// (Historia, Total). p.hijo opcional para filtrar.
+function getConsumoPeriodo(ss, p) {
+  const h = ss.getSheetByName('ConsumoHijos'); if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,8).getValues()
+    .filter(r => r[0] && (!p.hijo || r[1] === p.hijo))
+    .map(r => ({
+      fecha: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') : r[0].toString().trim().substring(0,10),
+      hijo: r[1], producto: r[2], codigo: r[3], cantidad: parseInt(r[4])||0, costo: parseFloat(r[5])||0, motivo: r[6], nota: r[7]
+    }));
 }
 
 function registrarPagoCliente(ss, p) {
@@ -2925,6 +2938,13 @@ function resumenHijoHoy_(ss, hijo) {
   if (hc && hc.getLastRow() > 1) {
     hc.getRange(2, 1, hc.getLastRow() - 1, 5).getValues().forEach(row => {
       if (row[1] === hijo && _esHoy_(row[0]) && parseFloat(row[3]) > 0) r.deudasNuevas += parseFloat(row[3]) || 0;
+    });
+  }
+  // Comido/regalado de hoy: su costo descuenta la ganancia.
+  const hk = ss.getSheetByName('ConsumoHijos');
+  if (hk && hk.getLastRow() > 1) {
+    hk.getRange(2, 1, hk.getLastRow() - 1, 6).getValues().forEach(row => {
+      if (row[1] === hijo && _esHoy_(row[0])) r.ganancia -= (parseFloat(row[5]) || 0) * (parseInt(row[4]) || 0);
     });
   }
   return r;
