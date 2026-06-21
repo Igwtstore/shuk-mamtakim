@@ -576,6 +576,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <!-- STEP 4: PAGO -->
     <div class="wizard-step" id="ws-3">
       <div class="wizard-label">¿Cómo pagó?</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button type="button" id="met-efectivo" onclick="seleccionarMetodo('efectivo')" style="flex:1;padding:10px;border-radius:10px;border:2px solid #2e8b57;background:#e8f5ee;color:#2e8b57;font-weight:700;font-size:0.9rem;cursor:pointer;font-family:inherit">💵 Efectivo</button>
+        <button type="button" id="met-mp" onclick="seleccionarMetodo('mp')" style="flex:1;padding:10px;border-radius:10px;border:2px solid #e0d5c9;background:#fff;color:#999;font-weight:700;font-size:0.9rem;cursor:pointer;font-family:inherit">📱 Mercado Pago</button>
+      </div>
       <div class="pago-btns">
         <button class="pago-btn pago-total" onclick="seleccionarPago('total')">
           <span class="pago-btn-icon">✅</span>
@@ -2268,13 +2272,23 @@ let wStep = 0;
 let wCliente = '';
 let wProductosSeleccionados = {}; // { codigo: { ...producto, qty } }
 let wPago = ''; // 'total' | 'cuenta' | 'nopago'
+let wMetodo = 'efectivo'; // 'efectivo' | 'mp' — cómo entró la plata cobrada
+function seleccionarMetodo(m) {
+  wMetodo = m === 'mp' ? 'mp' : 'efectivo';
+  const ef = document.getElementById('met-efectivo'), mp = document.getElementById('met-mp');
+  const off = 'flex:1;padding:10px;border-radius:10px;border:2px solid #e0d5c9;background:#fff;color:#999;font-weight:700;font-size:0.9rem;cursor:pointer;font-family:inherit';
+  const onEf = 'flex:1;padding:10px;border-radius:10px;border:2px solid #2e8b57;background:#e8f5ee;color:#2e8b57;font-weight:700;font-size:0.9rem;cursor:pointer;font-family:inherit';
+  const onMp = 'flex:1;padding:10px;border-radius:10px;border:2px solid #2c6fad;background:#e8f0ff;color:#2c6fad;font-weight:700;font-size:0.9rem;cursor:pointer;font-family:inherit';
+  if (ef) ef.style.cssText = wMetodo === 'efectivo' ? onEf : off;
+  if (mp) mp.style.cssText = wMetodo === 'mp' ? onMp : off;
+}
 let wVentaId = '';   // id único de la venta: el backend lo usa para NO duplicar si se reintenta
 let deudoresCache = [];
 
 const WIZARD_TITLES = ['¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
 
 function abrirWizard() {
-  wStep = 0; wCliente = ''; wVentaId = ''; wProductosSeleccionados = {}; wPago = '';
+  wStep = 0; wCliente = ''; wVentaId = ''; wProductosSeleccionados = {}; wPago = ''; seleccionarMetodo('efectivo');
   document.getElementById('w-cliente').value = '';
   document.getElementById('w-monto-parcial').value = '';
   ['w-cliente-deuda', 'w-cuenta-preview'].forEach(id => { const e = document.getElementById(id); if (e) e.innerHTML = ''; });
@@ -2573,6 +2587,7 @@ async function confirmarVentaWizard() {
   const loteParams = {
     hijo: usuario, cliente: wCliente, esDebe: esDebe,
     pagoParcial: wPago === 'cuenta' ? montoPago : 0,
+    metodoPago: (wPago === 'nopago') ? 'efectivo' : wMetodo,   // cómo entró la plata cobrada
     ventaId: wVentaId, items: JSON.stringify(items)
   };
   if (wPago === 'masque' && wCliente && saldo > 0) {
@@ -3337,10 +3352,12 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
   if (_diaVistoCandy) { card.style.display = 'none'; return; }   // el cierre es del día de hoy
   const precio = {}, costo = {};
   (catalogo || []).forEach(p => { const c = (p.codigo || '').toLowerCase(); precio[c] = p.precioVenta || 0; costo[c] = p.costo || 0; });
-  let vendido = 0, cobrado = 0, ganancia = 0, deuda = 0; const vendidoQty = {};
+  let vendido = 0, cobrado = 0, ganancia = 0, deuda = 0, efectivo = 0, mp = 0; const vendidoQty = {};
   (ventas || []).forEach(v => {
     const sub = (v.precio || 0) * (v.cantidad || 1), pend = v.saldoPendiente || 0, c = (v.codigo || '').toLowerCase();
-    vendido += sub; cobrado += sub - pend; deuda += pend; ganancia += ((v.precio || 0) - (costo[c] || 0)) * (v.cantidad || 1);
+    const cobradoEsta = sub - pend;
+    vendido += sub; cobrado += cobradoEsta; deuda += pend; ganancia += ((v.precio || 0) - (costo[c] || 0)) * (v.cantidad || 1);
+    if ((v.metodoPago || 'efectivo') === 'mp') mp += cobradoEsta; else efectivo += cobradoEsta;
     const cod = (v.codigo || '').toString(); vendidoQty[cod] = (vendidoQty[cod] || 0) + (v.cantidad || 1);
   });
   const consumidoQty = {}; (consumo || []).forEach(x => { const cod = (x.codigo || '').toString(); consumidoQty[cod] = (consumidoQty[cod] || 0) + (parseInt(x.cantidad) || 0); });
@@ -3357,7 +3374,8 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
   if (!hayLista) html += `<div style="font-size:0.84rem;color:#b8860b;background:#fff3e0;border:1px solid #f0c896;border-radius:10px;padding:8px 10px;margin-bottom:10px">📋 Armá tu listita de "lo que llevás hoy" (botón 📦 arriba) y al volver vas a ver cuánto te tiene que quedar.</div>`;
   html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.86rem">`;
   if (hayLista) html += box('#f3f7ff', '#2c6fad', '📦 Llevaste', llevadoVal);
-  html += box('#f0fbf3', '#2e8b57', '💵 Efectivo que tenés que tener', cobrado);
+  html += box('#f0fbf3', '#2e8b57', '💵 Efectivo que tenés que tener', efectivo);
+  if (mp > 0) html += box('#e8f0ff', '#2c6fad', '📱 En Mercado Pago', mp);
   html += box('#fff4ef', '#e05c2a', '📋 Te deben (de hoy)', deuda);
   if (hayLista) html += box('#f7f4ff', '#7a5fa0', '📦 Te queda para traer', quedaVal);
   html += `</div>`;

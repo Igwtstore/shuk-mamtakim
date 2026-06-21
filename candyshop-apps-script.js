@@ -1507,16 +1507,17 @@ function registrarVentaLote(ss, p) {
   let items;
   try { items = JSON.parse(dec(p.items || '[]')); } catch (e) { return { error: 'items inválido' }; }
   if (!items.length) return { error: 'sin items' };
-  const h = getOrCreate(ss, 'VentasHijos', ['Fecha','Hijo','Producto','Codigo','Cantidad','Precio','Total','Cliente','EsDebe','PagoParcial','SaldoPendiente']);
+  const h = getOrCreate(ss, 'VentasHijos', ['Fecha','Hijo','Producto','Codigo','Cantidad','Precio','Total','Cliente','EsDebe','PagoParcial','SaldoPendiente','MetodoPago']);
   const fecha = p.fecha ? new Date(p.fecha + 'T12:00:00') : new Date();
   const cliente = dec(p.cliente || ''); const esDebe = p.esDebe || 'NO';
   const pagoParcial = parseFloat(p.pagoParcial) || 0;
+  const metodo = (dec(p.metodoPago || 'efectivo') === 'mp') ? 'mp' : 'efectivo';   // cómo entró la plata cobrada
   // Escribe TODAS las filas de una (setValues), sin un roundtrip por producto.
   const rows = items.map(it => [fecha, p.hijo, dec(it.productoNombre || ''), dec(it.productoCodigo || ''),
     parseInt(it.cantidad) || 1, parseFloat(it.precio) || 0, parseFloat(it.total) || 0,
-    cliente, esDebe, pagoParcial, parseFloat(it.saldoPendiente) || 0]);
+    cliente, esDebe, pagoParcial, parseFloat(it.saldoPendiente) || 0, metodo]);
   const startRow = h.getLastRow() + 1;
-  h.getRange(startRow, 1, rows.length, 11).setValues(rows);
+  h.getRange(startRow, 1, rows.length, 12).setValues(rows);
   // Cuenta corriente: una deuda por línea con saldo (preserva el nombre del producto).
   items.forEach(it => {
     const sp = parseFloat(it.saldoPendiente) || 0;
@@ -1646,7 +1647,7 @@ function ventasHoyHijos(ss, p) {
   const h = ss.getSheetByName('VentasHijos'); if (!h || h.getLastRow() < 2) return [];
   // Por defecto HOY; con p.dia (dd/MM/yyyy) devuelve las ventas de ESE día (mismo formato, con rowIndex).
   const hoyStr = (p && p.dia && /^\d{2}\/\d{2}\/\d{4}$/.test(p.dia)) ? p.dia : Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
-  return h.getRange(2,1,h.getLastRow()-1,11).getValues()
+  return h.getRange(2,1,h.getLastRow()-1,12).getValues()
     .map((r, idx) => ({ r: r, rowIndex: idx + 2 }))   // guardar la fila REAL antes de filtrar (la usan editar/borrar)
     .filter(o => {
       const r = o.r;
@@ -1659,13 +1660,13 @@ function ventasHoyHijos(ss, p) {
       }
       return r[1] === p.hijo && fechaStr === hoyStr;
     })
-    .map(o => { const r = o.r; return { rowIndex: o.rowIndex, producto:r[2], codigo:r[3], cantidad:r[4], precio:r[5], cliente:r[7], saldoPendiente:r[10],
+    .map(o => { const r = o.r; return { rowIndex: o.rowIndex, producto:r[2], codigo:r[3], cantidad:r[4], precio:r[5], cliente:r[7], saldoPendiente:r[10], metodoPago: (r[11]||'efectivo').toString(),
       hora: (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'HH:mm') : (r[0]||'').toString().trim().substring(11,16) }; });
 }
 
 function ventasPeriodo(ss, p) {
   const h = ss.getSheetByName('VentasHijos'); if (!h || h.getLastRow() < 2) return [];
-  const rows = h.getRange(2,1,h.getLastRow()-1,11).getValues();
+  const rows = h.getRange(2,1,h.getLastRow()-1,12).getValues();
   return rows
     .map((r, idx) => {
       if (!r[0] || (p.hijo && r[1] !== p.hijo)) return null;
@@ -1680,7 +1681,7 @@ function ventasPeriodo(ss, p) {
         rowIndex: idx + 2,
         fecha, hora, hijo: r[1], producto: r[2], codigo: r[3],
         cantidad: r[4], precio: r[5], total: r[6],
-        cliente: r[7], esDebe: r[8], pagoParcial: r[9], saldoPendiente: r[10]
+        cliente: r[7], esDebe: r[8], pagoParcial: r[9], saldoPendiente: r[10], metodoPago: (r[11]||'efectivo').toString()
       };
     })
     .filter(r => r !== null);
