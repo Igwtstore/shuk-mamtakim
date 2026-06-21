@@ -27,7 +27,7 @@ const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker
 const PROTECTED_HIJOS = [
   'registrarVentaHijos','registrarVentaLote','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente','getConsumoPeriodo',
-  'cargarStock','setStockDia','getStockDia','getUltimoStockDia','resetearStockDia','agregarProductoHijo','editarProductoHijo',
+  'cargarStock','setStockDia','getStockDia','getUltimoStockDia','resetearStockDia','cerrarDiaHijos','agregarProductoHijo','editarProductoHijo',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
@@ -1149,7 +1149,7 @@ function doGet(e) {
       // su teardown para no dejar residuo en producción, y sirve para limpiar lo ya ensuciado.
       // Seguro: ningún dato real contiene estos marcadores.
       const marca = /__TEST__|REGTEST|REGCLI|AJTEST|VISTEST|BORRTEST|DIAG_/;
-      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos'];
+      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos'];
       const resultado = {};
       hojas.forEach(nombre => {
         const h = ss.getSheetByName(nombre);
@@ -1266,6 +1266,7 @@ function doGet(e) {
     if (accion === 'registrarVentaLote')   { return json(registrarVentaLote(ss, e.parameter)); }
     if (accion === 'registrarConsumoHijos'){ return json(registrarConsumoHijos(ss, e.parameter)); }
     if (accion === 'getConsumoPeriodo')    { return json(getConsumoPeriodo(ss, e.parameter)); }
+    if (accion === 'cerrarDiaHijos')       { return json(cerrarDiaHijos(ss, e.parameter)); }
     if (accion === 'registrarPagoCliente') { return json(registrarPagoCliente(ss, e.parameter)); }
     if (accion === 'registrarVueltoCC')    { return json(registrarVueltoCC(ss, e.parameter)); }
     if (accion === 'registrarPagoVuelto')  { return json(registrarPagoVuelto(ss, e.parameter)); }
@@ -1976,6 +1977,10 @@ function getUltimoStockDia(ss, p) {
 // REEMPLAZA la lista de HOY (lo que se lleva) por los items dados, ajustando el depósito por la
 // DIFERENCIA (devuelve lo viejo, toma lo nuevo) → no duplica al re-cargar. items = totales del día.
 function setStockDia(ss, p) {
+  // Candado del circuito diario: no se puede armar/editar la listita de HOY si quedó un día anterior
+  // SIN cerrar. El chico debe cerrar ese día primero (a menos que mande forzarCierre por el botón).
+  const est = estadoDiaHijos_(ss, p.hijo);
+  if (est.diaAbiertoEsPasado && p.forzar !== '1') return { error: 'dia_anterior_abierto', dia: est.diaAbierto };
   const h = getOrCreate(ss, 'StockDiario', ['Fecha','Hijo','Codigo','Producto','Cantidad']);
   let items; try { items = JSON.parse(dec(p.items || '[]')); } catch (e) { return { error: 'items inválido' }; }
   const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
@@ -2094,8 +2099,44 @@ function panelHijos(ss, p) {
     catalogo: getCatalogoHijos(ss),
     stockDia: getStockDia(ss, p),
     consumo: getConsumoHoy(ss, p),
+    cierre: estadoDiaHijos_(ss, p.hijo),
     visitas: visitasHijoResumen_(ss, (p.hijo || '').toLowerCase())
   };
+}
+
+// dd/MM/yyyy → número comparable (yyyymmdd). '' → 0.
+function _fechaNum_(f) { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0; }
+
+// Estado del día de un hijo para el circuito apertura/cierre.
+// diaAbierto = fecha de la listita (StockDiario) más reciente del hijo SIN cierre registrado.
+function estadoDiaHijos_(ss, hijo) {
+  const hoy = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  const cerrados = {};
+  const hc = ss.getSheetByName('CierresHijos');
+  if (hc && hc.getLastRow() >= 2) hc.getRange(2, 1, hc.getLastRow() - 1, 2).getValues().forEach(r => { if (r[1] === hijo) cerrados[(r[0] || '').toString()] = true; });
+  const fechasLista = {};
+  const hs = ss.getSheetByName('StockDiario');
+  if (hs && hs.getLastRow() >= 2) hs.getRange(2, 1, hs.getLastRow() - 1, 2).getValues().forEach(r => {
+    if (r[1] === hijo && r[0]) { const f = (r[0] && typeof r[0].getTime === 'function') ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') : r[0].toString().trim().substring(0, 10); fechasLista[f] = true; }
+  });
+  let diaAbierto = null;
+  Object.keys(fechasLista).forEach(f => { if (!cerrados[f] && (!diaAbierto || _fechaNum_(f) > _fechaNum_(diaAbierto))) diaAbierto = f; });
+  return { hoy, hoyCerrado: !!cerrados[hoy], diaAbierto, diaAbiertoEsPasado: !!(diaAbierto && diaAbierto !== hoy) };
+}
+
+// Cierra el día de un hijo (registra el snapshot). Idempotente por hijo+fecha. Habilita la próxima apertura.
+function cerrarDiaHijos(ss, p) {
+  const hijo = (p.hijo || '').toString().trim(); if (!hijo) return { error: 'falta hijo' };
+  const dia = (p.dia && /^\d{2}\/\d{2}\/\d{4}$/.test(p.dia)) ? p.dia : Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  const h = getOrCreate(ss, 'CierresHijos', ['Fecha', 'Hijo', 'CerradoEn', 'Vendido', 'Cobrado', 'Efectivo', 'MP', 'Deuda', 'Ganancia', 'ConsumoCosto', 'Nota']);
+  if (h.getLastRow() >= 2) {
+    const d = h.getRange(2, 1, h.getLastRow() - 1, 2).getValues();
+    for (let i = 0; i < d.length; i++) { if ((d[i][0] || '').toString() === dia && d[i][1] === hijo) return { ok: true, dup: true }; }
+  }
+  h.appendRow([dia, hijo, Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'),
+    parseFloat(p.vendido) || 0, parseFloat(p.cobrado) || 0, parseFloat(p.efectivo) || 0, parseFloat(p.mp) || 0,
+    parseFloat(p.deuda) || 0, parseFloat(p.ganancia) || 0, parseFloat(p.consumoCosto) || 0, dec(p.nota || '')]);
+  return { ok: true, dia };
 }
 
 // Cuenta las visitas en el servidor: antes viajaba la lista completa de visitas

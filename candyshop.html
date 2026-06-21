@@ -949,8 +949,10 @@ async function recargarTodo(btn) {
 // ─── CARGAR DATOS ─────────────────────────────────────────────────
 const arr = x => Array.isArray(x) ? x : [];
 
+let _estadoDia = {};   // estado del circuito diario (apertura/cierre) del perfil actual
 function renderPanel(d) {
   catalogoCache = arr(d.catalogo);
+  _estadoDia = d.cierre || {};
   renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores), arr(d.consumo));
   renderDeudores(arr(d.deudores));
   renderCatalogo(catalogoCache);
@@ -3230,6 +3232,13 @@ let stockQtys = {}; // { codigo: qty }
 let _depoDisp = {};   // codigo → unidades en depósito (para mostrar disponibilidad)
 async function abrirCargaStock() {
   if (!catalogoCache.length) { alert('Primero cargá los productos en Catálogo'); return; }
+  // Candado del circuito: si quedó un día anterior sin cerrar, hay que cerrarlo antes de abrir uno nuevo.
+  if (_estadoDia && _estadoDia.diaAbiertoEsPasado) {
+    if (!confirm(`📅 Tenés el día ${_estadoDia.diaAbierto} SIN cerrar.\n\nPara armar la lista de hoy primero hay que cerrar ese día. ¿Cerrarlo ahora?`)) return;
+    const r = await api('cerrarDiaHijos', { hijo: usuario, dia: _estadoDia.diaAbierto });
+    if (!(r && r.ok)) { mostrarToast('❌ No se pudo cerrar el día anterior', '#c0392b'); return; }
+    mostrarToast('✅ Día anterior cerrado'); await cargarDatos();
+  }
   stockQtys = {};
   document.getElementById('stock-overlay').classList.add('open');
   document.getElementById('stock-modal-list').innerHTML = '<div class="spinner" style="padding:20px 0">Cargando...</div>';
@@ -3298,8 +3307,12 @@ async function confirmarCargaStock() {
     .map(p => ({ codigo: p.codigo, nombre: p.nombre, cantidad: stockQtys[p.codigo] }));
   const btn = document.querySelector('#stock-overlay .btn-save');
   btn.textContent = 'Guardando...'; btn.disabled = true;
-  await api('setStockDia', { hijo: usuario, items: JSON.stringify(items) });
+  const r = await api('setStockDia', { hijo: usuario, items: JSON.stringify(items) });
   btn.textContent = 'Guardar mi listita'; btn.disabled = false;
+  if (r && r.error === 'dia_anterior_abierto') {   // candado: hay un día anterior sin cerrar
+    mostrarToast('📅 Primero cerrá el día ' + (r.dia || 'anterior'), '#c0392b');
+    cerrarCargaStock(); await cargarDatos(); return;
+  }
   cerrarCargaStock();
   await cargarDatos();
   const t = document.createElement('div');
@@ -3391,7 +3404,23 @@ function renderCierreDia(ventas, catalogo, stockDia, consumo) {
   if (vendioFuera) html += `<div style="margin-top:6px;font-size:0.76rem;color:#b8860b;text-align:center">⚠️ Vendiste algo que no estaba en tu listita</div>`;
   if (consumoCosto > 0) html += `<div style="margin-top:8px;font-size:0.8rem;color:#e05c2a;text-align:center">😋 Comido / regalado: −${fmt(consumoCosto)} <span style="color:#aaa">(ya descontado de la ganancia)</span></div>`;
   html += `<div style="margin-top:12px;text-align:center;background:linear-gradient(135deg,#fff7e6,#ffe9c7);border-radius:12px;padding:12px"><div style="font-size:0.8rem;color:#8a6d3b">🏆 Ganaste hoy</div><div style="font-size:1.7rem;font-weight:900;color:#e58e00">${fmt(ganancia)}</div></div>`;
+  // Cerrar día (circuito): guarda el snapshot y habilita la próxima apertura.
+  window._cierreSnapshot = { vendido, cobrado, efectivo, mp, deuda, ganancia, consumoCosto };
+  if (_estadoDia && _estadoDia.hoyCerrado) {
+    html += `<div style="margin-top:12px;text-align:center;background:#e8f5ee;border:1px solid #b2d8c0;border-radius:10px;padding:10px;font-weight:800;color:#2e8b57">✅ Día cerrado — mañana armás la nueva lista</div>`;
+  } else {
+    html += `<button onclick="cerrarDiaHoy(this)" style="margin-top:12px;width:100%;padding:12px;background:linear-gradient(135deg,#2e8b57,#1f6e43);color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit">✅ Cerrar día</button>
+      <div style="font-size:0.72rem;color:#aaa;text-align:center;margin-top:6px">Verificá que la mercadería que te queda y la plata coincidan, y cerrá.</div>`;
+  }
   cont.innerHTML = html;
+}
+async function cerrarDiaHoy(btn) {
+  if (!confirm('¿Cerrar el día?\n\nFijate que la mercadería que te queda y la plata (efectivo + Mercado Pago) coincidan con lo que dice la casita. Después vas a poder armar la lista del próximo día.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Cerrando...'; }
+  const s = window._cierreSnapshot || {};
+  const r = await api('cerrarDiaHijos', { hijo: usuario, vendido: s.vendido || 0, cobrado: s.cobrado || 0, efectivo: s.efectivo || 0, mp: s.mp || 0, deuda: s.deuda || 0, ganancia: s.ganancia || 0, consumoCosto: s.consumoCosto || 0 });
+  if (r && r.ok) { mostrarToast('✅ ¡Día cerrado! Buen trabajo 💪'); await cargarDatos(); }
+  else { mostrarToast('❌ ' + (r?.error || 'no se pudo'), '#c0392b'); if (btn) { btn.disabled = false; btn.textContent = '✅ Cerrar día'; } }
 }
 
 // ─── HISTORIA ────────────────────────────────────────────────────
