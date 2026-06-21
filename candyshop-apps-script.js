@@ -2106,6 +2106,8 @@ function panelHijos(ss, p) {
 
 // dd/MM/yyyy → número comparable (yyyymmdd). '' → 0.
 function _fechaNum_(f) { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0; }
+// Celda de fecha (Sheets puede guardarla como Date o string) → 'dd/MM/yyyy' consistente.
+function _fechaCelda_(c) { return (c && typeof c.getTime === 'function') ? Utilities.formatDate(c, TZ, 'dd/MM/yyyy') : (c || '').toString().trim().substring(0, 10); }
 
 // Estado del día de un hijo para el circuito apertura/cierre.
 // diaAbierto = fecha de la listita (StockDiario) más reciente del hijo SIN cierre registrado.
@@ -2113,7 +2115,7 @@ function estadoDiaHijos_(ss, hijo) {
   const hoy = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
   const cerrados = {};
   const hc = ss.getSheetByName('CierresHijos');
-  if (hc && hc.getLastRow() >= 2) hc.getRange(2, 1, hc.getLastRow() - 1, 2).getValues().forEach(r => { if (r[1] === hijo) cerrados[(r[0] || '').toString()] = true; });
+  if (hc && hc.getLastRow() >= 2) hc.getRange(2, 1, hc.getLastRow() - 1, 2).getValues().forEach(r => { if (r[1] === hijo) cerrados[_fechaCelda_(r[0])] = true; });
   const fechasLista = {};
   const hs = ss.getSheetByName('StockDiario');
   if (hs && hs.getLastRow() >= 2) hs.getRange(2, 1, hs.getLastRow() - 1, 2).getValues().forEach(r => {
@@ -2131,11 +2133,13 @@ function cerrarDiaHijos(ss, p) {
   const h = getOrCreate(ss, 'CierresHijos', ['Fecha', 'Hijo', 'CerradoEn', 'Vendido', 'Cobrado', 'Efectivo', 'MP', 'Deuda', 'Ganancia', 'ConsumoCosto', 'Nota']);
   if (h.getLastRow() >= 2) {
     const d = h.getRange(2, 1, h.getLastRow() - 1, 2).getValues();
-    for (let i = 0; i < d.length; i++) { if ((d[i][0] || '').toString() === dia && d[i][1] === hijo) return { ok: true, dup: true }; }
+    for (let i = 0; i < d.length; i++) { if (_fechaCelda_(d[i][0]) === dia && d[i][1] === hijo) return { ok: true, dup: true }; }
   }
-  h.appendRow([dia, hijo, Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'),
+  const row = h.getLastRow() + 1;
+  h.getRange(row, 1).setNumberFormat('@');   // que la fecha quede como TEXTO (Sheets no la convierta a Date)
+  h.getRange(row, 1, 1, 11).setValues([[dia, hijo, Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'),
     parseFloat(p.vendido) || 0, parseFloat(p.cobrado) || 0, parseFloat(p.efectivo) || 0, parseFloat(p.mp) || 0,
-    parseFloat(p.deuda) || 0, parseFloat(p.ganancia) || 0, parseFloat(p.consumoCosto) || 0, dec(p.nota || '')]);
+    parseFloat(p.deuda) || 0, parseFloat(p.ganancia) || 0, parseFloat(p.consumoCosto) || 0, dec(p.nota || '')]]);
   return { ok: true, dia };
 }
 
