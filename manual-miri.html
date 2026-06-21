@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shuk Mamtakim — Manual de uso</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --azul:#1a1a2e; --verde:#1a7a3c; --dorado:#c9954a; --gris:#f7f6f2;
+    --gris-medio:#e8e6e0; --texto-suave:#6b6b7a; --rojo:#c0392b; --celeste:#2c6fad;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif; background:var(--gris); color:var(--azul); font-size:11pt; line-height:1.55; margin:0;}
+  .hoja{max-width:820px; margin:1.5rem auto; background:white; box-shadow:0 4px 24px rgba(0,0,0,0.08);}
+  .cover{background:var(--azul); color:white; padding:3rem; }
+  .cover-logo{font-family:'Fraunces',serif; font-size:2.8rem; font-weight:700; color:var(--dorado); letter-spacing:-0.02em;}
+  .cover-subtitle{font-size:0.8rem; text-transform:uppercase; letter-spacing:0.15em; color:rgba(255,255,255,0.55); margin-top:0.2rem;}
+  .cover-title{font-family:'Fraunces',serif; font-size:1.9rem; font-weight:600; margin-top:1.6rem;}
+  .cover-meta{font-size:0.82rem; color:rgba(255,255,255,0.55); margin-top:0.5rem;}
+  .cover-bar{height:4px; background:linear-gradient(90deg,var(--dorado),transparent); margin-top:1.8rem;}
+  .body{padding:2.2rem 2.6rem 3rem;}
+  h3{font-family:'Fraunces',serif; font-size:1.08rem; color:var(--azul); border-left:4px solid var(--dorado); padding-left:0.7rem; margin:1.6rem 0 0.6rem; page-break-after:avoid;}
+  p{margin:0.3rem 0 0.6rem; color:#333;}
+  ol,ul{margin:0.3rem 0 0.8rem; padding-left:1.4rem;}
+  li{margin-bottom:0.32rem; color:#333;}
+  .tip{background:#e8f5ee; border-left:4px solid var(--verde); border-radius:0 8px 8px 0; padding:0.6rem 0.9rem; margin:0.7rem 0; font-size:0.95em;}
+  .ojo{background:#fdf3e3; border-left:4px solid var(--dorado); border-radius:0 8px 8px 0; padding:0.6rem 0.9rem; margin:0.7rem 0; font-size:0.95em;}
+  b{color:var(--azul);}
+  .chip{display:inline-block; background:var(--gris); border:1px solid var(--gris-medio); border-radius:20px; padding:0.05rem 0.6rem; font-size:0.82em; font-weight:600;}
+  .idx{background:var(--gris); border-radius:10px; padding:1rem 1.4rem; margin-bottom:1rem; column-count:2; column-gap:2rem; font-size:0.92em;}
+  .idx a{color:var(--azul); text-decoration:none; display:block; padding:0.15rem 0;}
+  .btn-pdf{position:fixed; right:18px; bottom:18px; background:var(--azul); color:white; border:none; border-radius:30px; padding:0.8rem 1.4rem; font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.25); z-index:10;}
+  @media print{
+    body{background:white;}
+    .hoja{box-shadow:none; margin:0; max-width:100%;}
+    .btn-pdf{display:none;}
+    h3{page-break-after:avoid;}
+    .tip,.ojo{page-break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<button class="btn-pdf" onclick="window.print()">📄 Descargar PDF</button>
+<div class="hoja">
+  <div class="cover">
+    <div class="cover-logo">Shuk Mamtakim</div>
+    <div class="cover-subtitle">Manual de uso</div>
+    <div class="cover-title">Cómo usar el sistema, paso a paso</div>
+    <div class="cover-meta">Panel de ventas — actualizado 2026-06-21</div>
+    <div class="cover-bar"></div>
+  </div>
+  <div class="body">
+
+  <div class="idx">
+    <a href="#entrar">1. Entrar al panel</a>
+    <a href="#pedido">2. Cargar un pedido</a>
+    <a href="#cobrar">3. Cobrar un pedido</a>
+    <a href="#pagocta">4. Pago a cuenta</a>
+    <a href="#cc">5. Cuenta corriente (quién debe)</a>
+    <a href="#caja">6. Caja · movimientos y Extracto</a>
+    <a href="#catalogo">7. Catálogo: productos</a>
+    <a href="#stock">8. Stock</a>
+    <a href="#tienda">9. Estado de la tienda</a>
+  </div>
+
+  <h3 id="entrar">1. Entrar al panel</h3>
+  <ol>
+    <li>Entrá a la página de Shuk y tocá <b>Panel</b>.</li>
+    <li>Ingresá usuario y contraseña. Quedás logueada en ese dispositivo.</li>
+  </ol>
+  <div class="tip">El panel se actualiza solo cada pocos minutos cuando la pestaña está abierta. Si querés forzar, recargá la página.</div>
+
+  <h3 id="pedido">2. Cargar un pedido</h3>
+  <ol>
+    <li>En la sección <b>Ventas</b>, buscá los productos y poné la cantidad de cada uno.</li>
+    <li>Elegí si es <b>Mayorista</b> o <b>Minorista</b> (cambia los precios).</li>
+    <li>Escribí el nombre del cliente y elegí la forma de pago.</li>
+    <li>Confirmá. El pedido queda <b>pendiente</b> hasta que cobres.</li>
+  </ol>
+  <div class="ojo"><b>Importante:</b> cargar un pedido NO suma plata a la caja. La plata entra recién cuando tocás <b>Confirmar cobro</b> (punto 3). Hasta entonces figura como deuda del cliente.</div>
+
+  <h3 id="cobrar">3. Cobrar un pedido</h3>
+  <p>En la tarjeta del pedido, tocá <b>💰 Confirmar cobro</b>. Se abre una ventana:</p>
+  <ol>
+    <li>Elegí <b>a qué caja entró</b> la plata: <b>MP Gaby</b> (transferencia), <b>EFT $ Myri</b> (efectivo) o <b>ETF U$S Myri</b> (dólares).</li>
+    <li>Si la venta es en <b>U$S</b> pero te pagan en pesos, poné el <b>tipo de cambio</b> y el sistema convierte solo.</li>
+    <li>Podés adjuntar uno o varios <b>comprobantes</b> (foto de la transferencia).</li>
+    <li>Si te pagaron un poco de menos o de más (redondeo / sin vuelto), poné <b>cuánto recibiste</b> y el sistema ajusta.</li>
+  </ol>
+  <div class="tip">Cada parte cobrada queda registrada en su caja, así después cuadra todo solo.</div>
+
+  <h3 id="pagocta">4. Pago a cuenta (pago parcial)</h3>
+  <p>Cuando un cliente paga una <b>parte</b> de lo que debe:</p>
+  <ol>
+    <li>Tocá <b>Pago a cuenta</b> en su pedido o desde la cuenta corriente.</li>
+    <li>Poné el monto (en $ y/o U$S) y a qué caja entró.</li>
+    <li>El resto le sigue quedando como deuda.</li>
+  </ol>
+  <div class="tip">Si al cobrar elegís "dejar el resto en cuenta corriente", el sistema abre este pago a cuenta solo, ya cargado con lo que recibiste.</div>
+
+  <h3 id="cc">5. Cuenta corriente (quién te debe)</h3>
+  <ul>
+    <li>Lista a todos los que deben, con el total. Junta automáticamente los nombres iguales aunque estén escritos distinto (mayúsculas o acentos).</li>
+    <li>Tocá <b>ver detalle</b> en un deudor para ver pedido por pedido y los pagos que fue haciendo.</li>
+    <li>Un cliente deja de figurar cuando le confirmás el cobro.</li>
+  </ul>
+
+  <h3 id="caja">6. Caja · movimientos y Extracto</h3>
+  <ul>
+    <li>Cada columna es una caja con su <b>saldo real</b>: <b>MP Gaby</b>, <b>EFT $ Myri</b>, <b>ETF U$S Myri</b> y la cuenta corriente (lo que te deben).</li>
+    <li>Tocá cualquier movimiento para ver el detalle del pedido.</li>
+    <li><b>📄 Extracto:</b> descargás un CSV de una caja (por ejemplo MP Gaby) por el período que elijas, para conciliar con lo que te entró al banco.</li>
+  </ul>
+
+  <h3 id="catalogo">7. Catálogo: productos</h3>
+  <p><b>Agregar un producto:</b></p>
+  <ol>
+    <li>Nombre, descripción, precios (mayorista y minorista) y stock.</li>
+    <li><b>Moneda (mayorista):</b> elegí $ o U$S según en qué lo cobres al por mayor.</li>
+    <li><b>Visible para:</b> Ambos / Solo mayorista / Solo minorista / Oculto.</li>
+  </ol>
+  <p><b>Editar u ocultar productos:</b></p>
+  <ul>
+    <li>Buscá el producto en <b>✏️ Editar producto</b> y cambiá lo que quieras (precios, fotos, stock, moneda).</li>
+    <li>Para mostrar/ocultar varios de una, usá <b>🙈 Mostrar / ocultar productos</b>. Cada uno tiene un <b>✏️</b> para editarlo aunque esté oculto o sin stock.</li>
+    <li><b>Ofertas:</b> ponés un precio promo y se muestra tachado el anterior.</li>
+  </ul>
+
+  <h3 id="stock">8. Stock</h3>
+  <p>Ves cuánto queda de cada producto. Si hacés un recuento físico, cargá los números acá para que quede exacto.</p>
+
+  <h3 id="tienda">9. Estado de la tienda</h3>
+  <ul>
+    <li><b>🟢 Abierta:</b> funcionamiento normal.</li>
+    <li><b>🟡 Cotización:</b> los pedidos entran como presupuesto y NO descuentan stock hasta que los aceptás.</li>
+    <li><b>🔴 Cerrada:</b> nadie puede pedir; aparece un cartel.</li>
+  </ul>
+
+  <div class="tip" style="margin-top:2rem">Para guardar este manual en PDF: tocá <b>📄 Descargar PDF</b> (arriba a la derecha) o usá <b>Ctrl/Cmd + P</b> → "Guardar como PDF".</div>
+
+  </div>
+</div>
+</body>
+</html>
