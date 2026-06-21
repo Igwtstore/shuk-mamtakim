@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shuk Mamtakim — Manual de uso</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --azul:#1a1a2e; --verde:#1a7a3c; --dorado:#c9954a; --gris:#f7f6f2;
+    --gris-medio:#e8e6e0; --texto-suave:#6b6b7a; --rojo:#c0392b; --celeste:#2c6fad;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif; background:var(--gris); color:var(--azul); font-size:11pt; line-height:1.55; margin:0;}
+  .hoja{max-width:820px; margin:1.5rem auto; background:white; box-shadow:0 4px 24px rgba(0,0,0,0.08);}
+  .cover{background:var(--azul); color:white; padding:3rem; }
+  .cover-logo{font-family:'Fraunces',serif; font-size:2.8rem; font-weight:700; color:var(--dorado); letter-spacing:-0.02em;}
+  .cover-subtitle{font-size:0.8rem; text-transform:uppercase; letter-spacing:0.15em; color:rgba(255,255,255,0.55); margin-top:0.2rem;}
+  .cover-title{font-family:'Fraunces',serif; font-size:1.9rem; font-weight:600; margin-top:1.6rem;}
+  .cover-meta{font-size:0.82rem; color:rgba(255,255,255,0.55); margin-top:0.5rem;}
+  .cover-bar{height:4px; background:linear-gradient(90deg,var(--dorado),transparent); margin-top:1.8rem;}
+  .body{padding:2.2rem 2.6rem 3rem;}
+  h2.parte{font-family:'Fraunces',serif; font-size:1.35rem; color:white; background:var(--azul); padding:0.7rem 1.1rem; border-radius:10px; margin:2.2rem 0 1.2rem; display:flex; align-items:center; gap:0.6rem;}
+  h3{font-family:'Fraunces',serif; font-size:1.08rem; color:var(--azul); border-left:4px solid var(--dorado); padding-left:0.7rem; margin:1.6rem 0 0.6rem; page-break-after:avoid;}
+  p{margin:0.3rem 0 0.6rem; color:#333;}
+  ol,ul{margin:0.3rem 0 0.8rem; padding-left:1.4rem;}
+  li{margin-bottom:0.32rem; color:#333;}
+  .tip{background:#e8f5ee; border-left:4px solid var(--verde); border-radius:0 8px 8px 0; padding:0.6rem 0.9rem; margin:0.7rem 0; font-size:0.95em;}
+  .ojo{background:#fdf3e3; border-left:4px solid var(--dorado); border-radius:0 8px 8px 0; padding:0.6rem 0.9rem; margin:0.7rem 0; font-size:0.95em;}
+  .alerta{background:#fde8e8; border-left:4px solid var(--rojo); border-radius:0 8px 8px 0; padding:0.6rem 0.9rem; margin:0.7rem 0; font-size:0.95em;}
+  b{color:var(--azul);}
+  .chip{display:inline-block; background:var(--gris); border:1px solid var(--gris-medio); border-radius:20px; padding:0.05rem 0.6rem; font-size:0.82em; font-weight:600;}
+  .idx{background:var(--gris); border-radius:10px; padding:1rem 1.4rem; margin-bottom:1rem; column-count:2; column-gap:2rem; font-size:0.92em;}
+  .idx a{color:var(--azul); text-decoration:none; display:block; padding:0.15rem 0;}
+  .idx .tit{font-weight:700; color:var(--dorado); margin-top:0.4rem;}
+  .btn-pdf{position:fixed; right:18px; bottom:18px; background:var(--azul); color:white; border:none; border-radius:30px; padding:0.8rem 1.4rem; font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.25); z-index:10;}
+  @media print{
+    body{background:white;}
+    .hoja{box-shadow:none; margin:0; max-width:100%;}
+    .btn-pdf{display:none;}
+    h2.parte{page-break-before:always;}
+    h3{page-break-after:avoid;}
+    .tip,.ojo,.alerta{page-break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<button class="btn-pdf" onclick="window.print()">📄 Descargar PDF</button>
+<div class="hoja">
+  <div class="cover">
+    <div class="cover-logo">Shuk Mamtakim</div>
+    <div class="cover-subtitle">Manual de uso</div>
+    <div class="cover-title">Cómo usar el sistema, paso a paso</div>
+    <div class="cover-meta">Panel de Shuk (Jony / Myri) · Panel de Candy (Meir / Iosi / Pa) — actualizado 2026-06-21</div>
+    <div class="cover-bar"></div>
+  </div>
+  <div class="body">
+
+  <div class="idx">
+    <div class="tit">SHUK — Panel</div>
+    <a href="#s-entrar">1. Entrar al panel</a>
+    <a href="#s-vista">2. Vista Jony / Vista Myri</a>
+    <a href="#s-pedido">3. Cargar un pedido a mano</a>
+    <a href="#s-cobrar">4. Cobrar un pedido</a>
+    <a href="#s-pagocta">5. Pago a cuenta</a>
+    <a href="#s-cc">6. Cuenta corriente (quién debe)</a>
+    <a href="#s-caja">7. Caja · movimientos y Extracto</a>
+    <a href="#s-socios">8. Cuenta entre socios</a>
+    <a href="#s-ganancias">9. Ganancias, Maaser y Corte</a>
+    <a href="#s-catalogo">10. Catálogo: productos</a>
+    <a href="#s-stock">11. Stock</a>
+    <a href="#s-tienda">12. Estado de la tienda</a>
+    <div class="tit">CANDY — Panel chicos</div>
+    <a href="#c-entrar">13. Entrar (Meir/Iosi/Pa)</a>
+    <a href="#c-listita">14. La listita del día</a>
+    <a href="#c-venta">15. Cargar una venta</a>
+    <a href="#c-cobrar">16. Cobrar, pagar y dar vuelto</a>
+    <a href="#c-cierre">17. Cerrar el día</a>
+    <a href="#c-historial">18. Historial</a>
+    <a href="#c-compras">19. Compras y depósito</a>
+    <a href="#c-flyers">20. Flyers</a>
+  </div>
+
+  <h2 class="parte">🏪 Parte 1 — Panel de Shuk</h2>
+
+  <h3 id="s-entrar">1. Entrar al panel</h3>
+  <ol>
+    <li>Entrá a la página de Shuk y tocá <b>Panel</b> (o el ícono de administración).</li>
+    <li>Ingresá tu usuario y contraseña. Quedás logueado en ese dispositivo.</li>
+  </ol>
+  <div class="tip">El panel se actualiza solo cada pocos minutos cuando la pestaña está abierta. Si querés forzar, recargá la página.</div>
+
+  <h3 id="s-vista">2. Vista Jony / Vista Myri</h3>
+  <p>Arriba hay un selector para cambiar entre <b>vista Jony</b> y <b>vista Myri</b>.</p>
+  <ul>
+    <li><b>Vista Jony:</b> ve todo — Pitzujim, golosinas, comisiones, cajas de los dos.</li>
+    <li><b>Vista Myri:</b> ve <b>solo lo de Myri</b> (sus golosinas y sus cajas). No ve Pitzujim ni los productos propios de Jony, ni las comisiones.</li>
+  </ul>
+  <div class="tip">Usá <b>vista Myri</b> cuando le mostrás algo a ella: queda prolijo y privado.</div>
+
+  <h3 id="s-pedido">3. Cargar un pedido a mano</h3>
+  <ol>
+    <li>En la sección <b>Ventas</b>, buscá los productos y poné la cantidad de cada uno.</li>
+    <li>Elegí si es <b>Mayorista</b> o <b>Minorista</b> (cambia los precios).</li>
+    <li>Escribí el nombre del cliente y elegí la forma de pago.</li>
+    <li>Confirmá. El pedido queda <b>pendiente</b> hasta que cobres.</li>
+  </ol>
+  <div class="ojo"><b>Regla de oro:</b> cargar un pedido NO suma plata a la caja. La plata entra recién cuando tocás <b>Confirmar cobro</b> (ver punto 4). Hasta entonces figura como deuda.</div>
+
+  <h3 id="s-cobrar">4. Cobrar un pedido</h3>
+  <p>En la tarjeta del pedido, tocá <b>💰 Confirmar cobro</b>. Se abre una ventana:</p>
+  <ol>
+    <li><b>Pago JONY</b> (Pitzujim / productos de Jony) y <b>Pago MYRI</b> (golosinas) aparecen por separado.</li>
+    <li>En cada uno elegís <b>a qué caja entró</b> la plata: efectivo, Mercado Pago, dólares, etc.</li>
+    <li>Si la venta es en <b>U$S</b> pero te pagan en pesos, poné el <b>tipo de cambio</b> y el sistema convierte solo.</li>
+    <li>Podés adjuntar uno o varios <b>comprobantes</b> (foto de la transferencia).</li>
+    <li>Si te pagaron un poco de menos o de más (redondeo / sin vuelto), poné <b>cuánto recibiste</b>: el sistema ajusta y recalcula la comisión.</li>
+  </ol>
+  <div class="tip"><b>Cajas nuevas de Jony:</b> ahora Jony tiene caja en <b>pesos</b>, <b>Mercado Pago</b> y <b>dólares (ETF U$S JONY)</b>. Si vendés un producto tuyo en dólares, cobralo a esa caja.</div>
+  <div class="ojo">La <b>comisión del 15%</b> se calcula solo sobre las <b>golosinas de Myri</b>. Los productos de Jony nunca pagan comisión.</div>
+
+  <h3 id="s-pagocta">5. Pago a cuenta (pago parcial)</h3>
+  <p>Cuando un cliente paga una <b>parte</b> de lo que debe:</p>
+  <ol>
+    <li>Tocá <b>Pago a cuenta</b> en su pedido o desde la cuenta corriente.</li>
+    <li>Poné el monto (en $ y/o U$S) y a qué caja entró.</li>
+    <li>El resto le sigue quedando como deuda.</li>
+  </ol>
+  <div class="tip">Si al cobrar elegís "dejar el resto en cuenta corriente", el sistema abre este pago a cuenta solo, ya cargado.</div>
+
+  <h3 id="s-cc">6. Cuenta corriente (quién te debe)</h3>
+  <ul>
+    <li>Lista a todos los que deben, con el total. Junta automáticamente los nombres iguales aunque estén escritos distinto (mayúsculas/acentos).</li>
+    <li>Tocá <b>ver detalle</b> en un deudor para ver pedido por pedido y los pagos que hizo.</li>
+    <li>Un cliente deja de figurar cuando le confirmás el cobro real.</li>
+  </ul>
+
+  <h3 id="s-caja">7. Caja · movimientos y Extracto</h3>
+  <ul>
+    <li>Cada columna es una caja (saldo físico real): MP Jony, EFT $ Jony, <b>ETF U$S Jony</b>, MP Gaby, EFT $ Myri, ETF U$S Myri, etc.</li>
+    <li>Tocá cualquier movimiento para ver el detalle del pedido.</li>
+    <li><b>📄 Extracto:</b> descargás un CSV de una caja (ej. MP Gaby) por el período que elijas, para que Myri concilie con el banco.</li>
+  </ul>
+
+  <h3 id="s-socios">8. Cuenta entre socios (Jony ↔ Myri)</h3>
+  <p>Muestra cuánto se deben entre ustedes: la comisión que Myri te debe, lo que vos cobraste de ella, etc. Se actualiza con cada cobro confirmado.</p>
+
+  <h3 id="s-ganancias">9. Ganancias, Maaser y Corte</h3>
+  <ul>
+    <li>La <b>ganancia</b> es en vivo: cuenta solo comisión y Pitzujim ya <b>cobrados</b> del período actual.</li>
+    <li>El <b>Maaser</b> (diezmo) se calcula sobre esa ganancia.</li>
+    <li><b>✂️ Hacer corte:</b> cierra el período (cuando vos quieras), le pagás a Myri lo que le debés, retirás tu comisión y todo vuelve a cero para empezar de nuevo.</li>
+  </ul>
+
+  <h3 id="s-catalogo">10. Catálogo: productos</h3>
+  <p><b>Agregar un producto:</b></p>
+  <ol>
+    <li>Nombre, descripción, precios (mayorista y minorista), stock.</li>
+    <li><b>Dueño:</b> Jony o Myri — define de quién es la plata y si genera comisión.</li>
+    <li><b>Moneda (mayorista):</b> $ o U$S — en qué se cobra al por mayor. <span class="chip">NUEVO</span></li>
+    <li><b>Visible para:</b> Ambos / Solo mayorista / Solo minorista / Oculto.</li>
+  </ol>
+  <div class="tip"><b>Ejemplo:</b> si Jony quiere vender un chocolate importado propio en dólares → Dueño <b>Jony</b> + Moneda <b>U$S</b>. Es 100% suyo, va a su caja de dólares y no genera comisión.</div>
+  <p><b>Editar / ocultar productos:</b></p>
+  <ul>
+    <li>Buscá el producto en <b>✏️ Editar producto</b> y cambiá lo que quieras (incluido dueño y moneda).</li>
+    <li>Para mostrar/ocultar varios de una, usá <b>🙈 Mostrar / ocultar productos</b>. Ahí cada producto tiene un <b>✏️</b> para editarlo aunque esté oculto o sin stock.</li>
+    <li><b>Ofertas:</b> ponés precio promo y se muestra tachado el anterior.</li>
+  </ul>
+
+  <h3 id="s-stock">11. Stock</h3>
+  <p>Ves cuánto queda de cada producto. Si hacés un recuento físico, cargá los números acá para que quede exacto.</p>
+
+  <h3 id="s-tienda">12. Estado de la tienda</h3>
+  <ul>
+    <li><b>🟢 Abierta:</b> normal.</li>
+    <li><b>🟡 Cotización:</b> los pedidos entran como presupuesto y NO descuentan stock hasta que los aceptás.</li>
+    <li><b>🔴 Cerrada:</b> nadie puede pedir; aparece un cartel.</li>
+  </ul>
+
+  <h2 class="parte">🍬 Parte 2 — Panel de Candy (los chicos)</h2>
+
+  <h3 id="c-entrar">13. Entrar (Meir / Iosi / Pa)</h3>
+  <p>Cada uno toca su botón con su nombre. Lo que carga queda a su nombre. Pa (papá) también tiene su perfil.</p>
+
+  <h3 id="c-listita">14. La listita del día (apertura)</h3>
+  <ol>
+    <li>A la mañana (o la noche anterior) tocá <b>📋 Mi listita del día</b>.</li>
+    <li>Poné cuánto llevás de cada producto. Sale del depósito común.</li>
+    <li>Botón <b>"Llevar lo mismo que la última vez"</b> para no cargar todo de nuevo.</li>
+  </ol>
+
+  <h3 id="c-venta">15. Cargar una venta</h3>
+  <ol>
+    <li>Elegí el o los productos y la cantidad.</li>
+    <li>Escribí el cliente. Si ya debe, aparece <b>⚠️ "ya debe $X"</b> al lado.</li>
+    <li>Elegí cómo pagó: <b>💵 Efectivo</b> o <b>📱 Mercado Pago</b>. <span class="chip">NUEVO</span></li>
+    <li>Si paga todo, listo. Si paga una parte (venta a cuenta), poné cuánto pagó: el resto le queda como deuda.</li>
+  </ol>
+  <div class="tip">En el día, cada venta muestra clarito: 🔴 debe / 🔵 le debemos cambio / 🟢 al día.</div>
+  <div class="ojo">¿Te equivocaste? Cada venta del día tiene <b>✏️ corregir</b> y <b>🗑️ borrar</b>. Si hay duplicados, usá <b>🔍 Revisar ventas duplicadas</b> en Deudores.</div>
+
+  <h3 id="c-cobrar">16. Cobrar, pagar y dar vuelto</h3>
+  <ul>
+    <li>En <b>Deudores</b>, cada cliente tiene botones para <b>cobrar deuda</b>, <b>cobrar todo</b> o registrar un <b>pago a cuenta</b>.</li>
+    <li>Si le diste de menos y le debés cambio, también se registra.</li>
+  </ul>
+
+  <h3 id="c-cierre">17. Cerrar el día</h3>
+  <ol>
+    <li>Al terminar, en la <b>casita de cierre</b> verás: cuánto llevaste, cuánto efectivo tenés que tener, cuánto en Mercado Pago, cuánto te deben y cuánto te queda para traer.</li>
+    <li>Verificá que <b>cuadre</b>: Vendiste = Cobrado + Deuda. Y ves <b>cuánto ganaste hoy</b>.</li>
+    <li>Tocá <b>✅ Cerrar día</b>. Recién ahí se habilita la próxima apertura.</li>
+  </ol>
+  <div class="ojo">Si te comiste o regalaste algo, cargalo: se descuenta el <b>costo</b> de tu ganancia (no el precio de venta).</div>
+
+  <h3 id="c-historial">18. Historial</h3>
+  <p>Ves tus ventas de días anteriores con el mismo formato del día (ventas / ganancia / maaser) y el acumulado tuyo y de todos. Podés editar o borrar de cualquier día.</p>
+
+  <h3 id="c-compras">19. Compras y depósito</h3>
+  <ul>
+    <li>En <b>Compras</b> cargás lo que le comprás a un proveedor con su costo.</li>
+    <li>El sistema calcula el <b>costo promedio</b> y lo suma al <b>depósito común</b> (con fotos y valorizado).</li>
+    <li>De ahí sale lo que cada uno se lleva en su listita.</li>
+  </ul>
+
+  <h3 id="c-flyers">20. Flyers</h3>
+  <p>En <b>Flyers</b> armás una placa para promocionar productos: el texto lo escribe la IA y usás las fotos reales. Podés elegir formato (post / historia), tema de temporada, y mandártelo al WhatsApp.</p>
+
+  <div class="tip" style="margin-top:2rem">Para guardar este manual en PDF: tocá <b>📄 Descargar PDF</b> (arriba a la derecha) o usá <b>Ctrl/Cmd + P</b> → "Guardar como PDF".</div>
+
+  </div>
+</div>
+</body>
+</html>
