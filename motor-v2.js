@@ -16,7 +16,7 @@ const PROTECTED_ACTIONS = [
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
-  'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja',
+  'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar',
   'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','limpiarTestData','panelAdmin'
 ];
 
@@ -1119,6 +1119,7 @@ function doGet(e) {
     if (accion === 'bandejaListar')  { return json(bandejaListar(ss)); }
     if (accion === 'bandejaUsar')    { return json(bandejaUsar(ss, e.parameter)); }
     if (accion === 'procesarBandeja'){ return json(procesarBandeja(ss)); }
+    if (accion === 'bandejaReintentar'){ return json(bandejaReintentar(ss)); }
     if (accion === 'eliminarProducto') {
       // Borra un producto del Stock de Shuk por id (deja registro en MovimientosStock).
       const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
@@ -2993,6 +2994,11 @@ function bandejaUsar(ss, p) {
 
 // Analiza hasta 4 fotos pendientes por corrida (la llama el panel tras subir,
 // y también el trigger horario del backup como red de seguridad).
+// Error de IA que NO es culpa de la foto (saldo/créditos, rate limit, overload, quota).
+// Esos NO deben "quemar" la foto: se deja pendiente para reintentar cuando se resuelva.
+function _esErrorIATransitorio_(msg) {
+  return /credit|billing|too low|saldo|rate.?limit|overloaded|529|429|quota|insufficient|unavailable/i.test((msg || '').toString());
+}
 function procesarBandeja(ss) {
   const h = ss.getSheetByName('BandejaFotos');
   if (!h || h.getLastRow() < 2) return { ok: true, procesadas: 0, pendientes: 0 };
@@ -3007,12 +3013,27 @@ function procesarBandeja(ss) {
       procesadas++;
     } else if (r.error === 'sin_clave') {
       return { error: r.mensaje };
+    } else if (_esErrorIATransitorio_(r.error)) {
+      // Saldo/créditos/rate: la foto NO se marca como fallada, queda pendiente para reintentar.
+      return { error: '⚠️ La IA no tiene saldo (créditos de Anthropic). Cargá créditos en console.anthropic.com → Plans & Billing y reintentá. Las fotos quedaron guardadas.', transitorio: true, detalle: r.error };
     } else {
       h.getRange(i + 1, 7).setValue('error');
       procesadas++;
     }
   }
   return { ok: true, procesadas, pendientes };
+}
+
+// Vuelve a 'pendiente' las fotos que habían quedado en 'error' (para reintentar el análisis).
+function bandejaReintentar(ss) {
+  const h = ss.getSheetByName('BandejaFotos');
+  if (!h || h.getLastRow() < 2) return { ok: true, n: 0 };
+  const datos = h.getRange(2, 1, h.getLastRow() - 1, 7).getValues();
+  let n = 0;
+  for (let i = 0; i < datos.length; i++) {
+    if (datos[i][6] === 'error') { h.getRange(i + 2, 7).setValue('pendiente'); n++; }
+  }
+  return { ok: true, n };
 }
 
 // ─── PRODUCTOS DORMIDOS (sugerencias de oferta) ───────────────────────────────
