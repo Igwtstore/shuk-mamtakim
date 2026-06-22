@@ -6525,6 +6525,7 @@ async function renderAnalitica() {
   if (!d || d.error) { cont.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕</div>'; return; }
   if (d.vacio) { cont.innerHTML = '<div class="admin-card"><div class="sinpedidos">Todavía no hay datos de tráfico. Se empiezan a registrar a medida que entren visitantes a la tienda. 👀</div></div>'; return; }
 
+  window._anaData = d;   // para exportar a CSV
   const r = d.resumen;
   const pct = (a,b) => b > 0 ? Math.round(a/b*100) : 0;
   const card = (inner, style='') => `<div class="admin-card" style="${style}">${inner}</div>`;
@@ -6546,6 +6547,40 @@ async function renderAnalitica() {
     </div>
     <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:8px;line-height:1.4">ℹ️ Únicos = navegadores distintos. Tus visitas y las de Miri no cuentan (desde hoy). La misma persona desde celu y compu cuenta como 2.</div>`);
 
+  // Comparativa con el período anterior (solo si el período es acotado)
+  if (d.comparativa) {
+    const c = d.comparativa;
+    const chip = (lbl, o) => {
+      const up = o.delta >= 0;
+      const col = o.delta === 0 ? 'var(--texto-suave)' : (up ? 'var(--verde)' : '#c0392b');
+      const flecha = o.delta === 0 ? '=' : (up ? '▲' : '▼');
+      return `<div style="flex:1;min-width:0;text-align:center">
+        <div style="font-size:1.25rem;font-weight:800">${o.actual}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave);font-weight:600">${lbl}</div>
+        <div style="font-size:0.72rem;font-weight:700;color:${col};margin-top:2px">${flecha} ${Math.abs(o.delta)}%</div>
+        <div style="font-size:0.58rem;color:var(--texto-suave)">antes: ${o.anterior}</div>
+      </div>`;
+    };
+    html += card(`<div class="admin-titulo">📊 Comparado con el período anterior</div>
+      <div style="display:flex;gap:8px">${chip('Visitas', c.visitas)}${chip('Únicos', c.unicos)}${chip('Pedidos', c.pedidos)}</div>`);
+  }
+
+  // Tendencia diaria
+  if (d.dias30 && d.dias30.length) {
+    const maxDia = Math.max(...d.dias30.map(x=>x.n), 1);
+    const barras = d.dias30.map(x => {
+      const fch = x.fecha.slice(8,10) + '/' + x.fecha.slice(5,7);
+      return `<div title="${fch} — ${x.n} visitas" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0">
+        <div style="width:80%;background:#2c6fad;border-radius:3px 3px 0 0;height:${Math.max(2,Math.round(x.n/maxDia*70))}px"></div>
+      </div>`;
+    }).join('');
+    const f0 = d.dias30[0].fecha, f1 = d.dias30[d.dias30.length-1].fecha;
+    html += card(`<div class="admin-titulo">📈 Visitas por día</div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:6px">${barras}</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--texto-suave);margin-top:3px">
+        <span>${f0.slice(8,10)}/${f0.slice(5,7)}</span><span>${f1.slice(8,10)}/${f1.slice(5,7)}</span></div>`);
+  }
+
   // Embudo
   const e = d.embudo;
   const etapas = [['Entraron', e.visita, '#5c3d1e'], ['Agregaron al carrito', e.carrito, '#2c6fad'],
@@ -6562,6 +6597,25 @@ async function renderAnalitica() {
         </div>
       </div>`).join('') +
     `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:4px">Conversión final: <b>${pct(e.pedido,base)}%</b> de los que entran terminan pidiendo.</div>`);
+
+  // Top productos más deseados (lo que la gente agregó al carrito / pidió)
+  const tp = d.topProductos || [];
+  if (tp.length) {
+    const maxTp = Math.max(...tp.map(x=>x.n), 1);
+    const tpRows = tp.map((x,i) => `
+      <div style="margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${esc(x.nombre)}</span>
+          <span style="color:var(--texto-suave);flex-shrink:0;margin-left:6px">${x.n}</span>
+        </div>
+        <div style="background:var(--gris-medio);border-radius:5px;height:9px;overflow:hidden">
+          <div style="width:${pct(x.n,maxTp)}%;height:100%;background:#e08a2a;border-radius:5px"></div>
+        </div>
+      </div>`).join('');
+    html += card(`<div class="admin-titulo">🔥 Productos más deseados</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo que más agregaron al carrito o pidieron en el período. Ideal para destacar o no quedarte sin stock.</div>
+      ${tpRows}`);
+  }
 
   // Carritos abandonados — ventas casi cerradas para recuperar
   const ab = d.abandonados || [];
@@ -6581,7 +6635,8 @@ async function renderAnalitica() {
       </div>
     </div>`;
   }).join('') : '<div class="sinpedidos">Sin carritos abandonados en el período ✓</div>';
-  html += card(`<div class="admin-titulo">🛒 Carritos abandonados (${ab.length})</div>
+  const btnCsvAb = ab.length ? `<button onclick="descargarAnaCSV('abandonados')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
+  html += card(`<div class="admin-titulo">🛒 Carritos abandonados (${ab.length}) ${btnCsvAb}</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Agregaron productos y no terminaron el pedido. Si dejaron su teléfono, recuperalos con un clic.</div>
     ${abRows}`);
 
@@ -6599,6 +6654,19 @@ async function renderAnalitica() {
     </div>`).join('');
   html += card(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
 
+  // Conversión por canal: qué origen trae gente que efectivamente compra
+  const cpo = (d.conversionPorOrigen || []).filter(x => x.visitantes > 0);
+  if (cpo.length) {
+    const convRows = cpo.map(x => `
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio)">
+        <span>${iconoOrigen[x.origen]||x.origen}</span>
+        <span style="color:var(--texto-suave)">${x.pedidos}/${x.visitantes} · <b style="color:${x.pct>=20?'var(--verde)':(x.pct>=8?'#e08a2a':'#c0392b')}">${x.pct}%</b></span>
+      </div>`).join('');
+    html += card(`<div class="admin-titulo">🎯 Conversión por canal</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:6px">De cada canal, cuántos visitantes terminaron pidiendo. Te dice dónde conviene invertir.</div>
+      ${convRows}`);
+  }
+
   // Dispositivo + ciudades (lado a lado)
   const dispRows = Object.entries(d.porDispositivo).sort((a,b)=>b[1]-a[1])
     .map(([k,n]) => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
@@ -6607,9 +6675,14 @@ async function renderAnalitica() {
     ? d.topCiudades.map(c => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
         <span>📍 ${esc(c.nombre)}</span><b>${c.n}</b></div>`).join('')
     : '<div class="sinpedidos">Sin datos</div>';
+  const paises = d.topPaises || [];
+  const paisCard = (paises.length > 1)
+    ? card(`<div class="admin-titulo">Países</div>${paises.map(p => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0"><span>🌎 ${esc(p.nombre)}</span><b>${p.n}</b></div>`).join('')}`, 'flex:1;min-width:140px')
+    : '';
   html += `<div style="display:flex;gap:0.75rem;flex-wrap:wrap">
     ${card(`<div class="admin-titulo">Dispositivo</div>${dispRows}`, 'flex:1;min-width:140px')}
     ${card(`<div class="admin-titulo">Ciudades top</div>${ciudadRows}`, 'flex:1;min-width:140px')}
+    ${paisCard}
   </div>`;
 
   // Horarios pico
@@ -6622,6 +6695,21 @@ async function renderAnalitica() {
     </div>
     <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--texto-suave);margin-top:3px">
       <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>`);
+
+  // Día de la semana con más tráfico
+  if (d.porDiaSemana && d.porDiaSemana.some(n=>n>0)) {
+    const diasLbl = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const maxDS = Math.max(...d.porDiaSemana, 1);
+    const dsRows = d.porDiaSemana.map((n,i) => `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="font-size:0.72rem;width:30px;flex-shrink:0">${diasLbl[i]}</span>
+        <div style="flex:1;background:var(--gris-medio);border-radius:5px;height:12px;overflow:hidden">
+          <div style="width:${pct(n,maxDS)}%;height:100%;background:#7b2ff7;border-radius:5px"></div>
+        </div>
+        <span style="font-size:0.7rem;color:var(--texto-suave);width:28px;text-align:right;flex-shrink:0">${n}</span>
+      </div>`).join('');
+    html += card(`<div class="admin-titulo">📅 Días de la semana</div>${dsRows}`);
+  }
 
   // Leads identificados
   const leadRows = d.leads.length
@@ -6639,11 +6727,34 @@ async function renderAnalitica() {
         </div>
       </div>`).join('')
     : '<div class="sinpedidos">Todavía nadie se identificó. Aparecen acá cuando alguien hace un pedido o se registra.</div>';
-  html += card(`<div class="admin-titulo">🧑 Visitantes identificados (${d.leads.length})</div>
+  const btnCsvLeads = d.leads.length ? `<button onclick="descargarAnaCSV('leads')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
+  html += card(`<div class="admin-titulo">🧑 Visitantes identificados (${d.leads.length}) ${btnCsvLeads}</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Personas que dejaron sus datos al registrarse o pedir, con su historial de visitas atado.</div>
     ${leadRows}`);
 
   cont.innerHTML = html;
+}
+
+// Exporta a CSV los leads o los carritos abandonados del período mostrado.
+function descargarAnaCSV(tipo) {
+  const d = window._anaData; if (!d) return;
+  const esc = v => '"' + (v==null?'':String(v)).replace(/"/g,'""') + '"';
+  let cols, rows, nombre;
+  if (tipo === 'leads') {
+    cols = ['Nombre','Teléfono','Ciudad','Origen','Visitas','Última'];
+    rows = (d.leads||[]).map(l => [l.nombre, l.telefono, l.ciudad, l.origen, l.visitas, l.ultima]);
+    nombre = 'leads-shuk';
+  } else {
+    cols = ['Nombre','Teléfono','Ciudad','Etapa','Productos','Cuándo'];
+    rows = (d.abandonados||[]).map(a => [a.nombre, a.telefono, a.ciudad, a.etapa, (a.productos||[]).join(' | '), a.cuando]);
+    nombre = 'carritos-abandonados-shuk';
+  }
+  const csv = [cols.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre + '-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 let _dashPeriodo = 7;

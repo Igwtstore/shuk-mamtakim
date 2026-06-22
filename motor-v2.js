@@ -2255,12 +2255,17 @@ function getAnalitica(ss, p) {
   if (!h || h.getLastRow() < 2) return { vacio: true };
   const dias = parseInt(p.dias) || 0;   // 0 = todo
   const desde = dias > 0 ? new Date(Date.now() - dias * 86400000) : null;
+  const prevDesde = dias > 0 ? new Date(Date.now() - 2 * dias * 86400000) : null;   // período anterior (mismo largo)
   const nCols = Math.max(h.getLastColumn(), 11);
-  const filas = h.getRange(2,1,h.getLastRow()-1,nCols).getValues()
-    .filter(r => r[0] instanceof Date && (!desde || r[0] >= desde));
+  const todas = h.getRange(2,1,h.getLastRow()-1,nCols).getValues()
+    .filter(r => r[0] instanceof Date);
+  const filas = desde ? todas.filter(r => r[0] >= desde) : todas;
 
   const resumen = { visitas:0, unicos:0, nuevos:0, recurrentes:0, tienda:0, mayorista:0 };
-  const porOrigen = {}, porDispositivo = {}, porCiudad = {}, porHora = new Array(24).fill(0), porDia = {};
+  const porOrigen = {}, porDispositivo = {}, porCiudad = {}, porPais = {}, porHora = new Array(24).fill(0), porDia = {};
+  const porDiaSemana = new Array(7).fill(0);   // 0=Dom … 6=Sáb
+  const prodDeseados = {};                     // producto -> veces agregado al carrito/checkout/pedido
+  const origenVisitaVids = {}, origenPedidoVids = {};   // para conversión por canal
   const embudoVids = { visita:{}, carrito:{}, checkout:{}, pedido:{} };
   const vids = {};            // vid -> { visitas, fechas:Set, nombre, telefono, ciudad, origen, pagina, primera, ultima }
 
@@ -2271,20 +2276,29 @@ function getAnalitica(ss, p) {
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
       if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos:{}, ultimaCarrito:null, ultimoPedido:null, etapa:'carrito' };
       const c = carritosPorVid[vid];
-      if (evento === 'pedido') { c.ultimoPedido = fecha; }
-      else {
+      if (evento === 'pedido') {
+        c.ultimoPedido = fecha;
+        const og = origen || 'directo';
+        if (!origenPedidoVids[og]) origenPedidoVids[og] = {};
+        origenPedidoVids[og][vid] = 1;
+      } else {
         if (!c.ultimaCarrito || fecha > c.ultimaCarrito) c.ultimaCarrito = fecha;
         if (evento === 'checkout') c.etapa = 'checkout';
         if (detalle) c.productos[detalle] = 1;
       }
+      if (detalle) prodDeseados[detalle] = (prodDeseados[detalle]||0) + 1;   // qué quieren (carrito+checkout+pedido)
     }
     if (evento === 'visita') {
       resumen.visitas++;
       resumen[pagina === 'mayorista' ? 'mayorista' : 'tienda']++;
-      porOrigen[origen||'directo'] = (porOrigen[origen||'directo']||0) + 1;
+      const og = origen || 'directo';
+      porOrigen[og] = (porOrigen[og]||0) + 1;
+      if (vid) { if (!origenVisitaVids[og]) origenVisitaVids[og] = {}; origenVisitaVids[og][vid] = 1; }
       if (disp) porDispositivo[disp] = (porDispositivo[disp]||0) + 1;
       if (ciudad) porCiudad[ciudad] = (porCiudad[ciudad]||0) + 1;
+      if (pais) porPais[pais] = (porPais[pais]||0) + 1;
       porHora[fecha.getHours()]++;
+      porDiaSemana[fecha.getDay()]++;
       const dk = Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd');
       porDia[dk] = (porDia[dk]||0) + 1;
     }
@@ -2320,13 +2334,42 @@ function getAnalitica(ss, p) {
 
   const topCiudades = Object.entries(porCiudad).sort((a,b)=>b[1]-a[1]).slice(0,8)
     .map(([nombre,n]) => ({ nombre, n }));
+  const topPaises = Object.entries(porPais).sort((a,b)=>b[1]-a[1]).slice(0,6)
+    .map(([nombre,n]) => ({ nombre, n }));
   const dias30 = Object.entries(porDia).sort((a,b)=>a[0]<b[0]?-1:1).map(([fecha,n]) => ({ fecha, n }));
+  const topProductos = Object.entries(prodDeseados).sort((a,b)=>b[1]-a[1]).slice(0,10)
+    .map(([nombre,n]) => ({ nombre, n }));
+  // Conversión por canal: % de visitantes únicos de ese origen que terminaron pidiendo.
+  const conversionPorOrigen = Object.keys(origenVisitaVids).map(og => {
+    const uv = Object.keys(origenVisitaVids[og]).length;
+    const up = origenPedidoVids[og] ? Object.keys(origenPedidoVids[og]).length : 0;
+    return { origen: og, visitantes: uv, pedidos: up, pct: uv ? Math.round(up/uv*100) : 0 };
+  }).sort((a,b)=>b.visitantes-a.visitantes);
   const embudo = {
     visita: Object.keys(embudoVids.visita).length,
     carrito: Object.keys(embudoVids.carrito).length,
     checkout: Object.keys(embudoVids.checkout).length,
     pedido: Object.keys(embudoVids.pedido).length
   };
+
+  // Comparativa con el período anterior (mismo largo de días): visitas, únicos y pedidos.
+  let comparativa = null;
+  if (prevDesde) {
+    const prevFilas = todas.filter(r => r[0] >= prevDesde && r[0] < desde);
+    let pVis = 0; const pUni = {}, pPed = {};
+    prevFilas.forEach(r => {
+      const vid = r[1], evento = r[3];
+      if (evento === 'visita') pVis++;
+      if (vid) { pUni[vid] = 1; if (evento === 'pedido') pPed[vid] = 1; }
+    });
+    const delta = (act, ant) => ant > 0 ? Math.round((act-ant)/ant*100) : (act > 0 ? 100 : 0);
+    const pedActual = embudo.pedido, pedAnt = Object.keys(pPed).length, uniAnt = Object.keys(pUni).length;
+    comparativa = {
+      visitas:  { actual: resumen.visitas, anterior: pVis,    delta: delta(resumen.visitas, pVis) },
+      unicos:   { actual: resumen.unicos,  anterior: uniAnt,  delta: delta(resumen.unicos, uniAnt) },
+      pedidos:  { actual: pedActual,       anterior: pedAnt,  delta: delta(pedActual, pedAnt) }
+    };
+  }
 
   // Carritos abandonados: agregó al carrito (o llegó al checkout) y no hay
   // pedido posterior. Ventas casi cerradas para recuperar por WhatsApp.
@@ -2349,7 +2392,8 @@ function getAnalitica(ss, p) {
     .sort((a,b) => b.ts - a.ts)
     .slice(0, 30);
 
-  return { resumen, porOrigen, porDispositivo, topCiudades, porHora, dias30, embudo, leads, abandonados };
+  return { resumen, porOrigen, porDispositivo, topCiudades, topPaises, porHora, porDiaSemana,
+           dias30, embudo, leads, abandonados, topProductos, conversionPorOrigen, comparativa };
 }
 
 // ─── PROVEEDORES Y COMPRAS (depósito compartido de los hijos) ─────────────────
