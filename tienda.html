@@ -12,10 +12,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { font-family: 'DM Sans', -apple-system, sans-serif; background: #f5f0e8; min-height: 100vh; }
+body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; background-image: radial-gradient(circle at 15% 12%, #ffe3f1 0, transparent 45%), radial-gradient(circle at 85% 8%, #e3f0ff 0, transparent 40%); min-height: 100vh; }
 
 /* HEADER */
-.header { background: linear-gradient(160deg, #2d1a0a 0%, #5c3d1e 60%, #8b5e3c 100%); color: white; padding: 28px 20px 22px; text-align: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 4px 20px rgba(45,26,10,0.3); }
+.header { background: linear-gradient(135deg, #ff5fa2 0%, #b14cff 55%, #5cc8ff 100%); color: white; padding: 28px 20px 22px; text-align: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 6px 24px rgba(177,76,255,0.35); }
 .header-emoji { font-size: 2.2rem; margin-bottom: 4px; line-height: 1; }
 .header-title { font-family: 'Fraunces', serif; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; }
 .header-sub { font-size: 0.82rem; opacity: 0.65; margin-top: 3px; font-weight: 500; }
@@ -39,18 +39,27 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #f5f0e8; m
 .producto-info { padding: 10px 12px 6px; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .producto-nombre { font-size: 0.82rem; font-weight: 700; color: #2d1a0a; line-height: 1.3; }
 .producto-desc { font-size: 0.72rem; color: #9a8a7a; line-height: 1.3; }
-.producto-precio { font-size: 1rem; font-weight: 800; color: #5c3d1e; margin-top: 4px; }
-.btn-agregar { margin: 6px 10px 10px; padding: 9px 10px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; transition: opacity 0.15s; }
+.producto-precio { font-size: 1rem; font-weight: 800; color: #d6336c; margin-top: 4px; }
+.btn-agregar { margin: 6px 10px 10px; padding: 9px 10px; background: linear-gradient(135deg, #ff5fa2, #b14cff); color: white; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; transition: opacity 0.15s; }
 .btn-agregar:active { opacity: 0.8; }
 
 /* EN CARRITO */
 .btn-en-carrito { background: linear-gradient(135deg, #1a7a3c, #2a9a50); }
-.badge-cant { position: absolute; top: 8px; right: 8px; background: #5c3d1e; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 800; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.badge-cant { position: absolute; top: 8px; right: 8px; background: #b14cff; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 800; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+/* AGOTADO */
+.producto-card.agotada .producto-foto-wrap img,
+.producto-card.agotada .producto-foto-placeholder { filter: grayscale(0.85) opacity(0.55); }
+.badge-agotado { position: absolute; top: 8px; left: 8px; background: #6b6b6b; color: white; border-radius: 8px; padding: 3px 8px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.03em; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.badge-ultimas { position: absolute; top: 8px; left: 8px; background: #ff8c00; color: white; border-radius: 8px; padding: 3px 8px; font-size: 0.64rem; font-weight: 800; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.btn-avisame { margin: 6px 10px 10px; padding: 9px 10px; background: #fff; color: #b14cff; border: 1.5px solid #e7c6ff; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.btn-avisame:active { background: #faf2ff; }
+.btn-avisame.pedido { background: #f3e8ff; color: #8b2fd6; border-color: #d9b3ff; }
 
 /* CARRITO FLOTANTE */
-.cart-fab { position: fixed; bottom: 24px; right: 16px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 50px; padding: 14px 22px; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 700; cursor: pointer; box-shadow: 0 6px 28px rgba(92,61,30,0.45); z-index: 40; display: none; align-items: center; gap: 10px; transition: transform 0.15s; }
+.cart-fab { position: fixed; bottom: 24px; right: 16px; background: linear-gradient(135deg, #ff5fa2, #b14cff); color: white; border: none; border-radius: 50px; padding: 14px 22px; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 700; cursor: pointer; box-shadow: 0 6px 28px rgba(177,76,255,0.45); z-index: 40; display: none; align-items: center; gap: 10px; transition: transform 0.15s; }
 .cart-fab:active { transform: scale(0.96); }
-.cart-count { background: white; color: #5c3d1e; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 800; }
+.cart-count { background: white; color: #b14cff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 800; }
 .cart-fab-total { font-size: 0.85rem; opacity: 0.85; }
 
 /* LOADING / ERROR */
@@ -104,7 +113,7 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #f5f0e8; m
 .qty-picker { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 20px; }
 .qty-picker .qty-btn { width: 46px; height: 46px; font-size: 1.4rem; border-radius: 12px; background: #f5f0e8; border: none; font-weight: 700; color: #5c3d1e; cursor: pointer; }
 .qty-picker .qty-num { font-size: 2rem; font-weight: 800; color: #2d1a0a; min-width: 44px; }
-.btn-confirmar { width: 100%; padding: 14px; background: linear-gradient(135deg, #5c3d1e, #8b5e3c); color: white; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 1rem; font-weight: 700; cursor: pointer; }
+.btn-confirmar { width: 100%; padding: 14px; background: linear-gradient(135deg, #ff5fa2, #b14cff); color: white; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 1rem; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -165,6 +174,18 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #f5f0e8; m
   </div>
 </div>
 
+<!-- MODAL AVISAME (producto agotado) -->
+<div class="modal-overlay" id="avisame-overlay" onclick="cerrarSiAfuera(event,'avisame-overlay')">
+  <div class="modal-box">
+    <h3>🔔 Te avisamos cuando llegue</h3>
+    <p><span id="avisame-prod" style="font-weight:700;color:#b14cff"></span> está agotado. Dejanos tus datos y te escribimos apenas vuelva.</p>
+    <input class="modal-input" id="avisame-nombre" type="text" placeholder="Tu nombre" maxlength="40">
+    <input class="modal-input" id="avisame-tel" type="tel" placeholder="Tu WhatsApp (opcional)" maxlength="20">
+    <button class="btn-confirmar" onclick="enviarAviso()">🔔 Avisame cuando llegue</button>
+    <button class="btn-cancelar" onclick="document.getElementById('avisame-overlay').classList.remove('open')">Cancelar</button>
+  </div>
+</div>
+
 <!-- MODAL CANTIDAD -->
 <div class="modal-overlay" id="qty-overlay" onclick="cerrarSiAfuera(event,'qty-overlay')">
   <div class="qty-modal-box">
@@ -207,6 +228,8 @@ let carrito = {};
 let catalogoData = [];
 let productoSeleccionado = null;
 let qtyTmp = 1;
+let productoAviso = null;
+const _avisados = new Set(JSON.parse(localStorage.getItem('candy_avisados_' + kid) || '[]'));
 
 // ─── CARGAR CATÁLOGO ─────────────────────────────────────────────
 async function cargarCatalogo() {
@@ -232,25 +255,36 @@ function renderCatalogo(productos, esFiltered) {
     el.innerHTML = `<div class="sin-resultados">${esFiltered ? '🔍 Sin resultados' : 'Sin productos disponibles'}</div>`;
     return;
   }
-  el.innerHTML = productos.map(p => {
-    const enCarrito = carrito[p.codigo];
-    const cant = enCarrito?.cantidad || 0;
+  // Disponibles primero; los agotados van al final pero SIEMPRE se ven.
+  const ordenados = [...productos].sort((a, b) => ((a.stock > 0 ? 0 : 1) - (b.stock > 0 ? 0 : 1)));
+  el.innerHTML = ordenados.map(p => {
+    const cant = carrito[p.codigo]?.cantidad || 0;
+    const agotado = !(p.stock > 0);
+    const pocas = !agotado && p.stock <= 5;
     const fotoEl = p.foto
       ? `<img src="${fotoTienda(p.foto, 600)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';
     const placeholder = `<div class="producto-foto-placeholder" style="${p.foto ? 'display:none' : ''}">${emojiKid}</div>`;
-    return `<div class="producto-card" onclick="seleccionarProducto('${p.codigo}')">
+    const badge = agotado ? '<span class="badge-agotado">AGOTADO</span>'
+      : (pocas ? `<span class="badge-ultimas">¡Quedan ${p.stock}!</span>` : '');
+    let boton;
+    if (agotado) {
+      const ped = _avisados.has(p.codigo);
+      boton = `<button class="btn-avisame ${ped ? 'pedido' : ''}" onclick="event.stopPropagation(); ${ped ? '' : `abrirAvisame('${p.codigo}')`}">${ped ? '✓ Te avisaremos' : '🔔 Avisame cuando llegue'}</button>`;
+    } else {
+      boton = `<button class="btn-agregar ${cant > 0 ? 'btn-en-carrito' : ''}" onclick="event.stopPropagation(); seleccionarProducto('${p.codigo}')">${cant > 0 ? `✓ En pedido (${cant})` : '+ Agregar'}</button>`;
+    }
+    return `<div class="producto-card ${agotado ? 'agotada' : ''}" onclick="${agotado ? `abrirAvisame('${p.codigo}')` : `seleccionarProducto('${p.codigo}')`}">
       <div class="producto-foto-wrap">
         ${fotoEl}${placeholder}
+        ${badge}
         ${cant > 0 ? `<span class="badge-cant">${cant}</span>` : ''}
       </div>
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
         <div class="producto-precio">${fmt(p.precioVenta)}</div>
       </div>
-      <button class="btn-agregar ${cant > 0 ? 'btn-en-carrito' : ''}" onclick="event.stopPropagation(); seleccionarProducto('${p.codigo}')">
-        ${cant > 0 ? `✓ En pedido (${cant})` : '+ Agregar'}
-      </button>
+      ${boton}
     </div>`;
   }).join('');
 }
@@ -259,6 +293,7 @@ function renderCatalogo(productos, esFiltered) {
 function seleccionarProducto(codigo) {
   productoSeleccionado = catalogoData.find(p => p.codigo === codigo);
   if (!productoSeleccionado) return;
+  if (!(productoSeleccionado.stock > 0)) { abrirAvisame(codigo); return; }   // agotado → ofrecer aviso
   qtyTmp = carrito[codigo]?.cantidad || 1;
   const fotoEl = document.getElementById('qty-foto');
   if (productoSeleccionado.foto) { fotoEl.src = fotoTienda(productoSeleccionado.foto, 900); fotoEl.style.display = 'block'; }
@@ -381,6 +416,48 @@ function confirmarPedido() {
   document.getElementById('checkout-overlay').classList.remove('open');
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
+}
+
+// ─── AVISAME (producto agotado) ───────────────────────────────────
+function abrirAvisame(codigo) {
+  productoAviso = catalogoData.find(p => p.codigo === codigo);
+  if (!productoAviso) return;
+  if (_avisados.has(codigo)) { toast('✓ Ya te vamos a avisar 🔔'); return; }
+  document.getElementById('avisame-prod').textContent = productoAviso.nombre;
+  document.getElementById('avisame-nombre').value = '';
+  document.getElementById('avisame-tel').value = '';
+  document.getElementById('avisame-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('avisame-nombre').focus(), 300);
+}
+
+async function enviarAviso() {
+  if (!productoAviso) return;
+  const nombre = document.getElementById('avisame-nombre').value.trim();
+  if (!nombre) { document.getElementById('avisame-nombre').focus(); return; }
+  const tel = document.getElementById('avisame-tel').value.trim();
+  const cod = productoAviso.codigo;
+  document.getElementById('avisame-overlay').classList.remove('open');
+  const u = new URL(APPS_URL);
+  u.searchParams.set('accion', 'avisarmeCandy');
+  u.searchParams.set('hijo', nombreKid);
+  u.searchParams.set('codigo', cod);
+  u.searchParams.set('producto', productoAviso.nombre);
+  u.searchParams.set('cliente', nombre);
+  u.searchParams.set('telefono', tel);
+  u.searchParams.set('wa', phone);
+  try { await fetch(u); } catch (e) {}
+  _avisados.add(cod);
+  localStorage.setItem('candy_avisados_' + kid, JSON.stringify([..._avisados]));
+  toast('🔔 ¡Listo! Te avisamos cuando llegue');
+  renderCatalogo(catalogoData);
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#b14cff;color:#fff;padding:12px 22px;border-radius:24px;font-weight:700;font-size:0.9rem;z-index:200;box-shadow:0 6px 24px rgba(177,76,255,0.45);white-space:nowrap';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
 }
 
 cargarCatalogo();

@@ -374,6 +374,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="stat"><div class="stat-num" id="s-vis-total">—</div><div class="stat-label">Total</div></div>
       </div>
     </div>
+    <div class="card" id="avisos-card" style="display:none">
+      <div class="card-title">🔔 Te piden (agotados)</div>
+      <div id="avisos-list"></div>
+    </div>
     <div class="card" id="stock-card" style="display:none">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>📦 Stock restante</span>
@@ -960,6 +964,39 @@ function renderPanel(d) {
   renderConsumoHoy(d.consumo);
   renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache, arr(d.consumo));
   renderCierreDia(arr(d.ventas), catalogoCache, d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.consumo));
+  renderAvisos();
+}
+
+// 🔔 Avisos: clientes que pidieron un producto agotado desde la tienda. Se resuelven al reponer.
+async function renderAvisos() {
+  const card = document.getElementById('avisos-card');
+  const list = document.getElementById('avisos-list');
+  if (!card || !list) return;
+  let avisos = [];
+  try { avisos = arr(await api('getAvisosCandy', { hijo: usuario })); } catch (e) { return; }
+  if (!avisos.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  list.innerHTML = avisos.map(a => {
+    const tel = (a.telefono || '').replace(/\D/g, '');
+    const waBtn = tel
+      ? `<a href="https://wa.me/549${tel}?text=${encodeURIComponent('¡Hola ' + (a.cliente || '').split(' ')[0] + '! 🍬 Ya tengo ' + a.producto + ' ¿Te lo aparto?')}" target="_blank" style="background:#e8f5ee;color:#2e8b57;border:none;border-radius:8px;padding:5px 10px;font-size:0.74rem;font-weight:700;text-decoration:none;white-space:nowrap">💬 Avisar</a>`
+      : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0ebe3">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:0.88rem;color:#5c3d1e">🍬 ${a.producto}</div>
+        <div style="font-size:0.74rem;color:#aaa">👤 ${a.cliente || 'cliente'}${tel ? ' · ' + a.telefono : ''} · ${a.fecha}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${waBtn}
+        <button onclick="resolverAviso(${a.row}, this)" style="background:#f0ebe3;color:#888;border:none;border-radius:8px;padding:5px 10px;font-size:0.74rem;font-weight:700;cursor:pointer">✓ Listo</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function resolverAviso(row, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  await api('resolverAvisoCandy', { row });
+  renderAvisos();
 }
 
 // 1) Pinta al instante lo último guardado en el teléfono, 2) trae todo el panel

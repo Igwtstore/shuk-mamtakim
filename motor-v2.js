@@ -31,7 +31,8 @@ const PROTECTED_HIJOS = [
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
-  'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA'
+  'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA',
+  'getAvisosCandy','resolverAvisoCandy'   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1352,6 +1353,9 @@ function doGet(e) {
     if (accion === 'archivarFlyer')        { return json(archivarFlyer(ss, e.parameter)); }
     if (accion === 'eliminarFlyer')        { return json(eliminarFlyer(ss, e.parameter)); }
     if (accion === 'enviarFlyerWA')        { return json(enviarFlyerWA(e.parameter)); }
+    if (accion === 'avisarmeCandy')        { return json(avisarmeCandy(ss, e.parameter)); }
+    if (accion === 'getAvisosCandy')       { return json(getAvisosCandy(ss, e.parameter)); }
+    if (accion === 'resolverAvisoCandy')   { return json(resolverAvisoCandy(ss, e.parameter)); }
 
   } catch(err) { return json({error:err.toString()}); }
 }
@@ -1464,9 +1468,43 @@ function sendTwilioWA(to, body) {
 function getCatalogoHijos(ss) {
   const h = ss.getSheetByName('CatalogoHijos');
   if (!h || h.getLastRow() < 2) return [];
+  // Stock disponible = lo que hay en el depósito compartido → la tienda marca "agotado" con esto.
+  const dep = {};
+  const hd = ss.getSheetByName('DepositoHijos');
+  if (hd && hd.getLastRow() >= 2) hd.getRange(2,1,hd.getLastRow()-1,3).getValues()
+    .forEach(r => { if (r[0]) { const c = r[0].toString(); dep[c] = (dep[c]||0) + (parseInt(r[2])||0); } });
   return h.getRange(2,1,h.getLastRow()-1,5).getValues()
     .filter(r => r[0])
-    .map(r => ({ codigo:r[0].toString(), nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'' }));
+    .map(r => { const cod = r[0].toString();
+      return { codigo:cod, nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'', stock: dep[cod]||0 }; });
+}
+
+// ── AVISAME cuando vuelva (tienda de Candy) ──────────────────────────────────
+// El cliente toca "avisame" en un producto agotado. Lo guardamos (panel) e intentamos
+// avisar al chico por WhatsApp (best-effort, no rompe si Twilio no está configurado).
+function avisarmeCandy(ss, p) {
+  const h = getOrCreate(ss, 'AvisosCandy', ['Fecha','Hijo','Codigo','Producto','Cliente','Telefono','Estado']);
+  const hijo = dec(p.hijo||''), prod = dec(p.producto||''), cli = dec(p.cliente||''), tel = dec(p.telefono||'');
+  h.appendRow([Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), hijo, dec(p.codigo||''), prod, cli, tel, 'pendiente']);
+  try {
+    const waTo = dec(p.wa||'');
+    if (waTo) sendTwilioWA(waTo, `🔔 *Candy Shop* — te piden un producto agotado\n\n🍬 ${prod}\n👤 ${cli||'cliente'}${tel ? (' · ' + tel) : ''}\n\nCuando lo tengas, avisale 😉`);
+  } catch (e) {}
+  return { ok: true };
+}
+function getAvisosCandy(ss, p) {
+  const h = ss.getSheetByName('AvisosCandy'); if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2,1,h.getLastRow()-1,7).getValues()
+    .map((r,i) => ({ row:i+2, fecha:(r[0]||'').toString(), hijo:(r[1]||'').toString(), codigo:(r[2]||'').toString(),
+      producto:(r[3]||'').toString(), cliente:(r[4]||'').toString(), telefono:(r[5]||'').toString(), estado:(r[6]||'pendiente').toString() }))
+    .filter(a => (!p.hijo || a.hijo === p.hijo) && a.estado !== 'listo')
+    .reverse();
+}
+function resolverAvisoCandy(ss, p) {
+  const h = ss.getSheetByName('AvisosCandy'); if (!h) return { ok:false };
+  const row = parseInt(p.row)||0; if (row < 2) return { ok:false };
+  h.getRange(row, 7).setValue('listo');
+  return { ok:true };
 }
 
 function agregarProductoHijo(ss, p) {
