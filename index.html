@@ -4890,7 +4890,212 @@ function verDetalleDeudor(i) {
   const sUSD = items.reduce((s, it) => s + Math.max(0, it.remUSD), 0);
   const sTxt = [sARS > 1 ? money(sARS) : '', sUSD > 0.01 ? 'U$S ' + sUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
   html += `<div style="display:flex;justify-content:space-between;margin-top:0.5rem;padding:0.5rem 0.7rem;background:#fdecea;border-radius:8px;font-weight:800;color:#c0392b"><span>Saldo que debe</span><span>${sTxt}</span></div>`;
+  const cliEsc2 = (d.nombre || '').replace(/'/g, "\\'");
+  html += `<button onclick="abrirEstadoCuenta('${cliEsc2}')" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-family:inherit;font-weight:700;font-size:0.85rem;cursor:pointer">📄 Estado de cuenta completo (con saldos)</button>`;
   _mostrarOverlayDetalle(html);
+}
+
+// ─── ESTADO DE CUENTA del cliente (extracto cronológico con saldo corriente) ────
+// Reconstruye el libro mayor del cliente: cada pedido = débito; si está cobrado de
+// verdad (caja real, no Cta Cte) = crédito que lo salda; cada pago a cuenta = crédito.
+// Todo ordenado por fecha, arrastrando el saldo. El saldo final coincide con el panel.
+const _CAJA_LBL = { MP_GABY:'MP Gaby', EFT_MYRI:'Efectivo', EFT_JONY:'Efectivo', MP_JONY:'MP',
+  ETF_USD_JONY:'U$S', ETF_USD_MYRI:'U$S', CTA_CTE_ARS:'Cta Cte', CTA_CTE_USD:'Cta Cte' };
+function _cajaLbl(c) { return _CAJA_LBL[c] || c || ''; }
+function _tsFecha(f) {
+  const m = (f || '').toString().trim().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  return m ? new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)).getTime() : 0;
+}
+function _resumenPedido(productosStr) {
+  const ls = _lineasPedidoVista(productosStr, false).map(l => {
+    const m = l.match(/•\s*(\d+x\s+[^—]+?)(?:\s+·|\s+—)/);
+    return m ? m[1].trim() : l.replace(/^•\s*/, '').split('—')[0].trim();
+  });
+  const s = ls.join(', ');
+  return s.length > 50 ? s.slice(0, 48) + '…' : (s || 'pedido');
+}
+async function abrirEstadoCuenta(cliente) {
+  showToast('📄 Armando estado de cuenta…');
+  const [ventas, pagos] = await Promise.all([ apiGet('ventas'), apiGet('getPagos').catch(() => []) ]);
+  if (!Array.isArray(ventas)) { showToast('No se pudo cargar'); return; }
+  const k = normCliente(cliente);
+  const movs = [];
+  ventas.filter(v => normCliente(v.cliente) === k && v.estado !== 'cancelado' && v.estado !== 'cotizacion')
+    .forEach(v => {
+      const ars = parseFloat(v.totalARS) || 0, usd = parseFloat(v.totalUSD) || 0;
+      const ts = _tsFecha(v.fecha), fch = (v.fecha || '').split(' ')[0];
+      movs.push({ ts, fecha: fch, tipo: 'pedido', concepto: `Pedido #${v.nVenta || '—'} · ${_resumenPedido(v.productos)}`, ars, usd, signo: 1 });
+      if (esCobradoReal(v)) {
+        const caja = _cajaLbl(v.cajaJony) || _cajaLbl(v.cajaMyri);
+        movs.push({ ts: ts + 1, fecha: fch, tipo: 'cobro', concepto: `✓ Cobrado${caja ? ' (' + caja + ')' : ''}`, ars, usd, signo: -1 });
+      }
+    });
+  (pagos || []).filter(p => normCliente(p.cliente) === k).forEach(p => {
+    const ars = parseFloat(p.montoARS) || 0, usd = parseFloat(p.montoUSD) || 0;
+    if (ars <= 0 && usd <= 0) return;
+    const nota = (p.nota || '').toString().trim();
+    movs.push({ ts: _tsFecha(p.fecha), fecha: (p.fecha || '').split(' ')[0], tipo: 'pago',
+      concepto: `Pago a cuenta${p.caja ? ' (' + _cajaLbl(p.caja) + ')' : ''}${nota ? ' · ' + nota : ''}`, ars, usd, signo: -1 });
+  });
+  if (!movs.length) { showToast('Este cliente no tiene movimientos'); return; }
+  movs.sort((a, b) => a.ts - b.ts || (a.tipo === 'pedido' ? -1 : 1));
+  let sA = 0, sU = 0;
+  movs.forEach(m => { sA += m.signo * m.ars; sU += m.signo * m.usd; m.sA = sA; m.sU = sU; });
+  const tel = (_telPorCliente && (_telPorCliente[cliente])) || '';
+  window._estadoCta = { cliente, movs, saldoARS: sA, saldoUSD: sU, tel,
+    emitido: new Date().toLocaleDateString('es-AR') };
+  _renderEstadoCta();
+}
+function _fmtSigno(ars, usd, signo) {
+  const sg = signo > 0 ? '+' : '−';
+  const parts = [];
+  if (ars > 0) parts.push(sg + ' $' + Math.round(ars).toLocaleString('es-AR'));
+  if (usd > 0) parts.push(sg + ' U$S ' + usd.toFixed(2));
+  return parts.join('<br>') || '—';
+}
+function _fmtSaldo(ars, usd) {
+  const parts = [];
+  if (Math.abs(ars) >= 1) parts.push('$' + Math.round(ars).toLocaleString('es-AR'));
+  if (Math.abs(usd) >= 0.01) parts.push('U$S ' + usd.toFixed(2));
+  return parts.join('<br>') || '$0';
+}
+function _renderEstadoCta() {
+  const d = window._estadoCta; if (!d) return;
+  const filas = d.movs.map(m => {
+    const credito = m.signo < 0;
+    return `<tr style="border-bottom:1px solid #eee">
+      <td style="padding:5px 6px;font-size:0.72rem;white-space:nowrap;vertical-align:top">${m.fecha}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;vertical-align:top">${esc(m.concepto)}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;vertical-align:top;font-weight:700;color:${credito ? '#1a7a3c' : '#c0392b'}">${_fmtSigno(m.ars, m.usd, m.signo)}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;vertical-align:top;font-weight:700">${_fmtSaldo(m.sA, m.sU)}</td>
+    </tr>`;
+  }).join('');
+  const saldoFinal = _fmtSaldo(d.saldoARS, d.saldoUSD);
+  const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
+  const doc = `<div id="estadocta-doc" style="background:#fff;padding:1rem 1.1rem;font-family:'DM Sans',sans-serif;color:#222">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--azul);padding-bottom:8px;margin-bottom:10px">
+        <div><div style="font-weight:800;font-size:1.05rem;color:var(--azul)">Shuk Mamtakim</div>
+          <div style="font-size:0.72rem;color:#888">Estado de cuenta</div></div>
+        <div style="text-align:right;font-size:0.7rem;color:#888">Emitido<br><b style="color:#444">${d.emitido}</b></div>
+      </div>
+      <div style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Cliente: ${esc(d.cliente)}</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--gris);color:#555">
+          <th style="padding:5px 6px;font-size:0.68rem;text-align:left">Fecha</th>
+          <th style="padding:5px 6px;font-size:0.68rem;text-align:left">Detalle</th>
+          <th style="padding:5px 6px;font-size:0.68rem;text-align:right">Debe / Pagó</th>
+          <th style="padding:5px 6px;font-size:0.68rem;text-align:right">Saldo</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:0.6rem 0.8rem;background:${alDia ? '#e8f5ee' : '#fdecea'};border-radius:8px;font-weight:800;color:${alDia ? '#1a7a3c' : '#c0392b'}">
+        <span>${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL'}</span><span style="text-align:right">${saldoFinal}</span></div>
+      <div style="font-size:0.62rem;color:#aaa;margin-top:6px">Detalle de pedidos y pagos. El saldo se actualiza con cada movimiento.</div>
+    </div>`;
+  const botones = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+      <button onclick="estadoCtaPDF()" style="flex:1;min-width:90px;padding:0.55rem;background:#c0392b;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">📄 PDF</button>
+      <button onclick="estadoCtaImagen()" style="flex:1;min-width:90px;padding:0.55rem;background:#7b2ff7;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">🖼️ Imagen</button>
+      <button onclick="estadoCtaWhatsApp()" style="flex:1;min-width:90px;padding:0.55rem;background:#25D366;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">💬 WhatsApp</button>
+      <button onclick="estadoCtaCSV()" style="flex:1;min-width:90px;padding:0.55rem;background:#2c6fad;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">📊 CSV</button>
+    </div>`;
+  let ov = document.getElementById('estadocta-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'estadocta-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9100;display:flex;align-items:center;justify-content:center;padding:0.8rem';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  } else ov.innerHTML = '';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.3);padding:0.5rem';
+  box.innerHTML = doc + botones + `<button onclick="document.getElementById('estadocta-overlay').remove()" style="margin-top:8px;width:100%;padding:0.5rem;background:var(--gris-medio);color:#444;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>`;
+  ov.appendChild(box);
+}
+function cargarHtml2Canvas() {
+  return new Promise((resolve, reject) => {
+    if (window.html2canvas) return resolve(window.html2canvas);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    s.onload = () => resolve(window.html2canvas);
+    s.onerror = () => reject(new Error('No se pudo cargar el generador de imagen'));
+    document.head.appendChild(s);
+  });
+}
+async function _estadoCtaCanvas() {
+  const h2c = await cargarHtml2Canvas();
+  const node = document.getElementById('estadocta-doc');
+  return h2c(node, { scale: 2, backgroundColor: '#ffffff' });
+}
+async function estadoCtaImagen() {
+  showToast('🖼️ Generando imagen…');
+  try {
+    const canvas = await _estadoCtaCanvas();
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'estado-cuenta-' + (window._estadoCta.cliente || 'cliente').replace(/\s+/g, '-') + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { showToast('⚠️ ' + e.message); }
+}
+async function estadoCtaPDF() {
+  showToast('📄 Generando PDF…');
+  try {
+    const [jspdf, canvas] = await Promise.all([cargarJsPDF(), _estadoCtaCanvas()]);
+    const { jsPDF } = jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth(), margin = 28;
+    const imgW = W - margin * 2;
+    const imgH = canvas.height * imgW / canvas.width;
+    const pageH = pdf.internal.pageSize.getHeight() - margin * 2;
+    const img = canvas.toDataURL('image/png');
+    if (imgH <= pageH) {
+      pdf.addImage(img, 'PNG', margin, margin, imgW, imgH);
+    } else {
+      // documento largo: lo paginamos cortando la imagen verticalmente
+      let y = 0; const ratio = imgW / canvas.width;
+      const sliceH = pageH / ratio;
+      while (y < canvas.height) {
+        const c2 = document.createElement('canvas');
+        c2.width = canvas.width; c2.height = Math.min(sliceH, canvas.height - y);
+        c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
+        pdf.addImage(c2.toDataURL('image/png'), 'PNG', margin, margin, imgW, c2.height * ratio);
+        y += sliceH;
+        if (y < canvas.height) pdf.addPage();
+      }
+    }
+    pdf.save('estado-cuenta-' + (window._estadoCta.cliente || 'cliente').replace(/\s+/g, '-') + '.pdf');
+  } catch (e) { showToast('⚠️ ' + e.message); }
+}
+function estadoCtaWhatsApp() {
+  const d = window._estadoCta; if (!d) return;
+  const lineas = d.movs.map(m => {
+    const sg = m.signo > 0 ? '' : '− ';
+    const monto = [m.ars > 0 ? '$' + Math.round(m.ars).toLocaleString('es-AR') : '', m.usd > 0 ? 'U$S' + m.usd.toFixed(2) : ''].filter(Boolean).join('+');
+    const saldo = [Math.abs(m.sA) >= 1 ? '$' + Math.round(m.sA).toLocaleString('es-AR') : '', Math.abs(m.sU) >= 0.01 ? 'U$S' + m.sU.toFixed(2) : ''].filter(Boolean).join('+') || '$0';
+    return `${m.fecha} · ${m.concepto}\n   ${sg}${monto}  →  saldo ${saldo}`;
+  }).join('\n');
+  const saldoFinal = [Math.abs(d.saldoARS) >= 1 ? '$' + Math.round(d.saldoARS).toLocaleString('es-AR') : '', Math.abs(d.saldoUSD) >= 0.01 ? 'U$S' + d.saldoUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$0';
+  const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
+  const txt = `*Estado de cuenta — Shuk Mamtakim*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL: ' + saldoFinal}*`;
+  const tel = (d.tel || '').toString().replace(/\D/g, '');
+  const base = tel ? 'https://wa.me/549' + tel : 'https://wa.me/';
+  window.open(base + '?text=' + encodeURIComponent(txt), '_blank');
+}
+function estadoCtaCSV() {
+  const d = window._estadoCta; if (!d) return;
+  const esc2 = v => '"' + (v == null ? '' : String(v)).replace(/"/g, '""') + '"';
+  const cols = ['Fecha', 'Detalle', 'Debe ARS', 'Pagó ARS', 'Debe USD', 'Pagó USD', 'Saldo ARS', 'Saldo USD'];
+  const rows = d.movs.map(m => [
+    m.fecha, m.concepto,
+    m.signo > 0 ? Math.round(m.ars) : '', m.signo < 0 ? Math.round(m.ars) : '',
+    m.signo > 0 && m.usd > 0 ? m.usd.toFixed(2) : '', m.signo < 0 && m.usd > 0 ? m.usd.toFixed(2) : '',
+    Math.round(m.sA), m.sU ? m.sU.toFixed(2) : ''
+  ]);
+  const csv = [cols.map(esc2).join(','), ...rows.map(r => r.map(esc2).join(','))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'estado-cuenta-' + (d.cliente || 'cliente').replace(/\s+/g, '-') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 // 🔍 Auditoría: corre chequeos automáticos sobre ventas y stock, lista las alertas.
