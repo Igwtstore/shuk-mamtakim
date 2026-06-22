@@ -3075,7 +3075,10 @@ function renderHistorialCliente(movs, cliente) {
 
   let saldoAcum = 0;
   const rowsAsc = [...movs].reverse();
-  const withSaldo = rowsAsc.map(m => { saldoAcum += m.monto; return { ...m, saldoAcum }; }).reverse();
+  const ascSaldo = rowsAsc.map(m => { saldoAcum += m.monto; return { ...m, saldoAcum }; });
+  const withSaldo = [...ascSaldo].reverse();
+  // Guardado para exportar el estado de cuenta (PDF/imagen/WhatsApp/CSV). Orden cronológico asc.
+  window._candyExtracto = { cliente, movs: ascSaldo, saldoFinal, emitido: new Date().toLocaleDateString('es-AR') };
 
   el.innerHTML = withSaldo.map(m => {
     let t = TIPOS[m.tipo] || { label: m.tipo, cls: 'mov-pago', signo: '' };
@@ -3100,7 +3103,134 @@ function renderHistorialCliente(movs, cliente) {
         <span class="mov-saldo-chip">Saldo: ${fmt(m.saldoAcum)}</span>
       </div>
     </div>`;
+  }).join('') + `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;border-top:1px solid #eee;padding-top:12px">
+      <div style="width:100%;font-size:0.72rem;color:#aaa;margin-bottom:2px">📄 Compartí el estado de cuenta:</div>
+      <button onclick="candyExtractoPDF()" style="flex:1;min-width:80px;padding:0.5rem;background:#c0392b;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.76rem;cursor:pointer">📄 PDF</button>
+      <button onclick="candyExtractoImagen()" style="flex:1;min-width:80px;padding:0.5rem;background:#7b2ff7;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.76rem;cursor:pointer">🖼️ Imagen</button>
+      <button onclick="candyExtractoWhatsApp()" style="flex:1;min-width:80px;padding:0.5rem;background:#25D366;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.76rem;cursor:pointer">💬 WhatsApp</button>
+      <button onclick="candyExtractoCSV()" style="flex:1;min-width:80px;padding:0.5rem;background:#2c6fad;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.76rem;cursor:pointer">📊 CSV</button>
+    </div>`;
+}
+
+// ── ESTADO DE CUENTA EXPORTABLE (Candy) — mismo concepto que Shuk, mono-moneda ARS ──
+function _candyLoadScript(src, globalName) {
+  return new Promise((resolve, reject) => {
+    if (window[globalName]) return resolve(window[globalName]);
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve(window[globalName]);
+    s.onerror = () => reject(new Error('No se pudo cargar (revisá internet)'));
+    document.head.appendChild(s);
+  });
+}
+const _candyCajaLbl = { pago: 'Pagó', deuda: 'Deuda', vuelto: 'Vuelto', pago_vuelto: 'Vuelto saldado' };
+function _candyExtractoDocHTML() {
+  const d = window._candyExtracto; if (!d) return '';
+  const fmtN = n => '$ ' + Math.round(Math.abs(n)).toLocaleString('es-AR');
+  const filas = d.movs.map(m => {
+    const credito = m.monto < 0;
+    const concepto = (m.tipo === 'deuda' ? (m.producto || 'Pedido') : (_candyCajaLbl[m.tipo] || m.tipo));
+    return `<tr style="border-bottom:1px solid #eee">
+      <td style="padding:5px 6px;font-size:0.72rem;white-space:nowrap;vertical-align:top">${m.fecha}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;vertical-align:top">${concepto}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;font-weight:700;color:${credito ? '#1a7a3c' : '#c0392b'}">${credito ? '−' : '+'} ${fmtN(m.monto)}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;font-weight:700">${fmtN(m.saldoAcum)}</td>
+    </tr>`;
   }).join('');
+  const alDia = Math.abs(d.saldoFinal) < 0.01;
+  const debe = d.saldoFinal > 0;
+  const lbl = alDia ? '✓ Cuenta al día' : (debe ? 'SALDO QUE DEBE' : 'A FAVOR (cambio)');
+  return `<div id="candy-extracto-doc" style="background:#fff;padding:1rem 1.1rem;font-family:'DM Sans',sans-serif;color:#222">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #e05c2a;padding-bottom:8px;margin-bottom:10px">
+      <div><div style="font-weight:800;font-size:1.05rem;color:#e05c2a">Candy Shop 🍬</div>
+        <div style="font-size:0.72rem;color:#999">Estado de cuenta</div></div>
+      <div style="text-align:right;font-size:0.7rem;color:#999">Emitido<br><b style="color:#444">${d.emitido}</b></div>
+    </div>
+    <div style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Cliente: ${d.cliente}</div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#f5efe6;color:#555">
+        <th style="padding:5px 6px;font-size:0.68rem;text-align:left">Fecha</th>
+        <th style="padding:5px 6px;font-size:0.68rem;text-align:left">Detalle</th>
+        <th style="padding:5px 6px;font-size:0.68rem;text-align:right">Debe / Pagó</th>
+        <th style="padding:5px 6px;font-size:0.68rem;text-align:right">Saldo</th>
+      </tr></thead><tbody>${filas}</tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;padding:0.6rem 0.8rem;background:${alDia ? '#e8f5ee' : (debe ? '#fdecea' : '#eef4fb')};border-radius:8px;font-weight:800;color:${alDia ? '#1a7a3c' : (debe ? '#c0392b' : '#2c6fad')}">
+      <span>${lbl}</span><span>${fmtN(d.saldoFinal)}</span></div>
+  </div>`;
+}
+async function _candyExtractoCanvas() {
+  const h2c = await _candyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas');
+  // render offscreen
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:460px;background:#fff';
+  wrap.innerHTML = _candyExtractoDocHTML();
+  document.body.appendChild(wrap);
+  try { return await h2c(wrap.firstElementChild, { scale: 2, backgroundColor: '#ffffff' }); }
+  finally { wrap.remove(); }
+}
+async function candyExtractoImagen() {
+  mostrarToast('🖼️ Generando imagen…');
+  try {
+    const canvas = await _candyExtractoCanvas();
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'estado-cuenta-' + (window._candyExtracto.cliente || 'cliente').replace(/\s+/g, '-') + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { mostrarToast('⚠️ ' + e.message, '#c0392b'); }
+}
+async function candyExtractoPDF() {
+  mostrarToast('📄 Generando PDF…');
+  try {
+    const jspdf = await _candyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf');
+    const canvas = await _candyExtractoCanvas();
+    const { jsPDF } = jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth(), m = 28;
+    const imgW = W - m * 2, ratio = imgW / canvas.width;
+    const imgH = canvas.height * ratio, pageH = pdf.internal.pageSize.getHeight() - m * 2;
+    if (imgH <= pageH) {
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', m, m, imgW, imgH);
+    } else {
+      let y = 0; const sliceH = pageH / ratio;
+      while (y < canvas.height) {
+        const c2 = document.createElement('canvas');
+        c2.width = canvas.width; c2.height = Math.min(sliceH, canvas.height - y);
+        c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
+        pdf.addImage(c2.toDataURL('image/png'), 'PNG', m, m, imgW, c2.height * ratio);
+        y += sliceH; if (y < canvas.height) pdf.addPage();
+      }
+    }
+    pdf.save('estado-cuenta-' + (window._candyExtracto.cliente || 'cliente').replace(/\s+/g, '-') + '.pdf');
+  } catch (e) { mostrarToast('⚠️ ' + e.message, '#c0392b'); }
+}
+function candyExtractoWhatsApp() {
+  const d = window._candyExtracto; if (!d) return;
+  const fmtN = n => '$' + Math.round(Math.abs(n)).toLocaleString('es-AR');
+  const lineas = d.movs.map(m => {
+    const concepto = (m.tipo === 'deuda' ? (m.producto || 'Pedido') : (_candyCajaLbl[m.tipo] || m.tipo));
+    return `${m.fecha} · ${concepto}\n   ${m.monto < 0 ? '−' : '+'}${fmtN(m.monto)}  →  saldo ${fmtN(m.saldoAcum)}`;
+  }).join('\n');
+  const alDia = Math.abs(d.saldoFinal) < 0.01;
+  const pie = alDia ? '✓ Cuenta al día' : (d.saldoFinal > 0 ? 'SALDO QUE DEBE: ' + fmtN(d.saldoFinal) : 'A FAVOR: ' + fmtN(d.saldoFinal));
+  const txt = `*Estado de cuenta — Candy Shop 🍬*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${pie}*`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+}
+function candyExtractoCSV() {
+  const d = window._candyExtracto; if (!d) return;
+  const esc2 = v => '"' + (v == null ? '' : String(v)).replace(/"/g, '""') + '"';
+  const cols = ['Fecha', 'Detalle', 'Debe', 'Pagó', 'Saldo'];
+  const rows = d.movs.map(m => {
+    const concepto = (m.tipo === 'deuda' ? (m.producto || 'Pedido') : (_candyCajaLbl[m.tipo] || m.tipo));
+    return [m.fecha, concepto, m.monto > 0 ? Math.round(m.monto) : '', m.monto < 0 ? Math.round(-m.monto) : '', Math.round(m.saldoAcum)];
+  });
+  const csv = [cols.map(esc2).join(','), ...rows.map(r => r.map(esc2).join(','))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'estado-cuenta-' + (d.cliente || 'cliente').replace(/\s+/g, '-') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 function cerrarHistorial() { document.getElementById('historial-overlay').classList.remove('open'); }
