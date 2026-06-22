@@ -1974,14 +1974,21 @@ function cargarStock(ss, p) {
   const h = getOrCreate(ss, 'StockDiario', ['Fecha','Hijo','Codigo','Producto','Cantidad']);
   const items = JSON.parse(dec(p.items || '[]'));
   const fecha = new Date();
-  items.forEach(item => {
-    if (item.codigo && item.cantidad > 0) {
-      const cant = parseInt(item.cantidad) || 0;
-      h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', cant]);
-      // Lo que se lleva para vender sale del depósito compartido.
-      ajustarDeposito_(ss, item.codigo, item.nombre || '', -cant);
-    }
-  });
+  const lockSD = LockService.getScriptLock();   // mismo lock que setStockDia: no pisar el borrar-por-índice
+  try { lockSD.waitLock(20000); } catch (e) {}
+  try {
+    items.forEach(item => {
+      if (item.codigo && item.cantidad > 0) {
+        const cant = parseInt(item.cantidad) || 0;
+        h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', cant]);
+        // Lo que se lleva para vender sale del depósito compartido.
+        ajustarDeposito_(ss, item.codigo, item.nombre || '', -cant);
+      }
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    try { lockSD.releaseLock(); } catch (e) {}
+  }
   return { ok: true };
 }
 
@@ -2031,27 +2038,36 @@ function setStockDia(ss, p) {
   const h = getOrCreate(ss, 'StockDiario', ['Fecha','Hijo','Codigo','Producto','Cantidad']);
   let items; try { items = JSON.parse(dec(p.items || '[]')); } catch (e) { return { error: 'items inválido' }; }
   const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
-  // 1) borrar las filas de HOY de este hijo, devolviendo su cantidad al depósito
-  if (h.getLastRow() >= 2) {
-    const datos = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues();
-    for (let i = datos.length - 1; i >= 0; i--) {
-      const r = datos[i];
-      if (r[0] && typeof r[0].getTime === 'function' && Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr && r[1] === p.hijo) {
-        const cant = parseInt(r[4]) || 0;
-        if (cant) ajustarDeposito_(ss, r[2].toString(), (r[3] || '').toString(), cant);   // devolver al depósito
-        h.deleteRow(i + 2);
+  // Lock: dos guardados simultáneos (doble tap / reenvío en celular lento) leían las mismas filas
+  // viejas y ambos borraban+escribían → la listita quedaba DUPLICADA. Serializamos el borrar+escribir.
+  const lockSD = LockService.getScriptLock();
+  try { lockSD.waitLock(20000); } catch (e) {}
+  try {
+    // 1) borrar las filas de HOY de este hijo, devolviendo su cantidad al depósito
+    if (h.getLastRow() >= 2) {
+      const datos = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues();
+      for (let i = datos.length - 1; i >= 0; i--) {
+        const r = datos[i];
+        if (r[0] && typeof r[0].getTime === 'function' && Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr && r[1] === p.hijo) {
+          const cant = parseInt(r[4]) || 0;
+          if (cant) ajustarDeposito_(ss, r[2].toString(), (r[3] || '').toString(), cant);   // devolver al depósito
+          h.deleteRow(i + 2);
+        }
       }
     }
+    // 2) escribir la lista nueva y tomarla del depósito
+    const fecha = new Date();
+    items.forEach(item => {
+      const cant = parseInt(item.cantidad) || 0;
+      if (item.codigo && cant > 0) {
+        h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', cant]);
+        ajustarDeposito_(ss, item.codigo, item.nombre || '', -cant);
+      }
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    try { lockSD.releaseLock(); } catch (e) {}
   }
-  // 2) escribir la lista nueva y tomarla del depósito
-  const fecha = new Date();
-  items.forEach(item => {
-    const cant = parseInt(item.cantidad) || 0;
-    if (item.codigo && cant > 0) {
-      h.appendRow([fecha, p.hijo, item.codigo, item.nombre || '', cant]);
-      ajustarDeposito_(ss, item.codigo, item.nombre || '', -cant);
-    }
-  });
   return { ok: true, n: items.length };
 }
 
@@ -2059,16 +2075,23 @@ function resetearStockDia(ss, p) {
   const h = ss.getSheetByName('StockDiario');
   if (!h || h.getLastRow() < 2) return { ok: true };
   const hoyStr = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
-  const datos = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues();
-  for (let i = datos.length - 1; i >= 0; i--) {
-    const r = datos[i];
-    if (r[0] && typeof r[0].getTime === 'function' &&
-        Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr &&
-        r[1] === p.hijo) {
-      // Al borrar la carga del día, la mercadería vuelve al depósito.
-      ajustarDeposito_(ss, r[2].toString(), r[3] ? r[3].toString() : '', parseInt(r[4]) || 0);
-      h.deleteRow(i + 2);
+  const lockSD = LockService.getScriptLock();   // mismo lock que setStockDia: no interleavar borrados/escrituras
+  try { lockSD.waitLock(20000); } catch (e) {}
+  try {
+    const datos = h.getRange(2, 1, h.getLastRow() - 1, 5).getValues();
+    for (let i = datos.length - 1; i >= 0; i--) {
+      const r = datos[i];
+      if (r[0] && typeof r[0].getTime === 'function' &&
+          Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy') === hoyStr &&
+          r[1] === p.hijo) {
+        // Al borrar la carga del día, la mercadería vuelve al depósito.
+        ajustarDeposito_(ss, r[2].toString(), r[3] ? r[3].toString() : '', parseInt(r[4]) || 0);
+        h.deleteRow(i + 2);
+      }
     }
+    SpreadsheetApp.flush();
+  } finally {
+    try { lockSD.releaseLock(); } catch (e) {}
   }
   return { ok: true };
 }
