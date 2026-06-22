@@ -16,7 +16,7 @@ const PROTECTED_ACTIONS = [
   'guardarNotaCliente','enviarPush','gasto','rendicion','agregarProducto','actualizarOferta',
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
-  'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar',
+  'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
   'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','limpiarTestData','panelAdmin'
 ];
 
@@ -923,21 +923,32 @@ function doGet(e) {
       return ok();
     }
     if (accion === 'agregarProducto') {
-      const h = ss.getSheetByName('Stock'); if (!h) return json({error:'sin hoja Stock'});
-      const datos = h.getDataRange().getValues();
-      let maxId = 0;
-      for (let i = 1; i < datos.length; i++) { const id = parseInt(datos[i][0])||0; if (id > maxId) maxId = id; }
-      const pMayNum = parseFloat(dec(e.parameter.pMay||'').replace(',', '.'));
-      _asegurarColMoneda_(ss);
-      const monedaNueva = (e.parameter.moneda === 'U$S') ? 'U$S' : '$';
-      h.appendRow([maxId+1, dec(e.parameter.nombre), dec(e.parameter.desc),
-        isNaN(pMayNum) ? '' : pMayNum, parseFloat(e.parameter.pMin||0),
-        parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
-        dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
-        0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||''), monedaNueva]);
-      const stockIni = parseInt(e.parameter.stock||0);
-      if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
-      return json({ ok: true, id: maxId+1 });
+      // Candado de idempotencia: doble-tap / reintento de red NO debe crear el producto dos veces.
+      // Lock para serializar y cache (clientId) para reconocer el mismo alta.
+      const cidAP = e.parameter.clientId ? dec(e.parameter.clientId) : '';
+      const cacheAP = CacheService.getScriptCache();
+      const lockAP = LockService.getScriptLock();
+      try { lockAP.waitLock(20000); } catch (e2) {}
+      try {
+        if (cidAP) { const prev = cacheAP.get('addprod_' + cidAP); if (prev) return json({ ok: true, id: prev, dup: true }); }
+        const h = ss.getSheetByName('Stock'); if (!h) return json({error:'sin hoja Stock'});
+        const datos = h.getDataRange().getValues();
+        let maxId = 0;
+        for (let i = 1; i < datos.length; i++) { const id = parseInt(datos[i][0])||0; if (id > maxId) maxId = id; }
+        const pMayNum = parseFloat(dec(e.parameter.pMay||'').replace(',', '.'));
+        _asegurarColMoneda_(ss);
+        const monedaNueva = (e.parameter.moneda === 'U$S') ? 'U$S' : '$';
+        h.appendRow([maxId+1, dec(e.parameter.nombre), dec(e.parameter.desc),
+          isNaN(pMayNum) ? '' : pMayNum, parseFloat(e.parameter.pMin||0),
+          parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
+          dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
+          0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||''), monedaNueva]);
+        const stockIni = parseInt(e.parameter.stock||0);
+        if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
+        if (cidAP) cacheAP.put('addprod_' + cidAP, String(maxId+1), 300);
+        SpreadsheetApp.flush();
+        return json({ ok: true, id: maxId+1 });
+      } finally { try { lockAP.releaseLock(); } catch (e2) {} }
     }
     if (accion === 'actualizarOferta') {
       const h = ss.getSheetByName('Stock'); if (!h) return json({error:'sin hoja Stock'});
@@ -1120,6 +1131,8 @@ function doGet(e) {
     if (accion === 'bandejaUsar')    { return json(bandejaUsar(ss, e.parameter)); }
     if (accion === 'procesarBandeja'){ return json(procesarBandeja(ss)); }
     if (accion === 'bandejaReintentar'){ return json(bandejaReintentar(ss)); }
+    if (accion === 'bandejaEliminar') { return json(bandejaEliminar(ss, e.parameter)); }
+    if (accion === 'bandejaVaciar')   { return json(bandejaVaciar(ss)); }
     if (accion === 'eliminarProducto') {
       // Borra un producto del Stock de Shuk por id (deja registro en MovimientosStock).
       const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
@@ -3024,6 +3037,25 @@ function procesarBandeja(ss) {
   return { ok: true, procesadas, pendientes };
 }
 
+// Borra una foto de la bandeja (la fila), sin tocar las ya 'usado'.
+function bandejaEliminar(ss, p) {
+  const h = ss.getSheetByName('BandejaFotos'); if (!h || h.getLastRow() < 2) return { ok: false };
+  const datos = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues();
+  for (let i = datos.length - 1; i >= 0; i--) {
+    if (datos[i][0] && datos[i][0].toString() === dec(p.id)) { h.deleteRow(i + 2); return { ok: true }; }
+  }
+  return { ok: false };
+}
+// Vacía la bandeja: borra todas las fotos que NO se hayan usado en un alta (deja las 'usado').
+function bandejaVaciar(ss) {
+  const h = ss.getSheetByName('BandejaFotos'); if (!h || h.getLastRow() < 2) return { ok: true, n: 0 };
+  const datos = h.getRange(2, 1, h.getLastRow() - 1, 7).getValues();
+  let n = 0;
+  for (let i = datos.length - 1; i >= 0; i--) {
+    if (datos[i][6] !== 'usado') { h.deleteRow(i + 2); n++; }
+  }
+  return { ok: true, n };
+}
 // Vuelve a 'pendiente' las fotos que habían quedado en 'error' (para reintentar el análisis).
 function bandejaReintentar(ss) {
   const h = ss.getSheetByName('BandejaFotos');

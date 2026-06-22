@@ -1227,7 +1227,7 @@
           <div id="np-upload-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
         </div>
       </div>
-      <button class="guardar-stock-btn" onclick="guardarNuevoProducto()" style="margin-top:0">Agregar producto</button>
+      <button id="np-guardar-btn" class="guardar-stock-btn" onclick="guardarNuevoProducto()" style="margin-top:0">Agregar producto</button>
     </div>
   </div>
   <div class="admin-card" id="stock-alerta-card" style="display:none">
@@ -4618,12 +4618,17 @@ async function cargarBandeja() {
   if (!grid) return;
   if (!bandejaCache.length) { grid.innerHTML = '<div class="sinpedidos" style="grid-column:1/-1">Bandeja vacía — tirá fotos arriba 📸</div>'; return; }
   const nErr = bandejaCache.filter(b => b.estado === 'error').length;
+  const header = `<div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+      <span style="font-size:0.74rem;color:var(--texto-suave)">${bandejaCache.length} foto${bandejaCache.length!==1?'s':''} en la bandeja</span>
+      <button onclick="vaciarBandeja(this)" style="background:#fff;color:#c0392b;border:1px solid #f0c0c0;border-radius:8px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">🗑️ Vaciar bandeja</button>
+    </div>`;
   const retryBanner = nErr ? `<div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#fdf3e3;border:1px solid #f0d8a8;border-radius:10px;padding:0.5rem 0.7rem;margin-bottom:4px">
       <span style="font-size:0.78rem;color:#9a6b1a">${nErr} foto${nErr!==1?'s':''} sin analizar.</span>
       <button onclick="reintentarBandeja(this)" style="background:#7b2ff7;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:0.76rem;font-weight:700;cursor:pointer">🔄 Reintentar</button>
     </div>` : '';
-  grid.innerHTML = retryBanner + bandejaCache.map(b => `
-    <div style="border:1.5px solid var(--gris-medio);border-radius:10px;overflow:hidden;background:#fff">
+  grid.innerHTML = header + retryBanner + bandejaCache.map(b => `
+    <div style="border:1.5px solid var(--gris-medio);border-radius:10px;overflow:hidden;background:#fff;position:relative">
+      <button onclick="borrarFotoBandeja('${b.id}')" title="Borrar esta foto" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:0.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">🗑️</button>
       <img src="https://res.cloudinary.com/dq2boloyp/image/upload/e_trim:10/w_300,f_auto,q_auto/${b.publicId}" style="width:100%;height:100px;object-fit:contain;background:#fff" loading="lazy">
       <div style="padding:6px 8px">
         ${b.estado === 'listo'
@@ -4635,6 +4640,18 @@ async function cargarBandeja() {
           : `<div style="font-size:0.68rem;color:var(--texto-suave)">🧠 Pensando...</div>`}
       </div>
     </div>`).join('');
+}
+
+async function borrarFotoBandeja(id) {
+  try { await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaEliminar', id })); } catch (e) {}
+  bandejaCache = bandejaCache.filter(b => b.id !== id);   // saca al toque, sin esperar
+  cargarBandeja();
+}
+async function vaciarBandeja(btn) {
+  if (!confirm('¿Vaciar la bandeja de fotos? (las que ya usaste en altas no se tocan)')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '🗑️ Vaciando...'; }
+  try { await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaVaciar' })); } catch (e) {}
+  await cargarBandeja();
 }
 
 function usarDeBandeja(id) {
@@ -4664,7 +4681,12 @@ function validarPreciosProducto(visible, pMay, pMin) {
   return '';
 }
 
+// Bloquea un botón (gris + sin clicks) mientras corre una acción → evita doble-submit / duplicados.
+function _bloquearBtn(btn, txt) { if (!btn) return null; const prev = { html: btn.innerHTML, dis: btn.disabled, op: btn.style.opacity, cur: btn.style.cursor }; btn.disabled = true; btn.style.opacity = '0.55'; btn.style.cursor = 'default'; if (txt) btn.textContent = txt; return prev; }
+function _restaurarBtn(btn, prev) { if (!btn || !prev) return; btn.disabled = prev.dis; btn.style.opacity = prev.op; btn.style.cursor = prev.cur; btn.innerHTML = prev.html; }
+let _guardandoProducto = false;
 async function guardarNuevoProducto() {
+  if (_guardandoProducto) return;   // ya se está guardando → ignorar doble-tap
   const nombre = document.getElementById('np-nombre').value.trim();
   const desc = document.getElementById('np-desc').value.trim();
   const pMay = document.getElementById('np-pmay').value.trim().replace(',', '.');
@@ -4686,42 +4708,49 @@ async function guardarNuevoProducto() {
   const dueno = document.getElementById('np-dueno').value || 'Miri';
   const moneda = document.getElementById('np-moneda').value === 'U$S' ? 'U$S' : '$';
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
-  // Subir foto si hay una seleccionada
-  let imagenId = '';
-  if (_npArchivos.length) {
-    imagenId = await subirArchivosCloudinary();
-    if (_npPreSubida && imagenId) imagenId = _npPreSubida + ',' + imagenId;
-    else if (_npPreSubida) imagenId = _npPreSubida;
-  } else if (_npPreSubida) {
-    imagenId = _npPreSubida;
+  _guardandoProducto = true;
+  const _btnNp = document.getElementById('np-guardar-btn');
+  const _prevNp = _bloquearBtn(_btnNp, '⏳ Guardando...');
+  try {
+    // Subir foto si hay una seleccionada
+    let imagenId = '';
+    if (_npArchivos.length) {
+      imagenId = await subirArchivosCloudinary();
+      if (_npPreSubida && imagenId) imagenId = _npPreSubida + ',' + imagenId;
+      else if (_npPreSubida) imagenId = _npPreSubida;
+    } else if (_npPreSubida) {
+      imagenId = _npPreSubida;
+    }
+    // clientId: candado de idempotencia en el backend → aunque lleguen 2 pedidos, 1 solo producto.
+    const clientId = 'np_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const params = new URLSearchParams({
+      accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible, dueno, moneda, clientId
+    });
+    const data = await fetch(APPS_SCRIPT_URL + '?' + params.toString()).then(r => r.json());
+    if (data.ok) {
+      agregarAlPushBuffer('nuevo', nombre + (desc ? ' · ' + desc.substring(0,35) : ''));
+      showToast(data.dup ? 'Ese producto ya estaba agregado ✓' : 'Producto agregado ✓');
+      document.getElementById('np-nombre').value = '';
+      document.getElementById('np-desc').value = '';
+      document.getElementById('np-pmay').value = '';
+      document.getElementById('np-pmin').value = '';
+      document.getElementById('np-stock').value = '';
+      document.getElementById('np-categoria').value = '';
+      document.getElementById('np-foto').value = '';
+      document.getElementById('np-preview').style.display = 'none';
+      _npArchivos = [];
+      if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
+      _npPreSubida = ''; _npBandejaId = '';   // limpiar ANTES de redibujar (si no, queda la foto fantasma)
+      renderNpArchivos();
+      _npCloudinaryId = '';
+      cargarProductos();
+    } else showToast('Error al guardar');
+  } catch (e) {
+    showToast('Error de conexión');
+  } finally {
+    _guardandoProducto = false;
+    _restaurarBtn(_btnNp, _prevNp);
   }
-  // Guardar en Google Sheet via Apps Script
-  const params = new URLSearchParams({
-    accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible, dueno, moneda
-  });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString())
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        agregarAlPushBuffer('nuevo', nombre + (desc ? ' · ' + desc.substring(0,35) : ''));
-        showToast('Producto agregado ✓');
-        document.getElementById('np-nombre').value = '';
-        document.getElementById('np-desc').value = '';
-        document.getElementById('np-pmay').value = '';
-        document.getElementById('np-pmin').value = '';
-        document.getElementById('np-stock').value = '';
-        document.getElementById('np-categoria').value = '';
-        document.getElementById('np-foto').value = '';
-        document.getElementById('np-preview').style.display = 'none';
-        _npArchivos = [];
-        if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
-        _npPreSubida = ''; _npBandejaId = '';   // limpiar ANTES de redibujar (si no, queda la foto fantasma)
-        renderNpArchivos();
-        _npCloudinaryId = '';
-        cargarProductos();
-      } else showToast('Error al guardar');
-    })
-    .catch(() => showToast('Error de conexión'));
 }
 
 function registrarTransferencia() {
