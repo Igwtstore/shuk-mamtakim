@@ -1273,6 +1273,11 @@
       <label>Buscá el producto</label>
       <input type="text" id="ep-buscar" placeholder="Escribí: elite, klik, sopa..." oninput="filtrarEditor()" onfocus="filtrarEditor()" autocomplete="off"
         style="width:100%;padding:0.65rem 0.9rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
+      <div id="ep-filtro-dueno" style="display:flex;gap:6px;margin-top:0.45rem">
+        <button type="button" onclick="setEpFiltroDueno('todos',this)" data-fd="todos" style="flex:1;padding:6px 4px;border:1.5px solid var(--azul);background:var(--azul);color:#fff;border-radius:8px;font-family:inherit;font-size:0.76rem;font-weight:700;cursor:pointer">Todos</button>
+        <button type="button" onclick="setEpFiltroDueno('jony',this)" data-fd="jony" style="flex:1;padding:6px 4px;border:1.5px solid #d8c4a8;background:#fff;color:#5c3d1e;border-radius:8px;font-family:inherit;font-size:0.76rem;font-weight:700;cursor:pointer">👤 Jony</button>
+        <button type="button" onclick="setEpFiltroDueno('miri',this)" data-fd="miri" style="flex:1;padding:6px 4px;border:1.5px solid #e6c0db;background:#fff;color:#c050a0;border-radius:8px;font-family:inherit;font-size:0.76rem;font-weight:700;cursor:pointer">👤 Miri</button>
+      </div>
       <div id="ep-resultados" style="display:none;max-height:280px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-top:0.4rem"></div>
     </div>
     <div id="ep-form" style="display:none">
@@ -4343,12 +4348,24 @@ function poblarEditorProductos() {
   if (document.getElementById('ep-resultados')?.style.display !== 'none') filtrarEditor();
 }
 
+let _epFiltroDueno = 'todos';   // 'todos' | 'jony' | 'miri' — filtro de dueño en la edición rápida
+function setEpFiltroDueno(d, btn) {
+  _epFiltroDueno = d;
+  document.querySelectorAll('#ep-filtro-dueno button').forEach(b => {
+    const act = b === btn;
+    const col = b.dataset.fd === 'jony' ? '#5c3d1e' : (b.dataset.fd === 'miri' ? '#c050a0' : 'var(--azul)');
+    b.style.background = act ? col : '#fff';
+    b.style.color = act ? '#fff' : col;
+  });
+  filtrarEditor();
+}
 function filtrarEditor() {
   const q = (document.getElementById('ep-buscar')?.value || '').toLowerCase().trim();
   const cont = document.getElementById('ep-resultados');
   if (!cont) return;
   let lista = productos.filter(p =>
-    !q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
+    (!q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q))
+    && (_epFiltroDueno === 'todos' || (_epFiltroDueno === 'jony' ? p.dueno === 'Jony' : p.dueno !== 'Jony')));
   lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 20);
   cont.style.display = 'block';
   if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.75rem">Sin resultados</div>'; return; }
@@ -4358,12 +4375,14 @@ function filtrarEditor() {
       ? `<img src="${imgUrl(imgs[0])[0]}" style="width:42px;height:42px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
       : `<div style="width:42px;height:42px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const oculto = (p.visible || '') === 'Oculto' ? ' <span style="font-size:0.6rem;background:#f0ebe3;border-radius:4px;padding:1px 5px">🙈</span>' : '';
+    const esJ = p.dueno === 'Jony';
+    const dueChip = `<span style="font-size:0.58rem;font-weight:800;border-radius:5px;padding:1px 6px;margin-left:4px;background:${esJ ? '#f3ead9' : '#fbeaf5'};color:${esJ ? '#5c3d1e' : '#c050a0'}">${esJ ? 'JONY' : 'MIRI'}</span>`;
     const inp = 'padding:6px 4px;border:1.5px solid var(--gris-medio);border-radius:7px;font-size:0.8rem;width:100%;box-sizing:border-box;text-align:center';
     return `<div style="padding:0.55rem 0.7rem;border-bottom:1px solid var(--gris)">
       <div style="display:flex;align-items:center;gap:0.6rem">
         ${thumb}
         <div style="min-width:0;flex:1">
-          <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}${oculto}</div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}${dueChip}${oculto}</div>
           <div style="font-size:0.68rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc || '')}</div>
         </div>
         <button onclick="elegirProductoEditor(${p.id})" title="Ficha completa: textos, fotos, eliminar" style="background:var(--gris);border:1px solid var(--gris-medio);border-radius:7px;padding:6px 10px;font-size:0.72rem;cursor:pointer;white-space:nowrap">✏️ Ficha</button>
