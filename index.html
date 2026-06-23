@@ -1161,6 +1161,7 @@
   </div>
   <div class="admin-card">
     <div class="admin-titulo">➕ Agregar nuevo producto</div>
+    <button type="button" onclick="abrirImportarCandy()" style="width:100%;margin-bottom:0.75rem;padding:0.7rem;background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.88rem;cursor:pointer;font-family:'DM Sans',sans-serif">📥 Importar productos de Candy Shop 🍬</button>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:2;min-width:150px">
@@ -4791,6 +4792,113 @@ async function guardarNuevoProducto() {
     _guardandoProducto = false;
     _restaurarBtn(_btnNp, _prevNp);
   }
+}
+
+// ─── IMPORTAR PRODUCTOS DE CANDY → SHUK ───────────────────────────────────────
+// Candy vende solo por menor: traemos su catálogo, elegimos cuáles pasar y les
+// agregamos canal mayorista (precio may + min + moneda). Crea productos en Shuk.
+let _candyCat = [];
+async function abrirImportarCandy() {
+  let ov = document.getElementById('impcandy-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'impcandy-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9200;display:flex;align-items:center;justify-content:center;padding:0.8rem';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:480px;width:100%"><div class="sinpedidos">Cargando catálogo de Candy… 🍬</div></div>';
+  try {
+    const d = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoHijos').then(r => r.json());
+    _candyCat = Array.isArray(d) ? d : [];
+  } catch (e) { _candyCat = []; }
+  if (!_candyCat.length) { ov.querySelector('div').innerHTML = '<div class="sinpedidos">No se pudo cargar el catálogo de Candy 😕</div>'; return; }
+  _renderImportarCandy();
+}
+function _renderImportarCandy() {
+  const ov = document.getElementById('impcandy-overlay'); if (!ov) return;
+  const enShuk = new Set(productos.map(p => (p.nombre || '').trim().toLowerCase()));
+  const filas = _candyCat.map((p, i) => {
+    const ya = enShuk.has((p.nombre || '').trim().toLowerCase());
+    const thumb = p.foto
+      ? `<img src="${imgUrl(p.foto)[0]}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
+      : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const inp = 'padding:5px 4px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem;width:100%;box-sizing:border-box;text-align:center';
+    return `<div style="padding:0.45rem 0.2rem;border-bottom:1px solid var(--gris)">
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <input type="checkbox" id="imp-chk-${i}" ${ya ? '' : 'checked'} style="width:18px;height:18px;flex-shrink:0">
+        ${thumb}
+        <div style="min-width:0;flex:1">
+          <div style="font-size:0.82rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
+          ${ya ? '<div style="font-size:0.62rem;color:#c0392b">⚠️ ya está en Shuk</div>' : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:5px;padding-left:1.7rem">
+        <div style="flex:1"><div style="font-size:0.56rem;color:var(--texto-suave);text-align:center">P. Mayorista</div><input id="imp-may-${i}" type="text" inputmode="decimal" placeholder="0" style="${inp}"></div>
+        <div style="flex:1"><div style="font-size:0.56rem;color:var(--texto-suave);text-align:center">P. Minorista</div><input id="imp-min-${i}" type="number" value="${p.precioVenta || ''}" style="${inp}"></div>
+      </div>
+    </div>`;
+  }).join('');
+  const box = `<div style="background:#fff;border-radius:14px;max-width:480px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:0.9rem 1rem;border-bottom:1px solid var(--gris-medio)">
+      <div style="font-weight:800;font-size:1.05rem;color:#b14cff">📥 Importar de Candy Shop 🍬</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">Elegí los productos y poné el precio mayorista. El minorista viene del precio de Candy (editable).</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:0.6rem">
+        <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Moneda (may.)</div>
+          <select id="imp-moneda" style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option value="$">$ Pesos</option><option value="U$S">U$S Dólares</option></select></div>
+        <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Visible</div>
+          <select id="imp-visible" style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option value="Ambos">Ambos</option><option value="Minorista">Solo minorista</option><option value="Mayorista">Solo mayorista</option><option value="Oculto">Oculto</option></select></div>
+        <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Dueño</div>
+          <select id="imp-dueno" style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option>Miri</option><option>Jony</option></select></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input type="checkbox" id="imp-todos" onchange="impToggleTodos(this)" style="width:16px;height:16px"> Marcar / desmarcar todos</label>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:0 0.6rem">${filas}</div>
+    <div style="padding:0.8rem 1rem;border-top:1px solid var(--gris-medio)">
+      <button id="imp-btn" onclick="importarCandySeleccionados()" style="width:100%;padding:0.7rem;background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.92rem;cursor:pointer">Importar seleccionados</button>
+      <button onclick="document.getElementById('impcandy-overlay').remove()" style="width:100%;padding:0.5rem;margin-top:6px;background:none;border:none;color:var(--texto-suave);font-weight:600;cursor:pointer">Cancelar</button>
+    </div>
+  </div>`;
+  ov.innerHTML = box;
+}
+function impToggleTodos(cb) {
+  _candyCat.forEach((p, i) => { const c = document.getElementById('imp-chk-' + i); if (c) c.checked = cb.checked; });
+}
+async function importarCandySeleccionados() {
+  const moneda = document.getElementById('imp-moneda').value === 'U$S' ? 'U$S' : '$';
+  const visible = document.getElementById('imp-visible').value || 'Ambos';
+  const dueno = document.getElementById('imp-dueno').value || 'Miri';
+  const sel = [];
+  _candyCat.forEach((p, i) => {
+    if (!document.getElementById('imp-chk-' + i)?.checked) return;
+    const may = (document.getElementById('imp-may-' + i).value || '').trim().replace(',', '.');
+    const min = (document.getElementById('imp-min-' + i).value || '').trim().replace(',', '.');
+    sel.push({ p, may: may || '0', min: min || '0' });
+  });
+  if (!sel.length) { showToast('No marcaste ningún producto'); return; }
+  // Validar que cada uno cumpla los precios que su visibilidad exige
+  for (const it of sel) {
+    const err = validarPreciosProducto(visible, it.may, it.min);
+    if (err) { showToast(`${it.p.nombre}: ${err}`); return; }
+  }
+  const btn = document.getElementById('imp-btn');
+  const prev = _bloquearBtn(btn, '📥 Importando…');
+  let okN = 0, dupN = 0;
+  for (const it of sel) {
+    const clientId = 'imp_' + (it.p.codigo || '') + '_' + Date.now();
+    const params = new URLSearchParams({
+      accion: 'agregarProducto', nombre: it.p.nombre, desc: '', pMay: it.may, pMin: it.min,
+      stock: '0', imagen: it.p.foto || '', categoria: 'Varios', visible, dueno, moneda, clientId
+    });
+    try {
+      const r = await fetch(APPS_SCRIPT_URL + '?' + params.toString()).then(x => x.json());
+      if (r.ok) { okN++; if (r.dup) dupN++; }
+    } catch (e) {}
+  }
+  _restaurarBtn(btn, prev);
+  document.getElementById('impcandy-overlay')?.remove();
+  showToast(`✓ ${okN} producto${okN !== 1 ? 's' : ''} importado${okN !== 1 ? 's' : ''}${dupN ? ' (' + dupN + ' ya existían)' : ''}`);
+  cargarProductos();
 }
 
 function registrarTransferencia() {
