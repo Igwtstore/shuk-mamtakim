@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Todas las funcionalidades v2.69</title>
+<title>Shuk Mamtakim — Todas las funcionalidades v2.70</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -24,9 +24,30 @@
 <body>
 <div class="top">
   <h1>🍬 Shuk Mamtakim</h1>
-  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.69 · Junio 2026</p>
+  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.70 · Junio 2026</p>
 </div>
 <div class="wrap">
+
+<div class="sec">
+  <h2>✨ Novedades v2.70</h2>
+  <div class="item">📥 <b>Importar productos de Candy a Shuk</b> <span class="new">v2.70</span> — desde "Agregar producto" elegís cuáles pasar de Candy, con su foto y costo a la vista; le ponés precio mayorista (el minorista viene del de Candy), moneda y dueño. Los que ya están en Shuk salen avisados para no duplicar.</div>
+  <div class="item">🔗 <b>Stock compartido Shuk↔Candy</b> <span class="new">v2.70</span> — los productos importados usan el MISMO depósito que Candy. Una venta en Shuk descuenta del mismo pozo que Candy (y al revés), así ninguno sobrevende. El stock que ves es el real del depósito.</div>
+  <div class="item">📦 <b>Stock manual en Candy</b> <span class="new">v2.70</span> — en el catálogo de Candy cada producto muestra su stock y, al editarlo, podés fijar a mano la cantidad del depósito (además de cargarla con cada compra).</div>
+  <div class="item">💵 <b>Cobrar en dólares una venta en pesos</b> <span class="new">v2.70</span> — si el cliente paga en dólares una venta en pesos, elegís la caja de dólares, ponés el tipo de cambio y el "¿Cuánto recibiste?" pasa a U$S. La plata cae en dólares y la comisión queda en dólares (con el mismo redondeo: perdonar / cuenta corriente). El cobro multimoneda ahora anda en los dos sentidos.</div>
+  <div class="item">💳 <b>Total a cobrar en la cuenta corriente</b> <span class="new">v2.70</span> — al pie de los deudores, el total en $ y U$S. En tu panel, con desglose entre paréntesis: cuánto es de Jony y cuánto de Miri.</div>
+  <div class="item">📄 <b>Estado de cuenta del cliente</b> <span class="new">v2.70</span> — extracto cronológico (pedidos y pagos con saldo arrastrado) para que el cliente no descrea la deuda. Exportable a PDF, imagen, WhatsApp y CSV. En Shuk y en Candy.</div>
+  <div class="item">🏷️ <b>Reclasificar categoría en lote</b> <span class="new">v2.70</span> — en el gestor de visibilidad: filtro por categoría y "Mover categoría" para cambiar muchos productos de una (ideal para los que quedaron en "Varios").</div>
+  <div class="item">🗂️ <b>Categoría con desplegable + "Nueva"</b> <span class="new">v2.70</span> — al editar, la categoría es un desplegable con todas las existentes y opción "➕ Nueva categoría". Se agregaron Snacks, Galletita y Sopa.</div>
+  <div class="item">✨ <b>IA en el editor de producto</b> <span class="new">v2.70</span> — botón para que la IA mire la foto y sugiera nombre y descripción, también al editar (no solo al dar de alta).</div>
+  <div class="item">🚫 <b>Sin duplicados por doble toque</b> <span class="new">v2.70</span> — los botones de acción (alta de producto, stock del día de Candy) se ponen grises al tocar y el servidor rechaza el segundo pedido. Se acabó el "lo toqué dos veces y se cargó doble".</div>
+  <div class="item">🛑 <b>Sin precio no se publica</b> <span class="new">v2.70</span> — si querés publicar un producto en mayorista o minorista sin su precio, te frena con un aviso.</div>
+  <div class="item">🔒 <b>Privacidad Jony/Miri reforzada</b> <span class="new">v2.70</span> — en la vista "Solo Miri" ya no aparece NADA de Jony en ningún listado (edición rápida, catálogo, pedido manual, importador).</div>
+  <div class="item">🧱 <b>Divisor "Sin stock" en la tienda</b> <span class="new">v2.70</span> — primero todos los productos con stock, después una línea con "dejanos tus datos y te avisamos cuando llegue" y debajo los agotados.</div>
+  <div class="item">📈 <b>Analítica al máximo</b> <span class="new">v2.70</span> — comparativa vs período anterior, productos más deseados, conversión por canal, países, días de la semana con más tráfico y exportar a CSV.</div>
+  <div class="item">🖼️ <b>Bandeja de fotos IA mejorada</b> <span class="new">v2.70</span> — borrar una foto o vaciar la bandeja, reintentar las que fallaron, y los errores de saldo de IA ya no "queman" las fotos (quedan para reintentar).</div>
+  <div class="item">✏️ <b>Editor más prolijo</b> <span class="new">v2.70</span> — el editor de producto se cierra solo al guardar (con aviso), y la edición rápida muestra el dueño (Jony/Miri) con filtro.</div>
+  <div class="item">🐛 <b>Stock del día de Candy sin duplicar</b> <span class="new">v2.70</span> — arreglado el bug del doble guardado que duplicaba la listita de los chicos (candado en el servidor).</div>
+</div>
 
 <div class="sec">
   <h2>🛍️ Tienda online (clientes minoristas)</h2>
@@ -181,7 +202,7 @@
   <div class="item">📖 <b>Documentación versionada</b> — docs técnicas con historial de versiones en /docs.html, y este inventario en /funcionalidades.html.</div>
 </div>
 
-<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.69 · Junio 2026 — se actualiza con cada release</div>
+<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.70 · Junio 2026 — se actualiza con cada release</div>
 </div>
 </body>
 </html>
