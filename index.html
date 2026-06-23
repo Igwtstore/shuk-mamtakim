@@ -2259,6 +2259,14 @@ function isCloudinaryId(filename) {
 
 function imgUrl(filename) {
   if (!filename) return [`${CLOUDINARY_BASE}/w_400,f_auto,q_auto/shuk-mamtakim/placeholder`];
+  // URL completa (p. ej. foto importada de Candy): usarla tal cual. Si es de Cloudinary, le
+  // insertamos el resize/optim; si no, va directa. (Antes imgUrl le anteponía la base y rompía.)
+  if (/^https?:\/\//i.test(filename)) {
+    const u = filename.indexOf('res.cloudinary.com') !== -1
+      ? filename.replace('/upload/', '/upload/e_trim:10/w_400,f_auto,q_auto/')
+      : filename;
+    return [u, filename, filename, filename];
+  }
   if (isCloudinaryId(filename)) {
     const url = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/${filename}`;
     return [url, url, url, url];
