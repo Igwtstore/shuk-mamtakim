@@ -1973,8 +1973,18 @@ async function cargarProductos() {
       dueno: (r[14]||'').trim(),
       visibleOferta: (r[15]||'Ambos').trim(),
       descBot: (r[16]||'').trim(),
-      moneda: ((r[17]||'$').trim() === 'U$S') ? 'U$S' : '$'
+      moneda: ((r[17]||'$').trim() === 'U$S') ? 'U$S' : '$',
+      candyCod: (r[28]||'').trim()   // vínculo de stock compartido con Candy (col 29)
     })).filter(p => p.activo && p.id);
+    // Stock compartido: para los productos vinculados a Candy, el stock real es el del depósito.
+    if (productos.some(p => p.candyCod)) {
+      try {
+        const dep = await fetch(APPS_SCRIPT_URL + '?accion=getDepositoHijos').then(r => r.json());
+        const depMap = {};
+        (Array.isArray(dep) ? dep : (dep.items || [])).forEach(d => { depMap[(d.codigo||'').toString()] = parseInt(d.cantidad)||0; });
+        productos.forEach(p => { if (p.candyCod) { p.stock = depMap[p.candyCod] || 0; p.stockCompartido = true; } });
+      } catch (e) {}
+    }
     // Sugerencias de categoría para el alta de productos (las del catálogo + las estándar)
     const dlCat = document.getElementById('categorias-productos-list');
     if (dlCat) {
@@ -4903,7 +4913,8 @@ async function importarCandySeleccionados() {
     const clientId = 'imp_' + (it.p.codigo || '') + '_' + Date.now();
     const params = new URLSearchParams({
       accion: 'agregarProducto', nombre: it.p.nombre, desc: '', pMay: it.may, pMin: it.min,
-      stock: '0', imagen: it.p.foto || '', categoria: 'Varios', visible, dueno, moneda, clientId
+      stock: '0', imagen: it.p.foto || '', categoria: 'Varios', visible, dueno, moneda, clientId,
+      candyCod: it.p.codigo || ''   // vínculo de stock compartido con Candy
     });
     try {
       const r = await fetch(APPS_SCRIPT_URL + '?' + params.toString()).then(x => x.json());

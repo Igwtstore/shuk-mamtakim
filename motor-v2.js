@@ -361,9 +361,7 @@ function doGet(e) {
                 const pp = u.split(':'); const pid = pp[0]; const qty = parseInt(pp[1])||0;
                 for (let j = 1; j < sd.length; j++) {
                   if (sd[j][0].toString() === pid) {
-                    const antes = parseInt(sd[j][5])||0, despues = antes - qty;  // puede quedar negativo (sobreventa) → devolución simétrica al cancelar
-                    sh.getRange(j+1,6).setValue(despues);
-                    registrarMovStock_(ss, pid, sd[j][1], -qty, antes, despues, 'Cotización aceptada #' + (datos[i][10]||''));
+                    _moverStockShuk_(ss, sh, sd[j], j+1, pid, -qty, 'Cotización aceptada #' + (datos[i][10]||''));
                     break;
                   }
                 }
@@ -421,13 +419,9 @@ function doGet(e) {
             var parts = u.split(':'); var pid = parts[0]; var qty = parseInt(parts[1])||0;
             for (var i = 1; i < sd.length; i++) {
               if (sd[i][0].toString() === pid) {
-                var antes = parseInt(sd[i][5])||0;
-                var despues = antes - qty;  // puede quedar negativo (sobreventa) → devolución simétrica al cancelar
-                sh.getRange(i+1,6).setValue(despues);
-                var sobre = qty - antes;
-                registrarMovStock_(ss, pid, sd[i][1], -qty, antes, despues,
-                  'Venta #' + nVenta + ' — ' + cliVenta + (sobre > 0 ? ' ⚠️ SOBREVENTA: pidió ' + qty + ', había ' + antes : ''));
-                if (sobre > 0) enviarTelegram_('papa', '⚠️ *SOBREVENTA*\n' + sd[i][1] + ': el pedido #' + nVenta + ' (' + cliVenta + ') pidió *' + qty + '* y solo había *' + antes + '*. Faltan ' + sobre + ' — revisalo antes de confirmar.');
+                var res = _moverStockShuk_(ss, sh, sd[i], i+1, pid, -qty, 'Venta #' + nVenta + ' — ' + cliVenta);
+                var sobre = qty - res.antes;
+                if (sobre > 0) enviarTelegram_('papa', '⚠️ *SOBREVENTA*\n' + sd[i][1] + ': el pedido #' + nVenta + ' (' + cliVenta + ') pidió *' + qty + '* y solo había *' + res.antes + '*. Faltan ' + sobre + ' — revisalo antes de confirmar.');
                 break;
               }
             }
@@ -522,9 +516,7 @@ function doGet(e) {
                   const parts = u.split(':'); const pid = parts[0]; const qty = parseInt(parts[1])||0;
                   for (let j = 1; j < sd.length; j++) {
                     if (sd[j][0].toString() === pid) {
-                      const antes = parseInt(sd[j][5])||0;
-                      sh.getRange(j+1,6).setValue(antes + qty);
-                      registrarMovStock_(ss, pid, sd[j][1], qty, antes, antes + qty, 'Cancelación pedido #' + (datos[i][10]||''));
+                      _moverStockShuk_(ss, sh, sd[j], j+1, pid, qty, 'Cancelación pedido #' + (datos[i][10]||''));
                       break;
                     }
                   }
@@ -585,10 +577,7 @@ function doGet(e) {
                 if (!delta) return;
                 for (let j = 1; j < sd2.length; j++) {
                   if (sd2[j][0].toString() === pid) {
-                    const antes = parseInt(sd2[j][5])||0;
-                    const despues = antes + delta;  // puede quedar negativo (sobreventa) → simétrico con la devolución
-                    sh2.getRange(j+1,6).setValue(despues);
-                    registrarMovStock_(ss, pid, sd2[j][1], delta, antes, despues, 'Edición pedido #' + (datos[i][10]||''));
+                    _moverStockShuk_(ss, sh2, sd2[j], j+1, pid, delta, 'Edición pedido #' + (datos[i][10]||''));
                     break;
                   }
                 }
@@ -945,9 +934,12 @@ function doGet(e) {
           0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||''), monedaNueva]);
         const stockIni = parseInt(e.parameter.stock||0);
         if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
+        // Vínculo con Candy (stock compartido): guarda el código de Candy en col 29.
+        const candyCod = dec(e.parameter.candyCod || '').trim();
+        if (candyCod) { _asegurarColCandyCod_(h); h.getRange(h.getLastRow(), 29).setValue(candyCod); }
         if (cidAP) cacheAP.put('addprod_' + cidAP, String(maxId+1), 300);
         SpreadsheetApp.flush();
-        return json({ ok: true, id: maxId+1 });
+        return json({ ok: true, id: maxId+1, candyCod: candyCod });
       } finally { try { lockAP.releaseLock(); } catch (e2) {} }
     }
     if (accion === 'actualizarOferta') {
@@ -1478,6 +1470,39 @@ function sendTwilioWA(to, body) {
 }
 
 // ─── FUNCIONES HIJOS ──────────────────────────────────────────────────────────
+
+// ── STOCK COMPARTIDO Shuk↔Candy (productos importados de Candy) ───────────────
+// Un producto de Shuk importado de Candy guarda el código de Candy en la col 29 (CandyCod).
+// Su stock real es el del DEPÓSITO compartido (DepositoHijos), no la columna Stock de Shuk.
+// Así una venta en Shuk descuenta del mismo pozo que Candy → no se sobrevende.
+function _asegurarColCandyCod_(h) {
+  if (!h) return;
+  if (h.getMaxColumns() < 29) h.insertColumnsAfter(h.getMaxColumns(), 29 - h.getMaxColumns());
+  if (h.getRange(1, 29).getValue() !== 'CandyCod') h.getRange(1, 29).setValue('CandyCod');
+}
+function _depositoQty_(ss, codigo) {
+  const h = ss.getSheetByName('DepositoHijos'); if (!h || h.getLastRow() < 2) return 0;
+  const d = h.getRange(2, 1, h.getLastRow() - 1, 3).getValues();
+  for (let i = 0; i < d.length; i++) if (d[i][0].toString() === codigo.toString()) return parseInt(d[i][2]) || 0;
+  return 0;
+}
+// Mueve el stock del producto pid según delta (negativo=descontar venta, positivo=devolver).
+// Si el producto está vinculado a Candy (col 29), mueve el DEPÓSITO; si no, la columna Stock.
+// sdRow = fila del Stock (array de getValues); rowIndex1 = nº de fila real (1-based).
+function _moverStockShuk_(ss, sh, sdRow, rowIndex1, pid, delta, motivo) {
+  const candyCod = (sdRow[28] || '').toString().trim();   // col 29 = CandyCod
+  const nombre = (sdRow[1] || '').toString();
+  if (candyCod) {
+    const antes = _depositoQty_(ss, candyCod);
+    ajustarDeposito_(ss, candyCod, nombre, delta);
+    registrarMovStock_(ss, pid, nombre, delta, antes, antes + delta, motivo + ' (depósito compartido)');
+    return { antes: antes, despues: antes + delta, compartido: true };
+  }
+  const antes = parseInt(sdRow[5]) || 0, despues = antes + delta;
+  sh.getRange(rowIndex1, 6).setValue(despues);
+  registrarMovStock_(ss, pid, nombre, delta, antes, despues, motivo);
+  return { antes: antes, despues: despues, compartido: false };
+}
 
 function getCatalogoHijos(ss) {
   const h = ss.getSheetByName('CatalogoHijos');
