@@ -2204,7 +2204,7 @@ function renderCatalogo() {
     catalogo.innerHTML = '<div class="loading">Sin resultados</div>';
     return;
   }
-  catalogo.innerHTML = filtrados.map(p => {
+  const card = (p) => {
     const qty = cantidades[p.id] || 0;
     const enCarrito = !!carrito[p.id];
     const agotado = p.stock <= 0;
@@ -2243,7 +2243,19 @@ function renderCatalogo() {
         </button>
       </div>`}
     </div>`;
-  }).join('');
+  };
+  const conStock = filtrados.filter(p => p.stock > 0);
+  const sinStock = filtrados.filter(p => p.stock <= 0);
+  let html = conStock.map(card).join('');
+  if (sinStock.length) {
+    // Divisor full-width (grid-column 1/-1) → arranca en renglón nuevo; las celdas vacías del
+    // último renglón con stock quedan en blanco. Abajo, todos los agotados.
+    html += `<div style="grid-column:1/-1;margin:1.4rem 0 0.5rem;border-top:2px dashed #e3a9a9;padding-top:0.95rem;text-align:center">
+      <div style="display:inline-block;background:#fdecea;color:#c0392b;font-weight:700;font-size:0.86rem;padding:6px 16px;border-radius:20px;line-height:1.45">🔔 Sin stock <span style="font-weight:500;color:#a85a5a">· dejanos tus datos y te avisamos cuando llegue 👇</span></div>
+    </div>`;
+    html += sinStock.map(card).join('');
+  }
+  catalogo.innerHTML = html;
   document.getElementById('carrito-btn-header').style.display = 'flex';
   setTimeout(initCarousels, 100);
 }
