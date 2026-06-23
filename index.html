@@ -2815,24 +2815,34 @@ async function renderCuentaCorriente() {
     const pagadoPorCliente = {};
     (pagos || []).forEach(p => {
       const k = normCliente(p.cliente);
-      if (!pagadoPorCliente[k]) pagadoPorCliente[k] = { ars: 0, usd: 0 };
+      if (!pagadoPorCliente[k]) pagadoPorCliente[k] = { ars: 0, usd: 0, pitz: 0 };
       pagadoPorCliente[k].ars += pagoARSvista(p);
       pagadoPorCliente[k].usd += parseFloat(p.montoUSD)||0;
+      pagadoPorCliente[k].pitz += parseFloat(p.montoPitz)||0;   // parte Pitzujim del pago (es de Jony)
     });
-    // Agrupar por cliente NORMALIZADO (en vista Miri usa solo los montos de Miri)
+    // Agrupar por cliente NORMALIZADO (en vista Miri usa solo los montos de Miri).
+    // jonyARS/miriARS/jonyUSD/miriUSD = de quién es la deuda (para el total con desglose en vista Jony).
     const porCliente = {};
     cc.forEach(v => {
       const k = normCliente(v.cliente);
-      if (!porCliente[k]) porCliente[k] = { nombre: v.cliente, pedidos: [], totalARS: 0, totalUSD: 0 };
+      if (!porCliente[k]) porCliente[k] = { nombre: v.cliente, pedidos: [], totalARS: 0, totalUSD: 0, jonyARS: 0, miriARS: 0, jonyUSD: 0, miriUSD: 0 };
       else porCliente[k].nombre = mejorNombreCliente(porCliente[k].nombre, v.cliente);
       porCliente[k].pedidos.push(v);
       porCliente[k].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
       porCliente[k].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
+      porCliente[k].jonyARS += parseFloat(v.arsJONY)||0;
+      porCliente[k].miriARS += parseFloat(v.arsMyri)||0;
+      porCliente[k].jonyUSD += parseFloat(v.usdJONY)||0;
+      porCliente[k].miriUSD += parseFloat(v.usdMyri)||0;
     });
     // Restar pagos a cuenta (vista Jony)
     Object.entries(porCliente).forEach(([k, d]) => {
       const pg = pagadoPorCliente[k];
-      if (pg) { d.totalARS -= pg.ars; d.totalUSD -= pg.usd; }
+      if (pg) {
+        d.totalARS -= pg.ars; d.totalUSD -= pg.usd;
+        d.jonyARS -= pg.pitz; d.miriARS -= (pg.ars - pg.pitz);   // Pitzujim → Jony; resto golosinas → Miri
+        d.miriUSD -= pg.usd;                                      // los pagos en U$S son golosinas (Miri)
+      }
     });
     // Quitar los que quedaron saldados
     const entries = Object.values(porCliente).filter(d => d.totalARS > 1 || d.totalUSD > 0.01);
@@ -2876,10 +2886,33 @@ async function renderCuentaCorriente() {
           </div>
         </div>
       </div>`;
-    }).join('');
+    }).join('') + _ccTotalFooter(entries, soloMiri);
   } catch(e) {
     lista.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕 <a onclick="invalidarCache();renderCuentaCorriente()" style="color:var(--azul);font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
   }
+}
+
+// Pie de la cuenta corriente: total a cobrar en $ y U$S. En vista Jony, con desglose
+// (cuánto es de Jony y cuánto de Miri). En vista Miri, solo el total de ella.
+function _ccTotalFooter(entries, soloMiri) {
+  const t = entries.reduce((s, d) => {
+    s.ars += d.totalARS; s.usd += d.totalUSD;
+    s.jARS += d.jonyARS || 0; s.mARS += d.miriARS || 0; s.jUSD += d.jonyUSD || 0; s.mUSD += d.miriUSD || 0;
+    return s;
+  }, { ars: 0, usd: 0, jARS: 0, mARS: 0, jUSD: 0, mUSD: 0 });
+  const money = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const usd = n => 'U$S ' + n.toFixed(2);
+  const hayARS = t.ars > 1, hayUSD = t.usd > 0.01;
+  if (!hayARS && !hayUSD) return '';
+  const fila = (montoStr, jStr, mStr) => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:2px">
+      <span style="font-weight:800;font-size:1.1rem;color:#c0392b">${montoStr}</span>
+      ${!soloMiri ? `<span style="font-size:0.72rem;color:var(--texto-suave)">Jony <b style="color:#5c3d1e">${jStr}</b> · Miri <b style="color:#c050a0">${mStr}</b></span>` : ''}
+    </div>`;
+  return `<div style="border:2px solid #f0c0c0;border-radius:12px;padding:0.7rem 0.9rem;margin-top:0.4rem;background:#fff6f6">
+      <div style="font-size:0.74rem;font-weight:800;color:#c0392b;margin-bottom:2px">💳 Total a cobrar (${entries.length} deudor${entries.length!==1?'es':''})</div>
+      ${hayARS ? fila(money(t.ars), money(t.jARS), money(t.mARS)) : ''}
+      ${hayUSD ? fila(usd(t.usd), usd(t.jUSD), usd(t.mUSD)) : ''}
+    </div>`;
 }
 
 async function renderPedidos() {
@@ -4640,18 +4673,6 @@ async function cargarBandeja() {
           : `<div style="font-size:0.68rem;color:var(--texto-suave)">🧠 Pensando...</div>`}
       </div>
     </div>`).join('');
-}
-
-async function borrarFotoBandeja(id) {
-  try { await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaEliminar', id })); } catch (e) {}
-  bandejaCache = bandejaCache.filter(b => b.id !== id);   // saca al toque, sin esperar
-  cargarBandeja();
-}
-async function vaciarBandeja(btn) {
-  if (!confirm('¿Vaciar la bandeja de fotos? (las que ya usaste en altas no se tocan)')) return;
-  if (btn) { btn.disabled = true; btn.textContent = '🗑️ Vaciando...'; }
-  try { await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaVaciar' })); } catch (e) {}
-  await cargarBandeja();
 }
 
 function usarDeBandeja(id) {
