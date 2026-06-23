@@ -100,6 +100,8 @@ function altaClienteAuto_(ss, nombre, tipo) {
 // La comisión queda en la MONEDA EN QUE SE COBRÓ la venta (regla del usuario):
 // U$S cobrada en una caja en pesos (con tipo de cambio) → comisión en PESOS;
 // U$S cobrada en una caja en dólares → comisión en U$S. La parte ARS siempre es comisión en pesos.
+// Cajas de DÓLARES reales (efectivo/comisión en U$S). NO incluye CTA_CTE_USD (es deuda, no cobro).
+function _esCajaUSD_(c) { return ['ETF_USD_MYRI', 'ETF_USD_JONY', 'COMI_USD_JONY'].indexOf((c || '').toString()) !== -1; }
 function _comiEnMonedaCobro_(arsMyri, usdMyri, cajaMyri, tc, sinComi) {
   if (sinComi) return { comiARS: 0, comiUSD: 0 };
   const CAJAS_ARS = ['MP_GABY', 'EFT_MYRI', 'EFT_JONY', 'MP_JONY', 'CTA_CTE_ARS'];
@@ -642,7 +644,7 @@ function doGet(e) {
               h.getRange(i+1,12).setValue(nJ); h.getRange(i+1,13).setValue(nM); h.getRange(i+1,14).setValue(nU);
               h.getRange(i+1,15).setValue(nCA); h.getRange(i+1,16).setValue(nCU);
               h.getRange(i+1,23).setValue(recibido - esperado);   // ajuste con signo
-              return ok();
+              // (sin return: cae al bloque de conversión cross-moneda de abajo)
             } else {
               // recibido == esperado: sin ajuste. Si había uno previo, lo deshace (restaura base).
               if (origStr) {
@@ -660,6 +662,34 @@ function doGet(e) {
             const _cm = _comiEnMonedaCobro_(datos[i][12], datos[i][13], dec(e.parameter.cajaMyri || ''), tc, _sc);
             h.getRange(i+1,15).setValue(_cm.comiARS);
             h.getRange(i+1,16).setValue(_cm.comiUSD);
+          }
+          // CROSS-MONEDA: una parte en PESOS cobrada en caja de DÓLARES → pasarla a U$S al tc.
+          // Así la plata cae en dólares en su caja y la comisión queda en U$S (regla: comisión en la
+          // moneda en que se cobró). Lee los valores YA escritos; idempotente al re-confirmar (ars=0).
+          if (tc > 0) {
+            const cM = dec(e.parameter.cajaMyri || ''), cJ = dec(e.parameter.cajaJony || '');
+            const aJ0 = parseFloat(h.getRange(i+1,12).getValue()) || 0;
+            const aM0 = parseFloat(h.getRange(i+1,13).getValue()) || 0;
+            const uM0 = parseFloat(h.getRange(i+1,14).getValue()) || 0;
+            _asegurarColUsdJony_(h);
+            const uJ0 = parseFloat(h.getRange(i+1,28).getValue()) || 0;
+            let aJ = aJ0, aM = aM0, uM = uM0, uJ = uJ0, mov = false;
+            if (aM0 > 0 && _esCajaUSD_(cM)) { uM = Math.round((uM0 + aM0 / tc) * 100) / 100; aM = 0; mov = true; }
+            if (aJ0 > 0 && _esCajaUSD_(cJ)) { uJ = Math.round((uJ0 + aJ0 / tc) * 100) / 100; aJ = 0; mov = true; }
+            if (mov) {
+              // Guardar la base en PESOS (col 24) si no estaba, para poder re-confirmar/ajustar después.
+              if (!(datos[i][23] || '').toString()) {
+                const preCA = parseFloat(h.getRange(i+1,15).getValue()) || 0;
+                const preCU = parseFloat(h.getRange(i+1,16).getValue()) || 0;
+                h.getRange(i+1,24).setNumberFormat('@');
+                h.getRange(i+1,24).setValue([aJ0, aM0, uM0, preCA, preCU].join('|'));
+              }
+              h.getRange(i+1,12).setValue(aJ); h.getRange(i+1,13).setValue(aM);
+              h.getRange(i+1,14).setValue(uM); h.getRange(i+1,28).setValue(uJ);
+              const _sc2 = (datos[i][26] || '').toString().toUpperCase() === 'SI';
+              const _cm2 = _comiEnMonedaCobro_(aM, uM, cM, tc, _sc2);
+              h.getRange(i+1,15).setValue(_cm2.comiARS); h.getRange(i+1,16).setValue(_cm2.comiUSD);
+            }
           }
           return ok();
         }

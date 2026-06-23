@@ -1735,8 +1735,8 @@
       <div id="cobro-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
     </div>
     <div id="cobro-ajuste-wrap" style="display:none;margin-bottom:0.75rem;background:#eef4fb;border-radius:8px;padding:0.75rem">
-      <label style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span></label>
-      <input type="number" id="cobro-recibido" min="0" oninput="cobro_recalcAjuste()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #b9d2ee;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+      <label id="cobro-ajuste-label" style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span></label>
+      <input type="number" id="cobro-recibido" min="0" step="any" oninput="cobro_recalcAjuste()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #b9d2ee;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       <div id="cobro-ajuste-result" style="font-size:0.78rem;margin-top:0.4rem;font-weight:600"></div>
       <div id="cobro-menos-wrap" style="display:none;margin-top:0.5rem;font-size:0.78rem">
         <div style="color:var(--azul);font-weight:600;margin-bottom:0.2rem">¿Qué hago con lo que falta?</div>
@@ -7909,34 +7909,61 @@ function cobro_esperadoPesos() {
   const usdEnPesos = _cobroUsdM > 0 && tc > 0 && COBRO_ARS_COLS.includes(cajaMyri);
   return Math.round(_cobroArsJ + _cobroArsM + (usdEnPesos ? _cobroUsdM * tc : 0));
 }
-// Muestra el campo "monto recibido" cuando hay cobro en pesos, prellena con lo esperado
-// y avisa el ajuste (de menos = redondeo/perdón; de más = pagó sin vuelto → sube comisión).
+// Cajas de dólares reales (sentido nuevo: venta en pesos cobrada en dólares).
+const _CAJAS_USD = ['ETF_USD_MYRI', 'ETF_USD_JONY', 'COMI_USD_JONY'];
+function _esCajaUSD(c) { return _CAJAS_USD.includes(c); }
+// ¿Se está cobrando una parte EN PESOS dentro de una caja de DÓLARES? → el "recibido" se ingresa
+// en U$S y hay que pedir tipo de cambio. (No aplica si además hay U$S yendo a una caja de pesos.)
+function cobro_pesoAUSD() {
+  const cajaM = document.getElementById('cobro-caja-myri')?.value || '';
+  const jw = document.getElementById('cobro-jony-wrap');
+  const cajaJ = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
+  const usdAPesos = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaM);
+  return !usdAPesos && ((_cobroArsM > 0 && _esCajaUSD(cajaM)) || (_cobroArsJ > 0 && _esCajaUSD(cajaJ)));
+}
+// Muestra el campo "monto recibido" y avisa el ajuste. En modo pesos→U$S, el recibido es en dólares.
 function cobro_recalcAjuste() {
   const wrap = document.getElementById('cobro-ajuste-wrap');
   const res = document.getElementById('cobro-ajuste-result');
   const inp = document.getElementById('cobro-recibido');
   if (!wrap || !res || !inp) return;
-  const esperado = cobro_esperadoPesos();
-  if (esperado <= 0) { wrap.style.display = 'none'; res.textContent = ''; return; }
+  const espPesos = cobro_esperadoPesos();
+  if (espPesos <= 0) { wrap.style.display = 'none'; res.textContent = ''; return; }
   wrap.style.display = 'block';
-  inp.placeholder = esperado.toLocaleString('es-AR');
-  const recibido = inp.value === '' ? esperado : Math.round(parseFloat(inp.value) || 0);
-  const dif = recibido - esperado;
   const menosWrap = document.getElementById('cobro-menos-wrap');
-  if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';   // solo si pagó de MENOS
-  if (inp.value === '' || dif === 0) {
-    res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${esperado.toLocaleString('es-AR')} · sin ajuste</span>`;
-  } else if (dif < 0) {
-    res.innerHTML = `<span style="color:#c0392b">Faltan $ ${Math.abs(dif).toLocaleString('es-AR')} — elegí abajo qué hacer</span>`;
-  } else {
-    res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>`;
+  const pesoAUsd = cobro_pesoAUSD();
+  if (pesoAUsd) {
+    const tc = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
+    if (tc <= 0) { inp.placeholder = '—'; if (menosWrap) menosWrap.style.display = 'none';
+      res.innerHTML = '<span style="color:var(--dorado)">Poné primero el tipo de cambio ↑</span>'; return; }
+    const espUSD = Math.round(espPesos / tc * 100) / 100;
+    inp.placeholder = espUSD.toFixed(2);
+    const recUSD = inp.value === '' ? espUSD : (parseFloat(inp.value) || 0);
+    const dif = Math.round((recUSD - espUSD) * 100) / 100;
+    if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';
+    if (inp.value === '' || dif === 0) res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: U$S ${espUSD.toFixed(2)} (= $ ${espPesos.toLocaleString('es-AR')}) · sin ajuste</span>`;
+    else if (dif < 0) res.innerHTML = `<span style="color:#c0392b">Faltan U$S ${Math.abs(dif).toFixed(2)} — elegí abajo qué hacer</span>`;
+    else res.innerHTML = `<span style="color:#1a7a3a">Recibís U$S ${dif.toFixed(2)} de más · sube la comisión</span>`;
+    return;
   }
+  inp.placeholder = espPesos.toLocaleString('es-AR');
+  const recibido = inp.value === '' ? espPesos : Math.round(parseFloat(inp.value) || 0);
+  const dif = recibido - espPesos;
+  if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';
+  if (inp.value === '' || dif === 0) res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${espPesos.toLocaleString('es-AR')} · sin ajuste</span>`;
+  else if (dif < 0) res.innerHTML = `<span style="color:#c0392b">Faltan $ ${Math.abs(dif).toLocaleString('es-AR')} — elegí abajo qué hacer</span>`;
+  else res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>`;
 }
 function cobro_onSelectChange() {
   const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
-  const needsTC = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
-  document.getElementById('cobro-tc-wrap').style.display = needsTC ? 'block' : 'none';
-  if (needsTC) cobro_calcularTC();
+  const usdAPesos = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
+  const pesoAUsd = cobro_pesoAUSD();
+  document.getElementById('cobro-tc-wrap').style.display = (usdAPesos || pesoAUsd) ? 'block' : 'none';
+  const lbl = document.getElementById('cobro-ajuste-label');
+  if (lbl) lbl.innerHTML = pesoAUsd
+    ? '💵 ¿Cuánto recibiste en U$S? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span>'
+    : '💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span>';
+  if (usdAPesos) cobro_calcularTC();
   cobro_recalcAjuste();
 }
 function cobro_calcularTC() {
@@ -8035,19 +8062,31 @@ async function confirmarCobroModal() {
   const cajaJony = jw.style.display !== 'none' ? document.getElementById('cobro-caja-jony').value : '';
   const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
-  // Si pagó de MENOS y eligió "dejar el resto en cuenta corriente" → es un PAGO PARCIAL:
-  // no confirmamos el cobro completo; abrimos Pago a cuenta precargado y el resto queda debiendo.
+  const pesoAUsd = cobro_pesoAUSD();   // venta en pesos cobrada en caja de dólares
+  // "recibido" en pesos-equivalente (en modo U$S, convierte recUSD × tc). difReal = en su moneda.
   const _recInp0 = document.getElementById('cobro-recibido');
+  const espP = cobro_esperadoPesos();
+  let recP = null, difReal = 0, espUSD = 0, recUSD = 0;
   if (_recInp0 && _recInp0.value !== '') {
-    const esp0 = cobro_esperadoPesos();
-    const rec0 = Math.round(parseFloat(_recInp0.value) || 0);
+    if (pesoAUsd && tipoCambio > 0) {
+      espUSD = Math.round(espP / tipoCambio * 100) / 100;
+      recUSD = parseFloat(_recInp0.value) || 0;
+      recP = Math.round(recUSD * tipoCambio);
+      difReal = Math.round((recUSD - espUSD) * 100) / 100;
+    } else {
+      recP = Math.round(parseFloat(_recInp0.value) || 0);
+      difReal = recP - espP;
+    }
+  }
+  // Si pagó de MENOS y eligió "dejar el resto en cuenta corriente" → PAGO PARCIAL (en pesos-equiv).
+  if (recP !== null) {
     const eligioCtaCte = (document.querySelector('input[name="cobro-falta"]:checked') || {}).value === 'ctacte';
-    if (esp0 > 0 && rec0 > 0 && rec0 < esp0 && eligioCtaCte) {
+    if (espP > 0 && recP > 0 && difReal < 0 && eligioCtaCte) {
       cerrarModalCobro();
       abrirPagoCuenta(_cobroCliente, _cobroId, _cobroArsJ, _cobroArsM, _cobroUsdM);
-      const pitz = Math.min(rec0, _cobroArsJ);
+      const pitz = Math.min(recP, _cobroArsJ);
       const gp = document.getElementById('pago-pitz'); if (gp) gp.value = pitz || '';
-      const gg = document.getElementById('pago-gol'); if (gg) gg.value = Math.max(0, rec0 - pitz) || '';
+      const gg = document.getElementById('pago-gol'); if (gg) gg.value = Math.max(0, recP - pitz) || '';
       showToast('💵 Completá el pago parcial — el resto queda en cuenta corriente');
       return;
     }
@@ -8056,15 +8095,17 @@ async function confirmarCobroModal() {
   const comprobante = await subirComprobantes(document.getElementById('cobro-comprobante'));
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
   if (comprobante) params.set('comprobante', comprobante);
-  // Ajuste de cobro: mandamos lo realmente recibido (pesos) solo si difiere de lo esperado.
-  const recInp = document.getElementById('cobro-recibido');
-  if (recInp && recInp.value !== '') {
-    const esperado = cobro_esperadoPesos();
-    const recibido = Math.round(parseFloat(recInp.value) || 0);
-    if (esperado > 0 && recibido > 0 && recibido !== esperado) {
-      const dif = recibido - esperado;
-      if (!confirm(`Vas a registrar un ajuste de ${dif < 0 ? '-' : '+'}$${Math.abs(dif).toLocaleString('es-AR')}.\n\nEsperado: $${esperado.toLocaleString('es-AR')} · Recibido: $${recibido.toLocaleString('es-AR')}\nLa comisión se recalcula sobre lo recibido. ¿Confirmar?`)) return;
-      params.set('recibido', String(recibido));
+  // Ajuste de cobro: mandamos lo recibido (pesos-equiv) solo si difiere de lo esperado.
+  if (recP !== null && espP > 0 && recP > 0) {
+    if (pesoAUsd && tipoCambio > 0) {
+      if (Math.abs(difReal) >= 0.01) {
+        if (!confirm(`Ajuste de ${difReal < 0 ? '-' : '+'}U$S ${Math.abs(difReal).toFixed(2)}.\n\nEsperado: U$S ${espUSD.toFixed(2)} · Recibido: U$S ${recUSD.toFixed(2)}\nLa comisión se recalcula sobre lo recibido (en dólares). ¿Confirmar?`)) return;
+        params.set('recibido', String(recP));
+      }
+    } else if (recP !== espP) {
+      const dif = recP - espP;
+      if (!confirm(`Vas a registrar un ajuste de ${dif < 0 ? '-' : '+'}$${Math.abs(dif).toLocaleString('es-AR')}.\n\nEsperado: $${espP.toLocaleString('es-AR')} · Recibido: $${recP.toLocaleString('es-AR')}\nLa comisión se recalcula sobre lo recibido. ¿Confirmar?`)) return;
+      params.set('recibido', String(recP));
     }
   }
   // En vista Myri solo se cobra su parte; no tocar la caja de Jony.
