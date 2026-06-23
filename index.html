@@ -6150,7 +6150,42 @@ async function abrirGestorVisibilidad() {
   const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'getProductosAdmin' }));
   _gvProductos = Array.isArray(r) ? r : [];
   _gvProductos.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  _gvPoblarCategorias();
   gvRender();
+}
+// Llena el filtro de categoría y el selector de destino con las categorías existentes + Nueva.
+function _gvPoblarCategorias() {
+  const cats = [...new Set([...CATEGORIA_ORDEN, ..._gvProductos.map(p => (p.categoria || '').trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'es'));
+  const filtro = document.getElementById('gv-cat-filtro');
+  if (filtro) { const v = filtro.value; filtro.innerHTML = '<option value="">🏷️ Todas las categorías</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''); filtro.value = v; }
+  const dest = document.getElementById('gv-cat-destino');
+  if (dest) { const v = dest.value; dest.innerHTML = '<option value="">Mover a…</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('') + '<option value="__nueva__">➕ Nueva categoría…</option>'; dest.value = v; }
+}
+function gvCatDestinoChange(sel) {
+  if (sel.value !== '__nueva__') return;
+  const nueva = (prompt('Nombre de la nueva categoría:') || '').trim();
+  if (!nueva) { sel.value = ''; return; }
+  if (![...sel.options].some(o => o.value === nueva)) {
+    const opt = document.createElement('option'); opt.value = nueva; opt.textContent = nueva;
+    sel.insertBefore(opt, sel.options[sel.options.length - 1]);
+  }
+  sel.value = nueva;
+}
+async function gvAplicarCategoria() {
+  const ids = Object.keys(_gvSel);
+  if (!ids.length) { showToast('Elegí al menos un producto'); return; }
+  const cat = document.getElementById('gv-cat-destino').value;
+  if (!cat || cat === '__nueva__') { showToast('Elegí la categoría destino'); return; }
+  if (!confirm(`¿Mover ${ids.length} producto${ids.length === 1 ? '' : 's'} a la categoría "${cat}"?`)) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'setCategoriaMasiva', ids: ids.join(','), categoria: cat }), '');
+  if (r && r.ok) {
+    showToast(`✓ ${r.n} producto${r.n === 1 ? '' : 's'} movido${r.n === 1 ? '' : 's'} a ${cat}`);
+    _gvProductos.forEach(p => { if (_gvSel[p.id]) p.categoria = cat; });
+    _gvSel = {};
+    _gvPoblarCategorias();
+    gvRender();
+    cargarProductos();
+  } else { showToast('Error: ' + ((r && r.error) || 'no se pudo')); }
 }
 function cerrarGestorVisibilidad() { document.getElementById('gv-overlay').classList.remove('open'); }
 function gvSetFiltro(f, btn) {
@@ -6161,8 +6196,10 @@ function gvSetFiltro(f, btn) {
 }
 function gvFiltrados() {
   const q = (document.getElementById('gv-buscar').value || '').trim().toLowerCase();
+  const catF = (document.getElementById('gv-cat-filtro') || {}).value || '';
   return _gvProductos.filter(p => {
     if (q && !(p.nombre || '').toLowerCase().includes(q)) return false;
+    if (catF && (p.categoria || 'Varios').trim() !== catF) return false;
     if (_gvFiltro === 'visibles') return p.activo;
     if (_gvFiltro === 'ocultos') return !p.activo;
     if (_gvFiltro === 'sinstock') return (p.stock || 0) <= 0;
@@ -6183,7 +6220,7 @@ function gvRender() {
       <input type="checkbox" ${sel ? 'checked' : ''} onchange="gvToggle('${p.id}')">
       <div style="flex:1;min-width:0">
         <div style="font-size:0.86rem;font-weight:600;color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
-        <div style="font-size:0.72rem;color:${stockColor}">${stockTxt} · ${estado}${duenoTxt}</div>
+        <div style="font-size:0.72rem;color:${stockColor}">${stockTxt} · ${estado}${duenoTxt} · 🏷️ ${esc(p.categoria || 'Varios')}</div>
       </div>
       <button type="button" onclick="event.preventDefault();event.stopPropagation();gvEditar('${p.id}')" title="Editar producto" style="border:none;background:var(--gris,#f0ebe3);border-radius:7px;padding:5px 9px;cursor:pointer;font-size:0.9rem">✏️</button>
     </label>`;
@@ -9032,6 +9069,7 @@ function cerrarEditPedido() {
         <button class="filtro-estado-btn" id="gv-f-ocultos" onclick="gvSetFiltro('ocultos',this)">🙈 Ocultos</button>
         <button class="filtro-estado-btn" id="gv-f-sinstock" onclick="gvSetFiltro('sinstock',this)">📭 Sin stock</button>
       </div>
+      <select id="gv-cat-filtro" onchange="gvRender()" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:#fff;margin-bottom:0.5rem"><option value="">🏷️ Todas las categorías</option></select>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;font-size:0.78rem;color:var(--texto-suave)">
         <label style="cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="gv-all" onchange="gvToggleAll(this.checked)"> Seleccionar todos los de la lista</label>
         <span id="gv-sel-count">0 seleccionados</span>
@@ -9039,6 +9077,10 @@ function cerrarEditPedido() {
       <div id="gv-lista" style="border:1px solid var(--gris-medio);border-radius:10px;overflow:hidden"></div>
     </div>
     <div class="edit-modal-footer" style="flex-wrap:wrap">
+      <div style="display:flex;gap:0.3rem;width:100%;margin-bottom:0.45rem">
+        <select id="gv-cat-destino" onchange="gvCatDestinoChange(this)" style="flex:1;min-width:0;padding:0.55rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:#fff"></select>
+        <button class="edit-btn-save" style="background:#eef0ff;color:#4b3bbf;white-space:nowrap" onclick="gvAplicarCategoria()">🏷️ Mover categoría</button>
+      </div>
       <button class="edit-btn-save" style="background:#fff3e0;color:#b8860b;flex:1" onclick="gvAplicar(false)">🙈 Ocultar seleccionados</button>
       <button class="edit-btn-save" style="background:#e8f5ee;color:#1a7a3a;flex:1" onclick="gvAplicar(true)">👁️ Mostrar seleccionados</button>
     </div>

@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','limpiarTestData','panelAdmin'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -1197,6 +1197,21 @@ function doGet(e) {
         if (set[datos[i][0].toString()]) { h.getRange(i + 2, 8).setValue(valor); n++; }
       }
       return json({ ok: true, n: n, mostrar: valor === 'SI' });
+    }
+    if (accion === 'setCategoriaMasiva') {
+      // Mueve muchos productos a una categoría de una sola vez (col 9 = Categoria).
+      const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json({ error: 'sin hoja Stock' });
+      const ids = dec(e.parameter.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+      const categoria = dec(e.parameter.categoria || '').trim();
+      if (!ids.length) return json({ error: 'sin ids' });
+      if (!categoria) return json({ error: 'sin categoria' });
+      const set = {}; ids.forEach(x => { set[x] = true; });
+      const datos = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues();
+      let n = 0;
+      for (let i = 0; i < datos.length; i++) {
+        if (set[datos[i][0].toString()]) { h.getRange(i + 2, 9).setValue(categoria); n++; }
+      }
+      return json({ ok: true, n: n, categoria: categoria });
     }
     if (accion === 'limpiarTestData') {
       // Purga filas de PRUEBA (marcadores únicos) de las hojas afectadas. Lo usan los tests en
