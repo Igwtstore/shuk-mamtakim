@@ -729,6 +729,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <input class="form-input" id="f-costo" type="number" placeholder="600">
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">📦 Stock en depósito (manual)</label>
+      <input class="form-input" id="f-stock" type="number" min="0" placeholder="0">
+      <div style="font-size:0.7rem;color:#aaa;margin-top:3px">Lo que hay en el depósito. También se carga solo con cada compra.</div>
+    </div>
     <div id="ganancia-preview" style="background:#f0fff4; border-radius:10px; padding:10px 12px; margin-bottom:14px; display:none; font-size:0.85rem; color:#2e8b57;">
       Ganancia: <strong id="gp-monto"></strong> · Maaser: <strong id="gp-diezmo"></strong>
     </div>
@@ -1212,7 +1217,7 @@ function renderCatalogo(catalogo) {
       ${fotoHtml}
       <div class="cat-info">
         <div class="cat-name">${p.nombre}</div>
-        <div class="cat-code">${p.codigo}</div>
+        <div class="cat-code">${p.codigo} · <span style="color:${(p.stock||0) > 0 ? '#2e8b57' : '#c0392b'};font-weight:700">📦 ${p.stock||0}</span></div>
       </div>
       <div class="cat-prices">
         <div class="cat-price">${fmt(p.precioVenta)}</div>
@@ -1233,6 +1238,8 @@ function abrirModal() {
   document.getElementById('f-nombre').value = '';
   document.getElementById('f-precio').value = '';
   document.getElementById('f-costo').value = '';
+  document.getElementById('f-stock').value = '';
+  _stockOriginal = 0;
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-preview').innerHTML = '📦';
   document.getElementById('foto-status').textContent = '';
@@ -1250,6 +1257,8 @@ function editarProducto(p) {
   document.getElementById('f-nombre').value = p.nombre;
   document.getElementById('f-precio').value = p.precioVenta || '';
   document.getElementById('f-costo').value = p.costo || '';
+  _stockOriginal = parseInt(p.stock) || 0;
+  document.getElementById('f-stock').value = _stockOriginal;
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-status').textContent = '';
   previewFoto(p.foto || '');
@@ -1270,6 +1279,7 @@ function cerrarModal() {
 function cerrarModalSiAfuera(e) { if (e.target.id === 'modal-overlay') cerrarModal(); }
 
 let fotoUrl = '';
+let _stockOriginal = 0;   // stock del depósito al abrir el modal (para detectar si lo cambió)
 
 async function subirFoto(input) {
   const file = input.files[0];
@@ -1343,8 +1353,16 @@ async function guardarProducto() {
   btn.disabled = false;
 
   if (res?.ok) {
+    // Stock manual del depósito: si lo cambió, lo ajustamos (fija la cantidad nueva).
+    const stockNuevo = parseInt(document.getElementById('f-stock').value);
+    let stockFinal = _stockOriginal;
+    if (!isNaN(stockNuevo) && stockNuevo >= 0 && stockNuevo !== _stockOriginal) {
+      const rs = await api('ajustarDepositoManual', { codigo, nombre, cantidad: stockNuevo });
+      if (rs?.ok) { stockFinal = stockNuevo; mostrarToast('📦 Stock actualizado'); }
+      else mostrarToast('⚠️ ' + (rs?.error || 'no se pudo ajustar el stock'), '#c0392b');
+    }
     // Actualización instantánea con el dato local; el refresco completo va en segundo plano.
-    const nuevo = { codigo, nombre, precioVenta: precio, costo, foto };
+    const nuevo = { codigo, nombre, precioVenta: precio, costo, foto, stock: stockFinal };
     const idx = catalogoCache.findIndex(p => p.codigo === (editandoCodigo || codigo));
     if (idx >= 0) catalogoCache[idx] = nuevo; else catalogoCache.push(nuevo);
     renderCatalogo(catalogoCache);

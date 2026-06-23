@@ -27,7 +27,7 @@ const BOT_SECRET = 'shukbot_2026_x7Kq9Lm4Rp8Tz3W';   // compartido con el worker
 const PROTECTED_HIJOS = [
   'registrarVentaHijos','registrarVentaLote','registrarConsumoHijos','registrarPagoCliente','registrarVueltoCC','registrarPagoVuelto','limpiarVentasHijosDia','arreglarVentasHijosDia',
   'consultarDeudores','consultarDeudaCliente','ventasHoy','ventasPeriodo','historialCliente','getConsumoPeriodo',
-  'cargarStock','setStockDia','getStockDia','getUltimoStockDia','resetearStockDia','cerrarDiaHijos','agregarProductoHijo','editarProductoHijo',
+  'cargarStock','setStockDia','getStockDia','getUltimoStockDia','resetearStockDia','cerrarDiaHijos','agregarProductoHijo','editarProductoHijo','ajustarDepositoManual',
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
@@ -1332,6 +1332,7 @@ function doGet(e) {
     if (accion === 'cargarStock')          { return json(cargarStock(ss, e.parameter)); }
     if (accion === 'setStockDia')          { return json(setStockDia(ss, e.parameter)); }
     if (accion === 'getStockDia')          { return json(getStockDia(ss, e.parameter)); }
+    if (accion === 'ajustarDepositoManual'){ return json(ajustarDepositoManual(ss, e.parameter)); }
     if (accion === 'getUltimoStockDia')    { return json(getUltimoStockDia(ss, e.parameter)); }
     if (accion === 'resetearStockDia')     { return json(resetearStockDia(ss, e.parameter)); }
     if (accion === 'agregarProductoHijo')  { return json(agregarProductoHijo(ss, e.parameter)); }
@@ -1502,6 +1503,24 @@ function _moverStockShuk_(ss, sh, sdRow, rowIndex1, pid, delta, motivo) {
   sh.getRange(rowIndex1, 6).setValue(despues);
   registrarMovStock_(ss, pid, nombre, delta, antes, despues, motivo);
   return { antes: antes, despues: despues, compartido: false };
+}
+
+// Ajuste MANUAL del stock del depósito (desde el panel de Candy): fija la cantidad de un
+// código al valor dado y registra la diferencia. Con lock para no pisar otros movimientos.
+function ajustarDepositoManual(ss, p) {
+  const codigo = dec(p.codigo || '').toString().trim(); if (!codigo) return { error: 'falta codigo' };
+  const nuevo = parseInt(p.cantidad); if (isNaN(nuevo) || nuevo < 0) return { error: 'cantidad inválida' };
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) {}
+  try {
+    const antes = _depositoQty_(ss, codigo);
+    if (nuevo !== antes) {
+      ajustarDeposito_(ss, codigo, dec(p.nombre || ''), nuevo - antes);
+      registrarMovStock_(ss, codigo, dec(p.nombre || ''), nuevo - antes, antes, nuevo, 'Ajuste manual de depósito (Candy)');
+    }
+    SpreadsheetApp.flush();
+    return { ok: true, antes: antes, nuevo: nuevo };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
 function getCatalogoHijos(ss) {
