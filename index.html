@@ -4830,11 +4830,23 @@ async function abrirImportarCandy() {
     document.body.appendChild(ov);
   }
   ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:480px;width:100%"><div class="sinpedidos">Cargando catálogo de Candy… 🍬</div></div>';
-  try {
-    const d = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoHijos').then(r => r.json());
-    _candyCat = Array.isArray(d) ? d : [];
-  } catch (e) { _candyCat = []; }
-  if (!_candyCat.length) { ov.querySelector('div').innerHTML = '<div class="sinpedidos">No se pudo cargar el catálogo de Candy 😕</div>'; return; }
+  // Reintenta: Apps Script a veces tarda/se enfría y la 1ª llamada falla.
+  let ultErr = '';
+  for (let intento = 0; intento < 3; intento++) {
+    try {
+      const r = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoHijos');
+      const d = await r.json();
+      if (Array.isArray(d)) { _candyCat = d; break; }
+      ultErr = (d && d.error) ? d.error : 'respuesta inesperada';
+    } catch (e) { ultErr = e.message || 'sin conexión'; }
+    await new Promise(res => setTimeout(res, 700));
+  }
+  if (!_candyCat.length) {
+    ov.querySelector('div').innerHTML = `<div class="sinpedidos">No se pudo cargar el catálogo de Candy 😕<div style="font-size:0.7rem;color:#aaa;margin-top:4px">${esc(ultErr)}</div>
+      <button onclick="abrirImportarCandy()" style="margin-top:10px;background:var(--azul);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer">🔄 Reintentar</button>
+      <button onclick="document.getElementById('impcandy-overlay').remove()" style="margin-top:6px;display:block;width:100%;background:none;border:none;color:#aaa;cursor:pointer">Cerrar</button></div>`;
+    return;
+  }
   _renderImportarCandy();
 }
 function _renderImportarCandy() {
