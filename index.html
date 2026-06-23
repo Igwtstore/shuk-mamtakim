@@ -2178,7 +2178,7 @@ function renderCatalogo() {
   const query = document.getElementById('buscador').value.toLowerCase();
   const catalogo = document.getElementById('catalogo');
   const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
-  const filtrados = productos.filter(p => {
+  const filtrados = productosVisibles().filter(p => {   // REGLA: vista Miri no ve productos de Jony
     const vis = (p.visible||'Ambos').trim();
     if (vis !== 'Ambos' && vis !== tipoActual) return false;
     return (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
@@ -4364,7 +4364,12 @@ function filtrarEditor() {
   const q = (document.getElementById('ep-buscar')?.value || '').toLowerCase().trim();
   const cont = document.getElementById('ep-resultados');
   if (!cont) return;
-  let lista = productos.filter(p =>
+  // REGLA: en vista Miri NO se ven productos de Jony (ni acá ni en ningún lado). productosVisibles()
+  // ya los oculta. Además se esconde el filtro de dueño (para Miri no tiene sentido).
+  const filtroRow = document.getElementById('ep-filtro-dueno');
+  if (filtroRow) filtroRow.style.display = esVistaMiri() ? 'none' : 'flex';
+  if (esVistaMiri()) _epFiltroDueno = 'todos';
+  let lista = productosVisibles().filter(p =>
     (!q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q))
     && (_epFiltroDueno === 'todos' || (_epFiltroDueno === 'jony' ? p.dueno === 'Jony' : p.dueno !== 'Jony')));
   lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 20);
@@ -4798,6 +4803,13 @@ async function guardarNuevoProducto() {
 // Candy vende solo por menor: traemos su catálogo, elegimos cuáles pasar y les
 // agregamos canal mayorista (precio may + min + moneda). Crea productos en Shuk.
 let _candyCat = [];
+// Las fotos de Candy suelen ser URLs completas de Cloudinary; las de Shuk son publicIds.
+function _candyFotoUrl(foto) {
+  if (!foto) return '';
+  if (foto.indexOf('res.cloudinary.com') !== -1) return foto.replace('/upload/', '/upload/e_trim:10/w_200/');
+  if (/^https?:\/\//.test(foto)) return foto;
+  return imgUrl(foto)[0];
+}
 async function abrirImportarCandy() {
   let ov = document.getElementById('impcandy-overlay');
   if (!ov) {
@@ -4817,12 +4829,15 @@ async function abrirImportarCandy() {
 }
 function _renderImportarCandy() {
   const ov = document.getElementById('impcandy-overlay'); if (!ov) return;
-  const enShuk = new Set(productos.map(p => (p.nombre || '').trim().toLowerCase()));
+  // REGLA: en vista Miri no se ven/dedupean productos de Jony.
+  const enShuk = new Set(productosVisibles().map(p => (p.nombre || '').trim().toLowerCase()));
   const filas = _candyCat.map((p, i) => {
     const ya = enShuk.has((p.nombre || '').trim().toLowerCase());
-    const thumb = p.foto
-      ? `<img src="${imgUrl(p.foto)[0]}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
-      : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const fu = _candyFotoUrl(p.foto);
+    const thumb = fu
+      ? `<img src="${fu}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.outerHTML='<div style=\\'width:40px;height:40px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\'>🍬</div>'">`
+      : `<div style="width:40px;height:40px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const costoTxt = (parseFloat(p.costo) > 0) ? `💰 costo $${Math.round(p.costo).toLocaleString('es-AR')}` : 'sin costo cargado';
     const inp = 'padding:5px 4px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem;width:100%;box-sizing:border-box;text-align:center';
     return `<div style="padding:0.45rem 0.2rem;border-bottom:1px solid var(--gris)">
       <div style="display:flex;align-items:center;gap:0.5rem">
@@ -4830,7 +4845,7 @@ function _renderImportarCandy() {
         ${thumb}
         <div style="min-width:0;flex:1">
           <div style="font-size:0.82rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
-          ${ya ? '<div style="font-size:0.62rem;color:#c0392b">⚠️ ya está en Shuk</div>' : ''}
+          <div style="font-size:0.62rem;color:#9a6b1a">${costoTxt}${ya ? ' · <span style="color:#c0392b">⚠️ ya está en Shuk</span>' : ''}</div>
         </div>
       </div>
       <div style="display:flex;gap:6px;margin-top:5px;padding-left:1.7rem">
@@ -4849,7 +4864,7 @@ function _renderImportarCandy() {
         <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Visible</div>
           <select id="imp-visible" style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option value="Ambos">Ambos</option><option value="Minorista">Solo minorista</option><option value="Mayorista">Solo mayorista</option><option value="Oculto">Oculto</option></select></div>
         <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Dueño</div>
-          <select id="imp-dueno" style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option>Miri</option><option>Jony</option></select></div>
+          <select id="imp-dueno" ${esVistaMiri() ? 'disabled' : ''} style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem">${esVistaMiri() ? '<option>Miri</option>' : '<option>Miri</option><option>Jony</option>'}</select></div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input type="checkbox" id="imp-todos" onchange="impToggleTodos(this)" style="width:16px;height:16px"> Marcar / desmarcar todos</label>
     </div>
@@ -4867,7 +4882,7 @@ function impToggleTodos(cb) {
 async function importarCandySeleccionados() {
   const moneda = document.getElementById('imp-moneda').value === 'U$S' ? 'U$S' : '$';
   const visible = document.getElementById('imp-visible').value || 'Ambos';
-  const dueno = document.getElementById('imp-dueno').value || 'Miri';
+  const dueno = esVistaMiri() ? 'Miri' : (document.getElementById('imp-dueno').value || 'Miri');   // REGLA: en vista Miri no se crea nada de Jony
   const sel = [];
   _candyCat.forEach((p, i) => {
     if (!document.getElementById('imp-chk-' + i)?.checked) return;
@@ -4876,7 +4891,7 @@ async function importarCandySeleccionados() {
     sel.push({ p, may: may || '0', min: min || '0' });
   });
   if (!sel.length) { showToast('No marcaste ningún producto'); return; }
-  // Validar que cada uno cumpla los precios que su visibilidad exige
+  // REGLA: un producto no se publica si le falta el precio del canal en que se publica.
   for (const it of sel) {
     const err = validarPreciosProducto(visible, it.may, it.min);
     if (err) { showToast(`${it.p.nombre}: ${err}`); return; }
@@ -4892,7 +4907,14 @@ async function importarCandySeleccionados() {
     });
     try {
       const r = await fetch(APPS_SCRIPT_URL + '?' + params.toString()).then(x => x.json());
-      if (r.ok) { okN++; if (r.dup) dupN++; }
+      if (r.ok) {
+        okN++; if (r.dup) dupN++;
+        // Registrar el costo (de Candy) para que la ganancia lo pueda usar. Solo si vino nuevo y hay costo.
+        const costo = parseFloat(it.p.costo) || 0;
+        if (!r.dup && r.id && costo > 0) {
+          fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'registrarCompra', productoId: String(r.id), producto: it.p.nombre, cantidad: '1', costoTotal: String(costo) })).catch(() => {});
+        }
+      }
     } catch (e) {}
   }
   _restaurarBtn(btn, prev);
@@ -8659,7 +8681,7 @@ function filtrarAgregarEdit() {
   ();
   const tipo = document.getElementById('ep-tipo')?.value || 'Mayorista';
   const esMay = tipo === 'Mayorista';
-  const disponibles = productos.filter(p => p.stock > 0 &&
+  const disponibles = productosVisibles().filter(p => p.stock > 0 &&   // REGLA: vista Miri no ve productos de Jony
     (!q || p.nombre.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q) || (p.categoria||'').toLowerCase().includes(q)));
   if (!disponibles.length) {
     cont.innerHTML = '<div style="padding:0.6rem;font-size:0.8rem;color:var(--texto-suave)">Sin resultados</div>';
