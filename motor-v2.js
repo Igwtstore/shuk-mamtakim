@@ -1248,7 +1248,7 @@ function doGet(e) {
       // su teardown para no dejar residuo en producción, y sirve para limpiar lo ya ensuciado.
       // Seguro: ningún dato real contiene estos marcadores.
       const marca = /__TEST__|REGTEST|REGCLI|AJTEST|VISTEST|BORRTEST|DIAG_/;
-      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos'];
+      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos', 'Trafico', 'AvisosCandy'];
       const resultado = {};
       hojas.forEach(nombre => {
         const h = ss.getSheetByName(nombre);
@@ -2378,11 +2378,14 @@ function visitasHijoResumen_(ss, pagina) {
 // NO se guarda la IP cruda: la ciudad aproximada la calcula el navegador.
 function registrarTrack(ss, p) {
   const h = getOrCreate(ss, 'Trafico',
-    ['Fecha','VID','Pagina','Evento','Origen','Dispositivo','Ciudad','Region','Pais','Nombre','Telefono','Detalle']);
+    ['Fecha','VID','Pagina','Evento','Origen','Dispositivo','Ciudad','Region','Pais','Nombre','Telefono','Detalle','Carrito','Total']);
   if (h.getRange(1, 12).getValue() !== 'Detalle') h.getRange(1, 12).setValue('Detalle');
+  if (h.getRange(1, 13).getValue() !== 'Carrito') h.getRange(1, 13).setValue('Carrito');
+  if (h.getRange(1, 14).getValue() !== 'Total') h.getRange(1, 14).setValue('Total');
   h.appendRow([new Date(), dec(p.vid||''), dec(p.pagina||'tienda'), dec(p.evento||'visita'),
     dec(p.origen||'directo'), dec(p.dispositivo||''), dec(p.ciudad||''), dec(p.region||''),
-    dec(p.pais||''), dec(p.nombre||''), dec(p.telefono||''), dec(p.producto||'')]);
+    dec(p.pais||''), dec(p.nombre||''), dec(p.telefono||''), dec(p.producto||''),
+    dec(p.carrito||''), dec(p.total||'')]);
   // Compatibilidad con el contador simple de visitas existente
   if ((p.evento||'visita') === 'visita') {
     const v = getOrCreate(ss, 'Visitas', ['Fecha','Pagina']);
@@ -2410,13 +2413,19 @@ function getAnalitica(ss, p) {
   const embudoVids = { visita:{}, carrito:{}, checkout:{}, pedido:{} };
   const vids = {};            // vid -> { visitas, fechas:Set, nombre, telefono, ciudad, origen, pagina, primera, ultima }
 
-  const carritosPorVid = {};   // vid -> { productos:{}, ultimaCarrito, ultimoPedido, etapa }
+  const carritosPorVid = {};   // vid -> { productos:{}, ultimaCarrito, ultimoPedido, etapa, items, total }
   filas.forEach(r => {
     const [fecha, vid, pagina, evento, origen, disp, ciudad, region, pais, nombre, tel] = r;
     const detalle = r[11] ? r[11].toString() : '';
+    const cartJson = r[12] ? r[12].toString() : '';
+    const totalEv = r[13] ? r[13].toString() : '';
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
-      if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos:{}, ultimaCarrito:null, ultimoPedido:null, etapa:'carrito' };
+      if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos:{}, ultimaCarrito:null, ultimoPedido:null, etapa:'carrito', items:null, total:0, itemsTs:null };
       const c = carritosPorVid[vid];
+      // Guardar el carrito completo (con cantidades) del evento MÁS RECIENTE que lo tenga.
+      if (cartJson && (!c.itemsTs || fecha >= c.itemsTs)) {
+        try { const arr = JSON.parse(cartJson); if (Array.isArray(arr) && arr.length) { c.items = arr; c.total = parseInt(totalEv) || 0; c.itemsTs = fecha; } } catch (e) {}
+      }
       if (evento === 'pedido') {
         c.ultimoPedido = fecha;
         const og = origen || 'directo';
@@ -2526,6 +2535,8 @@ function getAnalitica(ss, p) {
         nombre: info.nombre || '', telefono: info.telefono || '',
         ciudad: info.ciudad || '', etapa: c.etapa,
         productos: Object.keys(c.productos).slice(0, 6),
+        items: c.items || null,   // [{n,q,p}] con cantidades (si el evento lo capturó)
+        total: c.total || 0,
         cuando: Utilities.formatDate(c.ultimaCarrito, TZ, 'dd/MM HH:mm'),
         ts: c.ultimaCarrito.getTime()
       };

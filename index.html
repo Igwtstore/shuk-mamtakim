@@ -2616,7 +2616,7 @@ function agregarAlCarrito(id) {
   actualizarBadge();
   renderCatalogo();
   showToast(`${p.nombre} agregado ✓`);
-  track('carrito', { producto: p.nombre });
+  track('carrito', { producto: p.nombre, ..._cartParaTrack() });
 }
 
 function actualizarBadge() {
@@ -2728,7 +2728,7 @@ function enviarPedido(_stockVerificado) {
   try { _hist = JSON.parse(localStorage.getItem('shuk_pedido_hist') || '[]').filter(t => _ahora - t < 3600000); } catch {}
   if (_ahora - _ultimo < 90000) { showToast('Esperá un momentito antes de enviar otro pedido 🙏'); return; }
   if (_hist.length >= 4) { showToast('Llegaste al límite de pedidos por ahora. Escribinos por WhatsApp 🙏'); return; }
-  if (!_stockVerificado) track('checkout');
+  if (!_stockVerificado) track('checkout', { nombre, ..._cartParaTrack() });
   // Si no está registrado, pedir datos antes de enviar
   const telGuardado = localStorage.getItem('shuk_may_tel');
   if (!telGuardado || telGuardado.length !== 10) {
@@ -2813,7 +2813,7 @@ function enviarPedido(_stockVerificado) {
 
   localStorage.setItem('shuk_pedido_ts', String(_ahora));
   try { _hist.push(_ahora); localStorage.setItem('shuk_pedido_hist', JSON.stringify(_hist)); } catch {}
-  track('pedido', { nombre });
+  track('pedido', { nombre, ..._cartParaTrack() });
   registrarPedido(nombre, items, tipoCliente);
   enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY);
 
@@ -4285,6 +4285,27 @@ function _precioMoneda(p, modo) {
   return { precioUnit: Math.round(p.precioMin), moneda: '$' };
 }
 
+// Levanta un carrito abandonado como pedido manual: va a Ventas, precarga cliente + cantidades.
+function cargarComoPedido(i) {
+  const a = (window._abData || [])[i];
+  if (!a || !a.items || !a.items.length) { showToast('Este carrito no tiene cantidades para cargar'); return; }
+  setAdminTab('panel'); setPanelSeccion('ventas');
+  const tipoSel = document.getElementById('manual-tipo'); if (tipoSel) tipoSel.value = 'Minorista';
+  const cli = document.getElementById('manual-cliente'); if (cli) cli.value = a.nombre || '';
+  _manualQtys = {};
+  const noMatch = [];
+  a.items.forEach(it => {
+    const n = (it.n || '').trim().toLowerCase();
+    const prod = productos.find(p => (p.nombre || '').trim().toLowerCase() === n);
+    if (prod) _manualQtys[prod.id] = (_manualQtys[prod.id] || 0) + (parseInt(it.q) || 0);
+    else noMatch.push(it.n);
+  });
+  renderManualProductos();
+  actualizarTotalManual();
+  const buscador = document.getElementById('manual-buscar'); if (buscador) buscador.value = '';
+  setTimeout(() => { document.getElementById('manual-cliente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+  showToast(noMatch.length ? `📋 Cargado. Faltan (cargá a mano): ${noMatch.join(', ')}` : '📋 Pedido cargado — revisá y confirmá ↓');
+}
 function actualizarTotalManual() {
   const tipo = document.getElementById('manual-tipo').value;
   let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0;
@@ -7322,27 +7343,32 @@ async function renderAnalitica() {
       ${tpRows}`);
   }
 
-  // Carritos abandonados — ventas casi cerradas para recuperar
+  // Carritos abandonados / pedidos que no llegaron — ventas casi cerradas para recuperar
   const ab = d.abandonados || [];
-  const abRows = ab.length ? ab.map(a => {
+  window._abData = ab;
+  const abRows = ab.length ? ab.map((a, i) => {
     const quien = a.nombre ? esc(a.nombre) : '👤 Visitante anónimo';
-    const prods = a.productos.length ? esc(a.productos.join(', ')) : 'productos sin detalle';
+    const tieneItems = a.items && a.items.length;
+    const detalle = tieneItems
+      ? a.items.map(it => `<b>${it.q}×</b> ${esc(it.n)}`).join(' · ')
+      : (a.productos.length ? esc(a.productos.join(', ')) + ' <span style="color:#bbb">(sin cantidades)</span>' : 'productos sin detalle');
+    const totalStr = a.total > 0 ? ` · 💰 <b>$ ${Math.round(a.total).toLocaleString('es-AR')}</b>` : '';
     const msgRec = `¡Hola${a.nombre ? ' ' + a.nombre.split(' ')[0] : ''}! 👋 Vi que te quedó un pedido armado en *Shuk Mamtakim* 🍬 ¿Te lo preparo? Cualquier duda escribime.`;
+    const btnCargar = tieneItems ? `<button onclick="cargarComoPedido(${i})" style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">📋 Cargar como pedido</button>` : '';
+    const btnWA = a.telefono ? `<button onclick="window.open('https://wa.me/549${a.telefono}?text=${encodeURIComponent(msgRec)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">💬 Contactar</button>` : '';
     return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem;flex-wrap:wrap">
-        <div style="min-width:0;flex:1">
-          <div style="font-weight:700;color:${a.etapa==='checkout'?'#c0392b':'var(--azul)'};font-size:0.85rem">${quien}
-            <span style="font-size:0.62rem;background:${a.etapa==='checkout'?'#fdeaea':'#eef4fb'};color:${a.etapa==='checkout'?'#c0392b':'#2c6fad'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${a.etapa==='checkout'?'🔥 llegó al checkout':'🛒 armó carrito'}</span>
-          </div>
-          <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">${prods} · ${esc(a.cuando)}${a.ciudad?(' · 📍 '+esc(a.ciudad)):''}</div>
-        </div>
-        ${a.telefono ? `<button onclick="window.open('https://wa.me/549${a.telefono}?text=${encodeURIComponent(msgRec)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;flex-shrink:0">💬 Recuperar</button>` : ''}
+      <div style="font-weight:700;color:${a.etapa==='checkout'?'#c0392b':'var(--azul)'};font-size:0.85rem">${quien}
+        <span style="font-size:0.62rem;background:${a.etapa==='checkout'?'#fdeaea':'#eef4fb'};color:${a.etapa==='checkout'?'#c0392b':'#2c6fad'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${a.etapa==='checkout'?'🔥 llegó al checkout':'🛒 armó carrito'}</span>
+        ${a.telefono?` <span style="font-size:0.66rem;color:var(--texto-suave)">📞 ${esc(a.telefono)}</span>`:''}
       </div>
+      <div style="font-size:0.74rem;color:#444;margin-top:3px;line-height:1.5">${detalle}${totalStr}</div>
+      <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:1px">${esc(a.cuando)}${a.ciudad?(' · 📍 '+esc(a.ciudad)):''}</div>
+      ${(btnCargar||btnWA)?`<div style="display:flex;gap:6px;margin-top:7px">${btnCargar}${btnWA}</div>`:''}
     </div>`;
   }).join('') : '<div class="sinpedidos">Sin carritos abandonados en el período ✓</div>';
   const btnCsvAb = ab.length ? `<button onclick="descargarAnaCSV('abandonados')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
-  html += card(`<div class="admin-titulo">🛒 Carritos abandonados (${ab.length}) ${btnCsvAb}</div>
-    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Agregaron productos y no terminaron el pedido. Si dejaron su teléfono, recuperalos con un clic.</div>
+  html += card(`<div class="admin-titulo">🛒 Carritos sin terminar / pedidos que no llegaron (${ab.length}) ${btnCsvAb}</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Armaron el carrito y no completaron el pedido (o no llegó). Con "📋 Cargar como pedido" lo pasás al panel con sus cantidades.</div>
     ${abRows}`);
 
   // Origen
@@ -7450,8 +7476,11 @@ function descargarAnaCSV(tipo) {
     rows = (d.leads||[]).map(l => [l.nombre, l.telefono, l.ciudad, l.origen, l.visitas, l.ultima]);
     nombre = 'leads-shuk';
   } else {
-    cols = ['Nombre','Teléfono','Ciudad','Etapa','Productos','Cuándo'];
-    rows = (d.abandonados||[]).map(a => [a.nombre, a.telefono, a.ciudad, a.etapa, (a.productos||[]).join(' | '), a.cuando]);
+    cols = ['Nombre','Teléfono','Ciudad','Etapa','Productos','Total','Cuándo'];
+    rows = (d.abandonados||[]).map(a => {
+      const prods = (a.items && a.items.length) ? a.items.map(it => `${it.q}x ${it.n}`).join(' | ') : (a.productos||[]).join(' | ');
+      return [a.nombre, a.telefono, a.ciudad, a.etapa, prods, a.total||'', a.cuando];
+    });
     nombre = 'carritos-abandonados-shuk';
   }
   const csv = [cols.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\r\n');
@@ -8523,6 +8552,21 @@ async function _geo() {
     localStorage.setItem('shuk_geo', JSON.stringify(_geoCache));
   } catch { _geoCache = { ciudad:'', region:'', pais:'' }; }
   return _geoCache;
+}
+// Carrito compacto para el seguimiento: [{n:nombre, q:cantidad, p:precio}] + total. Así un carrito
+// abandonado (o un pedido que no llegó) se puede LEVANTAR con cantidades y total.
+function _cartParaTrack() {
+  const items = Object.values(carrito || {});
+  if (!items.length) return {};
+  let total = 0;
+  const arr = items.slice(0, 25).map(it => {
+    const precio = modo === 'mayorista'
+      ? (parseFloat(String(it.precioMay || '0').replace(',', '.')) || 0)
+      : Math.round(it.precioMin || 0);
+    total += precio * (it.qty || 0);
+    return { n: (it.nombre || '').substring(0, 40), q: it.qty || 0, p: precio };
+  });
+  return { carrito: JSON.stringify(arr), total: String(Math.round(total)) };
 }
 async function track(evento, extra = {}) {
   try {
