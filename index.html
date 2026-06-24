@@ -649,10 +649,12 @@
   /* ─── STOCK DRAWER ─── */
   .stock-drawer-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:8000; }
   .stock-drawer-overlay.open { display:block; }
-  /* Off-canvas con transform (NO con right:-100%): un fixed empujado afuera ensancha la página
-     en el celular y dispara el zoom-out que descalza el header/carrito. El transform no afecta el layout. */
-  .stock-drawer { position:fixed; top:0; right:0; width:min(420px,100vw); height:100vh; background:var(--blanco); box-shadow:-4px 0 24px rgba(0,0,0,0.15); z-index:8001; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.3s ease; }
-  .stock-drawer.open { transform:translateX(0); }
+  /* Off-canvas: CERRADO = display:none (se saca del layout). Un position:fixed empujado afuera
+     (right:-100% o transform) igual ensancha la página en Safari/iOS y descalza el header/carrito;
+     overflow-x:clip NO recorta elementos fixed. display:none es a prueba de balas. */
+  .stock-drawer { display:none; position:fixed; top:0; right:0; width:min(420px,100vw); height:100vh; background:var(--blanco); box-shadow:-4px 0 24px rgba(0,0,0,0.15); z-index:8001; flex-direction:column; }
+  .stock-drawer.open { display:flex; animation:drawerIn 0.25s ease; }
+  @keyframes drawerIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
   .stock-drawer-header { padding:16px 18px; border-bottom:1px solid var(--gris-medio); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
   .stock-drawer-title { font-weight:700; font-size:1rem; color:var(--texto); }
   .stock-search { padding:10px 14px; border:1.5px solid var(--gris-medio); border-radius:10px; font-family:'DM Sans',sans-serif; font-size:0.9rem; width:100%; outline:none; margin:0; }
@@ -764,6 +766,14 @@
     .catalogo { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; }
     .producto-img-wrap, .producto-img, .producto-img-placeholder { height: 180px; }
     .logo { font-size: 1.15rem; }
+    /* Header compacto en celular: que SIEMPRE entre (logo achicable + botones/carrito más chicos). */
+    .header { padding: 0 0.55rem; }
+    .header-inner { gap: 0.25rem; }
+    .header-inner > .logo { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+    .header-inner > .logo > div { min-width: 0; overflow: hidden; }
+    .header-inner > .logo > div > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dark-toggle { width: 30px; height: 30px; font-size: 0.88rem; flex-shrink: 0; }
+    .carrito-btn { padding: 0.4rem 0.6rem; font-size: 0.8rem; gap: 0.25rem; flex-shrink: 0; white-space: nowrap; }
   }
 
   /* === MODO RECATO (Tzniut) — tienda solo texto, sin imágenes === */
@@ -850,10 +860,13 @@
       <button class="dark-toggle" id="install-btn" style="display:none;font-size:0.78rem;width:auto;padding:0 0.7rem;border-radius:20px" onclick="installPWA()" title="Instalar app">📲 Instalar</button>
       <button class="dark-toggle" onclick="activarNotificaciones()" title="Activar notificaciones" id="notif-toggle">🔔</button>
       <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
-      <button class="dark-toggle" onclick="toggleRecato()" id="recato-btn" title="Modo sin fotos (solo texto)" style="font-size:0.95rem">📝</button>
-      <button class="dark-toggle" onclick="window.print()" title="Imprimir catálogo CON fotos" style="font-size:0.85rem">🖼️</button>
-      <button class="dark-toggle" onclick="generarCatalogoPDF()" title="Lista de precios PDF (sin fotos)" style="font-size:0.85rem">📄</button>
-      <button class="dark-toggle" onclick="abrirArmarCatalogo()" title="Armar catálogo con fotos (PDF / imagen)" style="font-size:0.85rem">📕</button>
+      <!-- Herramientas SOLO del panel admin (catálogo/PDF/imagen). El cliente NO las ve. -->
+      <span id="header-admin-tools" style="display:none;align-items:center;gap:0.5rem">
+        <button class="dark-toggle" onclick="toggleRecato()" id="recato-btn" title="Modo sin fotos (solo texto)" style="font-size:0.95rem">📝</button>
+        <button class="dark-toggle" onclick="window.print()" title="Imprimir catálogo CON fotos" style="font-size:0.85rem">🖼️</button>
+        <button class="dark-toggle" onclick="generarCatalogoPDF()" title="Lista de precios PDF (sin fotos)" style="font-size:0.85rem">📄</button>
+        <button class="dark-toggle" onclick="abrirArmarCatalogo()" title="Armar catálogo con fotos (PDF / imagen)" style="font-size:0.85rem">📕</button>
+      </span>
     </div>
     <button class="carrito-btn" onclick="abrirCarrito()" id="carrito-btn-header" style="display:none">
       🛒 Carrito
@@ -6496,6 +6509,8 @@ function setModo(m) {
   document.getElementById('catalogo-section').style.display = m !== 'admin' ? '' : 'none';
   document.getElementById('banner-mayorista-cta').style.display = m === 'minorista' ? '' : 'none';
   document.getElementById('admin-section').classList.toggle('visible', m === 'admin');
+  // Herramientas de catálogo/PDF: SOLO en el panel admin, nunca en la tienda del cliente.
+  const _ht = document.getElementById('header-admin-tools'); if (_ht) _ht.style.display = (m === 'admin') ? 'inline-flex' : 'none';
   if (m === 'admin') {
     renderSocioBar(); setAdminTab(_adminTabActual);
     // 1 sola llamada (panelAdmin) precarga ventas/gastos/rendiciones/pagos/clientes/socios en el
