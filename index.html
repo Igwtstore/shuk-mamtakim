@@ -133,6 +133,7 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  html { overflow-x: clip; }   /* red de seguridad: ningún off-canvas/elemento ancho descalza la página en el celular (clip no rompe sticky como overflow:hidden) */
   body {
     font-family: 'DM Sans', sans-serif;
     background: var(--gris);
@@ -648,8 +649,10 @@
   /* ─── STOCK DRAWER ─── */
   .stock-drawer-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:8000; }
   .stock-drawer-overlay.open { display:block; }
-  .stock-drawer { position:fixed; top:0; right:-100%; width:min(420px,100vw); height:100vh; background:var(--blanco); box-shadow:-4px 0 24px rgba(0,0,0,0.15); z-index:8001; display:flex; flex-direction:column; transition:right 0.3s ease; }
-  .stock-drawer.open { right:0; }
+  /* Off-canvas con transform (NO con right:-100%): un fixed empujado afuera ensancha la página
+     en el celular y dispara el zoom-out que descalza el header/carrito. El transform no afecta el layout. */
+  .stock-drawer { position:fixed; top:0; right:0; width:min(420px,100vw); height:100vh; background:var(--blanco); box-shadow:-4px 0 24px rgba(0,0,0,0.15); z-index:8001; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.3s ease; }
+  .stock-drawer.open { transform:translateX(0); }
   .stock-drawer-header { padding:16px 18px; border-bottom:1px solid var(--gris-medio); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
   .stock-drawer-title { font-weight:700; font-size:1rem; color:var(--texto); }
   .stock-search { padding:10px 14px; border:1.5px solid var(--gris-medio); border-radius:10px; font-family:'DM Sans',sans-serif; font-size:0.9rem; width:100%; outline:none; margin:0; }
