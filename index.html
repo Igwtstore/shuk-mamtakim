@@ -8719,8 +8719,14 @@ let _remitoTexto = '';
 let _remitoVenta = null;
 let _telPorCliente = {};
 
-function abrirRemito(v) {
-  _remitoVenta = v;
+// TC elegido en el modal (0 = no mostrar conversión). 'Mostrar en pesos' tildado + valor > 0.
+function _remitoTCval() {
+  const on = document.getElementById('remito-tc-on');
+  if (!on || !on.checked) return 0;
+  return parseFloat((document.getElementById('remito-tc-input').value || '').replace(',', '.')) || 0;
+}
+
+function _buildRemitoTexto(v, tc) {
   const lines = [];
   lines.push(`🧾 *REMITO — Shuk Mamtakim*`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
@@ -8732,16 +8738,42 @@ function abrirRemito(v) {
   lines.push(`📦 *DETALLE:*`);
   v.productos.split(' || ').forEach(l => lines.push(l));
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  const usd = parseFloat(v.totalUSD) || 0, ars = parseFloat(v.totalARS) || 0;
   const totales = [];
-  if (parseFloat(v.totalARS) > 0) totales.push(`$ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
-  if (parseFloat(v.totalUSD) > 0) totales.push(`U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
+  if (ars > 0) totales.push(`$ ${Math.round(ars).toLocaleString('es-AR')}`);
+  if (usd > 0) totales.push(`U$S ${usd.toFixed(2)}`);
   lines.push(`💰 *TOTAL: ${totales.join(' + ')}*`);
+  if (tc > 0 && usd > 0) {
+    const granARS = Math.round(ars + usd * tc);
+    lines.push(`💵 _Equiv. en pesos (informativo): ≈ $ ${granARS.toLocaleString('es-AR')}_`);
+    lines.push(`   _TC: U$S 1 = $ ${Math.round(tc).toLocaleString('es-AR')} · ${new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})} hs_`);
+  }
   if (v.notas && v.notas !== 'Manual') lines.push(`📝 Nota: ${v.notas}`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`Shuk Mamtakim 🍬 — shuk-mamtakim.vercel.app`);
+  return lines.join('\n');
+}
 
-  _remitoTexto = lines.join('\n');
+function _remitoRender() {
+  if (!_remitoVenta) return;
+  _remitoTexto = _buildRemitoTexto(_remitoVenta, _remitoTCval());
   document.getElementById('remito-pre').textContent = _remitoTexto;
+}
+
+function remitoTCAuto() {
+  document.getElementById('remito-tc-input').value = _tc > 0 ? Math.round(_tc) : '';
+  document.getElementById('remito-tc-on').checked = true;
+  _remitoRender();
+}
+
+function abrirRemito(v) {
+  _remitoVenta = v;
+  const hayUSD = parseFloat(v.totalUSD) > 0;
+  const box = document.getElementById('remito-tc-box');
+  if (box) box.style.display = hayUSD ? 'block' : 'none';
+  const on = document.getElementById('remito-tc-on'); if (on) on.checked = false;
+  const inp = document.getElementById('remito-tc-input'); if (inp) inp.value = _tc > 0 ? Math.round(_tc) : '';
+  _remitoRender();
   const telCli = _telPorCliente[v.cliente] || '';
   document.getElementById('remito-phone').value = telCli ? (telCli.length === 10 ? '549' + telCli : telCli) : '';
   document.getElementById('remito-overlay').classList.add('open');
@@ -8752,6 +8784,7 @@ function cerrarRemito() {
 }
 
 function enviarRemitoWA() {
+  _remitoRender();   // refresca el sello fecha/hora al momento de enviar
   const phone = document.getElementById('remito-phone').value.replace(/\D/g,'');
   if (!phone) { document.getElementById('remito-phone').focus(); return; }
   const esMovil = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -8762,6 +8795,7 @@ function enviarRemitoWA() {
 }
 
 function copiarRemito() {
+  _remitoRender();   // refresca el sello fecha/hora al momento de copiar
   navigator.clipboard.writeText(_remitoTexto).then(() => showToast('Remito copiado ✓'));
 }
 
@@ -8776,6 +8810,13 @@ function abrirRemitoPDF(v) {
   const _fotoRemito = p => {
     const primera = (p.imagen||'').split(',')[0].trim();
     if (!primera) return '';
+    // URL completa (foto importada de Candy): usarla tal cual (resize si es Cloudinary).
+    // Antes se le anteponía la base SIEMPRE y rompía → quedaba el placeholder 🍬.
+    if (/^https?:\/\//i.test(primera)) {
+      return primera.indexOf('res.cloudinary.com') !== -1
+        ? primera.replace('/upload/', '/upload/w_80,h_80,c_fill/')
+        : primera;
+    }
     if (primera.includes('/') && !primera.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
       return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/${primera}`;
     }
@@ -8821,10 +8862,16 @@ function abrirRemitoPDF(v) {
   }).join('');
   const lineas = filas;
 
+  // Conversión a pesos (informativa): toma el TC elegido en el modal (auto de la página o manual).
+  const tcPDF = (typeof _remitoTCval === 'function') ? _remitoTCval() : 0;
+  const _usdPDF = parseFloat(v.totalUSD) || 0, _arsPDF = parseFloat(v.totalARS) || 0;
+  const _granARS = Math.round(_arsPDF + _usdPDF * tcPDF);
+  const _selloFechaHora = new Date().toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Remito #${esc(v.nVenta)} — ${esc(v.cliente)}</title>
 <style>
-  @page { margin: 0; size: A4; }
+  @page { size: A4 portrait; margin: 10mm; }
   * { box-sizing:border-box; margin:0; padding:0; }
   body { font-family:'Segoe UI',Arial,sans-serif; background:#f5f0e8; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .page { max-width:700px; margin:0 auto; background:white; min-height:100vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -8848,9 +8895,12 @@ function abrirRemitoPDF(v) {
   .btn-print { background:#5c3d1e; color:white; border:none; border-radius:7px; padding:9px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; }
   .nota-box { margin:0 24px 0; background:#fffbe8; border-left:3px solid #e8c44a; padding:8px 12px; font-size:0.8rem; color:#7a6010; border-radius:0 6px 6px 0; }
   @media print {
-    body { background:white; }
+    /* Ajuste automático a A4 portrait: contenido 190mm + 10mm de margen por lado = 210mm (ancho A4),
+       así sale a escala 100% sin tener que tocar escala/orientación a mano. */
+    html, body { background:white; width:auto; }
     .btn-print { display:none; }
-    .page { max-width:100%; min-height:auto; box-shadow:none; }
+    .page { width:190mm; max-width:190mm; min-height:auto; box-shadow:none; margin:0 auto; }
+    .banner { width:100%; }
   }
 </style></head><body>
 <div class="page">
@@ -8874,8 +8924,12 @@ function abrirRemitoPDF(v) {
     <span class="lbl">Total del pedido</span>
     <span class="val">${totales.join(' + ')}</span>
   </div>
+  ${tcPDF > 0 && _usdPDF > 0 ? `<div style="background:#3a2614;color:#fdf3e3;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,0.15)">
+    <span style="font-size:0.66rem;opacity:0.75;text-transform:uppercase;letter-spacing:0.05em">Equivalente en pesos (informativo) · TC U$S 1 = $ ${Math.round(tcPDF).toLocaleString('es-AR')}</span>
+    <span style="font-size:1.05rem;font-weight:800">≈ $ ${_granARS.toLocaleString('es-AR')}</span>
+  </div>` : ''}
   <div class="footer">
-    <small>Generado el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})} · Shuk Mamtakim 🍬</small>
+    <small>Emitido el ${_selloFechaHora} hs · Shuk Mamtakim 🍬</small>
     <button class="btn-print" onclick="window.print()">🖨️ Imprimir / PDF</button>
   </div>
 </div>
@@ -9280,6 +9334,17 @@ function cerrarEditPedido() {
       <button onclick="cerrarRemito()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer">✕</button>
     </div>
     <div class="remito-body">
+      <div id="remito-tc-box" style="display:none;background:#fff8ec;border:1px solid #f0d9a8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:0.82rem;font-weight:700;color:#9a6b00;cursor:pointer">
+          <input type="checkbox" id="remito-tc-on" onchange="_remitoRender()"> 💵 Mostrar equivalente en pesos
+        </label>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <span style="font-size:0.74rem;color:#888">U$S 1 = $</span>
+          <input id="remito-tc-input" type="number" inputmode="decimal" oninput="_remitoRender()" style="width:90px;padding:6px 8px;border:1.5px solid #e6d3a8;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none">
+          <button onclick="remitoTCAuto()" style="background:#fce9c0;color:#9a6b00;border:none;border-radius:8px;padding:6px 10px;font-size:0.76rem;font-weight:700;cursor:pointer">🔄 Auto (de la página)</button>
+        </div>
+        <div style="font-size:0.68rem;color:#b08a3a;margin-top:6px">Se agrega como referencia informativa, con el TC usado y la fecha/hora de emisión.</div>
+      </div>
       <pre class="remito-pre" id="remito-pre"></pre>
       <div class="remito-phone-row">
         <input class="remito-phone-input" id="remito-phone" type="tel" placeholder="Teléfono del cliente (ej: 5491112345678)">
