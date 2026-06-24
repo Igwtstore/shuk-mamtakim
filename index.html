@@ -8822,12 +8822,6 @@ function abrirRemitoPDF(v) {
     }
     return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
   };
-  const porNombre = {};
-  (productos || []).forEach(p => {
-    const k = p.nombre.toLowerCase().trim();
-    (porNombre[k] = porNombre[k] || []).push(p);
-  });
-
   // Parsear líneas en columnas con foto
   const filas = (v.productos||'').split(' || ').map(linea => {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u = (\$|U\$S) ([\d.,]+)/);
@@ -8836,14 +8830,26 @@ function abrirRemitoPDF(v) {
     const partes = nombreCompleto.split(' · ');
     const nombre = partes[0].trim();
     const desc = partes.slice(1).join(' · ').trim();
-    const cands = porNombre[nombre.toLowerCase()] || [];
+    // El NOMBRE del producto puede contener " · " (ej. "Carnival · Tangy Candy"), así que no
+    // alcanza con partes[0]. Matcheamos el producto cuyo nombre sea PREFIJO de la línea (el más
+    // largo/específico gana); si hay variantes con el mismo nombre, desempata por descripción.
+    const fl = nombreCompleto.trim().toLowerCase();
+    let cands = (productos || []).filter(p => {
+      const pn = (p.nombre || '').trim().toLowerCase();
+      return pn && (fl === pn || fl.startsWith(pn + ' · '));
+    });
+    cands.sort((a, b) => (b.nombre || '').length - (a.nombre || '').length);
     let prodLinea = cands[0];
-    if (cands.length > 1 && desc) {
-      const ld = desc.toLowerCase();
-      prodLinea = cands.find(c => {
-        const pd = (c.desc || '').toLowerCase();
-        return pd && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim()));
-      }) || cands[0];
+    if (cands.length > 1) {
+      const maxLen = (cands[0].nombre || '').length;
+      const top = cands.filter(c => (c.nombre || '').length === maxLen);
+      if (top.length > 1) {
+        const resto = fl.slice(maxLen).replace(/^ · /, '').trim();
+        prodLinea = top.find(c => {
+          const pd = (c.desc || '').toLowerCase();
+          return pd && resto && (pd.startsWith(resto) || resto.startsWith(pd.substring(0, 45).trim()));
+        }) || top[0];
+      }
     }
     const imgUrl = prodLinea ? _fotoRemito(prodLinea) : '';
     const imgTag = imgUrl
