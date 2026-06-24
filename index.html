@@ -850,6 +850,7 @@
       <button class="dark-toggle" onclick="toggleRecato()" id="recato-btn" title="Modo sin fotos (solo texto)" style="font-size:0.95rem">📝</button>
       <button class="dark-toggle" onclick="window.print()" title="Imprimir catálogo CON fotos" style="font-size:0.85rem">🖼️</button>
       <button class="dark-toggle" onclick="generarCatalogoPDF()" title="Lista de precios PDF (sin fotos)" style="font-size:0.85rem">📄</button>
+      <button class="dark-toggle" onclick="abrirArmarCatalogo()" title="Armar catálogo con fotos (PDF / imagen)" style="font-size:0.85rem">📕</button>
     </div>
     <button class="carrito-btn" onclick="abrirCarrito()" id="carrito-btn-header" style="display:none">
       🛒 Carrito
@@ -2183,6 +2184,170 @@ async function generarCatalogoPDF() {
   const archivo = 'Shuk-Mamtakim-Precios-' + tipoActual + '-' + hoy.replace(/\//g, '-') + '.pdf';
   doc.save(archivo);
   showToast('✅ Catálogo PDF listo — ya podés mandarlo por WhatsApp');
+}
+
+// ─── ARMADOR DE CATÁLOGO (con fotos · PDF + imagen · elegís productos y plantilla) ──────
+let _acProductos = [], _acSel = {}, _acFiltro = 'todos', _acLayout = 'lista', _acVerMin = true, _acVerMay = true;
+function _acPrecioMin(p) { const v = parseFloat(String(p.precioMin).replace(',', '.')) || 0; return v > 0 ? '$ ' + Math.round(v).toLocaleString('es-AR') : '—'; }
+function _acPrecioMay(p) { const v = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0; if (v <= 0) return '—'; return p.moneda === 'U$S' ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR'); }
+function _acEsOculto(p) { return !p.activo || (p.visible || '').trim() === 'Oculto'; }
+async function abrirArmarCatalogo() {
+  let ov = document.getElementById('ac-overlay');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'ac-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0.8rem';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:520px;width:100%"><div class="sinpedidos">Cargando productos… 📕</div></div>';
+  let r = []; try { r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getProductosAdmin'); } catch (e) {}
+  let lista = Array.isArray(r) ? r : [];
+  if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // REGLA: vista Miri no ve lo de Jony
+  _acProductos = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || (a.nombre || '').localeCompare(b.nombre || ''));
+  _acSel = {}; _acFiltro = 'todos';
+  _acRender();
+}
+function _acFiltrados() {
+  const q = (document.getElementById('ac-buscar')?.value || '').trim().toLowerCase();
+  return _acProductos.filter(p => {
+    if (q && !(p.nombre || '').toLowerCase().includes(q)) return false;
+    const vis = (p.visible || 'Ambos').trim();
+    if (_acFiltro === 'minorista') return p.activo && (vis === 'Ambos' || vis === 'Minorista');
+    if (_acFiltro === 'mayorista') return p.activo && (vis === 'Ambos' || vis === 'Mayorista');
+    if (_acFiltro === 'ocultos') return _acEsOculto(p);
+    return true;
+  });
+}
+function _acRender() {
+  const ov = document.getElementById('ac-overlay'); if (!ov) return;
+  const lista = _acFiltrados();
+  const fbtn = (f, txt) => `<button onclick="_acSetFiltro('${f}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acFiltro===f?'var(--azul)':'var(--gris-medio)'};background:${_acFiltro===f?'var(--azul)':'#fff'};color:${_acFiltro===f?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const lbtn = (l, txt) => `<button onclick="_acSetLayout('${l}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acLayout===l?'#c9954a':'var(--gris-medio)'};background:${_acLayout===l?'#c9954a':'#fff'};color:${_acLayout===l?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const filas = lista.map(p => {
+    const sel = !!_acSel[p.id];
+    const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+    const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:34px;height:34px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const estado = _acEsOculto(p) ? '<span style="color:#b8860b">🙈 oculto</span>' : `<span style="color:#1a7a3a">👁️ ${esc(p.visible||'Ambos')}</span>`;
+    return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.6rem;border-bottom:1px solid var(--gris);cursor:pointer;background:${sel?'#eef4fb':'#fff'}">
+      <input type="checkbox" ${sel?'checked':''} onchange="_acToggle('${p.id}')" style="width:17px;height:17px">
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.84rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave)">🏷️ ${esc(p.categoria||'Varios')} · ${estado}</div>
+      </div>
+    </label>`;
+  }).join('');
+  const nSel = Object.keys(_acSel).length;
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:0.9rem 1rem;border-bottom:1px solid var(--gris-medio)">
+      <div style="font-weight:800;font-size:1.05rem;color:#c9954a">📕 Armar catálogo</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">Elegí los productos (incluí los 🙈 ocultos), la plantilla y qué precios mostrar.</div>
+      <input id="ac-buscar" oninput="_acRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
+      <div style="display:flex;gap:5px;margin-top:0.5rem">${fbtn('todos','Todos')}${fbtn('minorista','🛍️ Min')}${fbtn('mayorista','📦 May')}${fbtn('ocultos','🙈 Ocultos')}</div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input type="checkbox" onchange="_acToggleAll(this.checked)" ${lista.length&&lista.every(p=>_acSel[p.id])?'checked':''} style="width:15px;height:15px"> Seleccionar todos los de la lista <span style="color:var(--texto-suave)">· ${nSel} elegido${nSel!==1?'s':''}</span></label>
+    </div>
+    <div style="overflow-y:auto;flex:1">${filas || '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>'}</div>
+    <div style="padding:0.8rem 1rem;border-top:1px solid var(--gris-medio)">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:0.55rem">
+        <div style="display:flex;gap:5px;flex:1;min-width:150px">${lbtn('lista','📃 Lista')}${lbtn('grilla','🔳 Grilla')}</div>
+        <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMin?'checked':''} onchange="_acVerMin=this.checked"> Minorista</label>
+        <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMay?'checked':''} onchange="_acVerMay=this.checked"> Mayorista</label>
+      </div>
+      <input id="ac-titulo" placeholder="Título (opcional, ej: Lista mayorista junio)" style="width:100%;margin-bottom:0.55rem;padding:0.45rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.8rem;box-sizing:border-box">
+      <div style="display:flex;gap:6px">
+        <button onclick="generarCatalogo('pdf')" style="flex:1;padding:0.7rem;background:#c0392b;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.88rem;cursor:pointer">📄 PDF</button>
+        <button onclick="generarCatalogo('img')" style="flex:1;padding:0.7rem;background:#7b2ff7;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.88rem;cursor:pointer">🖼️ Imagen</button>
+        <button onclick="document.getElementById('ac-overlay').remove()" style="padding:0.7rem 1rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+function _acSetFiltro(f) { _acFiltro = f; _acRender(); }
+function _acSetLayout(l) { _acLayout = l; _acRender(); }
+function _acToggle(id) { if (_acSel[id]) delete _acSel[id]; else _acSel[id] = true; _acRender(); }
+function _acToggleAll(ch) { _acFiltrados().forEach(p => { if (ch) _acSel[p.id] = true; else delete _acSel[p.id]; }); _acRender(); }
+function _acBuildDoc() {
+  const sel = _acProductos.filter(p => _acSel[p.id]);
+  const byCat = {}; sel.forEach(p => { const c = p.categoria || 'Varios'; (byCat[c] = byCat[c] || []).push(p); });
+  const cats = Object.keys(byCat).sort((a, b) => getCatIdx({categoria:a}) - getCatIdx({categoria:b}) || a.localeCompare(b));
+  const titulo = (document.getElementById('ac-titulo')?.value || '').trim() || 'Catálogo';
+  const hoy = new Date().toLocaleDateString('es-AR');
+  const precio = p => {
+    const parts = [];
+    if (_acVerMin) parts.push(`<span style="color:#888;font-size:0.82em">Min</span> ${_acPrecioMin(p)}`);
+    if (_acVerMay) parts.push(`<span style="color:#888;font-size:0.82em">May</span> ${_acPrecioMay(p)}`);
+    return parts.join('<span style="color:#ccc"> · </span>') || '';
+  };
+  const foto = (p, h) => { const imgs = (p.imagen||'').split(',').map(x=>x.trim()).filter(Boolean);
+    return imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
+  let cuerpo = '';
+  cats.forEach(c => {
+    cuerpo += `<div style="background:#fcf3e3;color:#c9954a;font-weight:800;font-size:0.82rem;padding:5px 10px;border-radius:6px;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em">${esc(c)}</div>`;
+    if (_acLayout === 'grilla') {
+      cuerpo += `<div style="display:flex;flex-wrap:wrap;gap:10px">` + byCat[c].map(p => `
+        <div style="width:calc(33.33% - 7px);border:1px solid #eee;border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="height:120px;border-bottom:1px solid #f0f0f0">${foto(p,120)}</div>
+          <div style="padding:7px 8px;flex:1">
+            <div style="font-weight:700;font-size:0.78rem;color:#222;line-height:1.25">${esc(p.nombre)}</div>
+            <div style="font-size:0.64rem;color:#999;line-height:1.25;margin-top:1px">${esc(p.desc || '')}</div>
+            <div style="font-size:0.74rem;color:#5c3d1e;font-weight:600;margin-top:5px">${precio(p)}</div>
+          </div>
+        </div>`).join('') + `</div>`;
+    } else {
+      cuerpo += byCat[c].map(p => `
+        <div style="display:flex;align-items:center;gap:11px;padding:7px 0;border-bottom:1px solid #eee">
+          <div style="width:48px;height:48px;border-radius:7px;overflow:hidden;flex-shrink:0;border:1px solid #f0f0f0">${foto(p,48)}</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:0.86rem;color:#222">${esc(p.nombre)}</div><div style="font-size:0.7rem;color:#999">${esc(p.desc || '')}</div></div>
+          <div style="text-align:right;font-size:0.8rem;color:#5c3d1e;font-weight:600;white-space:nowrap">${precio(p)}</div>
+        </div>`).join('');
+    }
+  });
+  return `<div style="width:780px;background:#fff;padding:26px 28px;font-family:'DM Sans',-apple-system,sans-serif;color:#222;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid #c9954a;padding-bottom:11px">
+      <img src="icon-512.png" crossorigin="anonymous" style="width:50px;height:50px;border-radius:10px">
+      <div style="flex:1"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:800;color:#c9954a;line-height:1">SHUK MAMTAKIM</div><div style="font-size:0.72rem;color:#999;margin-top:3px">Dulces Tradicionales · Frutos Secos</div></div>
+      <div style="text-align:right;font-size:0.74rem;color:#888"><b style="color:#444">${esc(titulo)}</b><br>${hoy}</div>
+    </div>
+    ${cuerpo}
+    <div style="text-align:center;font-size:0.68rem;color:#aaa;margin-top:18px;border-top:1px solid #eee;padding-top:9px">Pedidos por WhatsApp: +54 9 11 3175-4540 · shuk-mamtakim.vercel.app</div>
+  </div>`;
+}
+async function generarCatalogo(tipo) {
+  const sel = _acProductos.filter(p => _acSel[p.id]);
+  if (!sel.length) { showToast('Elegí al menos un producto'); return; }
+  if (!_acVerMin && !_acVerMay) { showToast('Marcá al menos un precio (minorista o mayorista)'); return; }
+  showToast(tipo === 'pdf' ? '📄 Generando catálogo…' : '🖼️ Generando imagen…');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff';
+  wrap.innerHTML = _acBuildDoc();
+  document.body.appendChild(wrap);
+  try {
+    const h2c = await cargarHtml2Canvas();
+    const canvas = await h2c(wrap.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const archivo = 'catalogo-shuk-' + new Date().toISOString().slice(0, 10);
+    if (tipo === 'img') {
+      const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = archivo + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+    } else {
+      const jspdf = await cargarJsPDF(); const { jsPDF } = jspdf;
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      const W = pdf.internal.pageSize.getWidth(), m = 20, imgW = W - m * 2, ratio = imgW / canvas.width;
+      const imgH = canvas.height * ratio, pageH = pdf.internal.pageSize.getHeight() - m * 2;
+      if (imgH <= pageH) { pdf.addImage(canvas.toDataURL('image/png'), 'PNG', m, m, imgW, imgH); }
+      else {
+        let y = 0; const sliceH = pageH / ratio;
+        while (y < canvas.height) {
+          const c2 = document.createElement('canvas'); c2.width = canvas.width; c2.height = Math.min(sliceH, canvas.height - y);
+          c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
+          pdf.addImage(c2.toDataURL('image/png'), 'PNG', m, m, imgW, c2.height * ratio);
+          y += sliceH; if (y < canvas.height) pdf.addPage();
+        }
+      }
+      pdf.save(archivo + '.pdf');
+    }
+    showToast('✅ Catálogo listo');
+  } catch (e) { showToast('⚠️ ' + (e.message || 'no se pudo generar')); }
+  finally { wrap.remove(); }
 }
 
 function renderCatalogo() {
