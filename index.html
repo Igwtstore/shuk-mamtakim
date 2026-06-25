@@ -1697,6 +1697,28 @@
 </div>
 
 <!-- MODAL NOTIFICACION STOCK -->
+<!-- OFRECER PRODUCTO SIMILAR (lista de espera) -->
+<div id="similar-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:560;align-items:center;justify-content:center;padding:14px">
+  <div style="background:#fff;border-radius:14px;max-width:480px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--gris-medio)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:800;font-size:1rem;color:#9a6b00">✋ Ofrecer producto similar</span>
+        <button onclick="cerrarSimilar()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer">✕</button>
+      </div>
+      <div id="similar-sub" style="font-size:0.74rem;color:var(--texto-suave);margin-top:3px"></div>
+      <input id="similar-buscar" oninput="renderSimilarLista()" placeholder="🔍 Buscar producto a ofrecer…" autocomplete="off" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
+    </div>
+    <div id="similar-lista" style="overflow-y:auto;flex:1;min-height:90px"></div>
+    <div style="padding:0.7rem 1rem;border-top:1px solid var(--gris-medio)">
+      <label style="font-size:0.7rem;font-weight:700;color:var(--texto-suave);text-transform:uppercase">Mensaje (lo podés editar)</label>
+      <textarea id="similar-msg" rows="4" style="width:100%;margin-top:0.3rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.82rem;box-sizing:border-box;resize:vertical"></textarea>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:0.4rem;font-size:0.76rem;cursor:pointer"><input type="checkbox" id="similar-conFoto" checked> 🖼️ Enviar con foto (imagen de los productos)</label>
+      <button onclick="enviarSimilar()" id="similar-enviar" style="width:100%;margin-top:0.6rem;padding:0.7rem;background:var(--verde);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.9rem;cursor:pointer">📲 Enviar por WhatsApp</button>
+    </div>
+  </div>
+</div>
+<div id="similar-offscreen" style="position:fixed;left:-9999px;top:0"></div>
+
 <div id="notif-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.3rem">🔔 Avisame cuando llegue</div>
@@ -8332,11 +8354,14 @@ async function renderNotificaciones() {
     const htmlPend = Object.entries(gruposPend).map(([pid, g]) => {
       const tieneStock = (productos.find(p => p.id == pid)?.stock || 0) > 0;
       const clientesHTML = g.clientes.map(c => `<span style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})</span>`).join(' · ');
-      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${g.nombre.replace(/'/g,'').replace(/"/g,'')}','${nom}','${pid}','${c.modoCliente||'mayorista'}')">📱 ${nom}</button><button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕</button>`; }).join(' ');
+      const prodEsc = g.nombre.replace(/'/g,'').replace(/"/g,'');
+      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${prodEsc}','${nom}','${pid}','${c.modoCliente||'minorista'}')">📱 ${nom}</button><button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕</button>`; }).join(' ');
+      const similarBtns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion" style="background:#fff3e6;color:#9a6b00;font-size:0.72rem" onclick="abrirOfrecerSimilar('${c.telefono}','${nom}','${prodEsc}','${pid}','${c.modoCliente||'minorista'}')">✋ ${nom}</button>`; }).join(' ');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
         <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
         <div style="margin-bottom:0.4rem">${clientesHTML}</div>
         ${tieneStock ? `<div style="font-size:0.72rem;color:var(--verde);font-weight:600;margin-bottom:0.4rem">✓ Ya hay stock — notificá:</div><div class="pedido-acciones" style="flex-wrap:wrap">${btns}</div>` : '<div style="font-size:0.72rem;color:var(--dorado)">⏳ Sin stock todavía</div>'}
+        <div style="margin-top:0.4rem;display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap"><span style="font-size:0.68rem;color:var(--texto-suave)">Ofrecer similar:</span>${similarBtns}</div>
       </div>`;
     }).join('') || '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.5rem 0">Sin pendientes.</div>';
 
@@ -8347,7 +8372,7 @@ async function renderNotificaciones() {
         const dias = diasDesde(c.fecha);
         const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,'');
         const prod = g.nombre.replace(/'/g,'').replace(/"/g,'');
-        const modo = c.modoCliente||'mayorista';
+        const modo = c.modoCliente||'minorista';
         const esViejo = dias >= 3;
         const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista'}`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
@@ -8388,13 +8413,106 @@ function eliminarNotificacion(productoId, telefono) {
 }
 
 function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
-  const link = modoCliente === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
+  const link = modoCliente === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/#min-pL3q7';
   const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(() => setTimeout(renderNotificaciones, 1500))
     .catch(() => setTimeout(renderNotificaciones, 1500));
+}
+
+// ─── OFRECER PRODUCTO SIMILAR (lista de espera) ───────────────────────────────
+let _similarCtx = null, _similarSel = {};
+function abrirOfrecerSimilar(tel, nombre, esperado, prodId, modoCliente) {
+  _similarCtx = { tel, nombre, esperado, modoCliente: modoCliente === 'mayorista' ? 'mayorista' : 'minorista' };
+  _similarSel = {};
+  document.getElementById('similar-sub').textContent = `Para ${nombre} · espera: ${esperado} · canal: ${_similarCtx.modoCliente}`;
+  document.getElementById('similar-buscar').value = '';
+  document.getElementById('similar-conFoto').checked = true;
+  renderSimilarLista(); _similarUpdateMsg();
+  document.getElementById('similar-modal').style.display = 'flex';
+}
+function cerrarSimilar() { document.getElementById('similar-modal').style.display = 'none'; _similarCtx = null; }
+
+function _similarPrecio(p) {
+  if (_similarCtx.modoCliente === 'minorista') return '$ ' + Math.round(parseFloat(p.precioMin) || 0).toLocaleString('es-AR');
+  const may = parseFloat((p.precioMay || '0').toString().replace(',', '.')) || 0;
+  return (p.moneda === 'U$S') ? 'U$S ' + may.toFixed(2) : '$ ' + Math.round(may).toLocaleString('es-AR');
+}
+function _similarLink(p) {
+  const base = _similarCtx.modoCliente === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/';
+  return `${base}?p=${p.id}`;
+}
+function _similarSelProds() { return Object.keys(_similarSel).map(id => productos.find(p => String(p.id) === String(id))).filter(Boolean); }
+
+function renderSimilarLista() {
+  const q = (document.getElementById('similar-buscar').value || '').toLowerCase().trim();
+  const cont = document.getElementById('similar-lista');
+  let lista = productosVisibles().filter(p => p.stock > 0 && (p.visible || 'Ambos') !== 'Oculto');
+  if (q) lista = lista.filter(p => (p.nombre || '').toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q));
+  // primero los seleccionados, después por nombre
+  lista.sort((a, b) => (!!_similarSel[b.id] - !!_similarSel[a.id]) || a.nombre.localeCompare(b.nombre));
+  lista = lista.slice(0, 40);
+  if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:1rem">Buscá un producto para ofrecer</div>'; return; }
+  cont.innerHTML = lista.map(p => {
+    const sel = !!_similarSel[p.id];
+    const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+    const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">` : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>`;
+    return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.7rem;border-bottom:1px solid var(--gris);cursor:pointer;background:${sel ? '#e8f5ee' : '#fff'}">
+      <input type="checkbox" ${sel ? 'checked' : ''} onchange="_similarToggle('${p.id}')" style="width:16px;height:16px">
+      ${thumb}
+      <div style="flex:1;min-width:0"><div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div><div style="font-size:0.7rem;color:var(--texto-suave)">${esc((p.desc || '').substring(0, 38))} · <b>${_similarPrecio(p)}</b></div></div>
+    </label>`;
+  }).join('');
+}
+function _similarToggle(id) { if (_similarSel[id]) delete _similarSel[id]; else _similarSel[id] = true; renderSimilarLista(); _similarUpdateMsg(); }
+
+function _similarUpdateMsg() {
+  const sel = _similarSelProds(), c = _similarCtx;
+  let m = `¡Hola ${c.nombre}! 😊 Todavía no nos entró *${c.esperado}*, pero te puede interesar esto:`;
+  sel.forEach(p => { m += `\n• ${p.nombre} — ${_similarPrecio(p)} 👉 ${_similarLink(p)}`; });
+  m += `\n\nCualquier cosa, avisanos 🍬`;
+  document.getElementById('similar-msg').value = m;
+}
+
+async function _similarImagen() {
+  const sel = _similarSelProds(); if (!sel.length) return null;
+  const h2c = await cargarHtml2Canvas();
+  const off = document.getElementById('similar-offscreen');
+  off.innerHTML = `<div id="similar-card" style="width:460px;background:#fff;font-family:'DM Sans',sans-serif">
+    <div style="background:#1a1a2e;color:#fff;padding:14px 18px;font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem">🍬 Shuk Mamtakim — te recomendamos</div>
+    <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">${sel.map(p => {
+      const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean); const url = imgs.length ? imgUrl(imgs[0])[0] : '';
+      return `<div style="display:flex;gap:12px;align-items:center;border:1px solid #eee;border-radius:10px;padding:8px">
+        ${url ? `<img src="${url}" crossorigin="anonymous" style="width:66px;height:66px;object-fit:contain;background:#f5f0e8;border-radius:8px">` : `<div style="width:66px;height:66px;background:#f5f0e8;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🍬</div>`}
+        <div style="flex:1;min-width:0"><div style="font-weight:700;color:#1a1a2e;font-size:0.95rem">${esc(p.nombre)}</div><div style="font-size:0.76rem;color:#999">${esc((p.desc || '').substring(0, 60))}</div><div style="font-weight:800;color:#1a7a3a;margin-top:2px">${_similarPrecio(p)}</div></div>
+      </div>`; }).join('')}</div>
+    <div style="padding:8px 16px;color:#aaa;font-size:0.7rem;border-top:1px solid #eee">shuk-mamtakim.vercel.app</div></div>`;
+  await new Promise(r => setTimeout(r, 500));   // dar tiempo a que carguen las fotos
+  const canvas = await h2c(document.getElementById('similar-card'), { useCORS: true, backgroundColor: '#fff', scale: 2 });
+  off.innerHTML = '';
+  return await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92));
+}
+
+async function enviarSimilar() {
+  const sel = _similarSelProds();
+  if (!sel.length) { showToast('Elegí al menos un producto para ofrecer'); return; }
+  const msg = document.getElementById('similar-msg').value;
+  const tel = _similarCtx.tel;
+  const btn = document.getElementById('similar-enviar'); const prev = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Preparando…';
+  let file = null;
+  if (document.getElementById('similar-conFoto').checked) {
+    try { const blob = await _similarImagen(); if (blob) file = new File([blob], 'shuk-recomendado.jpg', { type: 'image/jpeg' }); } catch (e) {}
+  }
+  btn.disabled = false; btn.textContent = prev;
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], text: msg }); cerrarSimilar(); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  // Fallback (compu): descarga la imagen y abre WhatsApp con el texto para que la adjuntes.
+  if (file) { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = 'shuk-recomendado.jpg'; a.click(); showToast('🖼️ Imagen descargada — adjuntala en WhatsApp 📎'); }
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+  cerrarSimilar();
 }
 
 let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0, _cobroUsdJ = 0, _cobroCliente = '';
