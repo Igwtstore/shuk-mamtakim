@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -448,6 +448,13 @@ function doGet(e) {
       h.getRange(row, 25).setValue(Math.round(gananciaPitz));
       // Alta automática del cliente en el registro canónico (no duplica; nunca rompe la venta).
       altaClienteAuto_(ss, dec(e.parameter.cliente), dec(e.parameter.tipo));
+      // Envío cobrado al cliente → Caja Envíos del dueño del pedido (el costo se carga al cobrar).
+      const _envCobAlta = parseFloat(e.parameter.envioCobrado||0)||0;
+      if (_envCobAlta > 0) {
+        _upsertEnvio_(ss, id, { nVenta, cliente: dec(e.parameter.cliente),
+          dueno: _duenoVenta_(e.parameter.arsJONY, e.parameter.usdJONY, e.parameter.arsMyri, e.parameter.usdMyri),
+          cobrado: Math.round(_envCobAlta) });
+      }
       return json({ok:true, nVenta, id});
     }
     if (accion === 'cargarSaldoCC') {
@@ -588,6 +595,15 @@ function doGet(e) {
           }
           // Mantener coherente la col Stock Updates (la usa la cancelación para devolver stock)
           if (e.parameter.stockUpdatesNuevo !== undefined) { h.getRange(i+1,20).setNumberFormat('@'); h.getRange(i+1,20).setValue(dec(e.parameter.stockUpdatesNuevo)); }
+          // Envío cobrado al cliente (editado en el pedido) → Caja Envíos del dueño.
+          if (e.parameter.envioCobrado !== undefined && e.parameter.envioCobrado !== '') {
+            const _aJ = e.parameter.arsJONY!==undefined?e.parameter.arsJONY:datos[i][11];
+            const _uJ = e.parameter.usdJONY!==undefined?e.parameter.usdJONY:(datos[i][27]||0);
+            const _aM = e.parameter.arsMyri!==undefined?e.parameter.arsMyri:datos[i][12];
+            const _uM = e.parameter.usdMyri!==undefined?e.parameter.usdMyri:datos[i][13];
+            _upsertEnvio_(ss, e.parameter.id, { nVenta: datos[i][10], cliente: (datos[i][2]||'').toString(),
+              dueno: _duenoVenta_(_aJ,_uJ,_aM,_uM), cobrado: Math.round(parseFloat(e.parameter.envioCobrado)||0) });
+          }
           return ok();
         }
       }
@@ -691,11 +707,24 @@ function doGet(e) {
               h.getRange(i+1,15).setValue(_cm2.comiARS); h.getRange(i+1,16).setValue(_cm2.comiUSD);
             }
           }
+          // ── ENVÍO: costo real + quién pagó el cadete ───────────────────────────
+          // Upsert por ventaId (idempotente). Dueño se infiere del split de la venta. Si el cadete
+          // lo pagó el OTRO socio, _enviosData deriva la deuda en la cuenta entre socios.
+          if ((e.parameter.envioCosto !== undefined && e.parameter.envioCosto !== '') ||
+              (e.parameter.envioCobrado !== undefined && e.parameter.envioCobrado !== '')) {
+            const dueno = _duenoVenta_(datos[i][11], datos[i][27]||0, datos[i][12], datos[i][13]);
+            const patch = { nVenta: datos[i][10], cliente: (datos[i][2]||'').toString(), dueno,
+              quienPago: dec(e.parameter.quienPagoEnvio||'') || dueno };
+            if (e.parameter.envioCosto !== undefined && e.parameter.envioCosto !== '') patch.costo = Math.round(parseFloat(e.parameter.envioCosto)||0);
+            if (e.parameter.envioCobrado !== undefined && e.parameter.envioCobrado !== '') patch.cobrado = Math.round(parseFloat(e.parameter.envioCobrado)||0);
+            _upsertEnvio_(ss, e.parameter.id, patch);
+          }
           return ok();
         }
       }
       return json({error:'no encontrado'});
     }
+    if (accion === 'getCajaEnvios') { return json(_enviosData(ss)); }
     if (accion === 'editarNotaPedido') {
       const h = ss.getSheetByName('Ventas'); if (!h) return json({error:'sin hoja'});
       const datos = h.getDataRange().getValues();
@@ -819,7 +848,8 @@ function doGet(e) {
         rendiciones: _rendicionesData(ss),
         pagos: _pagosData(ss),
         clientes: _clientesData(ss),
-        movsSocios: _movsSociosData(ss)
+        movsSocios: _movsSociosData(ss),
+        envios: _enviosData(ss)
       });
     }
     if (accion === 'getBorrados') {
@@ -1248,7 +1278,7 @@ function doGet(e) {
       // su teardown para no dejar residuo en producción, y sirve para limpiar lo ya ensuciado.
       // Seguro: ningún dato real contiene estos marcadores.
       const marca = /__TEST__|REGTEST|REGCLI|AJTEST|VISTEST|BORRTEST|DIAG_/;
-      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos', 'Trafico', 'AvisosCandy'];
+      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos', 'Trafico', 'AvisosCandy', 'Envios'];
       const resultado = {};
       hojas.forEach(nombre => {
         const h = ss.getSheetByName(nombre);
@@ -2290,16 +2320,84 @@ function _clientesData(ss) {
 }
 function _movsSociosData(ss) {
   const h = ss.getSheetByName('MovsSocios');
-  if (!h || h.getLastRow() < 2) return { totalARS:0, totalUSD:0, movimientos:[] };
-  const movimientos = h.getRange(2,1,h.getLastRow()-1,4).getValues().map(r => ({
+  const movimientos = (!h || h.getLastRow() < 2) ? [] : h.getRange(2,1,h.getLastRow()-1,4).getValues().map(r => ({
     fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
     desc: (r[1]||'').toString(), montoARS: parseFloat(r[2])||0, montoUSD: parseFloat(r[3])||0
   }));
+  // Deuda DERIVADA de la Caja Envíos: si un socio puso el costo del envío de un pedido del otro,
+  // el dueño le debe ese costo. Se deriva (no se escribe en MovsSocios) → idempotente al re-confirmar.
+  const env = _enviosData(ss);
+  if (env.socioARS && Math.abs(env.socioARS) >= 1) {
+    movimientos.push({ fecha: '', desc: '📦 Envíos (costo que puso el otro socio)', montoARS: env.socioARS, montoUSD: 0 });
+  }
   return {
     totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
     totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
     movimientos
   };
+}
+
+// ─── CAJA ENVÍOS ──────────────────────────────────────────────────────────────
+// Caja paralela para el costo de envío, dividida por dueño (Miri / Jony). Hoja 'Envios' como
+// fuente de verdad; el saldo y la deuda entre socios se DERIVAN de acá (idempotente).
+function _duenoVenta_(arsJ, usdJ, arsM, usdM) {
+  const jony = (parseFloat(arsJ)||0) + (parseFloat(usdJ)||0);
+  const miri = (parseFloat(arsM)||0) + (parseFloat(usdM)||0);
+  if (miri > 0 && jony === 0) return 'Miri';
+  if (jony > 0 && miri === 0) return 'Jony';
+  return miri >= jony ? 'Miri' : 'Jony';   // mixto/sin plata: el lado con más (los compartidos se ven después)
+}
+
+function _upsertEnvio_(ss, ventaId, patch) {
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) {}
+  try {
+    const h = getOrCreate(ss, 'Envios', ['Fecha','VentaId','NVenta','Cliente','Dueno','Cobrado','Costo','QuienPago','Nota']);
+    let rowIdx = -1;
+    if (h.getLastRow() >= 2) {
+      const ids = h.getRange(2,2,h.getLastRow()-1,1).getValues();
+      for (let i=0;i<ids.length;i++){ const v = ids[i][0] instanceof Date ? ids[i][0].toISOString() : (ids[i][0]||'').toString().trim(); if (v === ventaId) { rowIdx = i+2; break; } }
+    }
+    if (rowIdx === -1) {
+      rowIdx = h.getLastRow() + 1;
+      h.appendRow([Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'), ventaId, patch.nVenta||'', patch.cliente||'', patch.dueno||'Miri',
+        patch.cobrado!==undefined?patch.cobrado:0, patch.costo!==undefined?patch.costo:0, patch.quienPago||'', patch.nota||'']);
+      h.getRange(rowIdx,1).setNumberFormat('@'); h.getRange(rowIdx,2).setNumberFormat('@');
+    } else {
+      if (patch.nVenta!==undefined)   h.getRange(rowIdx,3).setValue(patch.nVenta);
+      if (patch.cliente!==undefined)  h.getRange(rowIdx,4).setValue(patch.cliente);
+      if (patch.dueno)                h.getRange(rowIdx,5).setValue(patch.dueno);
+      if (patch.cobrado!==undefined)  h.getRange(rowIdx,6).setValue(patch.cobrado);
+      if (patch.costo!==undefined)    h.getRange(rowIdx,7).setValue(patch.costo);
+      if (patch.quienPago)            h.getRange(rowIdx,8).setValue(patch.quienPago);
+      if (patch.nota!==undefined)     h.getRange(rowIdx,9).setValue(patch.nota);
+    }
+    SpreadsheetApp.flush();
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+
+function _enviosData(ss) {
+  const h = ss.getSheetByName('Envios');
+  if (!h || h.getLastRow() < 2) return { movimientos: [], saldos: { Miri: 0, Jony: 0 }, socioARS: 0 };
+  const rows = h.getRange(2,1,h.getLastRow()-1,9).getValues();
+  const movimientos = []; const saldos = { Miri: 0, Jony: 0 }; let socioARS = 0;
+  rows.forEach(r => {
+    const cobrado = parseFloat(r[5])||0, costo = parseFloat(r[6])||0;
+    if (cobrado === 0 && costo === 0) return;
+    const dueno = (r[4]||'').toString() === 'Jony' ? 'Jony' : 'Miri';
+    const quienPago = (r[7]||'').toString();
+    saldos[dueno] += cobrado - costo;
+    if (costo > 0 && quienPago && quienPago !== dueno) {
+      if (dueno === 'Miri' && quienPago === 'Jony') socioARS += costo;        // + = Miri le debe a Jony
+      else if (dueno === 'Jony' && quienPago === 'Miri') socioARS -= costo;
+    }
+    movimientos.push({
+      fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : (r[0]||'').toString(),
+      ventaId: r[1] instanceof Date ? r[1].toISOString() : (r[1]||'').toString(), nVenta: r[2]||'',
+      cliente: (r[3]||'').toString(), dueno, cobrado, costo, quienPago, nota: (r[8]||'').toString()
+    });
+  });
+  return { movimientos, saldos, socioARS };
 }
 
 // Batch: todo lo que necesita el panel de los chicos en UNA sola llamada
