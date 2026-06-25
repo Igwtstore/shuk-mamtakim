@@ -747,8 +747,23 @@ function doGet(e) {
               if (ns !== antes) registrarMovStock_(ss, c.id, datos[i][1], ns - antes, antes, ns, 'Editor masivo');
               h.getRange(i + 1, 6).setValue(ns); return;
             }
+            if (k === 'nombre') {
+              // Historial de nombres: al renombrar, guardo el nombre anterior (col 31) para no romper el
+              // matcheo de pedidos viejos (que referencian por nombre). El ID interno es siempre el ancla.
+              const actual = (datos[i][1] || '').toString().trim();
+              const nuevo = (v === '__VACIO__' ? '' : v).trim();
+              if (nuevo && actual && nuevo !== actual) {
+                _asegurarColNombresPrev_(h);
+                const prev = (datos[i][30] || '').toString();
+                const lista = prev ? prev.split('|').map(s => s.trim()).filter(Boolean) : [];
+                if (lista.indexOf(actual) === -1) lista.push(actual);
+                h.getRange(i + 1, 31).setNumberFormat('@'); h.getRange(i + 1, 31).setValue(lista.join(' | '));
+              }
+              if (nuevo) h.getRange(i + 1, 2).setValue(nuevo);
+              return;
+            }
             if (k === 'precioMay' || k === 'precioMin') { _setPrecioTexto_(h, i + 1, campos[k], v); return; }
-            if (k === 'costo') { const cn = parseFloat(v.replace(',', '.')); h.getRange(i + 1, 30).setValue(isNaN(cn) ? '' : cn); return; }
+            if (k === 'costo') { _setPrecioTexto_(h, i + 1, 30, v); return; }
             if (campos[k] === undefined) return;
             h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : v);
           });
@@ -765,7 +780,7 @@ function doGet(e) {
       const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json({ ok: true, convertidos: 0 });
       const n = h.getLastRow() - 1;
       let cnt = 0;
-      [4, 5].forEach(col => {
+      [4, 5, 30].forEach(col => {
         const rng = h.getRange(2, col, n, 1);
         const vals = rng.getValues();
         const out = vals.map(r => {
@@ -1056,7 +1071,7 @@ function doGet(e) {
         if (candyCod) { _asegurarColCandyCod_(h); h.getRange(h.getLastRow(), 29).setValue(candyCod); }
         // Costo (col 30): lo que le cuesta el producto, para margen/ganancia. Fallback de getCostoPromedio.
         const costoNuevo = parseFloat((e.parameter.costo || '').toString().replace(',', '.'));
-        if (!isNaN(costoNuevo) && costoNuevo > 0) { _asegurarColCosto_(h); h.getRange(h.getLastRow(), 30).setValue(costoNuevo); }
+        if (!isNaN(costoNuevo) && costoNuevo > 0) { _asegurarColCosto_(h); _setPrecioTexto_(h, h.getLastRow(), 30, costoNuevo); }
         if (cidAP) cacheAP.put('addprod_' + cidAP, String(maxId+1), 300);
         SpreadsheetApp.flush();
         return json({ ok: true, id: maxId+1, candyCod: candyCod });
@@ -1303,7 +1318,8 @@ function doGet(e) {
         moneda: ((r[17] || '$').toString() === 'U$S') ? 'U$S' : '$',
         precioMay: r[3], precioMin: parseFloat(r[4]) || 0, desc: (r[2] || '').toString(),
         visible: (r[9] || 'Ambos').toString(), imagen: (r[6] || '').toString(),
-        descBot: (r[16] || '').toString(), costo: parseFloat(r[29]) || 0
+        descBot: (r[16] || '').toString(), costo: parseFloat(String(r[29] || '0').replace(',', '.')) || 0,
+        nombresPrev: (r[30] || '').toString()
       })));
     }
     if (accion === 'setVisibilidadMasiva') {
@@ -1584,6 +1600,9 @@ function getOrCreate(ss,nombre,headers){let h=ss.getSheetByName(nombre);if(!h){h
 function _asegurarColCosto_(h) {
   if (h.getRange(1, 30).getValue() !== 'Costo') h.getRange(1, 30).setValue('Costo');
 }
+function _asegurarColNombresPrev_(h) {
+  if (h.getRange(1, 31).getValue() !== 'NombresPrev') h.getRange(1, 31).setValue('NombresPrev');
+}
 
 // Guarda un precio como TEXTO con coma decimal. Motivo: un número con decimal (2.35) se exporta
 // en el gviz CSV de la tienda con coma SIN comillas (2,35) y ROMPE las columnas (corre la moneda,
@@ -1614,7 +1633,7 @@ function getCostoPromedio(ss, productoId) {
   if (st && st.getLastColumn() >= 30 && st.getLastRow() >= 2) {
     const sd = st.getRange(2, 1, st.getLastRow() - 1, 30).getValues();
     for (let i = 0; i < sd.length; i++) {
-      if ((sd[i][0] || '').toString() === productoId.toString()) return parseFloat(sd[i][29]) || 0;
+      if ((sd[i][0] || '').toString() === productoId.toString()) return parseFloat(String(sd[i][29] || '0').replace(',', '.')) || 0;
     }
   }
   return 0;

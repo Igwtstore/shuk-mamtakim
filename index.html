@@ -2072,7 +2072,9 @@ async function cargarProductos() {
       visibleOferta: (r[15]||'Ambos').trim(),
       descBot: (r[16]||'').trim(),
       moneda: ((r[17]||'$').trim() === 'U$S') ? 'U$S' : '$',
-      candyCod: (r[28]||'').trim()   // vínculo de stock compartido con Candy (col 29)
+      candyCod: (r[28]||'').trim(),   // vínculo de stock compartido con Candy (col 29)
+      costo: parseFloat((r[29]||'0').toString().replace(',','.')) || 0,   // col 30
+      nombresPrev: (r[30]||'').toString().trim()   // col 31: nombres anteriores (historial)
     })).filter(p => p.activo && p.id);
     // Stock compartido: para los productos vinculados a Candy, el stock real es el del depósito.
     if (productos.some(p => p.candyCod)) {
@@ -4322,6 +4324,18 @@ function _duenoBadge(p) {
   return h;
 }
 
+// Nombres de un producto: el actual + los anteriores (historial). Para matchear pedidos viejos
+// que referencian por nombre aunque el producto se haya renombrado. El ID interno es el ancla.
+function _nombresDe(p) {
+  const arr = [(p.nombre || '').trim()];
+  if (p.nombresPrev) p.nombresPrev.split('|').forEach(s => { const t = s.trim(); if (t) arr.push(t); });
+  return arr.filter(Boolean);
+}
+function _matchNombreProd(p, nombre) {
+  const n = (nombre || '').trim().toLowerCase();
+  return _nombresDe(p).some(x => x.toLowerCase() === n);
+}
+
 // ─── EDITOR MASIVO (planilla) ─────────────────────────────────────────────────
 let _masivoData = [], _masivoOrig = {}, _masivoCambios = {}, _masivoVista = 'datos', _masivoCats = [];
 const _mTh = 'padding:6px 8px;text-align:left;font-size:0.64rem;text-transform:uppercase;letter-spacing:0.03em;color:var(--texto-suave);border-bottom:1.5px solid var(--gris-medio);white-space:nowrap';
@@ -4355,6 +4369,7 @@ async function abrirMasivo() {
     _masivoCats = Array.from(new Set([...(window.CATEGORIA_ORDEN || ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Snacks','Galletita','Sopa','Varios']), ...prods.map(p => p.categoria).filter(Boolean)]));
     prods.forEach(p => {
       _masivoOrig[p.id] = {
+        nombre: _mDispTxt(p.nombre),
         desc: _mDispTxt(p.desc), descBot: _mDispTxt(p.descBot), categoria: _mDispTxt(p.categoria || 'Varios'),
         dueno: (p.dueno || '') === 'Jony' ? 'Jony' : 'Miri', visible: _mDispTxt(p.visible || 'Ambos'),
         moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: _mDispNum(p.precioMay), precioMin: _mDispNum(p.precioMin),
@@ -4423,7 +4438,7 @@ function renderMasivo() {
   } else {
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th><th style="${_mTh}">P.May</th><th style="${_mTh}">P.Min</th><th style="${_mTh}">Costo</th><th style="${_mTh}">Margen</th><th style="${_mTh}">Stock</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px"><b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -9277,10 +9292,11 @@ function abrirRemitoPDF(v) {
     // alcanza con partes[0]. Matcheamos el producto cuyo nombre sea PREFIJO de la línea (el más
     // largo/específico gana); si hay variantes con el mismo nombre, desempata por descripción.
     const fl = nombreCompleto.trim().toLowerCase();
-    let cands = (productos || []).filter(p => {
-      const pn = (p.nombre || '').trim().toLowerCase();
+    // Match por nombre actual O anteriores (historial) → la foto sale aunque se haya renombrado.
+    let cands = (productos || []).filter(p => _nombresDe(p).some(nm => {
+      const pn = nm.toLowerCase();
       return pn && (fl === pn || fl.startsWith(pn + ' · '));
-    });
+    }));
     cands.sort((a, b) => (b.nombre || '').length - (a.nombre || '').length);
     let prodLinea = cands[0];
     if (cands.length > 1) {
@@ -9420,7 +9436,9 @@ function abrirEditarPedido(v) {
   // hace falta para ajustar stock al guardar y para reparar descripciones perdidas.
   _editLineas.forEach(l => {
     if (!l.nombre) return;
-    const cands = productos.filter(p => p.nombre === l.nombre);
+    // Match por nombre actual O anteriores (historial) → renombrar no rompe pedidos viejos.
+    let cands = productos.filter(p => p.nombre === l.nombre);
+    if (!cands.length) cands = productos.filter(p => _matchNombreProd(p, l.nombre));
     if (!cands.length) return;
     let pl = cands[0];
     if (cands.length > 1) {
