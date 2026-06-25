@@ -2310,8 +2310,9 @@ function _acFiltrados() {
   return _acProductos.filter(p => {
     if (q && !(p.nombre || '').toLowerCase().includes(q)) return false;
     const vis = (p.visible || 'Ambos').trim();
-    if (_acFiltro === 'minorista') return p.activo && (vis === 'Ambos' || vis === 'Minorista');
-    if (_acFiltro === 'mayorista') return p.activo && (vis === 'Ambos' || vis === 'Mayorista');
+    if (_acFiltro === 'minorista') return p.activo && vis === 'Minorista';   // exclusivo
+    if (_acFiltro === 'mayorista') return p.activo && vis === 'Mayorista';   // exclusivo
+    if (_acFiltro === 'ambos') return p.activo && vis === 'Ambos';
     if (_acFiltro === 'ocultos') return _acEsOculto(p);
     return true;
   });
@@ -2342,7 +2343,7 @@ function _acRender() {
       <div style="font-weight:800;font-size:1.05rem;color:#c9954a">📕 Armar catálogo</div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">Elegí los productos (incluí los 🙈 ocultos), la plantilla y qué precios mostrar.</div>
       <input id="ac-buscar" oninput="_acRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
-      <div style="display:flex;gap:5px;margin-top:0.5rem">${fbtn('todos','Todos')}${fbtn('minorista','🛍️ Min')}${fbtn('mayorista','📦 May')}${fbtn('ocultos','🙈 Ocultos')}</div>
+      <div style="display:flex;gap:5px;margin-top:0.5rem;flex-wrap:wrap">${fbtn('todos','Todos')}${fbtn('minorista','🛍️ Min')}${fbtn('mayorista','📦 May')}${fbtn('ambos','👁️ Ambos')}${fbtn('ocultos','🙈 Ocultos')}</div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input type="checkbox" onchange="_acToggleAll(this.checked)" ${lista.length&&lista.every(p=>_acSel[p.id])?'checked':''} style="width:15px;height:15px"> Seleccionar todos los de la lista <span style="color:var(--texto-suave)">· ${nSel} elegido${nSel!==1?'s':''}</span></label>
     </div>
     <div style="overflow-y:auto;flex:1">${filas || '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>'}</div>
