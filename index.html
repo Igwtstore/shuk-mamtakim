@@ -1800,7 +1800,7 @@
     </div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante (opcional — foto de transferencia/MP)</label>
-      <input type="file" id="cobro-comprobante" accept="image/*" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
+      <input type="file" id="cobro-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
       <div id="cobro-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
       <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:0.15rem">Podés adjuntar varios (ej. pagos a cuenta). Se suman a los que ya tenga el pedido.</div>
     </div>
@@ -1890,7 +1890,7 @@
     </div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante(s) (opcional)</label>
-      <input type="file" id="pago-comprobante" accept="image/*" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('pago-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
+      <input type="file" id="pago-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('pago-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
       <div id="pago-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
@@ -3301,7 +3301,7 @@ async function renderPedidos() {
       const comiU = parseFloat(v.comiUSD || 0);
       const cobrado = esCobradoReal(v);
       const splitParts = [];
-      if (!soloMiri && arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">Pitzujim JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
+      if (!soloMiri && arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
       if (arsM > 0) splitParts.push(`<span>Golosinas MYRI: $ ${Math.round(arsM).toLocaleString('es-AR')}</span>`);
       if (usdM > 0) splitParts.push(`<span>Golosinas MYRI: U$S ${usdM.toFixed(2)}</span>`);
       if (!soloMiri && comiA > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: $ ${Math.round(comiA).toLocaleString('es-AR')}</span>`);
