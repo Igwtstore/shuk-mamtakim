@@ -9448,7 +9448,10 @@ function abrirEditarPedido(v) {
     const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
     if (!p) return;
     const { precioUnit, moneda } = _precioMoneda(p, v.tipo || 'Minorista');
-    l.precio = precioUnit; l.moneda = moneda;
+    if (moneda) l.moneda = moneda;
+    // Solo piso el precio si el producto HOY tiene un precio válido (>0). Si no (precio sin cargar),
+    // dejo el del pedido original — nunca un NaN/0 que rompa la línea y el total.
+    if (isFinite(precioUnit) && precioUnit > 0) l.precio = precioUnit;
   });
   // Foto de las cantidades originales por producto: el guardado ajusta stock por diferencia.
   _editQtysOrig = {};
