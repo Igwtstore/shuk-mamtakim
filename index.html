@@ -4303,12 +4303,8 @@ function renderManualProductos() {
     !q || p.nombre.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q) || (p.categoria||'').toLowerCase().includes(q));
   if (!elegibles.length) { lista.innerHTML = '<div class="sinpedidos" style="padding:0.75rem">Sin resultados para esa búsqueda</div>'; return; }
   lista.innerHTML = elegibles.map(p => {
-    const esPitz = p.dueno === 'Jony';
-    let precioUnit, moneda;
-    if (tipo === 'Mayorista') {
-      if (esPitz) { precioUnit = Math.round(parseFloat((p.precioMay||'0').toString().replace(',','.'))); moneda = '$'; }
-      else { precioUnit = parseFloat((p.precioMay||'0').toString().replace(',','.')); moneda = 'U$S'; }
-    } else { precioUnit = Math.round(p.precioMin); moneda = '$'; }
+    // Usa _precioMoneda (respeta la moneda real del producto) → el display coincide con lo que se cobra.
+    const { precioUnit, moneda } = _precioMoneda(p, tipo);
     const precioStr = moneda === 'U$S' ? `U$S ${precioUnit.toFixed(2)}` : `$ ${precioUnit.toLocaleString('es-AR')}`;
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--gris-medio)">
       <input type="number" id="mq-${p.id}" min="0" max="${p.stock}" value="${_manualQtys[p.id] || 0}"
@@ -9244,10 +9240,7 @@ function filtrarAgregarEdit() {
     cont.style.display = ''; return;
   }
   cont.innerHTML = disponibles.slice(0, 30).map(p => {
-    const esPitz = p.dueno === 'Jony';
-    let precio, moneda;
-    if (esMay) { precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0; moneda = esPitz ? '$' : 'U$S'; }
-    else { precio = Math.round(p.precioMin) || 0; moneda = '$'; }
+    const { precioUnit: precio, moneda } = _precioMoneda(p, esMay ? 'Mayorista' : 'Minorista');
     const precioStr = moneda === 'U$S' ? `U$S ${precio.toFixed(2)}` : `$ ${precio.toLocaleString('es-AR')}`;
     return `<div onclick="agregarProductoEdit(${p.id})" style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--gris-medio);cursor:pointer">
       <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${p.nombre}${p.desc ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${p.desc.substring(0,40)}</span>` : ''}</div>
