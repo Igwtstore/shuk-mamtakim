@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV','editarProductosLote'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV','editarProductosLote','blindarColumnasPrecios'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -772,6 +772,31 @@ function doGet(e) {
         SpreadsheetApp.flush();
         return json({ ok: true, n });
       } finally { try { lock.releaseLock(); } catch (e2) {} }
+    }
+    if (accion === 'blindarColumnasPrecios') {
+      // Raíz del problema "se vuelve fecha / la coma rompe el CSV": formatea las columnas de
+      // precios/costo como TEXTO a nivel COLUMNA (incluye filas futuras y ediciones manuales),
+      // así Google Sheets nunca más las auto-convierte. Además normaliza valores existentes a texto.
+      const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
+      _asegurarColCosto_(h);
+      const maxR = h.getMaxRows();
+      let convertidos = 0, fechasLimpiadas = 0;
+      [4, 5, 30].forEach(col => {
+        h.getRange(1, col, maxR, 1).setNumberFormat('@');   // TODA la columna como texto
+        if (h.getLastRow() >= 2) {
+          const n = h.getLastRow() - 1;
+          const rng = h.getRange(2, col, n, 1);
+          const out = rng.getValues().map(r => {
+            const c = r[0];
+            if (c instanceof Date) { fechasLimpiadas++; return ['']; }   // precio corrupto (fecha) → vaciar
+            if (typeof c === 'number') { convertidos++; return [c.toString().replace(/\./g, ',')]; }
+            return [(c === null || c === undefined) ? '' : c.toString()];
+          });
+          rng.setValues(out);
+        }
+      });
+      SpreadsheetApp.flush();
+      return json({ ok: true, convertidos, fechasLimpiadas });
     }
     if (accion === 'getCajaEnvios') { return json(_enviosData(ss)); }
     if (accion === 'migrarPreciosCSV') {
