@@ -1209,6 +1209,10 @@
           <label>Stock inicial</label>
           <input type="number" id="np-stock" placeholder="0" min="0" />
         </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:90px">
+          <label>Costo <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(lo que te cuesta)</span></label>
+          <input type="text" inputmode="decimal" id="np-costo" placeholder="0" />
+        </div>
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
@@ -4551,18 +4555,28 @@ function renderNpArchivos() {
   }
   cont.style.display = 'grid';
   let html = '';
+  const _badgePortada = `<div style="position:absolute;top:2px;left:2px;background:var(--dorado);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:6px">★ Portada</div>`;
   if (_npPreSubida) {
     html += `<div style="position:relative">
       <img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_200,f_auto,q_auto/${_npPreSubida}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px">
+      ${_badgePortada}
       <div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(0,0,0,0.5);color:#fff;border-radius:0 0 8px 8px">ya subida ✓</div>
     </div>`;
   }
+  // Portada = la primera IMAGEN (la pre-subida manda si existe). Botón ⭐ para elegir cuál es.
+  const _firstImg = _npArchivos.findIndex(f => !f.type.startsWith('video/'));
+  const _coverEsPre = !!_npPreSubida;
   html += _npArchivos.map((f, i) => {
     const esVid = f.type.startsWith('video/');
     const media = esVid
       ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem">🎬</div>`
       : `<img src="${URL.createObjectURL(f)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onload="URL.revokeObjectURL(this.src)">`;
-    return `<div style="position:relative">${media}
+    let portada = '';
+    if (!esVid) {
+      if (!_coverEsPre && i === _firstImg) portada = _badgePortada;
+      else portada = `<button type="button" onclick="hacerPortadaNp(${i})" title="Hacer portada" style="position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,0.6);color:#fff;border:none;font-size:0.55rem;padding:2px 6px;border-radius:6px;cursor:pointer;line-height:1.2">⭐ Portada</button>`;
+    }
+    return `<div style="position:relative">${media}${portada}
       <button type="button" onclick="quitarNpArchivo(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
     </div>`;
   }).join('');
@@ -4576,6 +4590,14 @@ function renderNpArchivos() {
 
 function quitarNpArchivo(i) {
   _npArchivos.splice(i, 1);
+  renderNpArchivos();
+}
+
+// Hace portada a la imagen elegida: la mueve al frente del array (la 1ª imagen es la portada).
+function hacerPortadaNp(i) {
+  if (i < 0 || i >= _npArchivos.length) return;
+  const [f] = _npArchivos.splice(i, 1);
+  _npArchivos.unshift(f);
   renderNpArchivos();
 }
 
@@ -5077,9 +5099,11 @@ async function guardarNuevoProducto() {
     }
     // clientId: candado de idempotencia en el backend → aunque lleguen 2 pedidos, 1 solo producto.
     const clientId = 'np_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const costo = (document.getElementById('np-costo').value || '').trim().replace(',', '.');
     const params = new URLSearchParams({
       accion: 'agregarProducto', nombre, desc, pMay: pMay||'0', pMin: pMin||'0', stock, imagen: imagenId, categoria, visible, dueno, moneda, clientId
     });
+    if (costo && parseFloat(costo) > 0) params.set('costo', costo);
     const data = await fetch(APPS_SCRIPT_URL + '?' + params.toString()).then(r => r.json());
     if (data.ok) {
       agregarAlPushBuffer('nuevo', nombre + (desc ? ' · ' + desc.substring(0,35) : ''));
@@ -5089,6 +5113,7 @@ async function guardarNuevoProducto() {
       document.getElementById('np-pmay').value = '';
       document.getElementById('np-pmin').value = '';
       document.getElementById('np-stock').value = '';
+      const _nc = document.getElementById('np-costo'); if (_nc) _nc.value = '';
       document.getElementById('np-categoria').value = '';
       document.getElementById('np-foto').value = '';
       document.getElementById('np-preview').style.display = 'none';

@@ -997,6 +997,9 @@ function doGet(e) {
         // Vínculo con Candy (stock compartido): guarda el código de Candy en col 29.
         const candyCod = dec(e.parameter.candyCod || '').trim();
         if (candyCod) { _asegurarColCandyCod_(h); h.getRange(h.getLastRow(), 29).setValue(candyCod); }
+        // Costo (col 30): lo que le cuesta el producto, para margen/ganancia. Fallback de getCostoPromedio.
+        const costoNuevo = parseFloat((e.parameter.costo || '').toString().replace(',', '.'));
+        if (!isNaN(costoNuevo) && costoNuevo > 0) { _asegurarColCosto_(h); h.getRange(h.getLastRow(), 30).setValue(costoNuevo); }
         if (cidAP) cacheAP.put('addprod_' + cidAP, String(maxId+1), 300);
         SpreadsheetApp.flush();
         return json({ ok: true, id: maxId+1, candyCod: candyCod });
@@ -1241,7 +1244,7 @@ function doGet(e) {
         moneda: ((r[17] || '$').toString() === 'U$S') ? 'U$S' : '$',
         precioMay: r[3], precioMin: parseFloat(r[4]) || 0, desc: (r[2] || '').toString(),
         visible: (r[9] || 'Ambos').toString(), imagen: (r[6] || '').toString(),
-        descBot: (r[16] || '').toString()
+        descBot: (r[16] || '').toString(), costo: parseFloat(r[29]) || 0
       })));
     }
     if (accion === 'setVisibilidadMasiva') {
@@ -1516,18 +1519,32 @@ function dec(v){try{return decodeURIComponent(v||'');}catch(e){return v||'';}}
 function ok(){return json({ok:true});}
 function json(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}
 function getOrCreate(ss,nombre,headers){let h=ss.getSheetByName(nombre);if(!h){h=ss.insertSheet(nombre);h.appendRow(headers);h.getRange(1,1,1,headers.length).setFontWeight('bold');}return h;}
+function _asegurarColCosto_(h) {
+  if (h.getRange(1, 30).getValue() !== 'Costo') h.getRange(1, 30).setValue('Costo');
+}
+
 function getCostoPromedio(ss, productoId) {
   const h = ss.getSheetByName('CostosJony');
-  if (!h || h.getLastRow() < 2) return 0;
-  const data = h.getDataRange().getValues();
-  let totalUnits = 0, totalCost = 0;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1].toString() === productoId.toString()) {
-      totalUnits += parseFloat(data[i][3]) || 0;
-      totalCost += parseFloat(data[i][4]) || 0;
+  if (h && h.getLastRow() >= 2) {
+    const data = h.getDataRange().getValues();
+    let totalUnits = 0, totalCost = 0;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][1].toString() === productoId.toString()) {
+        totalUnits += parseFloat(data[i][3]) || 0;
+        totalCost += parseFloat(data[i][4]) || 0;
+      }
+    }
+    if (totalUnits > 0) return totalCost / totalUnits;
+  }
+  // Fallback: costo manual cargado en el producto (Stock col 30) cuando no hay compras registradas.
+  const st = ss.getSheetByName('Stock');
+  if (st && st.getLastColumn() >= 30 && st.getLastRow() >= 2) {
+    const sd = st.getRange(2, 1, st.getLastRow() - 1, 30).getValues();
+    for (let i = 0; i < sd.length; i++) {
+      if ((sd[i][0] || '').toString() === productoId.toString()) return parseFloat(sd[i][29]) || 0;
     }
   }
-  return totalUnits > 0 ? totalCost / totalUnits : 0;
+  return 0;
 }
 function sendTwilioWA(to, body) {
   const props = PropertiesService.getScriptProperties();
