@@ -9097,6 +9097,14 @@ function abrirEditarPedido(v) {
     l.prodId = pl.id;
     if (!l.descripcion && pl.desc) l.descripcion = pl.desc.substring(0, 45);
   });
+  // Repreciar cada línea desde el PRODUCTO real (precio + moneda). El texto del pedido puede tener
+  // la moneda/precio mal (bug gviz histórico: Jony U$S se guardaba como "$"); acá se corrige al abrir.
+  _editLineas.forEach(l => {
+    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
+    if (!p) return;
+    const { precioUnit, moneda } = _precioMoneda(p, v.tipo || 'Minorista');
+    l.precio = precioUnit; l.moneda = moneda;
+  });
   // Foto de las cantidades originales por producto: el guardado ajusta stock por diferencia.
   _editQtysOrig = {};
   _editLineas.forEach(l => { if (l.prodId) _editQtysOrig[l.prodId] = (_editQtysOrig[l.prodId] || 0) + (l.qty || 0); });
@@ -9202,15 +9210,7 @@ function onTipoChange() {
   _editLineas = _editLineas.map(l => {
     const p = productos.find(x => x.nombre.toLowerCase() === l.nombre.toLowerCase());
     if (!p) return l;
-    const esPitz = p.dueno === 'Jony';
-    let precio, moneda;
-    if (esMay) {
-      precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
-      moneda = esPitz ? '$' : 'U$S';
-    } else {
-      precio = Math.round(p.precioMin) || 0;
-      moneda = '$';
-    }
+    const { precioUnit: precio, moneda } = _precioMoneda(p, tipo);
     return { ...l, precio, moneda };
   });
   renderEditLineas();
@@ -9261,16 +9261,7 @@ function agregarProductoEdit(id) {
   const p = productos.find(x => x.id === id);
   if (!p) return;
   const tipo = document.getElementById('ep-tipo').value;
-  const esMay = tipo === 'Mayorista';
-  const esPitz = p.dueno === 'Jony';
-  let precio, moneda;
-  if (esMay) {
-    precio = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
-    moneda = esPitz ? '$' : 'U$S';
-  } else {
-    precio = Math.round(p.precioMin) || 0;
-    moneda = '$';
-  }
+  const { precioUnit: precio, moneda } = _precioMoneda(p, tipo);
   _editLineas.push({ nombre: p.nombre, prodId: p.id, descripcion: (p.desc || '').substring(0, 45), qty: 1, moneda, precio, desc: 0 });
   renderEditLineas();
   recalcularEditTotal();
@@ -9375,7 +9366,10 @@ async function guardarEditPedido() {
   _editLineas.forEach(l => {
     const sub = (parseFloat(l.precio) || 0) * (l.qty || 0) * (1 - (l.desc || 0) / 100);
     const esJ = _esJonyLinea(l);
-    if (l.moneda === 'U$S') { if (esJ) eUsdJ += sub; else eUsdM += sub; }
+    // Moneda desde el PRODUCTO real (no la de la línea, que puede venir mal del texto viejo).
+    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
+    const mon = p ? _precioMoneda(p, tipo).moneda : (l.moneda || '$');
+    if (mon === 'U$S') { if (esJ) eUsdJ += sub; else eUsdM += sub; }
     else if (esJ) eArsJ += sub;
     else eArsM += sub;
   });
