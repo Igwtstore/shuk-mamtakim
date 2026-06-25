@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -725,6 +725,26 @@ function doGet(e) {
       return json({error:'no encontrado'});
     }
     if (accion === 'getCajaEnvios') { return json(_enviosData(ss)); }
+    if (accion === 'migrarPreciosCSV') {
+      // Convierte los precios guardados como NÚMERO (que rompen el gviz CSV con su coma decimal)
+      // a TEXTO con coma. Idempotente: los que ya son texto se dejan igual. Cols 4 (May) y 5 (Min).
+      const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json({ ok: true, convertidos: 0 });
+      const n = h.getLastRow() - 1;
+      let cnt = 0;
+      [4, 5].forEach(col => {
+        const rng = h.getRange(2, col, n, 1);
+        const vals = rng.getValues();
+        const out = vals.map(r => {
+          const c = r[0];
+          if (typeof c === 'number') { cnt++; return [c.toString().replace(/\./g, ',')]; }
+          return [(c === null || c === undefined) ? '' : c.toString()];
+        });
+        rng.setNumberFormat('@');
+        rng.setValues(out);
+      });
+      SpreadsheetApp.flush();
+      return json({ ok: true, convertidos: cnt });
+    }
     if (accion === 'editarNotaPedido') {
       const h = ss.getSheetByName('Ventas'); if (!h) return json({error:'sin hoja'});
       const datos = h.getDataRange().getValues();
@@ -988,10 +1008,13 @@ function doGet(e) {
         _asegurarColMoneda_(ss);
         const monedaNueva = (e.parameter.moneda === 'U$S') ? 'U$S' : '$';
         h.appendRow([maxId+1, dec(e.parameter.nombre), dec(e.parameter.desc),
-          isNaN(pMayNum) ? '' : pMayNum, parseFloat(e.parameter.pMin||0),
+          '', '',
           parseInt(e.parameter.stock||0), dec(e.parameter.imagen||''), 'SI',
           dec(e.parameter.categoria||'Varios'), dec(e.parameter.visible||'Ambos'),
           0, '', 0, 0, dec(e.parameter.dueno||'Miri'), 'Ambos', dec(e.parameter.descBot||''), monedaNueva]);
+        // Precios como TEXTO con coma (que gviz no rompa el CSV con los decimales). Ver _setPrecioTexto_.
+        _setPrecioTexto_(h, h.getLastRow(), 4, isNaN(pMayNum) ? '' : pMayNum);
+        _setPrecioTexto_(h, h.getLastRow(), 5, (e.parameter.pMin || '').toString().replace(',', '.') || '0');
         const stockIni = parseInt(e.parameter.stock||0);
         if (stockIni > 0) registrarMovStock_(ss, String(maxId+1), dec(e.parameter.nombre), stockIni, 0, stockIni, 'Alta de producto');
         // Vínculo con Candy (stock compartido): guarda el código de Candy en col 29.
@@ -1211,7 +1234,6 @@ function doGet(e) {
       const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, imagen: 7, activo: 8, categoria: 9, visible: 10, dueno: 15, descBot: 17, moneda: 18 };
       for (let i = 1; i < datos.length; i++) {
         if (datos[i][0].toString() === e.parameter.id) {
-          const numericos = { precioMay: 1, precioMin: 1, stock: 1 };
           Object.keys(campos).forEach(k => {
             if (e.parameter[k] !== undefined && e.parameter[k] !== null && e.parameter[k] !== '') {
               let v = dec(e.parameter[k]);
@@ -1219,10 +1241,13 @@ function doGet(e) {
                 const antes = parseInt(datos[i][5])||0;
                 const ns = parseInt(v)||0;
                 if (ns !== antes) registrarMovStock_(ss, e.parameter.id, datos[i][1], ns - antes, antes, ns, 'Edición manual (editor de producto)');
+                h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : ns);
+                return;
               }
-              if (v !== '__VACIO__' && numericos[k]) {
-                const n = parseFloat(v.toString().replace(',', '.'));
-                if (!isNaN(n)) v = n;   // número real: visible para el gviz CSV de la tienda
+              // Precios como TEXTO con coma (que gviz no rompa el CSV con los decimales). Ver _setPrecioTexto_.
+              if (k === 'precioMay' || k === 'precioMin') {
+                _setPrecioTexto_(h, i + 1, campos[k], v === '__VACIO__' ? '' : v);
+                return;
               }
               h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : v);
             }
@@ -1521,6 +1546,17 @@ function json(d){return ContentService.createTextOutput(JSON.stringify(d)).setMi
 function getOrCreate(ss,nombre,headers){let h=ss.getSheetByName(nombre);if(!h){h=ss.insertSheet(nombre);h.appendRow(headers);h.getRange(1,1,1,headers.length).setFontWeight('bold');}return h;}
 function _asegurarColCosto_(h) {
   if (h.getRange(1, 30).getValue() !== 'Costo') h.getRange(1, 30).setValue('Costo');
+}
+
+// Guarda un precio como TEXTO con coma decimal. Motivo: un número con decimal (2.35) se exporta
+// en el gviz CSV de la tienda con coma SIN comillas (2,35) y ROMPE las columnas (corre la moneda,
+// el dueño, etc.). Como texto, gviz lo entrecomilla y la coma queda protegida. Los productos viejos
+// que funcionan ya están así (ej. "6,2"). El front hace replace(',','.') al leer, así que da igual.
+function _setPrecioTexto_(h, row, col, valRaw) {
+  const s = (valRaw === '' || valRaw === null || valRaw === undefined) ? '' : valRaw.toString().trim().replace(/\./g, ',');
+  const cell = h.getRange(row, col);
+  cell.setNumberFormat('@');
+  cell.setValue(s);
 }
 
 function getCostoPromedio(ss, productoId) {
