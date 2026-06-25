@@ -4248,9 +4248,11 @@ function _duenoBadge(p) {
   const oculto = (p.visible || '').trim() === 'Oculto';
   const pill = (txt, bg, col) => `<span style="display:inline-block;font-size:0.6rem;font-weight:700;padding:1px 6px;border-radius:6px;background:${bg};color:${col};margin-right:4px;vertical-align:middle">${txt}</span>`;
   let h = '';
+  // El sistema trata TODO lo que no es Jony como Miri (ventas, stock, privacidad). Por eso un
+  // dueño vacío = Miri. Si en el futuro hay otro vendedor con nombre propio, se muestra ese nombre.
   if (d === 'Jony') h += pill('Jony', '#f3e3c3', '#9a6b00');
-  else if (d === 'Miri') h += pill('Miri', '#f7dcef', '#9b2d77');
-  else if (d) h += pill(esc(d), '#e6e6e6', '#555');
+  else if (d === '' || d === 'Miri') h += pill('Miri', '#f7dcef', '#9b2d77');
+  else h += pill(esc(d), '#e6e6e6', '#555');
   if (oculto) h += pill('🙈 Oculto', '#e7e7e7', '#777');
   return h;
 }
