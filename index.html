@@ -2306,7 +2306,8 @@ function _acRender() {
       <input type="checkbox" ${sel?'checked':''} onchange="_acToggle('${p.id}')" style="width:17px;height:17px">
       ${thumb}
       <div style="flex:1;min-width:0">
-        <div style="font-size:0.84rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
+        <div style="font-size:0.84rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_duenoBadge(p)}${esc(p.nombre)}</div>
+        ${p.desc ? `<div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc)}</div>` : ''}
         <div style="font-size:0.66rem;color:var(--texto-suave)">🏷️ ${esc(p.categoria||'Varios')} · ${estado}</div>
       </div>
     </label>`;
@@ -2497,6 +2498,25 @@ function renderCatalogo() {
   catalogo.innerHTML = html;
   document.getElementById('carrito-btn-header').style.display = 'flex';
   setTimeout(initCarousels, 100);
+  _aplicarDeepLinkProducto();
+}
+
+// Deep link: si la URL trae ?p=ID (link compartido de un producto), hace scroll y lo resalta.
+let _deepLinkHecho = false;
+function _aplicarDeepLinkProducto() {
+  if (_deepLinkHecho) return;
+  const pid = new URLSearchParams(location.search).get('p');
+  if (!pid) { _deepLinkHecho = true; return; }
+  setTimeout(() => {
+    const card = document.getElementById('card-' + pid);
+    if (!card) return;   // puede no estar renderizado aún (otro filtro/categoría); reintenta en el próximo render
+    _deepLinkHecho = true;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.style.transition = 'box-shadow 0.3s, transform 0.3s';
+    card.style.boxShadow = '0 0 0 3px var(--dorado), 0 6px 20px rgba(0,0,0,0.18)';
+    card.style.transform = 'scale(1.02)';
+    setTimeout(() => { card.style.boxShadow = ''; card.style.transform = ''; }, 2600);
+  }, 250);
 }
 
 const BASE_IMG = 'https://raw.githubusercontent.com/Igwtstore/shuk-mamtakim/main/';
@@ -6883,8 +6903,11 @@ function compartirProducto(id) {
   const p = productos.find(x => x.id == id);
   if (!p) return;
   const precio = formatPrecio(p);
-  const link = modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
-  const msg = `🛍️ *${p.nombre}*\n${p.desc}\n💰 *${precio}*\n\n📱 Ver catálogo completo: ${link}`;
+  // Deep link AL PRODUCTO (?p=ID): la tienda abre y lo resalta. Respeta el canal (minorista por
+  // default; mayorista si se está viendo mayorista).
+  const base = modo === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/';
+  const link = `${base}?p=${p.id}`;
+  const msg = `🛍️ *${p.nombre}*\n${p.desc || ''}\n💰 *${precio}*\n\n👉 Mirá este producto: ${link}`;
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -8254,7 +8277,8 @@ function confirmarNotificacion() {
   const tel = document.getElementById('notif-tel').value.trim().replace(/\D/g,'');
   if (!nombre) { showToast('Ingresá tu nombre'); return; }
   if (!tel || tel.length < 8) { showToast('Ingresá tu WhatsApp'); return; }
-  const modoActual = window.location.hash.includes('min-pL3q7') ? 'minorista' : 'mayorista';
+  // Canal REAL en el que está el cliente (no el hash, que un minorista en /tienda no tiene → caía a mayorista).
+  const modoActual = (modo === 'mayorista') ? 'mayorista' : 'minorista';
   const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel, modoCliente: modoActual });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(r => r.json())
