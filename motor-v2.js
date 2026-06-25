@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV'
+  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV','editarProductosLote'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -723,6 +723,40 @@ function doGet(e) {
         }
       }
       return json({error:'no encontrado'});
+    }
+    if (accion === 'editarProductosLote') {
+      // Editor masivo: aplica muchos cambios de productos en una sola llamada. cambios = JSON
+      // [{id, campo1:val, campo2:val, ...}] — solo los campos que cambiaron por producto.
+      const h = ss.getSheetByName('Stock'); if (!h) return json({ error: 'sin hoja Stock' });
+      let cambios; try { cambios = JSON.parse(dec(e.parameter.cambios || '[]')); } catch (e2) { return json({ error: 'json inválido' }); }
+      if (!cambios.length) return json({ ok: true, n: 0 });
+      const lock = LockService.getScriptLock(); try { lock.waitLock(25000); } catch (e2) {}
+      try {
+        _asegurarColMoneda_(ss); _asegurarColCosto_(h);
+        const datos = h.getDataRange().getValues();
+        const idx = {}; for (let i = 1; i < datos.length; i++) idx[datos[i][0].toString()] = i;
+        const campos = { nombre: 2, desc: 3, precioMay: 4, precioMin: 5, stock: 6, categoria: 9, visible: 10, dueno: 15, descBot: 17, moneda: 18 };
+        let n = 0;
+        cambios.forEach(c => {
+          const i = idx[(c.id || '').toString()]; if (i === undefined) return;
+          Object.keys(c).forEach(k => {
+            if (k === 'id') return;
+            let v = (c[k] === null || c[k] === undefined) ? '' : c[k].toString();
+            if (k === 'stock') {
+              const antes = parseInt(datos[i][5]) || 0; const ns = parseInt(v) || 0;
+              if (ns !== antes) registrarMovStock_(ss, c.id, datos[i][1], ns - antes, antes, ns, 'Editor masivo');
+              h.getRange(i + 1, 6).setValue(ns); return;
+            }
+            if (k === 'precioMay' || k === 'precioMin') { _setPrecioTexto_(h, i + 1, campos[k], v); return; }
+            if (k === 'costo') { const cn = parseFloat(v.replace(',', '.')); h.getRange(i + 1, 30).setValue(isNaN(cn) ? '' : cn); return; }
+            if (campos[k] === undefined) return;
+            h.getRange(i + 1, campos[k]).setValue(v === '__VACIO__' ? '' : v);
+          });
+          n++;
+        });
+        SpreadsheetApp.flush();
+        return json({ ok: true, n });
+      } finally { try { lock.releaseLock(); } catch (e2) {} }
     }
     if (accion === 'getCajaEnvios') { return json(_enviosData(ss)); }
     if (accion === 'migrarPreciosCSV') {
@@ -1475,6 +1509,9 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
+    // Editor masivo: batch grande → POST con JSON (evita el límite de largo del GET). Delega al
+    // handler general (doGet), que valida la sesión con body.token.
+    if (body.accion === 'editarProductosLote') { e.parameter = Object.assign({}, e.parameter, body); return doGet(e); }
     // Tool de Retell (custom function): POST con {args:{cliente,direccion,items}} y secret/accion en la URL.
     if (e.parameter && e.parameter.accion === 'pedidoVoz') {
       if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });

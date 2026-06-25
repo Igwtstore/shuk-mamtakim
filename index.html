@@ -1290,6 +1290,11 @@
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Prendé o apagá productos de la tienda de a muchos. Muestra cuántos quedan en stock. Ocultar no borra nada — el producto y su historial se conservan.</div>
     <button class="guardar-stock-btn" style="margin-top:0" onclick="abrirGestorVisibilidad()">🙈 Abrir gestor de visibilidad</button>
   </div>
+  <div class="admin-card" data-seccion="catalogo">
+    <div class="admin-titulo">📊 Editor masivo (planilla)</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Todos los productos en una grilla: cambiás precios, costo, stock, dueño, visibilidad y categoría de varios a la vez, y "Guardar todo". Ideal desde la compu.</div>
+    <button class="guardar-stock-btn" style="margin-top:0" onclick="abrirMasivo()">📊 Abrir editor masivo</button>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">✏️ Editar producto</div>
     <div class="nombre-campo" style="margin:0 0 0.6rem">
@@ -1711,6 +1716,24 @@
       <button onclick="confirmarNotificacion()" style="flex:2;padding:0.75rem;background:var(--dorado);color:var(--azul);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;">Avisarme</button>
     </div>
   </div>
+</div>
+
+<!-- EDITOR MASIVO (planilla) -->
+<div id="masivo-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:700;flex-direction:column">
+  <div style="padding:0.6rem 0.9rem;border-bottom:1px solid var(--gris-medio);display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;flex-shrink:0">
+    <span style="font-weight:800;font-size:1rem;color:var(--azul)">📊 Editor masivo</span>
+    <input id="masivo-buscar" placeholder="🔍 Buscar producto..." oninput="renderMasivo()" autocomplete="off" style="flex:1;min-width:140px;padding:0.45rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
+    <select id="masivo-fdue" onchange="renderMasivo()" style="padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-size:0.82rem">
+      <option value="">Dueño: todos</option><option value="Jony">Jony</option><option value="Miri">Miri</option>
+    </select>
+    <select id="masivo-fvis" onchange="renderMasivo()" style="padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-size:0.82rem">
+      <option value="">Visib: todas</option><option value="Ambos">Ambos</option><option value="Mayorista">Mayorista</option><option value="Minorista">Minorista</option><option value="Oculto">🙈 Oculto</option>
+    </select>
+    <button onclick="masivoToggleVista()" id="masivo-vista-btn" style="padding:0.45rem 0.8rem;border:1.5px solid var(--azul);background:#fff;color:var(--azul);border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer">📝 Descripciones</button>
+    <button onclick="guardarMasivo()" id="masivo-guardar" style="padding:0.45rem 0.9rem;border:none;background:var(--verde);color:#fff;border-radius:8px;font-weight:700;font-size:0.85rem;cursor:pointer;opacity:0.5" disabled>💾 Guardar (<span id="masivo-ncambios">0</span>)</button>
+    <button onclick="cerrarMasivo()" style="background:var(--gris);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:0.9rem;flex-shrink:0">✕</button>
+  </div>
+  <div id="masivo-body" style="flex:1;overflow:auto"></div>
 </div>
 
 <!-- MODAL CONFIRMAR COBRO -->
@@ -4255,6 +4278,170 @@ function _duenoBadge(p) {
   else h += pill(esc(d), '#e6e6e6', '#555');
   if (oculto) h += pill('🙈 Oculto', '#e7e7e7', '#777');
   return h;
+}
+
+// ─── EDITOR MASIVO (planilla) ─────────────────────────────────────────────────
+let _masivoData = [], _masivoOrig = {}, _masivoCambios = {}, _masivoVista = 'datos', _masivoCats = [];
+const _mTh = 'padding:6px 8px;text-align:left;font-size:0.64rem;text-transform:uppercase;letter-spacing:0.03em;color:var(--texto-suave);border-bottom:1.5px solid var(--gris-medio);white-space:nowrap';
+const _mTd = 'padding:4px 8px;vertical-align:middle;';
+const _mDispNum = v => (v === '' || v === null || v === undefined || v === 0 || v === '0') ? '' : v.toString().replace('.', ',');
+const _mDispTxt = v => (v === null || v === undefined) ? '' : v.toString();
+
+// POST con sesión (para batches grandes que no entran en una URL GET). Body text/plain → sin preflight CORS.
+async function _postSesion(payload) {
+  let tok = _authToken;
+  try { const g = await _sb.auth.getSession(); tok = g.data.session?.access_token || tok; } catch (e) {}
+  try {
+    const r = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(Object.assign({ token: tok }, payload)) });
+    const txt = await r.text();
+    try { return JSON.parse(txt); } catch { return { __transitorio: true }; }
+  } catch (e) { return { error: 'network' }; }
+}
+
+async function abrirMasivo() {
+  document.getElementById('masivo-overlay').style.display = 'flex';
+  document.getElementById('masivo-body').innerHTML = '<div style="padding:2rem;text-align:center;color:var(--texto-suave)">Cargando productos…</div>';
+  _masivoCambios = {}; _masivoOrig = {}; _masivoVista = 'datos';
+  document.getElementById('masivo-vista-btn').textContent = '📝 Descripciones';
+  masivoUpdateCounter();
+  try {
+    invalidarCache();
+    let prods = await apiGet('getProductosAdmin');
+    if (!Array.isArray(prods)) throw new Error('bad');
+    if (esVistaMiri()) prods = prods.filter(p => p.dueno !== 'Jony');   // privacidad
+    _masivoData = prods;
+    _masivoCats = Array.from(new Set([...(window.CATEGORIA_ORDEN || ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Snacks','Galletita','Sopa','Varios']), ...prods.map(p => p.categoria).filter(Boolean)]));
+    prods.forEach(p => {
+      _masivoOrig[p.id] = {
+        desc: _mDispTxt(p.desc), descBot: _mDispTxt(p.descBot), categoria: _mDispTxt(p.categoria || 'Varios'),
+        dueno: (p.dueno || '') === 'Jony' ? 'Jony' : 'Miri', visible: _mDispTxt(p.visible || 'Ambos'),
+        moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: _mDispNum(p.precioMay), precioMin: _mDispNum(p.precioMin),
+        costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0)
+      };
+    });
+    renderMasivo();
+  } catch (e) {
+    document.getElementById('masivo-body').innerHTML = '<div style="padding:2rem;text-align:center;color:#c0392b">No se pudo cargar. Cerrá y reintentá.</div>';
+  }
+}
+
+function cerrarMasivo() {
+  if (Object.keys(_masivoCambios).some(id => Object.keys(_masivoCambios[id]).length) && !confirm('Tenés cambios sin guardar. ¿Cerrar igual?')) return;
+  document.getElementById('masivo-overlay').style.display = 'none';
+}
+
+function _masivoFiltrados() {
+  const q = (document.getElementById('masivo-buscar').value || '').toLowerCase().trim();
+  const fd = document.getElementById('masivo-fdue').value, fv = document.getElementById('masivo-fvis').value;
+  return _masivoData.filter(p => {
+    if (q && !((p.nombre || '').toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q))) return false;
+    if (fd && ((p.dueno || '') === 'Jony' ? 'Jony' : 'Miri') !== fd) return false;
+    if (fv && (p.visible || 'Ambos') !== fv) return false;
+    return true;
+  });
+}
+
+function _mVal(id, campo) {
+  if (_masivoCambios[id] && _masivoCambios[id][campo] !== undefined) return _masivoCambios[id][campo];
+  return _masivoOrig[id] ? (_masivoOrig[id][campo] ?? '') : '';
+}
+
+function _mPills(id, campo, opts, actual) {
+  return `<div style="display:flex;gap:2px">` + opts.map(([val, lbl]) => {
+    const on = String(actual) === String(val);
+    return `<button type="button" onclick="masivoPill('${id}','${campo}','${val}',this)" style="padding:2px 6px;border:1px solid ${on ? 'var(--azul)' : 'var(--gris-medio)'};background:${on ? 'var(--azul)' : '#fff'};color:${on ? '#fff' : 'var(--texto)'};border-radius:5px;font-size:0.66rem;font-weight:700;cursor:pointer;white-space:nowrap">${lbl}</button>`;
+  }).join('') + `</div>`;
+}
+
+function _mCatSelect(id) {
+  const actual = _mVal(id, 'categoria');
+  const opts = _masivoCats.map(c => `<option ${c === actual ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  return `<select onchange="masivoRecord('${id}','categoria',this.value,this)" style="padding:3px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.76rem;max-width:108px">${opts}</select>`;
+}
+
+function _mMargen(id) {
+  const pMay = parseFloat((_mVal(id, 'precioMay') || '').toString().replace(',', '.')) || 0;
+  const costo = parseFloat((_mVal(id, 'costo') || '').toString().replace(',', '.')) || 0;
+  if (pMay <= 0 || costo <= 0) return '<span style="color:var(--texto-suave)">—</span>';
+  const m = Math.round((pMay - costo) / pMay * 100);
+  return `<span style="color:${m >= 0 ? 'var(--verde)' : '#c0392b'}">${m >= 0 ? '+' : ''}${m}%</span>`;
+}
+
+function renderMasivo() {
+  const body = document.getElementById('masivo-body');
+  const list = _masivoFiltrados();
+  if (!list.length) { body.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--texto-suave)">Sin resultados</div>'; return; }
+  const inp = (id, campo, tipo) => `<input ${tipo} value="${esc(_mVal(id, campo))}" onchange="masivoRecord('${id}','${campo}',this.value,this)" style="width:100%;padding:4px 5px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.8rem;box-sizing:border-box;font-family:'DM Sans',sans-serif">`;
+  let html;
+  if (_masivoVista === 'desc') {
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Descripción</th><th style="${_mTh}">🎤 Descripción Shuki</th></tr></thead><tbody>`;
+    list.forEach(p => {
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:240px">${inp(p.id, 'desc', 'type="text"')}</td><td style="${_mTd}min-width:240px">${inp(p.id, 'descBot', 'type="text"')}</td></tr>`;
+    });
+  } else {
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th><th style="${_mTh}">P.May</th><th style="${_mTh}">P.Min</th><th style="${_mTh}">Costo</th><th style="${_mTh}">Margen</th><th style="${_mTh}">Stock</th></tr></thead><tbody>`;
+    list.forEach(p => {
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px"><b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td></tr>`;
+    });
+  }
+  body.innerHTML = html + '</tbody></table>';
+  Object.keys(_masivoCambios).forEach(id => masivoMarkRow(id));
+}
+
+function masivoRecord(id, campo, valor, el) {
+  const orig = _masivoOrig[id] ? (_masivoOrig[id][campo] ?? '') : '';
+  _masivoCambios[id] = _masivoCambios[id] || {};
+  if (String(orig) === String(valor)) { delete _masivoCambios[id][campo]; if (!Object.keys(_masivoCambios[id]).length) delete _masivoCambios[id]; }
+  else _masivoCambios[id][campo] = valor;
+  if (el && el.style) el.style.borderColor = (String(orig) !== String(valor)) ? 'var(--verde)' : 'var(--gris-medio)';
+  if (campo === 'precioMay' || campo === 'costo') { const mg = document.getElementById('mmargen-' + id); if (mg) mg.innerHTML = _mMargen(id); }
+  masivoMarkRow(id); masivoUpdateCounter();
+}
+
+function masivoPill(id, campo, valor, btn) {
+  masivoRecord(id, campo, valor);
+  btn.parentElement.querySelectorAll('button').forEach(b => {
+    const on = b === btn;
+    b.style.background = on ? 'var(--azul)' : '#fff'; b.style.color = on ? '#fff' : 'var(--texto)';
+    b.style.borderColor = on ? 'var(--azul)' : 'var(--gris-medio)';
+  });
+  masivoMarkRow(id);
+}
+
+function masivoMarkRow(id) {
+  const row = document.querySelector(`tr[data-mrow="${id}"]`);
+  if (row) row.style.background = (_masivoCambios[id] && Object.keys(_masivoCambios[id]).length) ? '#eafaf0' : '';
+}
+
+function masivoUpdateCounter() {
+  const n = Object.keys(_masivoCambios).filter(id => Object.keys(_masivoCambios[id]).length).length;
+  const el = document.getElementById('masivo-ncambios'); if (el) el.textContent = n;
+  const btn = document.getElementById('masivo-guardar'); if (btn) { btn.disabled = n === 0; btn.style.opacity = n === 0 ? '0.5' : '1'; }
+}
+
+function masivoToggleVista() {
+  _masivoVista = _masivoVista === 'datos' ? 'desc' : 'datos';
+  document.getElementById('masivo-vista-btn').textContent = _masivoVista === 'datos' ? '📝 Descripciones' : '📊 Datos';
+  renderMasivo();
+}
+
+async function guardarMasivo() {
+  const ids = Object.keys(_masivoCambios).filter(id => Object.keys(_masivoCambios[id]).length);
+  if (!ids.length) return;
+  const cambios = ids.map(id => Object.assign({ id }, _masivoCambios[id]));
+  const btn = document.getElementById('masivo-guardar');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  const r = await _postSesion({ accion: 'editarProductosLote', cambios: JSON.stringify(cambios) });
+  if (r && r.__transitorio) { showToast('⚠️ El servidor tardó. Revisá si se guardó antes de reintentar.'); btn.disabled = false; masivoUpdateCounter(); return; }
+  if (r && r.ok) {
+    showToast(`✓ ${r.n || cambios.length} producto(s) guardado(s)`);
+    _masivoCambios = {};
+    try { await cargarProductos(); } catch (e) {}
+    await abrirMasivo();
+  } else {
+    showToast('⚠️ ' + ((r && r.error) || 'No se pudo guardar'));
+    btn.disabled = false; masivoUpdateCounter();
+  }
 }
 
 function renderStockDrawer(lista) {
