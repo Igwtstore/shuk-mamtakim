@@ -3410,7 +3410,7 @@ function renderOfertasAdmin() {
     const badgePack = tienePack ? `<span style="background:#fdf3e3;color:var(--dorado);font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px">PACK x${p.cantPack}</span>` : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:10px">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${p.nombre}</div>
+        <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
         ${p.desc ? `<div style="font-size:0.75rem;color:var(--texto-suave)">${p.desc}</div>` : ''}
         <div style="display:flex;gap:0.3rem;margin-top:2px;flex-wrap:wrap">${badge}${badgePack}</div>
       </div>
@@ -4241,13 +4241,27 @@ function cerrarStockDrawer() {
   document.getElementById('stock-drawer').classList.remove('open');
 }
 
+// Etiqueta de dueño (Jony/Miri) para TODAS las listas del back (nunca en el front del cliente).
+// Regla: el dueño se muestra siempre; "Oculto" SOLO si el producto está oculto (lo visible no dice nada).
+function _duenoBadge(p) {
+  const d = (p.dueno || '').trim();
+  const oculto = (p.visible || '').trim() === 'Oculto';
+  const pill = (txt, bg, col) => `<span style="display:inline-block;font-size:0.6rem;font-weight:700;padding:1px 6px;border-radius:6px;background:${bg};color:${col};margin-right:4px;vertical-align:middle">${txt}</span>`;
+  let h = '';
+  if (d === 'Jony') h += pill('Jony', '#f3e3c3', '#9a6b00');
+  else if (d === 'Miri') h += pill('Miri', '#f7dcef', '#9b2d77');
+  else if (d) h += pill(esc(d), '#e6e6e6', '#555');
+  if (oculto) h += pill('🙈 Oculto', '#e7e7e7', '#777');
+  return h;
+}
+
 function renderStockDrawer(lista) {
   const body = document.getElementById('stock-drawer-body');
   if (!lista.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--texto-suave)">Sin resultados</div>'; return; }
   body.innerHTML = lista.map(p => `
     <div class="stock-drawer-row">
       <div class="stock-drawer-nombre">
-        <div style="font-weight:600">${p.nombre}</div>
+        <div style="font-weight:600">${_duenoBadge(p)}${p.nombre}</div>
         ${p.desc ? `<div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,40)}</div>` : ''}
       </div>
       <span class="stock-drawer-actual" title="Stock actual">${p.stock}</span>
@@ -4311,7 +4325,7 @@ function renderManualProductos() {
         style="width:55px;padding:0.3rem 0.4rem;border:1.5px solid #e8e6e0;border-radius:6px;text-align:center;font-size:0.85rem;${(_manualQtys[p.id]||0) > 0 ? 'border-color:var(--verde);background:#e8f5ee;font-weight:700;' : ''}"
         onchange="setManualQty(${p.id}, this.value)" oninput="setManualQty(${p.id}, this.value)" />
       <div style="flex:1;min-width:0">
-        <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${p.nombre}</div>
+        <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
         <div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,60)}</div>
         <div style="font-size:0.7rem;color:var(--dorado);font-weight:600">${precioStr} · Stock: ${p.stock}</div>
       </div>
@@ -4389,7 +4403,7 @@ function renderManualSeleccion() {
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;border-bottom:1px solid #d8ecdf">
       <span style="font-weight:800;color:var(--verde);min-width:34px;text-align:center">${qty}×</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${p.nombre}</div>
+        <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
         ${p.desc ? `<div style="font-size:0.68rem;color:var(--texto-suave)">${p.desc.substring(0,45)}</div>` : ''}
       </div>
       <span style="font-size:0.78rem;font-weight:700;white-space:nowrap">${subStr}</span>
@@ -9243,7 +9257,7 @@ function filtrarAgregarEdit() {
     const { precioUnit: precio, moneda } = _precioMoneda(p, esMay ? 'Mayorista' : 'Minorista');
     const precioStr = moneda === 'U$S' ? `U$S ${precio.toFixed(2)}` : `$ ${precio.toLocaleString('es-AR')}`;
     return `<div onclick="agregarProductoEdit(${p.id})" style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--gris-medio);cursor:pointer">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${p.nombre}${p.desc ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${p.desc.substring(0,40)}</span>` : ''}</div>
+      <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}${p.desc ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${p.desc.substring(0,40)}</span>` : ''}</div>
       <div style="font-size:0.7rem;color:var(--dorado);font-weight:600">${precioStr} · Stock: ${p.stock}</div>
     </div>`;
   }).join('');
