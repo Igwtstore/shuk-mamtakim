@@ -2279,8 +2279,9 @@ function _acFiltrados() {
   return _acProductos.filter(p => {
     if (q && !(p.nombre || '').toLowerCase().includes(q)) return false;
     const vis = (p.visible || 'Ambos').trim();
-    if (_acFiltro === 'minorista') return p.activo && vis === 'Minorista';   // exclusivo
-    if (_acFiltro === 'mayorista') return p.activo && vis === 'Mayorista';   // exclusivo
+    // Min/May incluyen los 'Ambos' (un producto 'Ambos' se vende en los dos canales). 'Ambos' = solo los exclusivos de ambos.
+    if (_acFiltro === 'minorista') return p.activo && (vis === 'Minorista' || vis === 'Ambos');
+    if (_acFiltro === 'mayorista') return p.activo && (vis === 'Mayorista' || vis === 'Ambos');
     if (_acFiltro === 'ambos') return p.activo && vis === 'Ambos';
     if (_acFiltro === 'ocultos') return _acEsOculto(p);
     return true;
@@ -2296,13 +2297,15 @@ function _acRender() {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
     const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:34px;height:34px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const estado = _acEsOculto(p) ? '<span style="color:#b8860b">🙈 oculto</span>' : `<span style="color:#1a7a3a">👁️ ${esc(p.visible||'Ambos')}</span>`;
+    const _stk = parseFloat(p.stock) || 0;
+    const stkTxt = `<span style="color:${_stk <= 0 ? '#c0392b' : '#555'};font-weight:${_stk <= 0 ? '700' : '400'}">📦 ${_stk <= 0 ? 'sin stock' : _stk + ' u.'}</span>`;
     return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.6rem;border-bottom:1px solid var(--gris);cursor:pointer;background:${sel?'#eef4fb':'#fff'}">
       <input type="checkbox" ${sel?'checked':''} onchange="_acToggle('${p.id}')" style="width:17px;height:17px">
       ${thumb}
       <div style="flex:1;min-width:0">
         <div style="font-size:0.84rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_duenoBadge(p)}${esc(p.nombre)}</div>
         ${p.desc ? `<div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc)}</div>` : ''}
-        <div style="font-size:0.66rem;color:var(--texto-suave)">🏷️ ${esc(p.categoria||'Varios')} · ${estado}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave)">🏷️ ${esc(p.categoria||'Varios')} · ${estado} · ${stkTxt}</div>
       </div>
     </label>`;
   }).join('');
@@ -3185,7 +3188,7 @@ async function renderCuentaCorriente() {
       return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
           <div>
-            <div style="font-weight:700;color:var(--azul);font-size:0.9rem">${esc(cliente)}</div>
+            <div style="font-weight:800;color:#c0392b;font-size:0.9rem">${esc(cliente)}</div>
             <button onclick="verDetalleDeudor(${i})" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--azul);text-decoration:underline;cursor:pointer">${nped} pedido${nped!==1?'s':''} · ver detalle</button>
           </div>
           <div style="text-align:right">
@@ -7132,6 +7135,7 @@ function setPanelSeccion(s, btn) {
   document.querySelectorAll('.psec-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
+  if (typeof verificarStockBajo === 'function') verificarStockBajo();   // re-evalúa la alerta (solo va en Stock)
   if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
   if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí o hablá natural para probar a Shuki 👇 (ej: "hola, qué tenés?")', 'bot'); }
 }
@@ -8256,8 +8260,10 @@ function verificarStockBajo() {
   const card = document.getElementById('stock-alerta-card');
   const lista = document.getElementById('stock-alerta-lista');
   if (!card || !lista) return;
-  if (!bajos.length) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
+  // El "Stock bajo" SOLO va en la sección Stock (no en Ventas).
+  const enStock = (typeof _panelSeccion !== 'undefined') ? (_panelSeccion === 'stock') : true;
+  if (!bajos.length || !enStock) { card.style.display = 'none'; if (!bajos.length) return; }
+  else card.style.display = 'block';
   lista.innerHTML = bajos.map(p =>
     `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--gris-medio)">
       <span style="font-size:0.85rem;color:var(--azul);font-weight:600">${p.nombre} <span style="font-weight:400;color:var(--texto-suave)">${p.desc.substring(0,40)}</span></span>
