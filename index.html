@@ -5780,6 +5780,15 @@ function _fmtSaldo(ars, usd) {
   if (Math.abs(usd) >= 0.01) parts.push('U$S ' + usd.toFixed(2));
   return parts.join('<br>') || '$0';
 }
+// Saldo final con "+" explícito: deja claro que pesos y dólares son DOS saldos que se suman (no una conversión).
+function _fmtSaldoFinal(ars, usd, sep) {
+  const parts = [];
+  if (Math.abs(ars) >= 1) parts.push('$' + Math.round(ars).toLocaleString('es-AR'));
+  if (Math.abs(usd) >= 0.01) parts.push('U$S ' + usd.toFixed(2));
+  return parts.join(sep || '  +  ') || '$0';
+}
+// ¿El cliente debe en las dos monedas a la vez? → mostramos la aclaración de que no es una conversión.
+function _saldoEnDosMonedas(ars, usd) { return Math.abs(ars) >= 1 && Math.abs(usd) >= 0.01; }
 function _renderEstadoCta() {
   const d = window._estadoCta; if (!d) return;
   const filas = d.movs.map(m => {
@@ -5791,8 +5800,9 @@ function _renderEstadoCta() {
       <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;vertical-align:top;font-weight:700">${_fmtSaldo(m.sA, m.sU)}</td>
     </tr>`;
   }).join('');
-  const saldoFinal = _fmtSaldo(d.saldoARS, d.saldoUSD);
+  const saldoFinal = _fmtSaldoFinal(d.saldoARS, d.saldoUSD);
   const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
+  const dosMonedas = _saldoEnDosMonedas(d.saldoARS, d.saldoUSD);
   const doc = `<div id="estadocta-doc" style="background:#fff;padding:1rem 1.1rem;font-family:'DM Sans',sans-serif;color:#222">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--azul);padding-bottom:8px;margin-bottom:10px">
         <div><div style="font-weight:800;font-size:1.05rem;color:var(--azul)">Shuk Mamtakim</div>
@@ -5811,6 +5821,7 @@ function _renderEstadoCta() {
       </table>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:0.6rem 0.8rem;background:${alDia ? '#e8f5ee' : '#fdecea'};border-radius:8px;font-weight:800;color:${alDia ? '#1a7a3c' : '#c0392b'}">
         <span>${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL'}</span><span style="text-align:right">${saldoFinal}</span></div>
+      ${dosMonedas ? `<div style="font-size:0.64rem;color:#c0392b;margin-top:6px;text-align:center;font-weight:600">⚠️ Son dos saldos separados: uno en pesos <b>y</b> otro en dólares — no es una conversión, se deben ambos.</div>` : ''}
       <div style="font-size:0.62rem;color:#aaa;margin-top:6px">Detalle de pedidos y pagos. El saldo se actualiza con cada movimiento.</div>
     </div>`;
   const botones = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
@@ -5896,7 +5907,8 @@ function estadoCtaWhatsApp() {
   }).join('\n');
   const saldoFinal = [Math.abs(d.saldoARS) >= 1 ? '$' + Math.round(d.saldoARS).toLocaleString('es-AR') : '', Math.abs(d.saldoUSD) >= 0.01 ? 'U$S' + d.saldoUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$0';
   const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
-  const txt = `*Estado de cuenta — Shuk Mamtakim*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL: ' + saldoFinal}*`;
+  const aclara = _saldoEnDosMonedas(d.saldoARS, d.saldoUSD) ? '\n⚠️ Son dos saldos separados (pesos *y* dólares) — no es una conversión, se deben ambos.' : '';
+  const txt = `*Estado de cuenta — Shuk Mamtakim*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL: ' + saldoFinal}*${aclara}`;
   const tel = (d.tel || '').toString().replace(/\D/g, '');
   const base = tel ? 'https://wa.me/549' + tel : 'https://wa.me/';
   window.open(base + '?text=' + encodeURIComponent(txt), '_blank');
