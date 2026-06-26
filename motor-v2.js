@@ -148,6 +148,12 @@ function _asegurarColUsdJony_(h) {
   if (h.getMaxColumns() < 28) h.insertColumnsAfter(h.getMaxColumns(), 28 - h.getMaxColumns());
   if (h.getRange(1, 28).getValue() !== 'USD Jony') h.getRange(1, 28).setValue('USD Jony');
 }
+// Col 29: "Pagos Tramos" — JSON del cobro fraccionado [{balde,dueno,moneda,caja,monto}]. Vacío = modelo viejo (1 caja por lado).
+function _asegurarColTramos_(h) {
+  if (!h) return;
+  if (h.getMaxColumns() < 29) h.insertColumnsAfter(h.getMaxColumns(), 29 - h.getMaxColumns());
+  if (h.getRange(1, 29).getValue() !== 'Pagos Tramos') h.getRange(1, 29).setValue('Pagos Tramos');
+}
 
 function gananciaJonyPeriodo_(ss) {
   const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, items: [] };
@@ -621,6 +627,30 @@ function doGet(e) {
           h.getRange(i+1,18).setValue(dec(e.parameter.cajaMyri||''));
           const tc = parseFloat(e.parameter.tipoCambio||0);
           h.getRange(i+1,19).setValue(tc);
+          // Cobro fraccionado: guardar el JSON de tramos (dónde entró cada parte). En vista Myri se
+          // conservan los tramos de Jony que ya hubiera (solo se reemplazan los de Myri).
+          if (e.parameter.tramos !== undefined) {
+            _asegurarColTramos_(h);
+            let nuevos = []; try { nuevos = JSON.parse(dec(e.parameter.tramos) || '[]'); } catch (e3) { nuevos = []; }
+            if (e.parameter.soloMyri === '1') {
+              let prev = []; try { prev = JSON.parse((datos[i][28] || '').toString() || '[]'); } catch (e4) { prev = []; }
+              nuevos = prev.filter(t => t.dueno === 'J').concat(nuevos.filter(t => t.dueno === 'M'));
+            }
+            h.getRange(i+1,29).setNumberFormat('@');
+            h.getRange(i+1,29).setValue(JSON.stringify(nuevos));
+            // Comisión de Jony derivada de los tramos de MYRI (golosinas), en la moneda en que entró
+            // cada tramo. Así gananciaJonyPeriodo_ (diezmo/corte) y los renders quedan consistentes.
+            const _scT = (datos[i][26] || '').toString().toUpperCase() === 'SI';
+            let cA = 0, cU = 0;
+            if (!_scT) nuevos.filter(t => t.dueno === 'M').forEach(t => {
+              const monto = parseFloat(t.monto) || 0; if (monto <= 0) return;
+              const cajaUSD = ['ETF_USD_MYRI','ETF_USD_JONY','CTA_CTE_USD'].indexOf(t.caja) !== -1;
+              if (cajaUSD) cU += (t.moneda === 'USD' ? monto : (tc > 0 ? monto / tc : 0)) * 0.15;
+              else cA += (t.moneda === 'USD' ? monto * tc : monto) * 0.15;
+            });
+            h.getRange(i+1,15).setValue(Math.round(cA));
+            h.getRange(i+1,16).setValue(Math.round(cU * 100) / 100);
+          }
           if (e.parameter.comprobante) {   // comprobante(s): se ACUMULAN a los que ya tenga el pedido
             const prevC = (datos[i][21] || '').toString().trim();
             const nuevoC = dec(e.parameter.comprobante).trim();
@@ -678,7 +708,7 @@ function doGet(e) {
           // Comisión en la MONEDA DE COBRO: al confirmar la caja, si la venta era en U$S y se cobró
           // en una caja en pesos, la comisión pasa a pesos (y al revés). Los renders ya lo reflejan;
           // esto deja el dato GUARDADO consistente (cols 15/16). No corre si hubo ajuste (ya las seteó).
-          if (e.parameter.recibido === undefined || e.parameter.recibido === '') {
+          if ((e.parameter.recibido === undefined || e.parameter.recibido === '') && e.parameter.tramos === undefined) {
             const _sc = (datos[i][26] || '').toString().toUpperCase() === 'SI';
             const _cm = _comiEnMonedaCobro_(datos[i][12], datos[i][13], dec(e.parameter.cajaMyri || ''), tc, _sc);
             h.getRange(i+1,15).setValue(_cm.comiARS);
@@ -687,7 +717,8 @@ function doGet(e) {
           // CROSS-MONEDA: una parte en PESOS cobrada en caja de DÓLARES → pasarla a U$S al tc.
           // Así la plata cae en dólares en su caja y la comisión queda en U$S (regla: comisión en la
           // moneda en que se cobró). Lee los valores YA escritos; idempotente al re-confirmar (ars=0).
-          if (tc > 0) {
+          // NO corre con cobro fraccionado (los tramos ya definen dónde entró cada parte).
+          if (tc > 0 && e.parameter.tramos === undefined) {
             const cM = dec(e.parameter.cajaMyri || ''), cJ = dec(e.parameter.cajaJony || '');
             const aJ0 = parseFloat(h.getRange(i+1,12).getValue()) || 0;
             const aM0 = parseFloat(h.getRange(i+1,13).getValue()) || 0;
@@ -2411,7 +2442,7 @@ function resetearStockDia(ss, p) {
 // (ventas/gastos/...) y el batch panelAdmin, sin duplicar lógica.
 function _ventasData(ss) {
   const h = ss.getSheetByName('Ventas'); if (!h || h.getLastRow() < 2) return [];
-  const nc = Math.min(28, h.getLastColumn());
+  const nc = Math.min(29, h.getLastColumn());
   return h.getRange(2,1,h.getLastRow()-1,nc).getValues().map((r,idx) => ({
     id: r[0] instanceof Date ? r[0].toISOString() : r[0].toString().trim(),
     fecha: r[1] instanceof Date ? Utilities.formatDate(r[1],TZ,'dd/MM/yyyy HH:mm') : r[1].toString(),
@@ -2421,7 +2452,7 @@ function _ventasData(ss) {
     usdMyri:r[13]||0, comiARS:r[14]||0, comiUSD:r[15]||0,
     cajaJony:r[16]||'', cajaMyri:r[17]||'', tipoCambio:r[18]||0, stockUpdates:r[19]||'',
     comprobante:r[21]||'', ajuste: r[22]||0, corte: (r[25]||'').toString(), sinComision: (r[26]||'').toString(),
-    usdJONY: r[27]||0
+    usdJONY: r[27]||0, tramos: (r[28]||'').toString()
   }));
 }
 function _gastosData(ss) {

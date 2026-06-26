@@ -1762,42 +1762,11 @@
 <div id="cobro-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:1.25rem">💰 Confirmar cobro</div>
-    <div id="cobro-jony-wrap" style="display:none;margin-bottom:0.75rem">
-      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Pago JONY: <span id="cobro-jony-amt" style="color:var(--verde)"></span></label>
-      <select id="cobro-caja-jony" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
-        <optgroup label="Cajas JONY">
-          <option value="MP_JONY">MP JONY</option>
-          <option value="EFT_JONY">EFT $ JONY</option>
-          <option value="ETF_USD_JONY">ETF U$S JONY</option>
-        </optgroup>
-        <optgroup label="Cobrado por MYRI (queda debiéndote)">
-          <option value="MP_GABY">MP GABY</option>
-          <option value="EFT_MYRI">EFT $ MYRI</option>
-        </optgroup>
-        <optgroup label="Cuenta corriente">
-          <option value="CTA_CTE_ARS">Cta Cte $</option>
-          <option value="CTA_CTE_USD">Cta Cte U$S</option>
-        </optgroup>
-      </select>
-    </div>
-    <div id="cobro-myri-wrap" style="display:none;margin-bottom:0.75rem">
-      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Pago MYRI — Golosinas: <span id="cobro-myri-amt" style="color:var(--verde)"></span></label>
-      <select id="cobro-caja-myri" onchange="cobro_onSelectChange()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
-        <optgroup label="Cajas MYRI">
-          <option value="MP_GABY">MP GABY (transferencia)</option>
-          <option value="EFT_MYRI">EFT $ MYRI (efectivo)</option>
-          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
-        </optgroup>
-        <optgroup label="Cobrado por JONY (a cuenta comisión)">
-          <option value="EFT_JONY">EFT $ JONY (efectivo/transf.)</option>
-          <option value="MP_JONY">MP JONY</option>
-        </optgroup>
-        <optgroup label="Cuenta corriente">
-          <option value="CTA_CTE_ARS">Cta Cte $</option>
-          <option value="CTA_CTE_USD">Cta Cte U$S</option>
-        </optgroup>
-      </select>
-    </div>
+    <!-- Cobro fraccionado: una sección por "balde" (pesos/dólares de cada socio), cada uno divisible en varias cajas.
+         Se genera por JS en cobro_renderTramos(). Los selects viejos quedan ocultos como fallback de compatibilidad. -->
+    <div id="cobro-tramos-container" style="margin-bottom:0.5rem"></div>
+    <div id="cobro-jony-wrap" style="display:none"><span id="cobro-jony-amt"></span><select id="cobro-caja-jony"></select></div>
+    <div id="cobro-myri-wrap" style="display:none"><span id="cobro-myri-amt"></span><select id="cobro-caja-myri"></select></div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante (opcional — foto de transferencia/MP)</label>
       <input type="file" id="cobro-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
@@ -3078,8 +3047,23 @@ function comprobanteLinks(c) {
 // Solo para pedidos realmente cobrados (caja de verdad). En vista Miri oculta la parte de Jony.
 function detalleCobro(v, soloMiri) {
   if (!esCobradoReal(v)) return '';
-  const arsJ = parseFloat(v.arsJONY || 0), arsM = parseFloat(v.arsMyri || 0), usdM = parseFloat(v.usdMyri || 0), usdJ = parseFloat(v.usdJONY || 0);
   const tc = parseFloat(v.tipoCambio || 0);
+  // Cobro fraccionado: mostrar el desglose por tramo (cada parte → su caja).
+  let _trD = null;
+  if (v.tramos) { try { _trD = JSON.parse(v.tramos); } catch (e) { _trD = null; } }
+  if (_trD && _trD.length) {
+    const $ars2 = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+    const parts = _trD.filter(t => !(soloMiri && t.dueno === 'J') && (parseFloat(t.monto) || 0) > 0).map(t => {
+      const m = parseFloat(t.monto) || 0;
+      const cajaUSD = ['ETF_USD_MYRI', 'ETF_USD_JONY', 'CTA_CTE_USD'].includes(t.caja);
+      const montoTxt = t.moneda === 'USD'
+        ? (cajaUSD || tc <= 0 ? `U$S ${m.toFixed(2)}` : `U$S ${m.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars2(m * tc)}`)
+        : $ars2(m);
+      return `${montoTxt} → <b>${cajaLabel(t.caja)}</b>`;
+    });
+    return parts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;color:#1a7a3a;background:#eef7ee;border-radius:8px;padding:0.35rem 0.6rem">💵 ${parts.join(' &nbsp;·&nbsp; ')}</div>` : '';
+  }
+  const arsJ = parseFloat(v.arsJONY || 0), arsM = parseFloat(v.arsMyri || 0), usdM = parseFloat(v.usdMyri || 0), usdJ = parseFloat(v.usdJONY || 0);
   const cajaJ = v.cajaJony || '', cajaM = v.cajaMyri || '';
   const esReal = c => !!c && !String(c).startsWith('CTA_CTE');
   const $ars = n => '$ ' + Math.round(n).toLocaleString('es-AR');
@@ -6046,6 +6030,49 @@ async function renderCaja() {
         if (usdM > 0) movs.push({ desc: `Pend. cobro #${n}`, col: 'CTA_CTE_USD', val: usdM, mon: 'USD', tipo: 'venta', vid: v.id });
         return;
       }
+      // ── COBRO FRACCIONADO: si la venta tiene tramos, cada parte se imputó a su caja (varias por balde). ──
+      let _tramos = null;
+      if (v.tramos) { try { _tramos = JSON.parse(v.tramos); } catch (e) { _tramos = null; } }
+      if (_tramos && _tramos.length) {
+        const tc = parseFloat(v.tipoCambio || 0);
+        const _esUSD = c => ['ETF_USD_MYRI', 'ETF_USD_JONY', 'CTA_CTE_USD'].includes(c);
+        _tramos.forEach(t => {
+          const monto = parseFloat(t.monto) || 0; if (monto <= 0) return;
+          const cajaUSD = _esUSD(t.caja);
+          // Valor en la MONEDA DE LA CAJA (cross-moneda al tc si difieren).
+          let mon, val;
+          if (cajaUSD) { mon = 'USD'; val = t.moneda === 'USD' ? monto : (tc > 0 ? Math.round(monto / tc * 100) / 100 : 0); }
+          else { mon = 'ARS'; val = t.moneda === 'USD' ? Math.round(monto * tc) : Math.round(monto); }
+          const exTxt = (t.moneda === 'USD' && !cajaUSD) ? `ex U$S ${monto.toFixed(2)} @ $${tc.toLocaleString('es-AR')}` : '';
+          if (t.dueno === 'J') {
+            movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: t.caja, val, mon, tipo: 'venta', vid: v.id, dueno: 'J', sub: exTxt });
+          } else {
+            const esCajaJony = ['MP_JONY', 'EFT_JONY'].includes(t.caja);
+            if (mon === 'ARS') {
+              const comi = _sinComi ? 0 : Math.round(val * 0.15);
+              const sub = [exTxt, (esCajaJony && comi > 0) ? `incluye tu comisión $ ${comi.toLocaleString('es-AR')}` : ''].filter(Boolean).join(' · ');
+              movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: t.caja, val, mon: 'ARS', tipo: 'venta', vid: v.id, corte: v.corte, sub, myriNet: esCajaJony ? (val - comi) : undefined });
+              if (comi > 0 && !esCajaJony) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comi, mon: 'ARS', tipo: 'comi', srcCol: t.caja });
+              else if (comi > 0 && !v.corte) comiYaEnJonyARS += comi;
+            } else {
+              const comiU2 = _sinComi ? 0 : parseFloat((val * 0.15).toFixed(2));
+              movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: t.caja, val, mon: 'USD', tipo: 'venta', vid: v.id, corte: v.corte, myriNetUSD: esCajaJony ? (val - comiU2) : undefined });
+              if (comiU2 > 0 && !esCajaJony) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU2, mon: 'USD', tipo: 'comi', srcCol: t.caja });
+              else if (comiU2 > 0 && !v.corte) comiYaEnJonyUSD += comiU2;
+            }
+          }
+        });
+        // Envío (mismo criterio que el path normal): el cobrado entra a la caja del cobro, sin comisión.
+        const _envT = _enviosPorVenta[v.id];
+        const _envCobT = _envT ? (parseFloat(_envT.cobrado) || 0) : 0;
+        if (_envCobT > 0) {
+          const _cajasJ = ['MP_JONY', 'EFT_JONY', 'ETF_USD_JONY', 'COMI_USD_JONY'];
+          const cs = _tramos.map(t => t.caja).filter(c => c && !String(c).startsWith('CTA_CTE'));
+          const cajaEnv = cs.find(c => _cajasJ.includes(c)) || cs[0] || null;
+          if (cajaEnv) movs.push({ desc: `Envío #${n} ${f}`, col: cajaEnv, val: _envCobT, mon: 'ARS', tipo: 'envio', vid: v.id });
+        }
+        return;   // ya imputado por tramos; saltea el modelo de "1 caja por lado"
+      }
       // Pedido cobrado: se imputa a la caja real donde entró (la elegiste al confirmar el cobro).
       const cajaJ = v.cajaJony || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
       const cajaM = v.cajaMyri || (fp === 'Cuenta corriente' ? 'CTA_CTE_ARS' : null);
@@ -6393,6 +6420,36 @@ async function renderCuentaSocios() {
     // (es deuda hasta que se confirme). Así coincide con deudores y el diagnóstico.
     const cajaJ = v.cajaJony || '';
     const cajaM = v.cajaMyri || '';
+
+    // ── COBRO FRACCIONADO: deuda derivada tramo por tramo (cada parte entró a la caja que se eligió). ──
+    let _trS = null;
+    if (v.tramos) { try { _trS = JSON.parse(v.tramos); } catch (e) { _trS = null; } }
+    if (_trS && _trS.length) {
+      const tc = parseFloat(v.tipoCambio) || 0;
+      const _cajaUSD = c => ['ETF_USD_MYRI', 'ETF_USD_JONY', 'CTA_CTE_USD'].includes(c);
+      _trS.forEach(t => {
+        const monto = parseFloat(t.monto) || 0; if (monto <= 0) return;
+        const cajaUSD = _cajaUSD(t.caja);
+        const mon = cajaUSD ? 'USD' : 'ARS';
+        const val = cajaUSD ? (t.moneda === 'USD' ? monto : (tc > 0 ? monto / tc : 0))
+                            : (t.moneda === 'USD' ? Math.round(monto * tc) : monto);
+        const enMyri = MYRI_ARS.includes(t.caja) || t.caja === 'ETF_USD_MYRI';
+        const enJony = JONY_BOXES_CC.includes(t.caja);
+        if (t.dueno === 'J') {
+          // Pitzujim de Jony cobrado en una caja de Myri → Myri le debe el total.
+          if (enMyri && mon === 'ARS') pitzMyri += val;
+        } else if (mon === 'ARS') {
+          const comi = _sinComiS ? 0 : Math.round(val * 0.15);
+          if (enMyri) comiDebe += comi;                 // Myri cobró golosinas → debe comisión
+          else if (enJony) jonyTiene += (val - comi);   // Jony cobró golosinas de Myri → le debe el neto
+        } else {
+          const comiU = _sinComiS ? 0 : parseFloat((val * 0.15).toFixed(2));
+          if (t.caja === 'ETF_USD_MYRI') comiDebeU += comiU;
+          else if (enJony) jonyTieneU += (val - comiU);
+        }
+      });
+      return;   // ya derivado por tramos; saltea el modelo de "1 caja por lado"
+    }
 
     // Pitzujim que terminó en caja de Myri → Myri le debe el total (incluye U$S cobrados en pesos al tc)
     if (arsJ > 0 && MYRI_ARS.includes(cajaJ)) pitzMyri += arsJ;
@@ -8601,22 +8658,114 @@ let _cobroId = null, _cobroUsdM = 0, _cobroArsJ = 0, _cobroArsM = 0, _cobroUsdJ 
 let _enviosPorVenta = {};   // ventaId → {cobrado, costo, dueno, quienPago} (cache de la Caja Envíos)
 const COBRO_ARS_COLS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS'];
 
+// ─── COBRO FRACCIONADO (tramos por balde) ─────────────────────────────────────
+// Cada "balde" del pedido (pesos/dólares de Jony, pesos/dólares de Myri) se puede dividir
+// en varias cajas. _cobroTramos[balde] = [{caja, monto}]. El monto va en la moneda del balde.
+let _cobroTramos = { arsJ: [], usdJ: [], arsM: [], usdM: [] };
+function _cobroBaldes() {
+  return [
+    { key:'arsJ', dueno:'J', moneda:'ARS', total:_cobroArsJ, label:'Pago JONY · pesos' },
+    { key:'usdJ', dueno:'J', moneda:'USD', total:_cobroUsdJ, label:'Pago JONY · dólares' },
+    { key:'arsM', dueno:'M', moneda:'ARS', total:_cobroArsM, label:'Pago MYRI · pesos' },
+    { key:'usdM', dueno:'M', moneda:'USD', total:_cobroUsdM, label:'Pago MYRI · dólares' },
+  ].filter(b => b.total > 0 && !(b.dueno === 'J' && esVistaMiri()));   // vista Miri no ve los baldes de Jony
+}
+function _cajaDefaultBalde(b) {
+  if (b.dueno === 'J') return b.moneda === 'USD' ? 'ETF_USD_JONY' : 'MP_JONY';
+  return b.moneda === 'USD' ? 'ETF_USD_MYRI' : 'MP_GABY';
+}
+function _cobroInitTramos() {
+  _cobroTramos = { arsJ: [], usdJ: [], arsM: [], usdM: [] };
+  _cobroBaldes().forEach(b => { _cobroTramos[b.key] = [{ caja: _cajaDefaultBalde(b), monto: b.total }]; });
+}
+function _cajaOptsHtml(dueno, sel) {
+  const grupos = dueno === 'J' ? [
+    ['Cajas JONY', [['MP_JONY','MP JONY'],['EFT_JONY','EFT $ JONY'],['ETF_USD_JONY','ETF U$S JONY']]],
+    ['Cobrado por MYRI (te queda debiendo)', [['MP_GABY','MP GABY'],['EFT_MYRI','EFT $ MYRI']]],
+    ['Cuenta corriente', [['CTA_CTE_ARS','Cta Cte $'],['CTA_CTE_USD','Cta Cte U$S']]],
+  ] : [
+    ['Cajas MYRI', [['MP_GABY','MP GABY'],['EFT_MYRI','EFT $ MYRI'],['ETF_USD_MYRI','ETF U$S MYRI']]],
+    ['Cobrado por JONY (a cuenta comisión)', [['EFT_JONY','EFT $ JONY'],['MP_JONY','MP JONY']]],
+    ['Cuenta corriente', [['CTA_CTE_ARS','Cta Cte $'],['CTA_CTE_USD','Cta Cte U$S']]],
+  ];
+  return grupos.map(([g, opts]) => `<optgroup label="${g}">${opts.map(([v,l]) => `<option value="${v}"${v===sel?' selected':''}>${l}</option>`).join('')}</optgroup>`).join('');
+}
+function _fmtMonto(n, moneda) { return moneda === 'USD' ? Math.abs(n).toFixed(2) : Math.abs(Math.round(n)).toLocaleString('es-AR'); }
+function cobro_renderTramos() {
+  const cont = document.getElementById('cobro-tramos-container'); if (!cont) return;
+  let html = '';
+  _cobroBaldes().forEach(b => {
+    const tramos = _cobroTramos[b.key] || [];
+    const sym = b.moneda === 'USD' ? 'U$S' : '$';
+    const totalTxt = sym + ' ' + _fmtMonto(b.total, b.moneda);
+    const sum = tramos.reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+    const cubierto = Math.abs(sum - b.total) < (b.moneda === 'USD' ? 0.01 : 1);
+    html += `<div style="margin-bottom:0.6rem;border:1px solid #ece8df;border-radius:8px;padding:0.5rem 0.6rem">
+      <div style="font-size:0.78rem;font-weight:600;color:var(--azul);margin-bottom:0.35rem">${b.label}: <span style="color:var(--verde)">${totalTxt}</span></div>`;
+    tramos.forEach((t, i) => {
+      html += `<div style="display:flex;gap:0.35rem;align-items:center;margin-bottom:0.3rem">
+        <span style="font-size:0.8rem;color:var(--texto-suave);width:26px">${sym}</span>
+        <input type="number" min="0" step="${b.moneda==='USD'?'0.01':'any'}" value="${t.monto}" oninput="cobro_setTramo('${b.key}',${i},'monto',this.value)" style="width:88px;padding:0.4rem 0.5rem;border:1.5px solid #e8e6e0;border-radius:6px;font-size:0.85rem;box-sizing:border-box" />
+        <select onchange="cobro_setTramo('${b.key}',${i},'caja',this.value)" style="flex:1;min-width:0;padding:0.4rem 0.5rem;border:1.5px solid #e8e6e0;border-radius:6px;font-size:0.82rem;background:white">${_cajaOptsHtml(b.dueno, t.caja)}</select>
+        ${tramos.length>1 ? `<button type="button" onclick="cobro_delTramo('${b.key}',${i})" style="background:none;border:none;color:#c0392b;font-size:1rem;cursor:pointer;padding:0 4px">✕</button>` : ''}
+      </div>`;
+    });
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.2rem">
+      <button type="button" onclick="cobro_addTramo('${b.key}')" style="background:none;border:none;color:var(--azul);font-size:0.72rem;font-weight:600;cursor:pointer;padding:2px 0">➕ dividir en otra caja</button>
+      <span id="cobro-cub-${b.key}" style="font-size:0.68rem;color:${cubierto?'var(--verde)':'#c0392b'};font-weight:600">${cubierto?'✓ cubierto':('faltan '+sym+' '+_fmtMonto(b.total-sum, b.moneda))}</span>
+    </div></div>`;
+  });
+  cont.innerHTML = html;
+}
+function cobro_actualizarCubierto() {
+  _cobroBaldes().forEach(b => {
+    const span = document.getElementById('cobro-cub-' + b.key); if (!span) return;
+    const sym = b.moneda === 'USD' ? 'U$S' : '$';
+    const sum = (_cobroTramos[b.key]||[]).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+    const cubierto = Math.abs(sum - b.total) < (b.moneda === 'USD' ? 0.01 : 1);
+    span.style.color = cubierto ? 'var(--verde)' : '#c0392b';
+    span.textContent = cubierto ? '✓ cubierto' : ('faltan ' + sym + ' ' + _fmtMonto(b.total - sum, b.moneda));
+  });
+}
+function cobro_setTramo(key, i, campo, val) {
+  if (!_cobroTramos[key] || !_cobroTramos[key][i]) return;
+  _cobroTramos[key][i][campo] = val;
+  if (campo === 'caja') cobro_renderTramos();   // re-render para reflejar la caja elegida
+  cobro_actualizarCubierto();
+  cobro_onSelectChange();   // recalcula TC visible + esperado/recibido
+}
+function cobro_addTramo(key) {
+  const b = _cobroBaldes().find(x => x.key === key); if (!b) return;
+  const sum = (_cobroTramos[key]||[]).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+  _cobroTramos[key].push({ caja: _cajaDefaultBalde(b), monto: Math.max(0, b.total - sum) });
+  cobro_renderTramos(); cobro_onSelectChange();
+}
+function cobro_delTramo(key, i) {
+  if (!_cobroTramos[key]) return;
+  _cobroTramos[key].splice(i, 1);
+  cobro_renderTramos(); cobro_onSelectChange();
+}
+// Todos los tramos cargados, aplanados: [{balde, dueno, moneda, caja, monto}]. Para validar y guardar.
+function _cobroTramosFlat() {
+  const out = [];
+  _cobroBaldes().forEach(b => (_cobroTramos[b.key]||[]).forEach(t => {
+    const monto = parseFloat(t.monto) || 0;
+    if (monto > 0) out.push({ balde: b.key, dueno: b.dueno, moneda: b.moneda, caja: t.caja, monto });
+  }));
+  return out;
+}
+// ¿Todos los baldes están cubiertos exactamente por sus tramos?
+function _cobroBaldesCubiertos() {
+  return _cobroBaldes().every(b => {
+    const sum = (_cobroTramos[b.key]||[]).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+    return Math.abs(sum - b.total) < (b.moneda === 'USD' ? 0.01 : 1);
+  });
+}
+
 function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
   _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0; _cobroUsdJ = usdJ || 0; _cobroCliente = cliente || '';
-  const jw = document.getElementById('cobro-jony-wrap');
-  const mw = document.getElementById('cobro-myri-wrap');
-  // En vista Myri NO se muestra la parte de Jony (Pitzujim / sus productos) — privacidad.
-  const ocultarJony = esVistaMiri();
-  jw.style.display = ((arsJ > 0 || usdJ > 0) && !ocultarJony) ? 'block' : 'none';
-  mw.style.display = (arsM > 0 || usdM > 0) ? 'block' : 'none';
-  const jonyAmts = [];
-  if (arsJ > 0) jonyAmts.push('$ ' + Math.round(arsJ).toLocaleString('es-AR'));
-  if (usdJ > 0) jonyAmts.push('U$S ' + parseFloat(usdJ).toFixed(2));
-  document.getElementById('cobro-jony-amt').textContent = jonyAmts.join(' + ');
-  const myriAmts = [];
-  if (arsM > 0) myriAmts.push('$ ' + Math.round(arsM).toLocaleString('es-AR'));
-  if (usdM > 0) myriAmts.push('U$S ' + parseFloat(usdM).toFixed(2));
-  document.getElementById('cobro-myri-amt').textContent = myriAmts.join(' + ');
+  _cobroInitTramos();
+  cobro_renderTramos();
   document.getElementById('cobro-tc').value = '';
   document.getElementById('cobro-tc-result').textContent = '';
   const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
@@ -8651,84 +8800,38 @@ function cobro_envioCobrado() {
 // Cajas de dólares reales (sentido nuevo: venta en pesos cobrada en dólares).
 const _CAJAS_USD = ['ETF_USD_MYRI', 'ETF_USD_JONY', 'COMI_USD_JONY'];
 function _esCajaUSD(c) { return _CAJAS_USD.includes(c); }
-// ¿Se está cobrando una parte EN PESOS dentro de una caja de DÓLARES? → el "recibido" se ingresa
-// en U$S y hay que pedir tipo de cambio. (No aplica si además hay U$S yendo a una caja de pesos.)
-function cobro_pesoAUSD() {
-  const cajaM = document.getElementById('cobro-caja-myri')?.value || '';
-  const jw = document.getElementById('cobro-jony-wrap');
-  const cajaJ = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
-  const usdAPesos = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaM);
-  return !usdAPesos && ((_cobroArsM > 0 && _esCajaUSD(cajaM)) || (_cobroArsJ > 0 && _esCajaUSD(cajaJ)));
+// Con el cobro fraccionado el "recibido en U$S" del modelo viejo ya no aplica (cada tramo trae su caja/moneda).
+function cobro_pesoAUSD() { return false; }
+// ¿Algún tramo es cross-moneda (U$S en caja de pesos, o pesos en caja de U$S)? → hay que pedir el tipo de cambio.
+function _cobroNecesitaTC() {
+  return _cobroTramosFlat().some(t => {
+    const cajaUSD = _CAJAS_USD.includes(t.caja) || t.caja === 'CTA_CTE_USD';
+    return (t.moneda === 'USD' && !cajaUSD) || (t.moneda === 'ARS' && cajaUSD);
+  });
 }
-// Muestra el campo "monto recibido" y avisa el ajuste. En modo pesos→U$S, el recibido es en dólares.
+// Con tramos, el cobro se valida por COBERTURA de cada balde (no por un "monto recibido" único).
 function cobro_recalcAjuste() {
   const wrap = document.getElementById('cobro-ajuste-wrap');
-  const res = document.getElementById('cobro-ajuste-result');
-  const inp = document.getElementById('cobro-recibido');
-  if (!wrap || !res || !inp) return;
-  const espPesos = cobro_esperadoPesos();
-  if (espPesos <= 0) { wrap.style.display = 'none'; res.textContent = ''; return; }
-  wrap.style.display = 'block';
-  const menosWrap = document.getElementById('cobro-menos-wrap');
-  const pesoAUsd = cobro_pesoAUSD();
-  if (pesoAUsd) {
-    const tc = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
-    if (tc <= 0) { inp.placeholder = '—'; if (menosWrap) menosWrap.style.display = 'none';
-      res.innerHTML = '<span style="color:var(--dorado)">Poné primero el tipo de cambio ↑</span>'; return; }
-    const espUSD = Math.round(espPesos / tc * 100) / 100;
-    inp.placeholder = espUSD.toFixed(2);
-    const recUSD = inp.value === '' ? espUSD : (parseFloat(inp.value) || 0);
-    const dif = Math.round((recUSD - espUSD) * 100) / 100;
-    if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';
-    if (inp.value === '' || dif === 0) res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: U$S ${espUSD.toFixed(2)} (= $ ${espPesos.toLocaleString('es-AR')}) · sin ajuste</span>`;
-    else if (dif < 0) res.innerHTML = `<span style="color:#c0392b">Faltan U$S ${Math.abs(dif).toFixed(2)} — elegí abajo qué hacer</span>`;
-    else res.innerHTML = `<span style="color:#1a7a3a">Recibís U$S ${dif.toFixed(2)} de más · sube la comisión</span>`;
-    return;
-  }
-  // Esperado total = venta + envío. Así el cliente paga el total junto y no se interpreta como "ajuste".
-  const env = cobro_envioCobrado();
-  const espTotal = espPesos + env;
-  const notaEnv = env > 0 ? ` <span style="color:var(--texto-suave)">(incluye envío $ ${env.toLocaleString('es-AR')})</span>` : '';
-  inp.placeholder = espTotal.toLocaleString('es-AR');
-  const recibido = inp.value === '' ? espTotal : Math.round(parseFloat(inp.value) || 0);
-  const dif = recibido - espTotal;
-  if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';
-  if (inp.value === '' || dif === 0) res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${espTotal.toLocaleString('es-AR')} · sin ajuste</span>${notaEnv}`;
-  else if (dif < 0) res.innerHTML = `<span style="color:#c0392b">Faltan $ ${Math.abs(dif).toLocaleString('es-AR')} — elegí abajo qué hacer</span>${notaEnv}`;
-  else res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>${notaEnv}`;
+  if (wrap) wrap.style.display = 'none';   // el campo "cuánto recibiste" no se usa con el cobro fraccionado
+  cobro_actualizarCubierto();
 }
 function cobro_onSelectChange() {
-  const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
-  const jw = document.getElementById('cobro-jony-wrap');
-  const cajaJony = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
-  // U$S cobrado en una caja de PESOS (cross-moneda): aplica tanto a las golosinas de Myri como a los Pitzujim de Jony.
-  const usdAPesos = (_cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri)) || (_cobroUsdJ > 0 && COBRO_ARS_COLS.includes(cajaJony));
-  const pesoAUsd = cobro_pesoAUSD();
-  document.getElementById('cobro-tc-wrap').style.display = (usdAPesos || pesoAUsd) ? 'block' : 'none';
-  const lbl = document.getElementById('cobro-ajuste-label');
-  if (lbl) lbl.innerHTML = pesoAUsd
-    ? '💵 ¿Cuánto recibiste en U$S? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span>'
-    : '💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span>';
-  if (usdAPesos) cobro_calcularTC();
+  const tcw = document.getElementById('cobro-tc-wrap');
+  if (tcw) tcw.style.display = _cobroNecesitaTC() ? 'block' : 'none';
   cobro_recalcAjuste();
+  cobro_calcularTC();
 }
 function cobro_calcularTC() {
-  const tc = parseFloat(document.getElementById('cobro-tc').value) || 0;
-  const res = document.getElementById('cobro-tc-result');
-  const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
-  const jw = document.getElementById('cobro-jony-wrap');
-  const cajaJony = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
-  const mEnPesos = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
-  const jEnPesos = _cobroUsdJ > 0 && COBRO_ARS_COLS.includes(cajaJony);
-  if (tc > 0 && (mEnPesos || jEnPesos)) {
-    const arsM = mEnPesos ? Math.round(_cobroUsdM * tc) : 0;
-    const arsJ = jEnPesos ? Math.round(_cobroUsdJ * tc) : 0;
-    const comi = Math.round(arsM * 0.15);   // la comisión es solo sobre las golosinas de Myri; los Pitzujim de Jony no llevan
-    let txt = `= $ ${(arsM + arsJ).toLocaleString('es-AR')}`;
-    if (comi > 0) txt += ` · Comi $: $ ${comi.toLocaleString('es-AR')}`;
-    res.textContent = txt;
-  } else { res.textContent = ''; }
-  cobro_recalcAjuste();
+  const tc = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
+  const res = document.getElementById('cobro-tc-result'); if (!res) return;
+  if (tc <= 0) { res.textContent = ''; return; }
+  // Equivalente en pesos de lo que cae en cajas de PESOS (incluye los tramos U$S→pesos al tc).
+  let pesos = 0;
+  _cobroTramosFlat().forEach(t => {
+    const cajaUSD = _CAJAS_USD.includes(t.caja) || t.caja === 'CTA_CTE_USD';
+    if (!cajaUSD) pesos += (t.moneda === 'USD') ? t.monto * tc : t.monto;
+  });
+  res.textContent = pesos > 0 ? ('≈ $ ' + Math.round(pesos).toLocaleString('es-AR') + ' en cajas de pesos') : '';
 }
 function cerrarModalCobro() {
   document.getElementById('cobro-modal').style.display = 'none';
@@ -8811,59 +8914,20 @@ async function subirComprobantes(fileInput) {
 
 async function confirmarCobroModal() {
   if (!_cobroId) return;
-  const jw = document.getElementById('cobro-jony-wrap');
-  const mw = document.getElementById('cobro-myri-wrap');
-  const cajaJony = jw.style.display !== 'none' ? document.getElementById('cobro-caja-jony').value : '';
-  const cajaMyri = mw.style.display !== 'none' ? document.getElementById('cobro-caja-myri').value : '';
+  // Cada balde (pesos/dólares de cada socio) tiene que quedar cubierto por sus tramos.
+  if (!_cobroBaldesCubiertos()) { showToast('⚠️ Falta cubrir alguna parte del cobro — revisá los montos (tienen que dar ✓)'); return; }
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
-  const pesoAUsd = cobro_pesoAUSD();   // venta en pesos cobrada en caja de dólares
-  // "recibido" en pesos-equivalente (en modo U$S, convierte recUSD × tc). difReal = en su moneda.
-  const _recInp0 = document.getElementById('cobro-recibido');
-  const espP = cobro_esperadoPesos();
-  let recP = null, difReal = 0, espUSD = 0, recUSD = 0;
-  if (_recInp0 && _recInp0.value !== '') {
-    if (pesoAUsd && tipoCambio > 0) {
-      espUSD = Math.round(espP / tipoCambio * 100) / 100;
-      recUSD = parseFloat(_recInp0.value) || 0;
-      recP = Math.round(recUSD * tipoCambio);
-      difReal = Math.round((recUSD - espUSD) * 100) / 100;
-    } else {
-      // El "recibido" que pone el usuario incluye el envío; lo descontamos para que el ajuste se
-      // calcule solo sobre el pedido (el envío va a su propia caja y no se reescala).
-      recP = Math.round(parseFloat(_recInp0.value) || 0) - cobro_envioCobrado();
-      difReal = recP - espP;
-    }
-  }
-  // Si pagó de MENOS y eligió "dejar el resto en cuenta corriente" → PAGO PARCIAL (en pesos-equiv).
-  if (recP !== null) {
-    const eligioCtaCte = (document.querySelector('input[name="cobro-falta"]:checked') || {}).value === 'ctacte';
-    if (espP > 0 && recP > 0 && difReal < 0 && eligioCtaCte) {
-      cerrarModalCobro();
-      abrirPagoCuenta(_cobroCliente, _cobroId, _cobroArsJ, _cobroArsM, _cobroUsdM);
-      const pitz = Math.min(recP, _cobroArsJ);
-      const gp = document.getElementById('pago-pitz'); if (gp) gp.value = pitz || '';
-      const gg = document.getElementById('pago-gol'); if (gg) gg.value = Math.max(0, recP - pitz) || '';
-      showToast('💵 Completá el pago parcial — el resto queda en cuenta corriente');
-      return;
-    }
-  }
+  if (_cobroNecesitaTC() && tipoCambio <= 0) { showToast('⚠️ Poné el tipo de cambio (hay dólares cobrados en pesos)'); return; }
+  const tramos = _cobroTramosFlat();
+  // Caja "principal" por lado (la primera de cada socio), para compatibilidad con lecturas viejas.
+  const primCaja = dueno => { const t = tramos.find(x => x.dueno === dueno); return t ? t.caja : ''; };
+  const cajaJony = esVistaMiri() ? '' : primCaja('J');
+  const cajaMyri = primCaja('M');
   // Subir uno o varios comprobantes a Cloudinary. Se ACUMULAN a los que ya tenga el pedido.
   const comprobante = await subirComprobantes(document.getElementById('cobro-comprobante'));
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
+  params.set('tramos', JSON.stringify(tramos));   // cobro fraccionado: dónde entró cada parte
   if (comprobante) params.set('comprobante', comprobante);
-  // Ajuste de cobro: mandamos lo recibido (pesos-equiv) solo si difiere de lo esperado.
-  if (recP !== null && espP > 0 && recP > 0) {
-    if (pesoAUsd && tipoCambio > 0) {
-      if (Math.abs(difReal) >= 0.01) {
-        if (!confirm(`Ajuste de ${difReal < 0 ? '-' : '+'}U$S ${Math.abs(difReal).toFixed(2)}.\n\nEsperado: U$S ${espUSD.toFixed(2)} · Recibido: U$S ${recUSD.toFixed(2)}\nLa comisión se recalcula sobre lo recibido (en dólares). ¿Confirmar?`)) return;
-        params.set('recibido', String(recP));
-      }
-    } else if (recP !== espP) {
-      const dif = recP - espP;
-      if (!confirm(`Vas a registrar un ajuste de ${dif < 0 ? '-' : '+'}$${Math.abs(dif).toLocaleString('es-AR')}.\n\nEsperado: $${espP.toLocaleString('es-AR')} · Recibido: $${recP.toLocaleString('es-AR')}\nLa comisión se recalcula sobre lo recibido. ¿Confirmar?`)) return;
-      params.set('recibido', String(recP));
-    }
-  }
   // Envío: costo del cadete + quién lo pagó (+ cobrado, por si se carga acá). Va a la Caja Envíos.
   const _envCob = document.getElementById('cobro-envio-cobrado');
   const _envCos = document.getElementById('cobro-envio-costo');
