@@ -6517,6 +6517,13 @@ async function renderCuentaSocios() {
   const ars = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
   const usd = comiDebeU - jonyTieneU + movsUSD - saldadoUSD;
   _socios = { ars: Math.round(ars), usd: parseFloat(usd.toFixed(2)) };
+  // Desglose para el Excel de rendición de Miri (cómo se compone el saldo con Jony).
+  window._sociosDesglose = {
+    comiDebe: Math.round(comiDebe), pitzMyri: Math.round(pitzMyri), jonyTiene: Math.round(jonyTiene),
+    comiDebeU: parseFloat(comiDebeU.toFixed(2)), jonyTieneU: parseFloat(jonyTieneU.toFixed(2)),
+    enviosARS: Math.round(parseFloat(movsSoc.enviosARS) || 0), manualARS: Math.round(parseFloat(movsSoc.manualARS) || 0),
+    saldadoARS: Math.round(saldadoARS), saldadoUSD: parseFloat(saldadoUSD.toFixed(2))
+  };
 
   const f = n => '$ ' + Math.abs(Math.round(n)).toLocaleString('es-AR');
   const fu = n => 'U$S ' + Math.abs(n).toFixed(2);
@@ -6633,7 +6640,49 @@ async function renderCuentaSocios() {
     const hayDeuda = Math.abs(ars) >= 1 || Math.abs(usd) >= 0.01;
     html += `<div style="font-size:0.72rem;color:var(--texto-suave)">${hayDeuda ? 'Se actualiza solo cuando salden con Jony.' : 'Todo al día con Jony 🎉'}</div>`;
   }
+  html += `<button onclick="exportarRendicionMiri()" style="width:100%;padding:0.6rem;background:#eef7ee;color:#1a7a3a;border:1px solid #b8e0c5;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;margin-top:0.55rem">📥 Descargar rendición de Myri (Excel)</button>`;
   cont.innerHTML = html;
+}
+// Excel (CSV) de rendición de Myri: dónde está la plata de sus ventas + cómo cierra la cuenta con Jony.
+function exportarRendicionMiri() {
+  const movs = window._cajaMovs || [];
+  const ds = window._sociosDesglose || {};
+  const soc = _socios || { ars: 0, usd: 0 };
+  const CAJAS_M = { MP_GABY: 'MP Gaby', EFT_MYRI: 'Efectivo $', ETF_USD_MYRI: 'Efectivo U$S' };
+  const porCaja = {}; Object.keys(CAJAS_M).forEach(c => porCaja[c] = { ars: 0, usd: 0 });
+  movs.forEach(m => {
+    if (m.dueno === 'J' || !porCaja[m.col]) return;   // solo plata de Myri en sus cajas
+    if (m.mon === 'USD') porCaja[m.col].usd += (parseFloat(m.val) || 0);
+    else porCaja[m.col].ars += (parseFloat(m.val) || 0);
+  });
+  const f = n => Math.round(n).toLocaleString('es-AR');
+  const fu = n => Number(n).toFixed(2);
+  const hoy = new Date().toLocaleDateString('es-AR');
+  const rows = [];
+  rows.push(['RENDICIÓN MYRI — Shuk Mamtakim']); rows.push(['Emitido', hoy]); rows.push([]);
+  rows.push(['💰 TUS VENTAS — dónde está la plata (en tus cajas)']);
+  rows.push(['Caja', 'Pesos', 'Dólares']);
+  let totA = 0, totU = 0;
+  Object.keys(CAJAS_M).forEach(c => { const x = porCaja[c]; if (x.ars > 0 || x.usd > 0) { rows.push([CAJAS_M[c], x.ars > 0 ? '$ ' + f(x.ars) : '', x.usd > 0 ? 'U$S ' + fu(x.usd) : '']); totA += x.ars; totU += x.usd; } });
+  rows.push(['SUBTOTAL', '$ ' + f(totA), totU > 0 ? 'U$S ' + fu(totU) : '']); rows.push([]);
+  rows.push(['🤝 CUENTA CON JONY — cómo se compone']); rows.push(['Concepto', 'Monto']);
+  if (ds.comiDebe) rows.push(['Comisión que le debés (15% de tus ventas)', '+ $ ' + f(ds.comiDebe)]);
+  if (ds.pitzMyri) rows.push(['Pitzujim de Jony que cobraste vos', '+ $ ' + f(ds.pitzMyri)]);
+  if (ds.enviosARS) rows.push(['Envíos que cobraste (son de Jony)', '+ $ ' + f(ds.enviosARS)]);
+  if (ds.manualARS) rows.push(['Adelantos', (ds.manualARS > 0 ? '+ ' : '- ') + '$ ' + f(Math.abs(ds.manualARS))]);
+  if (ds.jonyTiene) rows.push(['Tus golosinas que cobró Jony (te las debe)', '- $ ' + f(ds.jonyTiene)]);
+  if (ds.comiDebeU) rows.push(['Comisión en dólares', '+ U$S ' + fu(ds.comiDebeU)]);
+  if (ds.jonyTieneU) rows.push(['Tus golosinas U$S que cobró Jony', '- U$S ' + fu(ds.jonyTieneU)]);
+  if (ds.saldadoARS) rows.push(['Ya saldado', '- $ ' + f(ds.saldadoARS)]);
+  rows.push([]);
+  rows.push(['📋 SALDO FINAL DE RENDICIÓN']);
+  rows.push([(soc.ars >= 0 ? 'Le debés a Jony' : 'Jony te debe') + ' (pesos)', '$ ' + f(Math.abs(soc.ars))]);
+  if (Math.abs(soc.usd) >= 0.01) rows.push([(soc.usd >= 0 ? 'Le debés a Jony' : 'Jony te debe') + ' (dólares)', 'U$S ' + fu(Math.abs(soc.usd))]);
+  const csv = rows.map(r => r.map(c => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'rendicion-myri-' + hoy.replace(/\//g, '-') + '.csv'; a.click();
+  showToast('📥 Rendición descargada');
 }
 
 async function saldarCuentaSocios() {
