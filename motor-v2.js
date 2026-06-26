@@ -650,6 +650,17 @@ function doGet(e) {
             });
             h.getRange(i+1,15).setValue(Math.round(cA));
             h.getRange(i+1,16).setValue(Math.round(cU * 100) / 100);
+            // Perdón de redondeo: el split de cada balde COBRADO ahora se reduce a lo realmente cobrado
+            // (suma de sus tramos del request). La comisión ya se derivó de esos tramos → todo cierra.
+            if (e.parameter.perdonarFaltante === '1') {
+              let req = []; try { req = JSON.parse(dec(e.parameter.tramos) || '[]'); } catch (e5) { req = []; }
+              const sumB = k => req.filter(t => t.balde === k).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+              const pres = new Set(req.map(t => t.balde));
+              if (pres.has('arsJ')) h.getRange(i+1,12).setValue(Math.round(sumB('arsJ')));
+              if (pres.has('arsM')) h.getRange(i+1,13).setValue(Math.round(sumB('arsM')));
+              if (pres.has('usdM')) h.getRange(i+1,14).setValue(Math.round(sumB('usdM') * 100) / 100);
+              if (pres.has('usdJ')) { _asegurarColUsdJony_(h); h.getRange(i+1,28).setValue(Math.round(sumB('usdJ') * 100) / 100); }
+            }
           }
           if (e.parameter.comprobante) {   // comprobante(s): se ACUMULAN a los que ya tenga el pedido
             const prevC = (datos[i][21] || '').toString().trim();

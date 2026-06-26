@@ -1254,8 +1254,13 @@
     </div>
   </div>
   <div class="admin-card" id="stock-alerta-card" style="display:none">
-    <div class="admin-titulo">⚠️ Stock bajo</div>
-    <div id="stock-alerta-lista"></div>
+    <details id="stock-alerta-det">
+      <summary class="admin-titulo" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.4rem">
+        <span style="font-size:0.8rem;color:var(--texto-suave)" id="stock-alerta-flecha">▸</span>
+        ⚠️ Stock bajo <span id="stock-alerta-count" style="color:var(--dorado);font-size:0.85rem;font-weight:700"></span>
+      </summary>
+      <div id="stock-alerta-lista" style="margin-top:0.6rem"></div>
+    </details>
   </div>
   <div class="admin-card">
     <div class="admin-titulo">🔢 Actualizar stock</div>
@@ -1765,6 +1770,12 @@
     <!-- Cobro fraccionado: una sección por "balde" (pesos/dólares de cada socio), cada uno divisible en varias cajas.
          Se genera por JS en cobro_renderTramos(). Los selects viejos quedan ocultos como fallback de compatibilidad. -->
     <div id="cobro-tramos-container" style="margin-bottom:0.5rem"></div>
+    <!-- Aparece cuando algún balde quedó sin cubrir (pagó de menos): qué hacer con el faltante. -->
+    <div id="cobro-faltante-wrap" style="display:none;margin-bottom:0.75rem;background:#fff3e6;border:1px solid #f0d9a8;border-radius:8px;padding:0.6rem 0.7rem">
+      <div style="font-size:0.78rem;font-weight:700;color:#9a6b00;margin-bottom:0.35rem">⚠️ Falta cubrir <span id="cobro-faltante-monto"></span></div>
+      <label style="display:block;font-size:0.78rem;margin-bottom:0.25rem;cursor:pointer"><input type="radio" name="cobro-faltante" value="ctacte" checked> Queda en <b>cuenta corriente</b> (te lo debe)</label>
+      <label style="display:block;font-size:0.78rem;cursor:pointer"><input type="radio" name="cobro-faltante" value="perdonar"> <b>Perdonar</b> (redondeo — baja la comisión)</label>
+    </div>
     <div id="cobro-jony-wrap" style="display:none"><span id="cobro-jony-amt"></span><select id="cobro-caja-jony"></select></div>
     <div id="cobro-myri-wrap" style="display:none"><span id="cobro-myri-amt"></span><select id="cobro-caja-myri"></select></div>
     <div style="margin-bottom:0.75rem">
@@ -8264,6 +8275,9 @@ function verificarStockBajo() {
   const enStock = (typeof _panelSeccion !== 'undefined') ? (_panelSeccion === 'stock') : true;
   if (!bajos.length || !enStock) { card.style.display = 'none'; if (!bajos.length) return; }
   else card.style.display = 'block';
+  const cnt = document.getElementById('stock-alerta-count'); if (cnt) cnt.textContent = '(' + bajos.length + ')';
+  const det = document.getElementById('stock-alerta-det');
+  if (det && !det._tog) { det._tog = true; det.addEventListener('toggle', () => { const fl = document.getElementById('stock-alerta-flecha'); if (fl) fl.textContent = det.open ? '▾' : '▸'; }); }
   lista.innerHTML = bajos.map(p =>
     `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--gris-medio)">
       <span style="font-size:0.85rem;color:var(--azul);font-weight:600">${p.nombre} <span style="font-weight:400;color:var(--texto-suave)">${p.desc.substring(0,40)}</span></span>
@@ -8732,6 +8746,31 @@ function cobro_actualizarCubierto() {
     span.style.color = cubierto ? 'var(--verde)' : '#c0392b';
     span.textContent = cubierto ? '✓ cubierto' : ('faltan ' + sym + ' ' + _fmtMonto(b.total - sum, b.moneda));
   });
+  // Bloque "faltante": aparece si algún balde quedó CORTO (pagó de menos).
+  const falt = _cobroFaltantes();
+  const fw = document.getElementById('cobro-faltante-wrap');
+  if (fw) {
+    fw.style.display = falt.length ? 'block' : 'none';
+    const fm = document.getElementById('cobro-faltante-monto');
+    if (fm && falt.length) fm.textContent = falt.map(x => (x.moneda === 'USD' ? 'U$S ' : '$ ') + _fmtMonto(x.faltante, x.moneda)).join(' + ');
+  }
+}
+// Baldes que quedaron CORTOS (pagó de menos). [{balde, moneda, faltante}].
+function _cobroFaltantes() {
+  const out = [];
+  _cobroBaldes().forEach(b => {
+    const sum = (_cobroTramos[b.key]||[]).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+    const falta = b.total - sum;
+    if (falta > (b.moneda === 'USD' ? 0.01 : 1)) out.push({ balde: b.key, moneda: b.moneda, faltante: falta });
+  });
+  return out;
+}
+// Baldes con EXCESO (se cargó de más que el total del balde) → hay que corregir.
+function _cobroHayExceso() {
+  return _cobroBaldes().some(b => {
+    const sum = (_cobroTramos[b.key]||[]).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
+    return sum - b.total > (b.moneda === 'USD' ? 0.01 : 1);
+  });
 }
 function cobro_setTramo(key, i, campo, val) {
   if (!_cobroTramos[key] || !_cobroTramos[key][i]) return;
@@ -8920,10 +8959,20 @@ async function subirComprobantes(fileInput) {
 
 async function confirmarCobroModal() {
   if (!_cobroId) return;
-  // Cada balde (pesos/dólares de cada socio) tiene que quedar cubierto por sus tramos.
-  if (!_cobroBaldesCubiertos()) { showToast('⚠️ Falta cubrir alguna parte del cobro — revisá los montos (tienen que dar ✓)'); return; }
+  // No se puede cargar de MÁS que el total de cada parte.
+  if (_cobroHayExceso()) { showToast('⚠️ Cargaste de más en alguna parte — revisá los montos'); return; }
   const tipoCambio = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
   if (_cobroNecesitaTC() && tipoCambio <= 0) { showToast('⚠️ Poné el tipo de cambio (hay dólares cobrados en pesos)'); return; }
+  // Faltante (pagó de menos): se resuelve con cuenta corriente o perdón (radio del bloque de faltante).
+  let perdonar = false;
+  const faltantes = _cobroFaltantes();
+  if (faltantes.length) {
+    const op = (document.querySelector('input[name="cobro-faltante"]:checked') || {}).value || 'ctacte';
+    if (op === 'perdonar') perdonar = true;
+    else faltantes.forEach(x => {   // el faltante queda como deuda en cuenta corriente (un tramo Cta Cte)
+      _cobroTramos[x.balde].push({ caja: x.moneda === 'USD' ? 'CTA_CTE_USD' : 'CTA_CTE_ARS', monto: x.faltante });
+    });
+  }
   const tramos = _cobroTramosFlat();
   // Caja "principal" por lado (la primera de cada socio), para compatibilidad con lecturas viejas.
   const primCaja = dueno => { const t = tramos.find(x => x.dueno === dueno); return t ? t.caja : ''; };
@@ -8933,6 +8982,7 @@ async function confirmarCobroModal() {
   const comprobante = await subirComprobantes(document.getElementById('cobro-comprobante'));
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
   params.set('tramos', JSON.stringify(tramos));   // cobro fraccionado: dónde entró cada parte
+  if (perdonar) params.set('perdonarFaltante', '1');   // reduce el split de cada balde a lo realmente cobrado
   if (comprobante) params.set('comprobante', comprobante);
   // Envío: costo del cadete + quién lo pagó (+ cobrado, por si se carga acá). Va a la Caja Envíos.
   const _envCob = document.getElementById('cobro-envio-cobrado');
