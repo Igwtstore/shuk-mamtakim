@@ -8682,6 +8682,18 @@ const COBRO_ARS_COLS = ['MP_GABY','EFT_MYRI','EFT_JONY','MP_JONY','CTA_CTE_ARS']
 // Cada "balde" del pedido (pesos/dólares de Jony, pesos/dólares de Myri) se puede dividir
 // en varias cajas. _cobroTramos[balde] = [{caja, monto}]. El monto va en la moneda del balde.
 let _cobroTramos = { arsJ: [], usdJ: [], arsM: [], usdM: [] };
+let _tramosPorVenta = {};   // ventaId → JSON de tramos con que se cobró (para precargar al re-confirmar)
+let _tcPorVenta = {};       // ventaId → tipo de cambio con que se cobró
+// Al re-confirmar un pedido ya cobrado: precarga las cajas/montos REALES con que se cobró (no los defaults),
+// para no desfasar las cajas si el usuario solo quería tocar un valor.
+function _cobroCargarTramosGuardados(id) {
+  const raw = _tramosPorVenta[id]; if (!raw) return;
+  let guardados = []; try { guardados = JSON.parse(raw); } catch (e) { return; }
+  if (!guardados.length) return;
+  const porBalde = { arsJ: [], usdJ: [], arsM: [], usdM: [] };
+  guardados.forEach(t => { if (porBalde[t.balde]) porBalde[t.balde].push({ caja: t.caja, monto: parseFloat(t.monto) || 0 }); });
+  _cobroBaldes().forEach(b => { if (porBalde[b.key] && porBalde[b.key].length) _cobroTramos[b.key] = porBalde[b.key]; });
+}
 function _cobroBaldes() {
   return [
     { key:'arsJ', dueno:'J', moneda:'ARS', total:_cobroArsJ, label:'Pago JONY · pesos' },
@@ -8810,8 +8822,10 @@ function _cobroBaldesCubiertos() {
 function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
   _cobroId = id; _cobroUsdM = usdM; _cobroArsJ = arsJ || 0; _cobroArsM = arsM || 0; _cobroUsdJ = usdJ || 0; _cobroCliente = cliente || '';
   _cobroInitTramos();
+  _cobroCargarTramosGuardados(id);   // si ya se cobró, precarga sus cajas reales (no los defaults)
   cobro_renderTramos();
-  document.getElementById('cobro-tc').value = '';
+  // Re-confirmar: precarga el tipo de cambio con que se cobró (si lo tenía).
+  document.getElementById('cobro-tc').value = (_tramosPorVenta[id] && _tcPorVenta[id]) ? _tcPorVenta[id] : '';
   document.getElementById('cobro-tc-result').textContent = '';
   const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
   const cs = document.getElementById('cobro-comprobante-st'); if (cs) cs.textContent = '';
@@ -9102,6 +9116,8 @@ async function cargarPanelAdmin() {
       set('ventas', d.ventas); set('gastos', d.gastos); set('rendiciones', d.rendiciones);
       set('getPagos', d.pagos); set('getClientes', d.clientes); set('getMovsSocios', d.movsSocios);
       if (d.envios) { set('getCajaEnvios', d.envios); _enviosPorVenta = {}; (d.envios.movimientos||[]).forEach(m => { _enviosPorVenta[m.ventaId] = m; }); }
+      // Cache de los tramos con que se cobró cada pedido → al re-confirmar, el modal precarga sus cajas reales.
+      _tramosPorVenta = {}; _tcPorVenta = {}; (d.ventas || []).forEach(v => { if (v.tramos) _tramosPorVenta[v.id] = v.tramos; if (v.tipoCambio) _tcPorVenta[v.id] = v.tipoCambio; });
     }
   } catch (e) { /* los renders piden individual */ }
 }
