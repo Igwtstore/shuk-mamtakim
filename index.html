@@ -6650,10 +6650,12 @@ function exportarRendicionMiri() {
   const soc = _socios || { ars: 0, usd: 0 };
   const CAJAS_M = { MP_GABY: 'MP Gaby', EFT_MYRI: 'Efectivo $', ETF_USD_MYRI: 'Efectivo U$S' };
   const porCaja = {}; Object.keys(CAJAS_M).forEach(c => porCaja[c] = { ars: 0, usd: 0 });
+  const deJony = { ars: 0, usd: 0 };   // plata de Jony que entró a cajas de Miri (Pitzujim cruzado + envíos)
   movs.forEach(m => {
-    if (m.dueno === 'J' || !porCaja[m.col]) return;   // solo plata de Myri en sus cajas
-    if (m.mon === 'USD') porCaja[m.col].usd += (parseFloat(m.val) || 0);
-    else porCaja[m.col].ars += (parseFloat(m.val) || 0);
+    if (!porCaja[m.col]) return;   // FÍSICO real: sumamos TODO lo que entró a las cajas de Miri (coincide con el banco)
+    const v = parseFloat(m.val) || 0;
+    if (m.mon === 'USD') porCaja[m.col].usd += v; else porCaja[m.col].ars += v;
+    if (m.dueno === 'J' || m.tipo === 'envio') { if (m.mon === 'USD') deJony.usd += v; else deJony.ars += v; }   // lo que es de Jony
   });
   const f = n => Math.round(n).toLocaleString('es-AR');
   const fu = n => Number(n).toFixed(2);
@@ -6664,7 +6666,12 @@ function exportarRendicionMiri() {
   rows.push(['Caja', 'Pesos', 'Dólares']);
   let totA = 0, totU = 0;
   Object.keys(CAJAS_M).forEach(c => { const x = porCaja[c]; if (x.ars > 0 || x.usd > 0) { rows.push([CAJAS_M[c], x.ars > 0 ? '$ ' + f(x.ars) : '', x.usd > 0 ? 'U$S ' + fu(x.usd) : '']); totA += x.ars; totU += x.usd; } });
-  rows.push(['SUBTOTAL', '$ ' + f(totA), totU > 0 ? 'U$S ' + fu(totU) : '']); rows.push([]);
+  rows.push(['SUBTOTAL (lo que hay en tus cajas)', '$ ' + f(totA), totU > 0 ? 'U$S ' + fu(totU) : '']);
+  if (deJony.ars > 0 || deJony.usd > 0) {
+    rows.push(['  ↳ de esto, es de Jony (se lo debés)', deJony.ars > 0 ? '$ ' + f(deJony.ars) : '', deJony.usd > 0 ? 'U$S ' + fu(deJony.usd) : '']);
+    rows.push(['  ↳ tuyo limpio', '$ ' + f(totA - deJony.ars), (totU - deJony.usd) > 0.01 ? 'U$S ' + fu(totU - deJony.usd) : '']);
+  }
+  rows.push([]);
   rows.push(['🤝 CUENTA CON JONY — cómo se compone']); rows.push(['Concepto', 'Monto']);
   if (ds.comiDebe) rows.push(['Comisión que le debés (15% de tus ventas)', '+ $ ' + f(ds.comiDebe)]);
   if (ds.pitzMyri) rows.push(['Pitzujim de Jony que cobraste vos', '+ $ ' + f(ds.pitzMyri)]);
