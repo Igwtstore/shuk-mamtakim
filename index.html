@@ -6354,6 +6354,10 @@ async function renderCuentaSocios() {
   // Movimientos manuales (adelantos que Myri te hace pagar, etc.): + = Myri te debe más.
   const movsARS = parseFloat(movsSoc.totalARS) || 0;
   const movsUSD = parseFloat(movsSoc.totalUSD) || 0;
+  // Desglose: adelantos manuales vs envíos cobrados por Myri (van en renglones separados y claros).
+  const manualARS = movsSoc.manualARS !== undefined ? (parseFloat(movsSoc.manualARS) || 0) : movsARS;
+  const enviosARS = parseFloat(movsSoc.enviosARS) || 0;
+  const enviosDetalle = movsSoc.enviosDetalle || [];
   const pedidosConPago = new Set((pagos||[]).filter(p => p.pedidoId).map(p => String(p.pedidoId)));
 
   // Componentes (ARS)
@@ -6462,7 +6466,17 @@ async function renderCuentaSocios() {
       ${filaM('Comisión de tus ventas (15% para Jony)', comiDebe, '+')}
       ${filaM('Ventas de Jony que cobraste vos (se las debés)', pitzMyri, '+')}
       ${filaM('Tus golosinas que cobró Jony (te las debe)', jonyTiene, '−')}
-      ${movsARS > 0 ? filaM('Adelantos que te pagó Jony', movsARS, '+') : (movsARS < 0 ? filaM('Adelantos a tu favor', -movsARS, '−') : '')}
+      ${manualARS > 0 ? filaM('Adelantos que te pagó Jony', manualARS, '+') : (manualARS < 0 ? filaM('Adelantos a tu favor', -manualARS, '−') : '')}
+      ${(enviosARS !== 0 && enviosDetalle.length) ? `
+      <details style="padding:2px 0">
+        <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
+          <span style="color:var(--texto-suave)">🛵 Envíos que cobraste (se los debés a Jony) <span style="font-size:0.62rem;color:var(--dorado)">▸ ver detalle</span></span>
+          <span style="font-weight:600;color:#c0392b;white-space:nowrap">+ ${f(enviosARS)}</span>
+        </summary>
+        <div style="padding:0.3rem 0 0.2rem 0.6rem">
+          ${enviosDetalle.map(d => `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• Venta #${esc(String(d.nVenta))}${d.cliente?' · '+esc(d.cliente):''}${d.fecha?' · '+esc(d.fecha):''} — cobraste ${f(d.monto)} de envío (es de Jony, se lo debés)</div>`).join('')}
+        </div>
+      </details>` : ''}
       ${saldadoARS !== 0 ? filaM('Ya saldado', saldadoARS, '−') : ''}
     </div>
     <div style="font-size:0.66rem;color:var(--texto-suave);margin-bottom:0.5rem">La comisión es el 15% de tus ventas de golosinas (es de Jony). Lo que él cobró de lo tuyo, te lo descuenta. ${Math.abs(usd) >= 0.01 ? 'El saldo en dólares se muestra arriba aparte.' : ''}</div>`;
@@ -6472,12 +6486,24 @@ async function renderCuentaSocios() {
     const fila = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
       `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${f(val)}</span></div>`;
     const neto = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
+    // Envíos cobrados por Myri: renglón propio y clickeable con el detalle (para que quede clarísimo de qué es la deuda).
+    const filaEnvios = (enviosARS !== 0 && enviosDetalle.length) ? `
+      <details style="padding:2px 0">
+        <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
+          <span style="color:var(--texto-suave)">🛵 Envíos que cobró Myri (te los debe) <span style="font-size:0.62rem;color:var(--dorado)">▸ ver detalle</span></span>
+          <span style="font-weight:600;color:var(--verde);white-space:nowrap">+ ${f(enviosARS)}</span>
+        </summary>
+        <div style="padding:0.3rem 0 0.2rem 0.6rem">
+          ${enviosDetalle.map(d => `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• Venta #${esc(String(d.nVenta))}${d.cliente?' · '+esc(d.cliente):''}${d.fecha?' · '+esc(d.fecha):''} — Myri cobró ${f(d.monto)} de envío (entró a su caja, te lo debe)</div>`).join('')}
+        </div>
+      </details>` : '';
     html += `<div style="background:var(--gris);border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
       <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">Por las ventas cruzadas entre vos y Myri:</div>
       ${fila('Comisión que Myri te debe', comiDebe, '+')}
       ${fila('Ventas tuyas que cobró Myri (te las debe)', pitzMyri, '+')}
       ${fila('Ventas de Myri que cobraste vos (se las debés)', jonyTiene, '−')}
-      ${movsARS > 0 ? fila('Adelantos que te hizo pagar (te los debe)', movsARS, '+') : (movsARS < 0 ? fila('Adelantos a favor de Myri', -movsARS, '−') : '')}
+      ${manualARS > 0 ? fila('Adelantos que te hizo pagar (te los debe)', manualARS, '+') : (manualARS < 0 ? fila('Adelantos a favor de Myri', -manualARS, '−') : '')}
+      ${filaEnvios}
       ${saldadoARS !== 0 ? fila('Ya saldado', saldadoARS, '−') : ''}
       ${Math.abs(neto) >= 1 ? `<div style="display:flex;justify-content:space-between;font-size:0.8rem;padding-top:0.35rem;margin-top:0.3rem;border-top:1px solid var(--gris-medio);font-weight:700"><span>${neto>0?'Myri te debe':'Le debés a Myri'}</span><span>${f(neto)}</span></div>` : ''}
     </div>`;

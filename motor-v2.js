@@ -2463,21 +2463,27 @@ function _movsSociosData(ss) {
     fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
     desc: (r[1]||'').toString(), montoARS: parseFloat(r[2])||0, montoUSD: parseFloat(r[3])||0
   }));
+  // Adelantos MANUALES (hoja MovsSocios), separados de los envíos para que el panel los muestre aparte.
+  const manualARS = movimientos.reduce((s,m)=>s+m.montoARS,0);
+  const manualUSD = movimientos.reduce((s,m)=>s+m.montoUSD,0);
   // Deuda DERIVADA de la Caja Envíos: el envío lo gestiona y paga Jony. Si el envío se cobró en una
   // caja de Miri, ella le debe a Jony ese valor cobrado. Se deriva (no se escribe en MovsSocios) →
   // idempotente al re-confirmar. Un renglón por envío, con detalle (#N, cliente, fecha).
   const env = _enviosData(ss);
+  const enviosARS = env.socioARS || 0;
   (env.deudaEnvios || []).forEach(d => {
     movimientos.push({
       fecha: d.fecha || '',
-      desc: '📦 Envío #' + (d.nVenta || '?') + (d.cliente ? ' · ' + d.cliente : ''),
+      desc: '🛵 Envío #' + (d.nVenta || '?') + (d.cliente ? ' · ' + d.cliente : ''),
       montoARS: d.monto, montoUSD: 0
     });
   });
   return {
-    totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
-    totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
-    movimientos
+    totalARS: manualARS + enviosARS,
+    totalUSD: manualUSD,
+    movimientos,
+    manualARS, enviosARS,
+    enviosDetalle: env.deudaEnvios || []   // [{nVenta, cliente, fecha, monto}] para el desplegable
   };
 }
 
