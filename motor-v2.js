@@ -2463,12 +2463,17 @@ function _movsSociosData(ss) {
     fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
     desc: (r[1]||'').toString(), montoARS: parseFloat(r[2])||0, montoUSD: parseFloat(r[3])||0
   }));
-  // Deuda DERIVADA de la Caja Envíos: si un socio puso el costo del envío de un pedido del otro,
-  // el dueño le debe ese costo. Se deriva (no se escribe en MovsSocios) → idempotente al re-confirmar.
+  // Deuda DERIVADA de la Caja Envíos: el envío lo gestiona y paga Jony. Si el envío se cobró en una
+  // caja de Miri, ella le debe a Jony ese valor cobrado. Se deriva (no se escribe en MovsSocios) →
+  // idempotente al re-confirmar. Un renglón por envío, con detalle (#N, cliente, fecha).
   const env = _enviosData(ss);
-  if (env.socioARS && Math.abs(env.socioARS) >= 1) {
-    movimientos.push({ fecha: '', desc: '📦 Envíos (costo que puso el otro socio)', montoARS: env.socioARS, montoUSD: 0 });
-  }
+  (env.deudaEnvios || []).forEach(d => {
+    movimientos.push({
+      fecha: d.fecha || '',
+      desc: '📦 Envío #' + (d.nVenta || '?') + (d.cliente ? ' · ' + d.cliente : ''),
+      montoARS: d.monto, montoUSD: 0
+    });
+  });
   return {
     totalARS: movimientos.reduce((s,m)=>s+m.montoARS,0),
     totalUSD: movimientos.reduce((s,m)=>s+m.montoUSD,0),
@@ -2515,28 +2520,51 @@ function _upsertEnvio_(ss, ventaId, patch) {
   } finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
+// La Caja Envíos es SIEMPRE de Jony (él gestiona y paga todos los envíos). Un solo saldo corriente:
+// entra lo cobrado al cliente, sale el costo del cadete. Si el cobro del pedido entró a una caja de
+// MIRI, ella le debe a Jony el VALOR COBRADO del envío (queda en la Cuenta entre socios, con detalle).
+const _CAJAS_JONY_ENV = ['MP_JONY','EFT_JONY','ETF_USD_JONY','COMI_USD_JONY'];
+const _CAJAS_MIRI_ENV = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI'];
+// ¿En qué caja (de qué socio) entró el cobro del pedido? Si tocó alguna caja de Jony → 'Jony'
+// (el envío quedó en su poder); si solo cajas de Miri → 'Miri'; sin cobro confirmado → 'Jony' (sin deuda aún).
+function _envioCobradoEnCajaDe_(cajaJony, cajaMyri) {
+  const cj = (cajaJony||'').toString(), cm = (cajaMyri||'').toString();
+  if (_CAJAS_JONY_ENV.indexOf(cj) !== -1 || _CAJAS_JONY_ENV.indexOf(cm) !== -1) return 'Jony';
+  if (_CAJAS_MIRI_ENV.indexOf(cm) !== -1 || _CAJAS_MIRI_ENV.indexOf(cj) !== -1) return 'Miri';
+  return 'Jony';
+}
 function _enviosData(ss) {
   const h = ss.getSheetByName('Envios');
-  if (!h || h.getLastRow() < 2) return { movimientos: [], saldos: { Miri: 0, Jony: 0 }, socioARS: 0 };
+  if (!h || h.getLastRow() < 2) return { movimientos: [], saldos: { Miri: 0, Jony: 0 }, socioARS: 0, deudaEnvios: [] };
   const rows = h.getRange(2,1,h.getLastRow()-1,9).getValues();
-  const movimientos = []; const saldos = { Miri: 0, Jony: 0 }; let socioARS = 0;
+  // Precargar a qué socio entró el cobro de cada venta (cols 17 cajaJony / 18 cajaMyri).
+  const cajaPorVenta = {};
+  const vh = ss.getSheetByName('Ventas');
+  if (vh && vh.getLastRow() >= 2) {
+    const vd = vh.getDataRange().getValues();
+    for (let i = 1; i < vd.length; i++) {
+      const vid = vd[i][0] instanceof Date ? vd[i][0].toISOString() : (vd[i][0]||'').toString().trim();
+      cajaPorVenta[vid] = _envioCobradoEnCajaDe_(vd[i][16], vd[i][17]);
+    }
+  }
+  const movimientos = []; const saldos = { Miri: 0, Jony: 0 }; let socioARS = 0; const deudaEnvios = [];
   rows.forEach(r => {
     const cobrado = parseFloat(r[5])||0, costo = parseFloat(r[6])||0;
     if (cobrado === 0 && costo === 0) return;
-    const dueno = (r[4]||'').toString() === 'Jony' ? 'Jony' : 'Miri';
-    const quienPago = (r[7]||'').toString();
-    saldos[dueno] += cobrado - costo;
-    if (costo > 0 && quienPago && quienPago !== dueno) {
-      if (dueno === 'Miri' && quienPago === 'Jony') socioARS += costo;        // + = Miri le debe a Jony
-      else if (dueno === 'Jony' && quienPago === 'Miri') socioARS -= costo;
+    const ventaId = r[1] instanceof Date ? r[1].toISOString() : (r[1]||'').toString();
+    const nVenta = r[2]||'';
+    const cliente = (r[3]||'').toString();
+    const fecha = r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : (r[0]||'').toString();
+    saldos.Jony += cobrado - costo;   // la caja de envíos es de Jony
+    const cobradoEn = cajaPorVenta[ventaId] || 'Jony';
+    if (cobrado > 0 && cobradoEn === 'Miri') {
+      socioARS += cobrado;   // + = Miri le debe a Jony (el valor cobrado del envío que entró a su caja)
+      deudaEnvios.push({ nVenta, cliente, fecha, monto: cobrado });
     }
-    movimientos.push({
-      fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : (r[0]||'').toString(),
-      ventaId: r[1] instanceof Date ? r[1].toISOString() : (r[1]||'').toString(), nVenta: r[2]||'',
-      cliente: (r[3]||'').toString(), dueno, cobrado, costo, quienPago, nota: (r[8]||'').toString()
-    });
+    movimientos.push({ fecha, ventaId, nVenta, cliente, dueno: 'Jony', cobrado, costo,
+      quienPago: (r[7]||'').toString(), nota: (r[8]||'').toString(), cobradoEn });
   });
-  return { movimientos, saldos, socioARS };
+  return { movimientos, saldos, socioARS, deudaEnvios };
 }
 
 // Batch: todo lo que necesita el panel de los chicos en UNA sola llamada

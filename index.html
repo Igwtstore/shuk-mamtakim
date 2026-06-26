@@ -1824,7 +1824,7 @@
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:90px">
           <div style="font-size:0.66rem;color:#b08a3a;margin-bottom:0.15rem">Cobrado al cliente $</div>
-          <input type="number" id="cobro-envio-cobrado" min="0" step="any" placeholder="0" style="width:100%;padding:0.45rem 0.55rem;border:1.5px solid #e6d3a8;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box" />
+          <input type="number" id="cobro-envio-cobrado" min="0" step="any" placeholder="0" oninput="cobro_recalcAjuste()" style="width:100%;padding:0.45rem 0.55rem;border:1.5px solid #e6d3a8;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box" />
         </div>
         <div style="flex:1;min-width:90px">
           <div style="font-size:0.66rem;color:#b08a3a;margin-bottom:0.15rem">Costo del cadete $</div>
@@ -6093,6 +6093,16 @@ async function renderCaja() {
           }
         }
       }
+      // ENVÍO: lo cobrado al cliente entró a la caja física donde se cobró el pedido (Opción 2: la caja
+      // cuadra con el banco real). Sin comisión — Jony gestiona el envío y su P&L vive en la Caja Envíos.
+      const _env = _enviosPorVenta[v.id];
+      const _envCob = _env ? (parseFloat(_env.cobrado) || 0) : 0;
+      if (_envCob > 0) {
+        const _esRealC = c => c && !String(c).startsWith('CTA_CTE');
+        const _cajasJ = ['MP_JONY','EFT_JONY','ETF_USD_JONY','COMI_USD_JONY'];
+        const cajaEnv = _cajasJ.includes(cajaJ) ? cajaJ : (_cajasJ.includes(cajaM) ? cajaM : (_esRealC(cajaM) ? cajaM : (_esRealC(cajaJ) ? cajaJ : null)));
+        if (cajaEnv) movs.push({ desc: `Envío #${n} ${f}`, col: cajaEnv, val: _envCob, mon: 'ARS', tipo: 'envio', vid: v.id });
+      }
     });
     gastos.forEach(g => {
       if (g.columna) movs.push({ desc: `${g.desc} ${g.fecha}`, col: g.columna, val: -(parseFloat(g.monto)||0), mon: g.moneda, tipo: 'gasto' });
@@ -6302,26 +6312,28 @@ const JONY_BOXES_CC = ['EFT_JONY','MP_JONY'];
 
 async function renderCajaEnvios() {
   const cont = document.getElementById('caja-envios-contenido');
+  const card = document.getElementById('caja-envios-card');
   if (!cont) return;
+  // La Caja Envíos la gestiona y la paga Jony → en vista Miri no se muestra (privacidad).
+  if (esVistaMiri()) { if (card) card.style.display = 'none'; return; }
+  if (card) card.style.display = '';
   const data = await apiGet('getCajaEnvios').catch(() => null);
   if (!data) { cont.innerHTML = '<div class="sinpedidos">Error al cargar.</div>'; return; }
-  const soloMiri = esVistaMiri();   // privacidad: Miri solo ve sus envíos
   const movs = (data.movimientos || []).slice().reverse();
-  const visibles = soloMiri ? movs.filter(m => m.dueno === 'Miri') : movs;
-  const saldoMiri = (data.saldos && data.saldos.Miri) || 0, saldoJony = (data.saldos && data.saldos.Jony) || 0;
+  const saldo = (data.saldos && data.saldos.Jony) || 0;
   const fmt = n => (n < 0 ? '-$ ' : '$ ') + Math.abs(Math.round(n)).toLocaleString('es-AR');
   const colS = n => n < 0 ? '#c0392b' : 'var(--verde)';
   let html = '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem">';
-  html += `<div style="flex:1;min-width:115px;background:var(--gris);border-radius:8px;padding:0.5rem 0.7rem"><div style="font-size:0.7rem;color:var(--texto-suave)">Saldo Miri</div><div style="font-weight:700;color:${colS(saldoMiri)}">${fmt(saldoMiri)}</div></div>`;
-  if (!soloMiri) html += `<div style="flex:1;min-width:115px;background:var(--gris);border-radius:8px;padding:0.5rem 0.7rem"><div style="font-size:0.7rem;color:var(--texto-suave)">Saldo Jony</div><div style="font-weight:700;color:${colS(saldoJony)}">${fmt(saldoJony)}</div></div>`;
+  html += `<div style="flex:1;min-width:140px;background:var(--gris);border-radius:8px;padding:0.5rem 0.7rem"><div style="font-size:0.7rem;color:var(--texto-suave)">Saldo Caja Envíos</div><div style="font-weight:700;color:${colS(saldo)}">${fmt(saldo)}</div></div>`;
   html += '</div>';
-  if (!visibles.length) { cont.innerHTML = html + '<div class="sinpedidos">Sin envíos todavía.</div>'; return; }
+  if (!movs.length) { cont.innerHTML = html + '<div class="sinpedidos">Sin envíos todavía.</div>'; return; }
   html += '<div style="display:flex;flex-direction:column">';
-  visibles.forEach(m => {
+  movs.forEach(m => {
     const saldoMov = (m.cobrado || 0) - (m.costo || 0);
-    const quien = (m.quienPago && m.quienPago !== m.dueno) ? ` · pagó ${esc(m.quienPago)}` : '';
+    // Si el envío entró a una caja de Miri, ella le debe ese cobrado a Jony (queda en la Cuenta entre socios).
+    const deuda = (m.cobradoEn === 'Miri' && (m.cobrado || 0) > 0) ? ` <span style="color:var(--dorado)">· Miri debe ${fmt(m.cobrado)}</span>` : '';
     html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;border-bottom:1px solid var(--gris);padding:0.4rem 0;font-size:0.82rem">
-      <div><b>${esc(m.cliente || '—')}</b> ${m.nVenta ? ('#' + esc(String(m.nVenta))) : ''} <span style="color:var(--texto-suave)">· ${esc(m.dueno)}${quien}</span></div>
+      <div><b>${esc(m.cliente || '—')}</b> ${m.nVenta ? ('#' + esc(String(m.nVenta))) : ''}${deuda}</div>
       <div style="text-align:right;white-space:nowrap;color:var(--texto-suave)">entró ${fmt(m.cobrado || 0)} · salió ${fmt(m.costo || 0)} <b style="color:${colS(saldoMov)}">= ${fmt(saldoMov)}</b></div>
     </div>`;
   });
@@ -8592,6 +8604,12 @@ function cobro_esperadoPesos() {
   const usdJenPesos = _cobroUsdJ > 0 && tc > 0 && COBRO_ARS_COLS.includes(cajaJony);
   return Math.round(_cobroArsJ + _cobroArsM + (usdMenPesos ? _cobroUsdM * tc : 0) + (usdJenPesos ? _cobroUsdJ * tc : 0));
 }
+// Envío cobrado al cliente (en pesos). Se suma al "esperado" para que el total transferido cuadre,
+// pero NO es parte del split de venta: va a la Caja Envíos (Jony) y no lleva comisión.
+function cobro_envioCobrado() {
+  const e = document.getElementById('cobro-envio-cobrado');
+  return e ? Math.round(parseFloat(e.value) || 0) : 0;
+}
 // Cajas de dólares reales (sentido nuevo: venta en pesos cobrada en dólares).
 const _CAJAS_USD = ['ETF_USD_MYRI', 'ETF_USD_JONY', 'COMI_USD_JONY'];
 function _esCajaUSD(c) { return _CAJAS_USD.includes(c); }
@@ -8629,13 +8647,17 @@ function cobro_recalcAjuste() {
     else res.innerHTML = `<span style="color:#1a7a3a">Recibís U$S ${dif.toFixed(2)} de más · sube la comisión</span>`;
     return;
   }
-  inp.placeholder = espPesos.toLocaleString('es-AR');
-  const recibido = inp.value === '' ? espPesos : Math.round(parseFloat(inp.value) || 0);
-  const dif = recibido - espPesos;
+  // Esperado total = venta + envío. Así el cliente paga el total junto y no se interpreta como "ajuste".
+  const env = cobro_envioCobrado();
+  const espTotal = espPesos + env;
+  const notaEnv = env > 0 ? ` <span style="color:var(--texto-suave)">(incluye envío $ ${env.toLocaleString('es-AR')})</span>` : '';
+  inp.placeholder = espTotal.toLocaleString('es-AR');
+  const recibido = inp.value === '' ? espTotal : Math.round(parseFloat(inp.value) || 0);
+  const dif = recibido - espTotal;
   if (menosWrap) menosWrap.style.display = (inp.value !== '' && dif < 0) ? 'block' : 'none';
-  if (inp.value === '' || dif === 0) res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${espPesos.toLocaleString('es-AR')} · sin ajuste</span>`;
-  else if (dif < 0) res.innerHTML = `<span style="color:#c0392b">Faltan $ ${Math.abs(dif).toLocaleString('es-AR')} — elegí abajo qué hacer</span>`;
-  else res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>`;
+  if (inp.value === '' || dif === 0) res.innerHTML = `<span style="color:var(--texto-suave)">Esperado: $ ${espTotal.toLocaleString('es-AR')} · sin ajuste</span>${notaEnv}`;
+  else if (dif < 0) res.innerHTML = `<span style="color:#c0392b">Faltan $ ${Math.abs(dif).toLocaleString('es-AR')} — elegí abajo qué hacer</span>${notaEnv}`;
+  else res.innerHTML = `<span style="color:#1a7a3a">Recibís $ ${dif.toLocaleString('es-AR')} de más · sube la comisión</span>${notaEnv}`;
 }
 function cobro_onSelectChange() {
   const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
@@ -8768,7 +8790,9 @@ async function confirmarCobroModal() {
       recP = Math.round(recUSD * tipoCambio);
       difReal = Math.round((recUSD - espUSD) * 100) / 100;
     } else {
-      recP = Math.round(parseFloat(_recInp0.value) || 0);
+      // El "recibido" que pone el usuario incluye el envío; lo descontamos para que el ajuste se
+      // calcule solo sobre el pedido (el envío va a su propia caja y no se reescala).
+      recP = Math.round(parseFloat(_recInp0.value) || 0) - cobro_envioCobrado();
       difReal = recP - espP;
     }
   }
