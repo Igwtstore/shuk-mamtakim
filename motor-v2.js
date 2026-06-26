@@ -1386,7 +1386,7 @@ function doGet(e) {
       // su teardown para no dejar residuo en producción, y sirve para limpiar lo ya ensuciado.
       // Seguro: ningún dato real contiene estos marcadores.
       const marca = /__TEST__|REGTEST|REGCLI|AJTEST|VISTEST|BORRTEST|DIAG_/;
-      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos', 'Trafico', 'AvisosCandy', 'Envios'];
+      const hojas = ['GananciasJony', 'Clientes', 'Borrados', 'Ventas', 'VentasHijos', 'CCHijos', 'ComprasHijos', 'Pagos', 'MovimientosStock', 'Stock', 'StockDiario', 'DepositoHijos', 'ConsumoHijos', 'CierresHijos', 'Trafico', 'AvisosCandy', 'Envios', 'MovsSocios'];
       const resultado = {};
       hojas.forEach(nombre => {
         const h = ss.getSheetByName(nombre);
