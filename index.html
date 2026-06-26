@@ -3086,7 +3086,12 @@ function detalleCobro(v, soloMiri) {
   const cajaJusd = (cajaJ === 'ETF_USD_JONY') ? cajaJ : 'ETF_USD_JONY';   // dólares de Jony → su caja U$S
   const partes = [];
   if (!soloMiri && arsJ > 0 && esReal(cajaJ)) partes.push(`${$ars(arsJ)} → <b>${cajaLabel(cajaJ)}</b>`);
-  if (!soloMiri && usdJ > 0) partes.push(`U$S ${usdJ.toFixed(2)} → <b>${cajaLabel(cajaJusd)}</b>`);
+  if (!soloMiri && usdJ > 0) {
+    // Si la parte de Jony en U$S se cobró en una caja de pesos con tipo de cambio: mostrar la conversión.
+    const cajaJenPesos = esReal(cajaJ) && !/USD|U\$S/.test(cajaJ) && cajaJ !== 'ETF_USD_JONY';
+    if (cajaJenPesos && tc > 0) partes.push(`U$S ${usdJ.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdJ * tc)} → <b>${cajaLabel(cajaJ)}</b>`);
+    else partes.push(`U$S ${usdJ.toFixed(2)} → <b>${cajaLabel(cajaJusd)}</b>`);
+  }
   if (arsM > 0 && esReal(cajaM)) partes.push(`${$ars(arsM)} → <b>${cajaLabel(cajaM)}</b>`);
   if (usdM > 0 && esReal(cajaM)) {
     // Si la caja destino es en pesos y hay tipo de cambio: mostrar la conversión completa.
@@ -6036,9 +6041,16 @@ async function renderCaja() {
         movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsJ, mon: 'ARS', tipo: 'venta', vid: v.id, dueno: 'J' });
       }
       if (usdJ > 0) {
-        // Dólares de Jony (sus propios productos): a su caja en U$S. Sin comisión (es de él).
-        const cajaJusd = (cajaJ === 'ETF_USD_JONY') ? cajaJ : (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : 'ETF_USD_JONY');
-        movs.push({ desc: `Vta #${n} ${f}`, col: cajaJusd, val: usdJ, mon: 'USD', tipo: 'venta', vid: v.id, dueno: 'J' });
+        // Dólares de Jony (sus propios productos). Sin comisión (es de él).
+        const tcJ = parseFloat(v.tipoCambio || 0);
+        if (tcJ > 0 && COBRO_ARS_COLS.includes(cajaJ)) {
+          // Pitzujim en U$S cobrado EN PESOS (cross-moneda): cae en la caja de pesos al tipo de cambio.
+          const arsEquivJ = Math.round(usdJ * tcJ);
+          movs.push({ desc: `Vta Pitzujim #${n} ${f}`, col: cajaJ, val: arsEquivJ, mon: 'ARS', tipo: 'venta', sub: `ex U$S ${usdJ.toFixed(2)} @ $${tcJ.toLocaleString('es-AR')}`, vid: v.id, dueno: 'J' });
+        } else {
+          const cajaJusd = (cajaJ === 'ETF_USD_JONY') ? cajaJ : (fp === 'Cuenta corriente' ? 'CTA_CTE_USD' : 'ETF_USD_JONY');
+          movs.push({ desc: `Vta #${n} ${f}`, col: cajaJusd, val: usdJ, mon: 'USD', tipo: 'venta', vid: v.id, dueno: 'J' });
+        }
       }
       if (arsM > 0 && cajaM) {
         const pagoFueAMyri = ['MP_GABY','EFT_MYRI','CTA_CTE_ARS'].includes(cajaM);
@@ -6344,7 +6356,7 @@ async function renderCuentaSocios() {
     if (v.corte) return;   // ya liquidado en un corte → no cuenta en el período actual
     if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
     const fp = (v.formaPago||'').trim();
-    const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0;
+    const arsJ = parseFloat(v.arsJONY)||0, arsM = parseFloat(v.arsMyri)||0, usdM = parseFloat(v.usdMyri)||0, usdJ = parseFloat(v.usdJONY)||0;
     const _sinComiS = (v.sinComision||'').toString().toUpperCase() === 'SI';   // saldo cargado sin comisión
     const comiA = _sinComiS ? 0 : ((parseFloat(v.comiARS)||0) || Math.round(arsM*0.15));
     const comiU = _sinComiS ? 0 : ((parseFloat(v.comiUSD)||0) || parseFloat((usdM*0.15).toFixed(2)));
@@ -6354,8 +6366,12 @@ async function renderCuentaSocios() {
     const cajaJ = v.cajaJony || '';
     const cajaM = v.cajaMyri || '';
 
-    // Pitzujim que terminó en caja de Myri → Myri le debe el total
+    // Pitzujim que terminó en caja de Myri → Myri le debe el total (incluye U$S cobrados en pesos al tc)
     if (arsJ > 0 && MYRI_ARS.includes(cajaJ)) pitzMyri += arsJ;
+    if (usdJ > 0 && MYRI_ARS.includes(cajaJ)) {
+      const tcJ = parseFloat(v.tipoCambio)||0;
+      if (tcJ > 0) pitzMyri += Math.round(usdJ * tcJ);   // Pitzujim U$S cobrado en pesos en caja de Myri
+    }
 
     // Golosinas en ARS
     if (arsM > 0) {
@@ -8569,9 +8585,12 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
 // caja en pesos, suma su conversión a tc). Si no hay parte en pesos, devuelve 0 (oculta el ajuste).
 function cobro_esperadoPesos() {
   const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
+  const jw = document.getElementById('cobro-jony-wrap');
+  const cajaJony = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
   const tc = parseFloat(document.getElementById('cobro-tc')?.value) || 0;
-  const usdEnPesos = _cobroUsdM > 0 && tc > 0 && COBRO_ARS_COLS.includes(cajaMyri);
-  return Math.round(_cobroArsJ + _cobroArsM + (usdEnPesos ? _cobroUsdM * tc : 0));
+  const usdMenPesos = _cobroUsdM > 0 && tc > 0 && COBRO_ARS_COLS.includes(cajaMyri);
+  const usdJenPesos = _cobroUsdJ > 0 && tc > 0 && COBRO_ARS_COLS.includes(cajaJony);
+  return Math.round(_cobroArsJ + _cobroArsM + (usdMenPesos ? _cobroUsdM * tc : 0) + (usdJenPesos ? _cobroUsdJ * tc : 0));
 }
 // Cajas de dólares reales (sentido nuevo: venta en pesos cobrada en dólares).
 const _CAJAS_USD = ['ETF_USD_MYRI', 'ETF_USD_JONY', 'COMI_USD_JONY'];
@@ -8620,7 +8639,10 @@ function cobro_recalcAjuste() {
 }
 function cobro_onSelectChange() {
   const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
-  const usdAPesos = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
+  const jw = document.getElementById('cobro-jony-wrap');
+  const cajaJony = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
+  // U$S cobrado en una caja de PESOS (cross-moneda): aplica tanto a las golosinas de Myri como a los Pitzujim de Jony.
+  const usdAPesos = (_cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri)) || (_cobroUsdJ > 0 && COBRO_ARS_COLS.includes(cajaJony));
   const pesoAUsd = cobro_pesoAUSD();
   document.getElementById('cobro-tc-wrap').style.display = (usdAPesos || pesoAUsd) ? 'block' : 'none';
   const lbl = document.getElementById('cobro-ajuste-label');
@@ -8633,10 +8655,18 @@ function cobro_onSelectChange() {
 function cobro_calcularTC() {
   const tc = parseFloat(document.getElementById('cobro-tc').value) || 0;
   const res = document.getElementById('cobro-tc-result');
-  if (tc > 0 && _cobroUsdM > 0) {
-    const arsEquiv = Math.round(_cobroUsdM * tc);
-    const comi = Math.round(arsEquiv * 0.15);
-    res.textContent = `= $ ${arsEquiv.toLocaleString('es-AR')} · Comi $: $ ${comi.toLocaleString('es-AR')}`;
+  const cajaMyri = document.getElementById('cobro-caja-myri')?.value || '';
+  const jw = document.getElementById('cobro-jony-wrap');
+  const cajaJony = (jw && jw.style.display !== 'none') ? (document.getElementById('cobro-caja-jony')?.value || '') : '';
+  const mEnPesos = _cobroUsdM > 0 && COBRO_ARS_COLS.includes(cajaMyri);
+  const jEnPesos = _cobroUsdJ > 0 && COBRO_ARS_COLS.includes(cajaJony);
+  if (tc > 0 && (mEnPesos || jEnPesos)) {
+    const arsM = mEnPesos ? Math.round(_cobroUsdM * tc) : 0;
+    const arsJ = jEnPesos ? Math.round(_cobroUsdJ * tc) : 0;
+    const comi = Math.round(arsM * 0.15);   // la comisión es solo sobre las golosinas de Myri; los Pitzujim de Jony no llevan
+    let txt = `= $ ${(arsM + arsJ).toLocaleString('es-AR')}`;
+    if (comi > 0) txt += ` · Comi $: $ ${comi.toLocaleString('es-AR')}`;
+    res.textContent = txt;
   } else { res.textContent = ''; }
   cobro_recalcAjuste();
 }

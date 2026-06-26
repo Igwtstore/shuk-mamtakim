@@ -637,35 +637,40 @@ function doGet(e) {
             const recibido = Math.round(parseFloat(e.parameter.recibido) || 0);
             // Base = split original (col 24 si ya existe; si no, el split actual de cols 12-16).
             const origStr = (datos[i][23] || '').toString();
-            let bJ, bM, bU, bCA, bCU;
+            // Base con 6 campos: arsJONY|arsMyri|usdMyri|comiARS|comiUSD|usdJONY (el 6º puede faltar en bases viejas → 0).
+            let bJ, bM, bU, bCA, bCU, bUJ;
             if (origStr && origStr.indexOf('|') !== -1) {
               const p = origStr.split('|').map(parseFloat);
-              bJ = p[0]||0; bM = p[1]||0; bU = p[2]||0; bCA = p[3]||0; bCU = p[4]||0;
+              bJ = p[0]||0; bM = p[1]||0; bU = p[2]||0; bCA = p[3]||0; bCU = p[4]||0; bUJ = p[5]||0;
             } else {
               bJ = parseFloat(datos[i][11])||0; bM = parseFloat(datos[i][12])||0; bU = parseFloat(datos[i][13])||0;
-              bCA = parseFloat(datos[i][14])||0; bCU = parseFloat(datos[i][15])||0;
+              bCA = parseFloat(datos[i][14])||0; bCU = parseFloat(datos[i][15])||0; bUJ = parseFloat(datos[i][27])||0;
             }
             const cajaM = dec(e.parameter.cajaMyri||'');
+            const cajaJ = dec(e.parameter.cajaJony||'');
             const usdEnPesos = bU > 0 && tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1;
-            const esperado = Math.round(bJ + bM + (usdEnPesos ? bU * tc : 0));
+            const usdJEnPesos = bUJ > 0 && tc > 0 && CAJAS_ARS.indexOf(cajaJ) !== -1;   // Pitzujim U$S de Jony cobrado en pesos
+            const esperado = Math.round(bJ + bM + (usdEnPesos ? bU * tc : 0) + (usdJEnPesos ? bUJ * tc : 0));
             if (esperado > 0 && recibido > 0 && Math.abs(recibido - esperado) >= 1) {
               const f = recibido / esperado;
-              const nJ = Math.round(bJ * f), nM = Math.round(bM * f), nU = Math.round(bU * f * 100) / 100;
-              // Comisión en la moneda de cobro (U$S cobrada en pesos → comisión en pesos).
+              const nJ = Math.round(bJ * f), nM = Math.round(bM * f), nU = Math.round(bU * f * 100) / 100, nUJ = Math.round(bUJ * f * 100) / 100;
+              // Comisión en la moneda de cobro (U$S cobrada en pesos → comisión en pesos). Solo Myri; los Pitzujim de Jony no llevan.
               const _sc = (datos[i][26] || '').toString().toUpperCase() === 'SI';
               const _cm = _comiEnMonedaCobro_(nM, nU, cajaM, tc, _sc);
               const nCA = _cm.comiARS, nCU = _cm.comiUSD;
+              _asegurarColUsdJony_(h);
               // Guardar la base original ANTES de pisar (solo la primera vez).
-              if (!origStr) { h.getRange(i+1,24).setNumberFormat('@'); h.getRange(i+1,24).setValue([bJ,bM,bU,bCA,bCU].join('|')); }
+              if (!origStr) { h.getRange(i+1,24).setNumberFormat('@'); h.getRange(i+1,24).setValue([bJ,bM,bU,bCA,bCU,bUJ].join('|')); }
               h.getRange(i+1,12).setValue(nJ); h.getRange(i+1,13).setValue(nM); h.getRange(i+1,14).setValue(nU);
-              h.getRange(i+1,15).setValue(nCA); h.getRange(i+1,16).setValue(nCU);
+              h.getRange(i+1,15).setValue(nCA); h.getRange(i+1,16).setValue(nCU); h.getRange(i+1,28).setValue(nUJ);
               h.getRange(i+1,23).setValue(recibido - esperado);   // ajuste con signo
               // (sin return: cae al bloque de conversión cross-moneda de abajo)
             } else {
               // recibido == esperado: sin ajuste. Si había uno previo, lo deshace (restaura base).
               if (origStr) {
+                _asegurarColUsdJony_(h);
                 h.getRange(i+1,12).setValue(bJ); h.getRange(i+1,13).setValue(bM); h.getRange(i+1,14).setValue(bU);
-                h.getRange(i+1,15).setValue(bCA); h.getRange(i+1,16).setValue(bCU);
+                h.getRange(i+1,15).setValue(bCA); h.getRange(i+1,16).setValue(bCU); h.getRange(i+1,28).setValue(bUJ);
               }
               h.getRange(i+1,23).setValue(0);
             }
@@ -698,7 +703,7 @@ function doGet(e) {
                 const preCA = parseFloat(h.getRange(i+1,15).getValue()) || 0;
                 const preCU = parseFloat(h.getRange(i+1,16).getValue()) || 0;
                 h.getRange(i+1,24).setNumberFormat('@');
-                h.getRange(i+1,24).setValue([aJ0, aM0, uM0, preCA, preCU].join('|'));
+                h.getRange(i+1,24).setValue([aJ0, aM0, uM0, preCA, preCU, uJ0].join('|'));
               }
               h.getRange(i+1,12).setValue(aJ); h.getRange(i+1,13).setValue(aM);
               h.getRange(i+1,14).setValue(uM); h.getRange(i+1,28).setValue(uJ);
