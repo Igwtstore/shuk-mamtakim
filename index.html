@@ -1179,7 +1179,7 @@
   </div>
   <div class="admin-card">
     <div class="admin-titulo">➕ Agregar nuevo producto</div>
-    <button type="button" onclick="abrirImportarCandy()" style="width:100%;margin-bottom:0.75rem;padding:0.7rem;background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.88rem;cursor:pointer;font-family:'DM Sans',sans-serif">📥 Importar productos de Candy Shop 🍬</button>
+    <button type="button" id="btn-importar-candy" onclick="abrirImportarCandy()" style="width:100%;margin-bottom:0.75rem;padding:0.7rem;background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.88rem;cursor:pointer;font-family:'DM Sans',sans-serif">📥 Importar productos de Candy Shop 🍬</button>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:2;min-width:150px">
@@ -1350,7 +1350,7 @@
       <button class="guardar-stock-btn" style="margin-top:0.4rem;background:#fde8e8;color:#c0392b" onclick="borrarProductoEditor()">🗑️ Borrar definitivamente (se va del catálogo)</button>
     </div>
   </div>
-  <div class="admin-card">
+  <div class="admin-card" id="card-bandeja">
     <div class="admin-titulo">📥 Bandeja de fotos (la IA las describe sola)</div>
     <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">Tirá acá todas las fotos juntas. La IA las analiza y deja listos nombre, descripción y categoría con el estilo del catálogo. Después, al dar de alta, elegís de acá y viene todo pre-pensado.</div>
     <input type="file" id="bandeja-files" accept="image/*" multiple onchange="subirABandeja(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
@@ -7192,6 +7192,16 @@ function _tagPanelCards() {
     card.dataset.seccion = s;
   });
 }
+// 🔒 REGLA SAGRADA: en vista Miri (o cualquier usuario que no sea Jony) NO se ve nada de Jony.
+// Estos elementos leen/muestran datos de TODOS (IA con números de Jony, bandeja con sus fotos,
+// importar de Candy) → se ocultan. Centralizado acá para sumar elementos a futuro fácil.
+function aplicarPrivacidadPanel() {
+  const ocultar = (typeof esVistaMiri === 'function') && esVistaMiri();
+  // El botón de importar Candy no es una card con sección → se controla a mano (mostrar/ocultar).
+  const btn = document.getElementById('btn-importar-candy'); if (btn) btn.style.display = ocultar ? 'none' : '';
+  // Las cards de IA y bandeja sí tienen sección (las posiciona setPanelSeccion); acá SOLO las ocultamos en Miri.
+  if (ocultar) ['card-ia', 'card-bandeja'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+}
 function setPanelSeccion(s, btn) {
   _panelSeccion = s;
   localStorage.setItem('shuk_panel_seccion', s);
@@ -7199,9 +7209,7 @@ function setPanelSeccion(s, btn) {
   document.querySelectorAll('#admin-tab-panel > .admin-card').forEach(card => {
     card.style.display = (card.dataset.seccion === s) ? '' : 'none';
   });
-  // La IA lee TODOS los datos (incluye números de Jony) → no se muestra en vista Myri
-  const cardIA = document.getElementById('card-ia');
-  if (cardIA && esVistaMiri()) cardIA.style.display = 'none';
+  aplicarPrivacidadPanel();   // 🔒 oculta lo sensible (IA, bandeja de fotos, importar Candy) en vista Miri
   document.querySelectorAll('.psec-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
@@ -7571,6 +7579,9 @@ function aplicarBloqueoDuenoMiri() {
 function setVistaSocio(v) {
   vistaSocio = v;
   renderSocioBar();
+  // 🔒 Re-aplicar privacidad al cambiar de vista (re-posiciona cards por sección y oculta lo de Jony en Miri).
+  if (typeof _panelSeccion !== 'undefined' && typeof setPanelSeccion === 'function') setPanelSeccion(_panelSeccion);
+  else aplicarPrivacidadPanel();
   // Si estaba en Ganancias y pasa a vista Miri, lo saco a Panel
   if (esVistaMiri() && (_adminTabActual === 'ganancias' || _adminTabActual === 'docs')) { setAdminTab('panel'); }
   // Re-render del panel (secciones siempre presentes)
