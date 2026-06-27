@@ -414,6 +414,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="card-title">Mis productos</div>
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff8f00,#f4511e);margin-top:8px" onclick="flyerDelDia()">⚡ Flyer del día (se arma solo)</button>
     </div>
@@ -1209,23 +1210,82 @@ function renderCatalogo(catalogo) {
   const el = document.getElementById('catalogo-list');
   if (!catalogo.length) { el.innerHTML = '<div class="empty">Sin productos. Agregá uno!</div>'; return; }
   el.innerHTML = catalogo.map(p => {
+    const esShuk = p.origen === 'shuk';
     const gan = (p.precioVenta || 0) - (p.costo || 0);
     const fotoHtml = p.foto
       ? `<div class="cat-foto"><img src="${fotoCS(p.foto, 200)}" style="object-fit:contain;background:#fff" onerror="this.parentElement.innerHTML='📦'"></div>`
       : `<div class="cat-foto">📦</div>`;
+    const badge = esShuk ? `<span style="background:#ffe0f0;color:#b14cff;font-size:0.62rem;font-weight:800;padding:1px 6px;border-radius:6px;margin-right:4px">🛍️ Shuk</span>` : '';
+    // Los de Shuk son VIVOS (no se editan acá); solo se pueden quitar del catálogo de Candy.
+    const accion = esShuk
+      ? `<button class="btn-edit" title="Quitar de Candy" onclick="quitarShukDeCandy('${(p.codigo||'').replace('shuk:','')}')">✕</button>`
+      : `<button class="btn-edit" onclick='editarProducto(${JSON.stringify(p)})'>✏️</button>`;
     return `<div class="cat-item">
       ${fotoHtml}
       <div class="cat-info">
-        <div class="cat-name">${p.nombre}</div>
+        <div class="cat-name">${badge}${p.nombre}</div>
         <div class="cat-code">${p.codigo} · <span style="color:${(p.stock||0) > 0 ? '#2e8b57' : '#c0392b'};font-weight:700">📦 ${p.stock||0}</span></div>
       </div>
       <div class="cat-prices">
         <div class="cat-price">${fmt(p.precioVenta)}</div>
         ${p.costo > 0 ? `<div class="cat-costo">Costo: ${fmt(p.costo)}</div><div class="cat-ganancia">+${fmt(gan)}</div>` : ''}
       </div>
-      <button class="btn-edit" onclick='editarProducto(${JSON.stringify(p)})'>✏️</button>
+      ${accion}
     </div>`;
   }).join('');
+}
+
+// ─── IMPORTAR PRODUCTOS DE SHUK ───────────────────────────────────
+let _impShukProds = [], _impShukSet = new Set();
+async function abrirImportarShuk() {
+  let ov = document.getElementById('imp-shuk-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'imp-shuk-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.onclick = e => { if (e.target === ov) cerrarImportarShuk(); }; document.body.appendChild(ov); }
+  ov.innerHTML = '<div style="background:#fff;border-radius:16px;padding:18px;max-width:460px;width:100%"><div class="spinner">Cargando productos de Shuk…</div></div>';
+  const [prods, imp] = await Promise.all([api('getProductosShukAdmin'), api('getShukEnCandy')]);
+  _impShukProds = Array.isArray(prods) ? prods : [];
+  _impShukSet = new Set(Array.isArray(imp) ? imp : []);
+  _renderImpShuk();
+}
+function cerrarImportarShuk() { const ov = document.getElementById('imp-shuk-ov'); if (ov) ov.remove(); cargarDatos(true); }
+function _renderImpShuk() {
+  const ov = document.getElementById('imp-shuk-ov'); if (!ov) return;
+  const q = (document.getElementById('imp-shuk-q')?.value || '').trim().toLowerCase();
+  const lista = _impShukProds.filter(p => !q || (p.nombre || '').toLowerCase().includes(q));
+  const filas = lista.map(p => {
+    const on = _impShukSet.has(p.id);
+    const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
+    const src = foto ? fotoCS(foto, 120) : '';
+    const oculto = !p.activo || (p.visible || '') === 'Oculto';
+    return `<div onclick="toggleImpShuk('${p.id}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
+      <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
+      ${src ? `<img src="${src}" style="width:38px;height:38px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:0.85rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre} ${oculto ? '<span style="color:#b8860b;font-size:0.6rem">🙈 oculto</span>' : ''}</div>
+        <div style="font-size:0.68rem;color:#999">$${p.precioMin || 0} · 📦 ${p.stock || 0}</div>
+      </div>
+    </div>`;
+  }).join('');
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:460px;width:100%;max-height:82vh;display:flex;flex-direction:column">
+    <div style="font-weight:800;font-size:1.05rem;color:#b14cff;margin-bottom:6px">🛍️ Importar productos de Shuk</div>
+    <div style="font-size:0.72rem;color:#888;margin-bottom:8px">Tocá para agregar/quitar. Aparecen en tu catálogo y se actualizan solos si cambian en Shuk.</div>
+    <input id="imp-shuk-q" oninput="_renderImpShuk()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px">
+    <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px">${filas || '<div class="empty">Sin productos</div>'}</div>
+    <button onclick="cerrarImportarShuk()" style="margin-top:10px;width:100%;padding:11px;background:#b14cff;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">Listo</button>
+  </div>`;
+  const bq = document.getElementById('imp-shuk-q'); if (bq && q) { bq.value = q; bq.focus(); }
+}
+async function toggleImpShuk(id, el) {
+  if (el) el.style.pointerEvents = 'none';
+  const r = await api('toggleShukEnCandy', { id });
+  if (r && r.ok) { if (r.importado) _impShukSet.add(id); else _impShukSet.delete(id); }
+  _renderImpShuk();
+}
+async function quitarShukDeCandy(id) {
+  if (!confirm('¿Quitar este producto de Shuk de tu catálogo?')) return;
+  await api('toggleShukEnCandy', { id });
+  cargarDatos();
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────
