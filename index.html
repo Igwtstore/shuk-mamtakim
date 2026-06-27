@@ -4873,12 +4873,19 @@ function hacerPortadaNp(i) {
 // Así la copia NO queda vinculada: si después tocás la foto original, la del nuevo producto no cambia.
 async function copiarFotoCloudinary(val) {
   if (!val) return '';
-  const url = /^https?:\/\//i.test(val) ? val : `${CLOUDINARY_BASE}/${String(val).replace(/^\//, '')}`;
-  const fd = new FormData();
-  fd.append('file', url);
-  fd.append('upload_preset', CLOUDINARY_PRESET);
-  fd.append('folder', 'shuk-mamtakim');
+  // imgUrl() arma la URL VÁLIDA del sistema (maneja public_id con/sin folder y URLs completas).
+  // Subimos la resolución a 1200px para que la copia salga en buena calidad.
+  const url = (imgUrl(val)[0] || '').replace('w_400', 'w_1200');
+  if (!url) return '';
   try {
+    // Unsigned no permite subir desde URL → descargamos la imagen como blob y subimos ESE archivo (copia nueva).
+    const imgRes = await fetch(url);
+    if (!imgRes.ok) return '';
+    const blob = await imgRes.blob();
+    const fd = new FormData();
+    fd.append('file', blob);
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    fd.append('folder', 'shuk-mamtakim');
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
     const data = await res.json();
     return data.public_id || data.secure_url || '';
