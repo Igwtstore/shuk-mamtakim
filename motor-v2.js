@@ -32,7 +32,8 @@ const PROTECTED_HIJOS = [
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
   'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA',
-  'getAvisosCandy','resolverAvisoCandy'   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
+  'getAvisosCandy','resolverAvisoCandy',   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
+  'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy'   // importar productos de Shuk al catálogo de Candy
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1379,20 +1380,11 @@ function doGet(e) {
       return json({ error: 'producto no encontrado' });
     }
     if (accion === 'getProductosAdmin') {
-      // Todos los productos del Stock, INCLUIDOS los ocultos (para el gestor masivo de visibilidad).
-      const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return json([]);
-      _asegurarColMoneda_(ss);   // crea/puebla la columna Moneda (idempotente) para que venga en la lista
-      const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
-      return json(d.filter(r => r[0] !== '' && r[1]).map(r => ({
-        id: r[0].toString(), nombre: (r[1] || '').toString(), stock: parseInt(r[5]) || 0,
-        activo: (r[7] || 'SI').toString().toUpperCase() !== 'NO',
-        categoria: (r[8] || 'Varios').toString(), dueno: (r[14] || '').toString(),
-        moneda: ((r[17] || '$').toString() === 'U$S') ? 'U$S' : '$',
-        precioMay: r[3], precioMin: parseFloat(r[4]) || 0, desc: (r[2] || '').toString(),
-        visible: (r[9] || 'Ambos').toString(), imagen: (r[6] || '').toString(),
-        descBot: (r[16] || '').toString(), costo: parseFloat(String(r[29] || '0').replace(',', '.')) || 0,
-        nombresPrev: (r[30] || '').toString()
-      })));
+      return json(_productosShukAdmin(ss));   // todos los productos del Stock, INCLUIDOS los ocultos
+    }
+    // Candy puede listar los productos de Shuk (para elegir cuáles importar a su catálogo). Acción de hijos.
+    if (accion === 'getProductosShukAdmin') {
+      return json(_productosShukAdmin(ss));
     }
     if (accion === 'setVisibilidadMasiva') {
       // Muestra/oculta muchos productos de una sola vez (col 8 'activo' = SI/NO).
@@ -1541,6 +1533,24 @@ function doGet(e) {
 
     // ─── SISTEMA HIJOS ────────────────────────────────────────────────────────
     if (accion === 'getCatalogoHijos')     { return json(getCatalogoHijos(ss)); }
+    if (accion === 'getShukEnCandy') {
+      const h = ss.getSheetByName('ShukEnCandy');
+      if (!h || h.getLastRow() < 2) return json([]);
+      return json(h.getRange(2,1,h.getLastRow()-1,1).getValues().map(r => (r[0]||'').toString().trim()).filter(Boolean));
+    }
+    if (accion === 'toggleShukEnCandy') {
+      // Agrega o quita un producto de Shuk del catálogo de Candy (toggle por id de Shuk).
+      const id = dec(e.parameter.id || '').trim();
+      if (!id) return json({ error: 'sin id' });
+      const h = getOrCreate(ss, 'ShukEnCandy', ['ShukId', 'Fecha']);
+      const ids = h.getLastRow() >= 2 ? h.getRange(2,1,h.getLastRow()-1,1).getValues() : [];
+      for (let i = 0; i < ids.length; i++) {
+        if ((ids[i][0]||'').toString().trim() === id) { h.deleteRow(i + 2); return json({ ok: true, importado: false }); }
+      }
+      h.appendRow([id, Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm')]);
+      h.getRange(h.getLastRow(), 1).setNumberFormat('@');
+      return json({ ok: true, importado: true });
+    }
     if (accion === 'registrarVentaHijos')  { return json(registrarVentaHijos(ss, e.parameter)); }
     if (accion === 'registrarVentaLote')   { return json(registrarVentaLote(ss, e.parameter)); }
     if (accion === 'registrarConsumoHijos'){ return json(registrarConsumoHijos(ss, e.parameter)); }
@@ -1779,7 +1789,44 @@ function ajustarDepositoManual(ss, p) {
   } finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
+// Todos los productos del Stock de Shuk, INCLUIDOS los ocultos. Reutilizado por getProductosAdmin,
+// getProductosShukAdmin (para que Candy elija qué importar) y _shukEnCandyData (productos vivos en Candy).
+function _productosShukAdmin(ss) {
+  const h = ss.getSheetByName('Stock'); if (!h || h.getLastRow() < 2) return [];
+  _asegurarColMoneda_(ss);
+  const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+  return d.filter(r => r[0] !== '' && r[1]).map(r => ({
+    id: r[0].toString(), nombre: (r[1] || '').toString(), stock: parseInt(r[5]) || 0,
+    activo: (r[7] || 'SI').toString().toUpperCase() !== 'NO',
+    categoria: (r[8] || 'Varios').toString(), dueno: (r[14] || '').toString(),
+    moneda: ((r[17] || '$').toString() === 'U$S') ? 'U$S' : '$',
+    precioMay: r[3], precioMin: parseFloat(r[4]) || 0, desc: (r[2] || '').toString(),
+    visible: (r[9] || 'Ambos').toString(), imagen: (r[6] || '').toString(),
+    descBot: (r[16] || '').toString(), costo: parseFloat(String(r[29] || '0').replace(',', '.')) || 0,
+    nombresPrev: (r[30] || '').toString()
+  }));
+}
+// Productos de SHUK importados a Candy (VIVOS): la hoja ShukEnCandy guarda solo el id de Shuk; los datos
+// (nombre/precio/foto/stock) se leen EN VIVO del Stock → si cambian en Shuk, se actualizan en Candy.
+// Devuelve en el formato del catálogo de Candy (codigo con prefijo 'shuk:' para no chocar con códigos de Candy).
+function _shukEnCandyData(ss) {
+  const h = ss.getSheetByName('ShukEnCandy');
+  if (!h || h.getLastRow() < 2) return [];
+  const ids = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues().map(r => (r[0] || '').toString().trim()).filter(Boolean);
+  if (!ids.length) return [];
+  const porId = {}; _productosShukAdmin(ss).forEach(p => { porId[p.id] = p; });
+  return ids.filter(id => porId[id]).map(id => {
+    const p = porId[id];
+    const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
+    return { codigo: 'shuk:' + id, nombre: p.nombre, precioVenta: parseFloat(p.precioMin) || 0,
+      costo: parseFloat(p.costo) || 0, foto: foto, stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.desc || '' };
+  });
+}
 function getCatalogoHijos(ss) {
+  const propios = _getCatalogoHijosPropios(ss);
+  return propios.concat(_shukEnCandyData(ss));   // catálogo de Candy + productos de Shuk importados (vivos)
+}
+function _getCatalogoHijosPropios(ss) {
   const h = ss.getSheetByName('CatalogoHijos');
   if (!h || h.getLastRow() < 2) return [];
   // Stock disponible = lo que hay en el depósito compartido → la tienda marca "agotado" con esto.
