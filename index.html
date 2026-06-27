@@ -1242,6 +1242,8 @@
       <div class="nombre-campo" style="margin:0">
         <label>Fotos y/o video del producto (hasta 5 — podés seleccionar varios juntos)</label>
         <input type="file" id="np-foto" accept="image/*,video/*" multiple onchange="previewNuevoProducto(this)" style="padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box;" />
+        <button type="button" onclick="abrirCopiarFotoDe('nuevo')" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar foto de otro producto</button>
+        <div id="np-copiadas-prev" style="display:none;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.5rem"></div>
         <div id="np-multi-prev" style="display:none;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.5rem"></div>
         <button type="button" onclick="analizarFotoAlta()" style="margin-top:0.5rem;width:100%;padding:0.7rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.85rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y escriba nombre + descripción</button>
         <div id="np-preview" style="margin-top:0.5rem;display:none">
@@ -1343,6 +1345,7 @@
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (⭐ = portada · ✕ = quitar)</label></div>
       <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
       <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
+      <button type="button" onclick="abrirCopiarFotoDe('editor')" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar foto de otro producto</button>
       <div id="ep-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
       <button type="button" onclick="analizarFotoEditor()" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.82rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y sugiera nombre + descripción</button>
       <button class="guardar-stock-btn" style="margin-top:0.6rem" onclick="guardarEdicionProducto()">💾 Guardar cambios</button>
@@ -4792,6 +4795,7 @@ function registrarGasto() {
 let _npCloudinaryId = '';
 
 let _npArchivos = [];   // archivos acumulados (elegir varias veces SUMA, no reemplaza)
+let _npCopiadas = [];   // public_ids de fotos COPIADAS de otros productos (copias independientes en Cloudinary)
 
 function previewNuevoProducto(input) {
   const nuevos = Array.from(input.files || []);
@@ -4864,6 +4868,79 @@ function hacerPortadaNp(i) {
   renderNpArchivos();
 }
 
+// ─── COPIAR FOTO DE OTRO PRODUCTO (copia INDEPENDIENTE en Cloudinary) ─────────
+// Cloudinary acepta subir desde una URL: descarga la imagen original y crea un asset NUEVO.
+// Así la copia NO queda vinculada: si después tocás la foto original, la del nuevo producto no cambia.
+async function copiarFotoCloudinary(val) {
+  if (!val) return '';
+  const url = /^https?:\/\//i.test(val) ? val : `${CLOUDINARY_BASE}/${String(val).replace(/^\//, '')}`;
+  const fd = new FormData();
+  fd.append('file', url);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
+  fd.append('folder', 'shuk-mamtakim');
+  try {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+    const data = await res.json();
+    return data.public_id || data.secure_url || '';
+  } catch (e) { return ''; }
+}
+let _copiarDestino = null, _copiarProductos = [];
+async function abrirCopiarFotoDe(destino) {
+  _copiarDestino = destino;
+  let ov = document.getElementById('copiar-foto-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'copiar-foto-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9400;display:flex;align-items:center;justify-content:center;padding:0.8rem';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:480px;width:100%"><div class="sinpedidos">Cargando productos… 🍬</div></div>';
+  let r = []; try { r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getProductosAdmin'); } catch (e) {}
+  let lista = Array.isArray(r) ? r : [];
+  if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // 🔒 privacidad: Miri no ve lo de Jony
+  _copiarProductos = lista.filter(p => (p.imagen || '').trim());      // solo los que tienen foto
+  _renderCopiarLista();
+}
+function _renderCopiarLista() {
+  const ov = document.getElementById('copiar-foto-ov'); if (!ov) return;
+  const q = (document.getElementById('copiar-buscar')?.value || '').trim().toLowerCase();
+  const lista = _copiarProductos.filter(p => !q || (p.nombre || '').toLowerCase().includes(q));
+  const filas = lista.map(p => {
+    const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
+    const src = imgUrl(foto)[0];
+    return `<div onclick="_copiarFotoElegir('${(foto).replace(/'/g,"\\'")}', this)" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--gris);cursor:pointer">
+      <img src="${src}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">
+      <div style="flex:1;min-width:0;font-size:0.82rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_duenoBadge ? _duenoBadge(p) : ''}${esc(p.nombre)}</div>
+      <span style="font-size:0.7rem;color:var(--azul);font-weight:700">copiar →</span>
+    </div>`;
+  }).join('');
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:1.1rem;max-width:480px;width:100%;max-height:80vh;display:flex;flex-direction:column">
+    <div style="font-weight:800;font-size:1rem;color:var(--azul);margin-bottom:0.5rem">📋 Copiar foto de otro producto</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.5rem">Elegí un producto y se copia su foto de portada (crea una copia nueva, no queda vinculada).</div>
+    <input id="copiar-buscar" oninput="_renderCopiarLista()" placeholder="🔍 Buscar producto…" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid #e8e6e0;border-radius:8px;font-size:0.85rem;box-sizing:border-box;margin-bottom:0.5rem" />
+    <div style="overflow:auto;flex:1">${filas || '<div class="sinpedidos">Sin productos con foto</div>'}</div>
+    <button onclick="document.getElementById('copiar-foto-ov').remove()" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:var(--gris);border:none;border-radius:8px;font-weight:700;cursor:pointer">Cerrar</button>
+  </div>`;
+  const bq = document.getElementById('copiar-buscar'); if (bq && q) { bq.value = q; bq.focus(); }
+}
+async function _copiarFotoElegir(foto, el) {
+  if (!foto) return;
+  if (el) { el.style.pointerEvents = 'none'; el.style.opacity = '0.5'; }
+  showToast('📋 Copiando la foto…');
+  const nuevoId = await copiarFotoCloudinary(foto);
+  if (!nuevoId) { showToast('⚠️ No se pudo copiar la foto'); if (el) { el.style.pointerEvents = ''; el.style.opacity = ''; } return; }
+  if (_copiarDestino === 'editor') { _epFotos.push(nuevoId); renderFotosEditor(); }
+  else { _npCopiadas.push(nuevoId); renderNpCopiadas(); }
+  showToast('✓ Foto copiada');
+  const ov = document.getElementById('copiar-foto-ov'); if (ov) ov.remove();
+}
+function renderNpCopiadas() {
+  const cont = document.getElementById('np-copiadas-prev'); if (!cont) return;
+  if (!_npCopiadas.length) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+  cont.style.display = 'grid';
+  cont.innerHTML = _npCopiadas.map((id, i) => `<div style="position:relative">
+    <img src="${imgUrl(id)[0]}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onerror="this.style.opacity=0.2">
+    <button type="button" onclick="_npCopiadas.splice(${i},1);renderNpCopiadas()" style="position:absolute;top:2px;right:2px;background:#c0392b;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
+    <div style="position:absolute;bottom:2px;left:2px;background:var(--azul);color:#fff;font-size:0.5rem;font-weight:700;padding:1px 4px;border-radius:5px">📋 copiada</div>
+  </div>`).join('');
+}
 async function subirArchivosCloudinary() {
   const files = _npArchivos.slice(0, 5);
   if (!files.length) return '';
@@ -5360,6 +5437,8 @@ async function guardarNuevoProducto() {
     } else if (_npPreSubida) {
       imagenId = _npPreSubida;
     }
+    // Fotos copiadas de otros productos (ya son copias independientes en Cloudinary).
+    if (_npCopiadas.length) imagenId = [imagenId, _npCopiadas.join(',')].filter(Boolean).join(',');
     // clientId: candado de idempotencia en el backend → aunque lleguen 2 pedidos, 1 solo producto.
     const clientId = 'np_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const costo = (document.getElementById('np-costo').value || '').trim().replace(',', '.');
@@ -5383,6 +5462,7 @@ async function guardarNuevoProducto() {
       _npArchivos = [];
       if (_npBandejaId) { fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'bandejaUsar', id: _npBandejaId })).then(() => cargarBandeja()); }
       _npPreSubida = ''; _npBandejaId = '';   // limpiar ANTES de redibujar (si no, queda la foto fantasma)
+      _npCopiadas = []; renderNpCopiadas();
       renderNpArchivos();
       _npCloudinaryId = '';
       cargarProductos();
