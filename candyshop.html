@@ -415,6 +415,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#c9954a,#a06a2c);margin-top:8px" onclick="abrirArmarCatalogoCandy()">📕 Armar catálogo (PDF / imagen)</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff8f00,#f4511e);margin-top:8px" onclick="flyerDelDia()">⚡ Flyer del día (se arma solo)</button>
     </div>
@@ -1286,6 +1287,120 @@ async function quitarShukDeCandy(id) {
   if (!confirm('¿Quitar este producto de Shuk de tu catálogo?')) return;
   await api('toggleShukEnCandy', { id });
   cargarDatos();
+}
+
+// ─── ARMAR CATÁLOGO (PDF / imagen) ────────────────────────────────
+let _catCandySel = {}, _catCandyLayout = 'lista';
+function abrirArmarCatalogoCandy() {
+  _catCandySel = {};
+  let ov = document.getElementById('armar-cat-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'armar-cat-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  _renderArmarCatCandy();
+}
+function _renderArmarCatCandy() {
+  const ov = document.getElementById('armar-cat-ov'); if (!ov) return;
+  const q = (document.getElementById('armar-cat-q')?.value || '').trim().toLowerCase();
+  const lista = (catalogoCache || []).filter(p => !q || (p.nombre || '').toLowerCase().includes(q));
+  const nSel = Object.keys(_catCandySel).filter(k => _catCandySel[k]).length;
+  const filas = lista.map(p => {
+    const on = !!_catCandySel[p.codigo];
+    const src = p.foto ? fotoCS(p.foto, 120) : '';
+    return `<div onclick="_toggleCatCandy('${(p.codigo || '').replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#fcf3e3' : '#fff'}">
+      <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
+      ${src ? `<img src="${src}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.68rem;color:#999">${fmt(p.precioVenta)}</div></div>
+    </div>`;
+  }).join('');
+  const lbtn = (l, t) => `<button onclick="_catCandyLayout='${l}';_renderArmarCatCandy()" style="flex:1;padding:7px;border:1.5px solid ${_catCandyLayout === l ? '#c9954a' : '#ddd'};background:${_catCandyLayout === l ? '#c9954a' : '#fff'};color:${_catCandyLayout === l ? '#fff' : '#666'};border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">${t}</button>`;
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column">
+    <div style="font-weight:800;font-size:1.05rem;color:#c9954a;margin-bottom:6px">📕 Armar catálogo</div>
+    <input id="armar-cat-q" oninput="_renderArmarCatCandy()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_catCandyTodos()" style="background:none;border:none;color:#c9954a;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
+    <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos</div>'}</div>
+    <input id="armar-cat-titulo" placeholder="Título (opcional, ej: Lista junio)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
+    <div style="display:flex;gap:6px;margin-top:8px">${lbtn('lista', '📄 Lista')}${lbtn('grilla', '🔲 Grilla')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button onclick="armarCatCandyGenerar('pdf')" style="flex:1;padding:11px;background:#c0392b;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">📄 PDF</button>
+      <button onclick="armarCatCandyGenerar('img')" style="flex:1;padding:11px;background:#7b2ff7;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">🖼️ Imagen</button>
+      <button onclick="document.getElementById('armar-cat-ov').remove()" style="padding:11px 14px;background:#eee;border:none;border-radius:10px;font-weight:700;cursor:pointer">✕</button>
+    </div>
+  </div>`;
+  const bq = document.getElementById('armar-cat-q'); if (bq && q) { bq.value = q; bq.focus(); }
+}
+function _toggleCatCandy(cod) { _catCandySel[cod] = !_catCandySel[cod]; _renderArmarCatCandy(); }
+function _catCandyTodos() {
+  const q = (document.getElementById('armar-cat-q')?.value || '').trim().toLowerCase();
+  (catalogoCache || []).filter(p => !q || (p.nombre || '').toLowerCase().includes(q)).forEach(p => _catCandySel[p.codigo] = true);
+  _renderArmarCatCandy();
+}
+function _armarCatCandyDoc() {
+  const _e = s => String(s || '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  const sel = (catalogoCache || []).filter(p => _catCandySel[p.codigo]);
+  const titulo = (document.getElementById('armar-cat-titulo')?.value || '').trim() || 'Catálogo';
+  const hoy = new Date().toLocaleDateString('es-AR');
+  const foto = p => p.foto ? `<img src="${fotoCS(p.foto, 300)}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;background:#faf8f5">🍬</div>`;
+  let cuerpo = '';
+  if (_catCandyLayout === 'grilla') {
+    cuerpo = `<div style="display:flex;flex-wrap:wrap;gap:10px">` + sel.map(p => `
+      <div style="width:calc(33.33% - 7px);border:1px solid #eee;border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:120px;border-bottom:1px solid #f0f0f0">${foto(p)}</div>
+        <div style="padding:7px 8px;flex:1"><div style="font-weight:700;font-size:0.78rem;color:#222;line-height:1.25">${_e(p.nombre)}</div><div style="font-size:0.82rem;color:#7b2ff7;font-weight:700;margin-top:5px">${fmt(p.precioVenta)}</div></div>
+      </div>`).join('') + `</div>`;
+  } else {
+    cuerpo = sel.map(p => `
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 0;border-bottom:1px solid #eee">
+        <div style="width:48px;height:48px;border-radius:7px;overflow:hidden;flex-shrink:0;border:1px solid #f0f0f0">${foto(p)}</div>
+        <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:0.86rem;color:#222">${_e(p.nombre)}</div></div>
+        <div style="text-align:right;font-size:0.85rem;color:#7b2ff7;font-weight:700;white-space:nowrap">${fmt(p.precioVenta)}</div>
+      </div>`).join('');
+  }
+  return `<div style="width:780px;background:#fff;padding:26px 28px;font-family:-apple-system,sans-serif;color:#222;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid #7b2ff7;padding-bottom:11px">
+      <div style="font-size:2.4rem">🍬</div>
+      <div style="flex:1"><div style="font-size:1.5rem;font-weight:800;color:#7b2ff7;line-height:1">Candy Shop</div><div style="font-size:0.72rem;color:#999;margin-top:3px">Golosinas ricas 🍬</div></div>
+      <div style="text-align:right;font-size:0.74rem;color:#888"><b style="color:#444">${_e(titulo)}</b><br>${hoy}</div>
+    </div>
+    ${cuerpo}
+  </div>`;
+}
+async function armarCatCandyGenerar(tipo) {
+  const sel = (catalogoCache || []).filter(p => _catCandySel[p.codigo]);
+  if (!sel.length) { mostrarToast('Elegí al menos un producto', '#c0392b'); return; }
+  mostrarToast(tipo === 'pdf' ? '📄 Generando catálogo…' : '🖼️ Generando imagen…');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff';
+  wrap.innerHTML = _armarCatCandyDoc();
+  document.body.appendChild(wrap);
+  try {
+    const h2c = await _candyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas');
+    const canvas = await h2c(wrap.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const archivo = 'catalogo-candy-' + new Date().toISOString().slice(0, 10);
+    if (tipo === 'img') {
+      const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = archivo + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+    } else {
+      const jspdf = await _candyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf');
+      const { jsPDF } = jspdf; const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      const W = pdf.internal.pageSize.getWidth(), m = 20, imgW = W - m * 2, ratio = imgW / canvas.width;
+      const imgH = canvas.height * ratio, pageH = pdf.internal.pageSize.getHeight() - m * 2;
+      if (imgH <= pageH) { pdf.addImage(canvas.toDataURL('image/png'), 'PNG', m, m, imgW, imgH); }
+      else {
+        let y = 0; const sliceH = pageH / ratio;
+        while (y < canvas.height) {
+          const c2 = document.createElement('canvas'); c2.width = canvas.width; c2.height = Math.min(sliceH, canvas.height - y);
+          c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
+          pdf.addImage(c2.toDataURL('image/png'), 'PNG', m, m, imgW, c2.height * ratio);
+          y += sliceH; if (y < canvas.height) pdf.addPage();
+        }
+      }
+      pdf.save(archivo + '.pdf');
+    }
+    const ov = document.getElementById('armar-cat-ov'); if (ov) ov.remove();
+    mostrarToast('✓ Catálogo listo');
+  } catch (e) { mostrarToast('⚠️ ' + (e.message || 'error'), '#c0392b'); }
+  finally { wrap.remove(); }
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────
