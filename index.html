@@ -3093,6 +3093,21 @@ function enviarPedido(_stockVerificado) {
     return;
   }
 
+  // Aviso de pedido repetido (NO bloquea): si el cliente acaba de enviar este MISMO pedido,
+  // le preguntamos. Si igual quiere comprar de nuevo, puede. Caso típico: reenvió pensando que no salió.
+  const _hashPed = items.map(it => `${it.id}x${it.qty}`).sort().join(',');
+  try {
+    const _prevPed = JSON.parse(localStorage.getItem('shuk_ultimo_pedido') || 'null');
+    if (_prevPed && _prevPed.hash === _hashPed && (Date.now() - _prevPed.ts) < 7200000) {
+      const _minsPed = Math.max(1, Math.round((Date.now() - _prevPed.ts) / 60000));
+      if (!confirm(`🤔 Ya enviaste este mismo pedido hace ${_minsPed} min.\n\n¿Querés enviarlo igual? (si querés comprar otra vez, tocá Aceptar)`)) {
+        _enviando = false;
+        if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
+        return;
+      }
+    }
+  } catch (e) {}
+
   // Reparto 2×2: dueño (Jony/Myri) × moneda ($/U$S). En mayorista la moneda la define el producto;
   // en minorista todo es pesos. La comisión (15%) es SOLO sobre lo de Myri.
   let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0;
@@ -3138,6 +3153,7 @@ function enviarPedido(_stockVerificado) {
   track('pedido', { nombre, ..._cartParaTrack() });
   registrarPedido(nombre, items, tipoCliente);
   enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY);
+  try { localStorage.setItem('shuk_ultimo_pedido', JSON.stringify({ hash: _hashPed, ts: Date.now() })); } catch (e) {}   // huella para avisar si reenvía el mismo pedido
 
   items.forEach(item => {
     const p = productos.find(x => x.id === item.id);
