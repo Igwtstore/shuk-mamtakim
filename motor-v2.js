@@ -36,7 +36,8 @@ const PROTECTED_HIJOS = [
   'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy',   // importar productos de Shuk al catálogo de Candy
   'setCategoriaHijosLote',   // asignar categoría a varios productos de Candy de una
   'setFotoHijo',   // setear solo la foto de un producto de Candy (carga rápida)
-  'renombrarCategoriaHijos'   // corregir el nombre de una categoría en todos sus productos
+  'renombrarCategoriaHijos',   // corregir el nombre de una categoría en todos sus productos
+  'setConfigCandy'   // switch global de la tienda (mostrar stock)
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1536,6 +1537,8 @@ function doGet(e) {
 
     // ─── SISTEMA HIJOS ────────────────────────────────────────────────────────
     if (accion === 'getCatalogoHijos')     { return json(getCatalogoHijos(ss)); }
+    if (accion === 'getConfigCandy')       { return json(getConfigCandy()); }   // público (lo lee la tienda)
+    if (accion === 'setConfigCandy')       { return json(setConfigCandy(e.parameter)); }
     if (accion === 'setCategoriaHijosLote') {
       // Asigna una categoría a varios productos de Candy (códigos separados por coma) de una sola vez.
       const cods = dec(e.parameter.codigos || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -1887,7 +1890,7 @@ function _getCatalogoHijosPropios(ss) {
   const hd = ss.getSheetByName('DepositoHijos');
   if (hd && hd.getLastRow() >= 2) hd.getRange(2,1,hd.getLastRow()-1,3).getValues()
     .forEach(r => { if (r[0]) { const c = r[0].toString(); dep[c] = (dep[c]||0) + (parseInt(r[2])||0); } });
-  const nc = Math.min(10, h.getLastColumn());
+  const nc = Math.min(11, h.getLastColumn());
   return h.getRange(2,1,h.getLastRow()-1,nc).getValues()
     .filter(r => r[0])
     .map(r => { const cod = r[0].toString();
@@ -1895,7 +1898,17 @@ function _getCatalogoHijosPropios(ss) {
         categoria: (r[5]||'').toString().trim() || 'Varios',
         precioOferta: parseFloat(r[6])||0,
         fechaOferta: (r[7] instanceof Date) ? Utilities.formatDate(r[7], TZ, 'dd/MM/yyyy') : (r[7]||'').toString().trim(),
-        cantPack: parseInt(r[8])||0, precioPack: parseFloat(r[9])||0 }; });
+        cantPack: parseInt(r[8])||0, precioPack: parseFloat(r[9])||0, siempreDisp: (r[10]===1||r[10]==='1'||r[10]===true) }; });
+}
+
+function _boolHijo_(v) { return v === true || v === 1 || v === '1' || v === 'true' || v === 'on'; }
+// Config global de la tienda de Candy (switch "mostrar stock"). Guardado en ScriptProperties.
+function getConfigCandy() {
+  return { mostrarStock: PropertiesService.getScriptProperties().getProperty('candy_mostrar_stock') !== '0' };  // default: mostrar
+}
+function setConfigCandy(p) {
+  if (p.mostrarStock !== undefined) PropertiesService.getScriptProperties().setProperty('candy_mostrar_stock', _boolHijo_(p.mostrarStock) ? '1' : '0');
+  return getConfigCandy();
 }
 
 // ── AVISAME cuando vuelva (tienda de Candy) ──────────────────────────────────
@@ -1927,9 +1940,9 @@ function resolverAvisoCandy(ss, p) {
 }
 
 function agregarProductoHijo(ss, p) {
-  const h = getOrCreate(ss, 'CatalogoHijos', ['Codigo','Nombre','PrecioVenta','Costo','Foto','Categoria','PrecioOferta','FechaOferta','CantPack','PrecioPack']);
+  const h = getOrCreate(ss, 'CatalogoHijos', ['Codigo','Nombre','PrecioVenta','Costo','Foto','Categoria','PrecioOferta','FechaOferta','CantPack','PrecioPack','SiempreDisp']);
   h.appendRow([dec(p.codigo), dec(p.nombre), parseFloat(p.precioVenta)||0, parseFloat(p.costo)||0, dec(p.foto||''), dec(p.categoria||'') || 'Varios',
-    parseFloat(p.precioOferta)||0, '', parseInt(p.cantPack)||0, parseFloat(p.precioPack)||0]);
+    parseFloat(p.precioOferta)||0, '', parseInt(p.cantPack)||0, parseFloat(p.precioPack)||0, _boolHijo_(p.siempreDisp) ? 1 : 0]);
   h.getRange(h.getLastRow(), 8).setNumberFormat('@').setValue(dec(p.fechaOferta||''));  // fecha como TEXTO, que Sheets no la convierta
   return { ok: true };
 }
@@ -1956,6 +1969,7 @@ function editarProductoHijo(ss, p) {
       if (p.fechaOferta !== undefined) h.getRange(i+1,8).setNumberFormat('@').setValue(dec(p.fechaOferta||''));
       if (p.cantPack !== undefined) h.getRange(i+1,9).setValue(parseInt(p.cantPack)||0);
       if (p.precioPack !== undefined) h.getRange(i+1,10).setValue(parseFloat(p.precioPack)||0);
+      if (p.siempreDisp !== undefined) h.getRange(i+1,11).setValue(_boolHijo_(p.siempreDisp) ? 1 : 0);
       if (nuevoCodigo !== codigo) renombrarCodigoHijos_(ss, codigo, nuevoCodigo);
       return { ok: true };
     }

@@ -258,6 +258,9 @@ let carrito = {};
 let catalogoData = [];
 let catActiva = 'Todos';
 let ordenTienda = 'categoria';   // por defecto agrupado por categoría
+let mostrarStockTienda = true;   // switch global (lo define el panel de Candy)
+// Un producto es comprable si: hay stock, o es "siempre disponible", o el switch de stock está apagado.
+function _comprable(p) { return !mostrarStockTienda || p.siempreDisp || (p.stock > 0); }
 let productoSeleccionado = null;
 let qtyTmp = 1;
 let productoAviso = null;
@@ -266,8 +269,12 @@ const _avisados = new Set(JSON.parse(localStorage.getItem('candy_avisados_' + ki
 // ─── CARGAR CATÁLOGO ─────────────────────────────────────────────
 async function cargarCatalogo() {
   try {
-    const res = await fetch(APPS_URL + '?accion=getCatalogoHijos');
+    const [res, cfgRes] = await Promise.all([
+      fetch(APPS_URL + '?accion=getCatalogoHijos'),
+      fetch(APPS_URL + '?accion=getConfigCandy').catch(() => null)
+    ]);
     const data = await res.json();
+    try { if (cfgRes) { const cfg = await cfgRes.json(); mostrarStockTienda = cfg.mostrarStock !== false; } } catch (e) {}
     catalogoData = data || [];
     renderCategorias();
     renderCatalogo(catalogoData);
@@ -302,8 +309,8 @@ function renderCatalogo(productos, esFiltered) {
   }
   const cardHtml = p => {
     const cant = carrito[p.codigo]?.cantidad || 0;
-    const agotado = !(p.stock > 0);
-    const pocas = !agotado && p.stock <= 5;
+    const agotado = !_comprable(p);
+    const pocas = !agotado && mostrarStockTienda && !p.siempreDisp && p.stock > 0 && p.stock <= 5;
     const fotoEl = p.foto
       ? `<img src="${fotoTienda(p.foto, 600)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';
@@ -337,8 +344,8 @@ function renderCatalogo(productos, esFiltered) {
   const divisorSinStock = `<div style="grid-column:1/-1;margin:1.4rem 0 0.5rem;border-top:2px dashed #e3a9a9;padding-top:0.95rem;text-align:center">
       <div style="display:inline-block;background:#fdecea;color:#c0392b;font-weight:700;font-size:0.86rem;padding:6px 16px;border-radius:20px;line-height:1.45">🔔 Sin stock <span style="font-weight:500;color:#a85a5a">· dejanos tus datos y te avisamos cuando llegue 👇</span></div>
     </div>`;
-  const conStock = productos.filter(p => p.stock > 0);
-  const sinStock = productos.filter(p => !(p.stock > 0));
+  const conStock = productos.filter(p => _comprable(p));
+  const sinStock = productos.filter(p => !_comprable(p));
   let html = '';
   if (ordenTienda === 'categoria' && catActiva === 'Todos') {
     // 🔥 Ofertas arriba de todo (productos con oferta o pack, con stock). Se repiten abajo en su categoría.
@@ -396,7 +403,7 @@ function subtotalItem(p, cant) {
 function seleccionarProducto(codigo) {
   productoSeleccionado = catalogoData.find(p => p.codigo === codigo);
   if (!productoSeleccionado) return;
-  if (!(productoSeleccionado.stock > 0)) { abrirAvisame(codigo); return; }   // agotado → ofrecer aviso
+  if (!_comprable(productoSeleccionado)) { abrirAvisame(codigo); return; }   // agotado → ofrecer aviso
   qtyTmp = carrito[codigo]?.cantidad || 1;
   const fotoEl = document.getElementById('qty-foto');
   if (productoSeleccionado.foto) { fotoEl.src = fotoTienda(productoSeleccionado.foto, 900); fotoEl.style.display = 'block'; }

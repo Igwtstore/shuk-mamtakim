@@ -410,6 +410,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
   <!-- CATÁLOGO -->
   <div class="tab-content" id="tab-catalogo">
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;background:#fff;border-radius:14px;margin-bottom:10px;box-shadow:0 2px 10px rgba(0,0,0,0.05);cursor:pointer">
+      <span><span style="font-weight:800;font-size:0.88rem">👁️ Mostrar stock en la tienda</span><br><span style="font-size:0.7rem;color:#999">Si lo apagás: no se ven las cantidades y todo queda disponible para pedir.</span></span>
+      <input type="checkbox" id="cfg-mostrar-stock" checked onchange="toggleMostrarStock(this.checked)" style="width:24px;height:24px;flex-shrink:0">
+    </label>
     <div class="card">
       <div class="card-title">Mis productos</div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
@@ -752,6 +756,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <input class="form-input" id="f-stock" type="number" min="0" placeholder="0">
       <div style="font-size:0.7rem;color:#aaa;margin-top:3px">Lo que hay en el depósito. También se carga solo con cada compra.</div>
     </div>
+    <label style="display:flex;align-items:center;gap:9px;padding:10px 12px;border:1.5px solid #cfe8d6;background:#f0fff4;border-radius:10px;margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="f-siempre-disp" style="width:18px;height:18px;flex-shrink:0">
+      <span><span style="font-weight:700;font-size:0.86rem">♾️ Siempre disponible</span><br><span style="font-size:0.7rem;color:#888">Se vende aunque no tengas stock (proveedor con stock de sobra). Nunca aparece agotado.</span></span>
+    </label>
     <div class="form-group">
       <label class="form-label">🏷️ Categoría</label>
       <input class="form-input" id="f-categoria" type="text" list="cat-candy-list" placeholder="Ej: Chocolate, Caramelo, Snacks…">
@@ -1016,6 +1024,7 @@ function renderPanel(d) {
   renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores), arr(d.consumo));
   renderDeudores(arr(d.deudores));
   renderCatalogoFiltrado();
+  _cargarConfigCandy();
   renderVisitasKid(d.visitas || {});
   renderConsumoHoy(d.consumo);
   renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache, arr(d.consumo));
@@ -1256,6 +1265,18 @@ function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
 
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────
+// ─── SWITCH GLOBAL "MOSTRAR STOCK" en la tienda ───────────────────
+let _cfgMostrarStock = true;
+async function _cargarConfigCandy() {
+  try { const c = await api('getConfigCandy'); _cfgMostrarStock = (c && c.mostrarStock !== false); } catch (e) {}
+  const chk = document.getElementById('cfg-mostrar-stock'); if (chk) chk.checked = _cfgMostrarStock;
+}
+async function toggleMostrarStock(v) {
+  _cfgMostrarStock = v;
+  mostrarToast(v ? '👁️ Mostrando stock en la tienda' : '🙈 Stock oculto en la tienda');
+  try { await api('setConfigCandy', { mostrarStock: v ? '1' : '0' }); } catch (e) { mostrarToast('⚠️ No se pudo guardar', '#c0392b'); }
+}
+
 // ─── STOCK AL TOQUE (mini-modal) ──────────────────────────────────
 function ajustarStockRapido(cod) {
   const p = catalogoCache.find(x => x.codigo === cod); if (!p) return;
@@ -1817,6 +1838,7 @@ function abrirModal() {
   document.getElementById('f-stock').value = '';
   document.getElementById('f-categoria').value = ''; _poblarCatCandyDatalist();
   ['f-precio-oferta','f-fecha-oferta','f-cant-pack','f-precio-pack'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-siempre-disp').checked = false;
   _stockOriginal = 0;
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-preview').innerHTML = '📦';
@@ -1842,6 +1864,7 @@ function editarProducto(p) {
   document.getElementById('f-fecha-oferta').value = p.fechaOferta || '';
   document.getElementById('f-cant-pack').value = p.cantPack > 0 ? p.cantPack : '';
   document.getElementById('f-precio-pack').value = p.precioPack > 0 ? p.precioPack : '';
+  document.getElementById('f-siempre-disp').checked = !!p.siempreDisp;
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-status').textContent = '';
   previewFoto(p.foto || '');
@@ -1930,7 +1953,8 @@ async function guardarProducto() {
   const fechaOferta = document.getElementById('f-fecha-oferta').value.trim();
   const cantPack = parseInt(document.getElementById('f-cant-pack').value) || 0;
   const precioPack = parseFloat(document.getElementById('f-precio-pack').value) || 0;
-  const oferta = { categoria, precioOferta, fechaOferta, cantPack, precioPack };
+  const siempreDisp = document.getElementById('f-siempre-disp').checked ? '1' : '0';
+  const oferta = { categoria, precioOferta, fechaOferta, cantPack, precioPack, siempreDisp };
   const accion = editandoCodigo ? 'editarProductoHijo' : 'agregarProductoHijo';
   // Al editar, el código original es la llave; si lo cambiaron va aparte como nuevoCodigo
   const params = editandoCodigo
