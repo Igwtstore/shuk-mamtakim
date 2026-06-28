@@ -1871,7 +1871,9 @@ function _getCatalogoHijosPropios(ss) {
     .map(r => { const cod = r[0].toString();
       return { codigo:cod, nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'', stock: dep[cod]||0,
         categoria: (r[5]||'').toString().trim() || 'Varios',
-        precioOferta: parseFloat(r[6])||0, fechaOferta: (r[7]||'').toString().trim(), cantPack: parseInt(r[8])||0, precioPack: parseFloat(r[9])||0 }; });
+        precioOferta: parseFloat(r[6])||0,
+        fechaOferta: (r[7] instanceof Date) ? Utilities.formatDate(r[7], TZ, 'dd/MM/yyyy') : (r[7]||'').toString().trim(),
+        cantPack: parseInt(r[8])||0, precioPack: parseFloat(r[9])||0 }; });
 }
 
 // ── AVISAME cuando vuelva (tienda de Candy) ──────────────────────────────────
@@ -1905,7 +1907,8 @@ function resolverAvisoCandy(ss, p) {
 function agregarProductoHijo(ss, p) {
   const h = getOrCreate(ss, 'CatalogoHijos', ['Codigo','Nombre','PrecioVenta','Costo','Foto','Categoria','PrecioOferta','FechaOferta','CantPack','PrecioPack']);
   h.appendRow([dec(p.codigo), dec(p.nombre), parseFloat(p.precioVenta)||0, parseFloat(p.costo)||0, dec(p.foto||''), dec(p.categoria||'') || 'Varios',
-    parseFloat(p.precioOferta)||0, dec(p.fechaOferta||''), parseInt(p.cantPack)||0, parseFloat(p.precioPack)||0]);
+    parseFloat(p.precioOferta)||0, '', parseInt(p.cantPack)||0, parseFloat(p.precioPack)||0]);
+  h.getRange(h.getLastRow(), 8).setNumberFormat('@').setValue(dec(p.fechaOferta||''));  // fecha como TEXTO, que Sheets no la convierta
   return { ok: true };
 }
 
@@ -1928,7 +1931,7 @@ function editarProductoHijo(ss, p) {
       h.getRange(i+1,5).setValue(dec(p.foto||''));
       if (p.categoria !== undefined) h.getRange(i+1,6).setValue(dec(p.categoria||'') || 'Varios');
       if (p.precioOferta !== undefined) h.getRange(i+1,7).setValue(parseFloat(p.precioOferta)||0);
-      if (p.fechaOferta !== undefined) h.getRange(i+1,8).setValue(dec(p.fechaOferta||''));
+      if (p.fechaOferta !== undefined) h.getRange(i+1,8).setNumberFormat('@').setValue(dec(p.fechaOferta||''));
       if (p.cantPack !== undefined) h.getRange(i+1,9).setValue(parseInt(p.cantPack)||0);
       if (p.precioPack !== undefined) h.getRange(i+1,10).setValue(parseFloat(p.precioPack)||0);
       if (nuevoCodigo !== codigo) renombrarCodigoHijos_(ss, codigo, nuevoCodigo);
