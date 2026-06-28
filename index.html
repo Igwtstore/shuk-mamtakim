@@ -2270,6 +2270,24 @@ async function generarCatalogoPDF() {
 
 // ─── ARMADOR DE CATÁLOGO (con fotos · PDF + imagen · elegís productos y plantilla) ──────
 let _acProductos = [], _acSel = {}, _acFiltro = 'todos', _acLayout = 'lista', _acVerMin = true, _acVerMay = true, _acOcultarSinStock = false, _acOrden = 'az';
+let _acMarca = 'shuk', _acTel = 'jony', _acQrDataUrl = '';
+// Marcas y teléfonos para personalizar el catálogo (encabezado/pie + WhatsApp).
+const _CAT_MARCAS = {
+  shuk:  { nombre: 'SHUK MAMTAKIM', sub: 'Dulces Tradicionales · Frutos Secos', color: '#c9954a',
+           logo: '<img src="icon-512.png" crossorigin="anonymous" style="width:50px;height:50px;border-radius:10px">' },
+  candy: { nombre: 'Candy Shop', sub: 'Golosinas ricas y más 🍬', color: '#b14cff',
+           logo: '<div style="width:50px;height:50px;border-radius:10px;background:linear-gradient(135deg,#ff5fa2,#b14cff);display:flex;align-items:center;justify-content:center;font-size:1.7rem">🍬</div>' }
+};
+const _CAT_TELS = { jony: { nombre: 'Jony', num: '5491131754540' }, meir: { nombre: 'Meir', num: '5491171046383' }, iosi: { nombre: 'Iosi', num: '5491150987261' } };
+function _telFmt(n) { n = String(n); return n.length >= 13 ? `+${n.slice(0,2)} ${n.slice(2,3)} ${n.slice(3,5)} ${n.slice(5,9)}-${n.slice(9)}` : '+' + n; }
+// Pre-carga el QR como dataURL (local) para que html2canvas lo renderice sin líos de CORS.
+async function _cargarQR(url) {
+  try {
+    const r = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=170x170&margin=0&data=${encodeURIComponent(url)}`);
+    const blob = await r.blob();
+    return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsDataURL(blob); });
+  } catch (e) { return ''; }
+}
 // Ordenador reutilizable de productos.
 const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
   if (orden === 'za') return getNombre(b).localeCompare(getNombre(a));
@@ -2349,6 +2367,17 @@ function _acRender() {
     </div>
     <div style="overflow-y:auto;flex:1">${filas || '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>'}</div>
     <div style="padding:0.8rem 1rem;border-top:1px solid var(--gris-medio)">
+      <div style="display:flex;gap:8px;margin-bottom:0.55rem">
+        <select onchange="_acMarca=this.value" style="flex:1;padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.76rem;background:#fff">
+          <option value="shuk"${_acMarca==='shuk'?' selected':''}>🏷️ Encabezado: Shuk</option>
+          <option value="candy"${_acMarca==='candy'?' selected':''}>🏷️ Encabezado: Candy</option>
+        </select>
+        <select onchange="_acTel=this.value" style="flex:1;padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.76rem;background:#fff">
+          <option value="jony"${_acTel==='jony'?' selected':''}>📱 WhatsApp: Jony</option>
+          <option value="meir"${_acTel==='meir'?' selected':''}>📱 WhatsApp: Meir</option>
+          <option value="iosi"${_acTel==='iosi'?' selected':''}>📱 WhatsApp: Iosi</option>
+        </select>
+      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:0.55rem">
         <div style="display:flex;gap:5px;flex:1;min-width:150px">${lbtn('lista','📃 Lista')}${lbtn('grilla','🔳 Grilla')}</div>
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMin?'checked':''} onchange="_acVerMin=this.checked"> Minorista</label>
@@ -2413,14 +2442,24 @@ function _acBuildDoc() {
         </div>`).join('');
     }
   });
+  const M = _CAT_MARCAS[_acMarca] || _CAT_MARCAS.shuk;
+  const T = _CAT_TELS[_acTel] || _CAT_TELS.jony;
+  const qr = _acQrDataUrl ? `<img src="${_acQrDataUrl}" style="width:74px;height:74px;border-radius:8px;border:1px solid #eee">` : '';
   return `<div style="width:780px;background:#fff;padding:26px 28px;font-family:'DM Sans',-apple-system,sans-serif;color:#222;box-sizing:border-box">
-    <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid #c9954a;padding-bottom:11px">
-      <img src="icon-512.png" crossorigin="anonymous" style="width:50px;height:50px;border-radius:10px">
-      <div style="flex:1"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:800;color:#c9954a;line-height:1">SHUK MAMTAKIM</div><div style="font-size:0.72rem;color:#999;margin-top:3px">Dulces Tradicionales · Frutos Secos</div></div>
+    <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid ${M.color};padding-bottom:11px">
+      ${M.logo}
+      <div style="flex:1"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:800;color:${M.color};line-height:1">${esc(M.nombre)}</div><div style="font-size:0.72rem;color:#999;margin-top:3px">${esc(M.sub)}</div></div>
       <div style="text-align:right;font-size:0.74rem;color:#888"><b style="color:#444">${esc(titulo)}</b><br>${hoy}</div>
     </div>
     ${cuerpo}
-    <div style="text-align:center;font-size:0.68rem;color:#aaa;margin-top:18px;border-top:1px solid #eee;padding-top:9px">Pedidos por WhatsApp: +54 9 11 3175-4540 · shuk-mamtakim.vercel.app</div>
+    <div id="ac-pie" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;border-top:1px solid #eee;padding-top:13px">
+      ${qr}
+      <div style="text-align:${qr ? 'left' : 'center'}">
+        <div style="font-size:0.82rem;font-weight:800;color:${M.color}">📱 Pedí por WhatsApp${T.nombre ? (' a ' + esc(T.nombre)) : ''}</div>
+        <div style="font-size:0.95rem;font-weight:700;color:#444;margin-top:2px">${_telFmt(T.num)}</div>
+        ${qr ? '<div style="font-size:0.66rem;color:#aaa;margin-top:2px">Escaneá el QR y te abre el chat 👈</div>' : ''}
+      </div>
+    </div>
   </div>`;
 }
 async function generarCatalogo(tipo) {
@@ -2428,12 +2467,17 @@ async function generarCatalogo(tipo) {
   if (!sel.length) { showToast('Elegí al menos un producto'); return; }
   if (!_acVerMin && !_acVerMay) { showToast('Marcá al menos un precio (minorista o mayorista)'); return; }
   showToast(tipo === 'pdf' ? '📄 Generando catálogo…' : '🖼️ Generando imagen…');
+  const _T = _CAT_TELS[_acTel] || _CAT_TELS.jony;
+  const _waUrl = `https://wa.me/${_T.num}`;
+  _acQrDataUrl = await _cargarQR(_waUrl);   // QR como dataURL (escaneable en imagen y PDF)
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff';
   wrap.innerHTML = _acBuildDoc();
   document.body.appendChild(wrap);
   try {
     const h2c = await cargarHtml2Canvas();
+    const _pieEl = wrap.querySelector('#ac-pie');   // medir el pie ANTES de rasterizar (para el link clickeable del PDF)
+    const _pieTop = _pieEl ? _pieEl.offsetTop : 0, _pieH = _pieEl ? _pieEl.offsetHeight : 0;
     const canvas = await h2c(wrap.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
     const archivo = 'catalogo-shuk-' + new Date().toISOString().slice(0, 10);
     if (tipo === 'img') {
@@ -2452,6 +2496,16 @@ async function generarCatalogo(tipo) {
           c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
           pdf.addImage(c2.toDataURL('image/png'), 'PNG', m, m, imgW, c2.height * ratio);
           y += sliceH; if (y < canvas.height) pdf.addPage();
+        }
+      }
+      // Link clickeable sobre el pie (QR + número) → abre WhatsApp al tocarlo.
+      if (_pieEl) {
+        const topC = _pieTop * 2, hC = _pieH * 2;
+        if (imgH <= pageH) {
+          pdf.link(m, m + topC * ratio, imgW, hC * ratio, { url: _waUrl });
+        } else {
+          const sliceH = pageH / ratio, pg = Math.floor(topC / sliceH), offC = topC - pg * sliceH;
+          try { pdf.setPage(pg + 1); pdf.link(m, m + offC * ratio, imgW, hC * ratio, { url: _waUrl }); } catch (e) {}
         }
       }
       pdf.save(archivo + '.pdf');
