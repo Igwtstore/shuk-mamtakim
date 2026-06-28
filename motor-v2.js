@@ -1809,6 +1809,15 @@ function _productosShukAdmin(ss) {
 // Productos de SHUK importados a Candy (VIVOS): la hoja ShukEnCandy guarda solo el id de Shuk; los datos
 // (nombre/precio/foto/stock) se leen EN VIVO del Stock → si cambian en Shuk, se actualizan en Candy.
 // Devuelve en el formato del catálogo de Candy (codigo con prefijo 'shuk:' para no chocar con códigos de Candy).
+// Resuelve el valor de imagen de Shuk (public_id con/sin folder, o URL) a URL completa de Cloudinary,
+// para que Candy (que solo entiende URLs completas) pueda mostrarla.
+function _fotoShukUrl(val) {
+  if (!val) return '';
+  if (/^https?:\/\//i.test(val)) return val;                       // ya es URL completa
+  const base = 'https://res.cloudinary.com/dq2boloyp/image/upload';
+  if (val.indexOf('/') !== -1 && !/\.(jpg|jpeg|png|gif|webp)$/i.test(val)) return base + '/' + val;  // public_id con folder
+  return base + '/shuk-mamtakim/' + val;                           // sin folder → asumir shuk-mamtakim
+}
 function _shukEnCandyData(ss) {
   const h = ss.getSheetByName('ShukEnCandy');
   if (!h || h.getLastRow() < 2) return [];
@@ -1819,7 +1828,7 @@ function _shukEnCandyData(ss) {
     const p = porId[id];
     const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
     return { codigo: 'shuk:' + id, nombre: p.nombre, precioVenta: parseFloat(p.precioMin) || 0,
-      costo: parseFloat(p.costo) || 0, foto: foto, stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.desc || '' };
+      costo: parseFloat(p.costo) || 0, foto: _fotoShukUrl(foto), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.desc || '' };
   });
 }
 function getCatalogoHijos(ss) {

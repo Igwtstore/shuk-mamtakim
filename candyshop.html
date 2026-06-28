@@ -1237,8 +1237,17 @@ function renderCatalogo(catalogo) {
 }
 
 // ─── IMPORTAR PRODUCTOS DE SHUK ───────────────────────────────────
-let _impShukProds = [], _impShukSet = new Set();
+let _impShukProds = [], _impShukSet = new Set(), _impShukFiltro = 'todo';
+// Resuelve el formato de imagen de Shuk (public_id con/sin folder, o URL) a URL completa de Cloudinary.
+function fotoShuk(val) {
+  if (!val) return '';
+  if (/^https?:\/\//i.test(val)) return val;
+  const base = 'https://res.cloudinary.com/dq2boloyp/image/upload';
+  if (val.indexOf('/') !== -1 && !/\.(jpg|jpeg|png|gif|webp)$/i.test(val)) return base + '/' + val;
+  return base + '/shuk-mamtakim/' + val;
+}
 async function abrirImportarShuk() {
+  _impShukFiltro = 'todo';
   let ov = document.getElementById('imp-shuk-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'imp-shuk-ov';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
@@ -1253,26 +1262,37 @@ function cerrarImportarShuk() { const ov = document.getElementById('imp-shuk-ov'
 function _renderImpShuk() {
   const ov = document.getElementById('imp-shuk-ov'); if (!ov) return;
   const q = (document.getElementById('imp-shuk-q')?.value || '').trim().toLowerCase();
-  const lista = _impShukProds.filter(p => !q || (p.nombre || '').toLowerCase().includes(q));
+  const pasaFiltro = p => {
+    if (_impShukFiltro === 'miri') return (p.dueno || '') !== 'Jony';
+    if (_impShukFiltro === 'jony') return (p.dueno || '') === 'Jony';
+    if (_impShukFiltro === 'ocultos') return !p.activo || (p.visible || '') === 'Oculto';
+    return true;
+  };
+  const lista = _impShukProds.filter(p => (!q || (p.nombre || '').toLowerCase().includes(q)) && pasaFiltro(p));
   const filas = lista.map(p => {
     const on = _impShukSet.has(p.id);
     const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
-    const src = foto ? fotoCS(foto, 120) : '';
+    const src = foto ? fotoCS(fotoShuk(foto), 120) : '';
     const oculto = !p.activo || (p.visible || '') === 'Oculto';
+    const duenoTag = (p.dueno || '') === 'Jony'
+      ? '<span style="background:#fff3d6;color:#b8860b;font-size:0.56rem;font-weight:800;padding:0 4px;border-radius:5px">Jony</span>'
+      : '<span style="background:#ffe0f0;color:#c2389a;font-size:0.56rem;font-weight:800;padding:0 4px;border-radius:5px">Miri</span>';
     return `<div onclick="toggleImpShuk('${p.id}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
       <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
-      ${src ? `<img src="${src}" style="width:38px;height:38px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      ${src ? `<img src="${src}" style="width:38px;height:38px;object-fit:contain;background:#f5f5f5;border-radius:6px" onerror="this.outerHTML='<div style=&quot;width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center&quot;>🍬</div>'">` : '<div style="width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:0.85rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre} ${oculto ? '<span style="color:#b8860b;font-size:0.6rem">🙈 oculto</span>' : ''}</div>
+        <div style="font-weight:700;font-size:0.85rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${duenoTag} ${p.nombre} ${oculto ? '<span style="color:#b8860b;font-size:0.6rem">🙈</span>' : ''}</div>
         <div style="font-size:0.68rem;color:#999">$${p.precioMin || 0} · 📦 ${p.stock || 0}</div>
       </div>
     </div>`;
   }).join('');
+  const fbtn = (f, t) => `<button onclick="_impShukFiltro='${f}';_renderImpShuk()" style="flex:1;padding:6px 3px;border:1.5px solid ${_impShukFiltro === f ? '#b14cff' : '#ddd'};background:${_impShukFiltro === f ? '#b14cff' : '#fff'};color:${_impShukFiltro === f ? '#fff' : '#666'};border-radius:8px;font-weight:700;font-size:0.72rem;cursor:pointer">${t}</button>`;
   ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:460px;width:100%;max-height:82vh;display:flex;flex-direction:column">
     <div style="font-weight:800;font-size:1.05rem;color:#b14cff;margin-bottom:6px">🛍️ Importar productos de Shuk</div>
     <div style="font-size:0.72rem;color:#888;margin-bottom:8px">Tocá para agregar/quitar. Aparecen en tu catálogo y se actualizan solos si cambian en Shuk.</div>
-    <input id="imp-shuk-q" oninput="_renderImpShuk()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px">
-    <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px">${filas || '<div class="empty">Sin productos</div>'}</div>
+    <input id="imp-shuk-q" oninput="_renderImpShuk()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
+    <div style="display:flex;gap:5px;margin-bottom:8px">${fbtn('todo', 'Todos')}${fbtn('miri', 'Miri')}${fbtn('jony', 'Jony')}${fbtn('ocultos', '🙈 Ocultos')}</div>
+    <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px">${filas || '<div class="empty">Sin productos en este filtro</div>'}</div>
     <button onclick="cerrarImportarShuk()" style="margin-top:10px;width:100%;padding:11px;background:#b14cff;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">Listo</button>
   </div>`;
   const bq = document.getElementById('imp-shuk-q'); if (bq && q) { bq.value = q; bq.focus(); }
