@@ -22,10 +22,8 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 
 /* BUSCADOR */
 .buscar-wrap { padding: 14px 16px 4px; max-width: 600px; margin: 0 auto; }
-.categorias-wrap { display: flex; gap: 7px; overflow-x: auto; padding: 8px 0 4px; max-width: 600px; margin: 0 auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-.categorias-wrap::-webkit-scrollbar { display: none; }
-/* Espaciadores: en un flex scrolleable el padding lateral se "come"; estos sí se respetan y evitan que el primer/último chip se corte. */
-.categorias-wrap::before, .categorias-wrap::after { content: ''; flex: 0 0 9px; }
+/* flex-wrap: los chips bajan de línea si no caben (no se cortan ni hace falta deslizar). */
+.categorias-wrap { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 16px 4px; max-width: 600px; margin: 0 auto; }
 .cat-chip { flex: 0 0 auto; padding: 7px 14px; border-radius: 18px; border: 1.5px solid #eadcc8; background: #fff; color: #8a6d4a; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
 .cat-chip.activo { background: #b14cff; border-color: #b14cff; color: #fff; }
 .orden-wrap { display: flex; align-items: center; gap: 8px; padding: 6px 16px 0; max-width: 600px; margin: 0 auto; }
@@ -289,7 +287,6 @@ function renderCategorias() {
   el.style.display = 'flex';
   const chip = (c, t) => `<button class="cat-chip ${catActiva === c ? 'activo' : ''}" onclick="setCategoria('${c.replace(/'/g, "\\'")}')">${t}</button>`;
   el.innerHTML = chip('Todos', '🍬 Todos') + cats.map(c => chip(c, c)).join('');
-  el.scrollLeft = 0;   // que arranque siempre desde el principio (no deslizado)
 }
 function setCategoria(c) { catActiva = c; renderCategorias(); filtrar(); }
 
