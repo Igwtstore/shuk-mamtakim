@@ -412,6 +412,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="tab-content" id="tab-catalogo">
     <div class="card">
       <div class="card-title">Mis productos</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input id="cat-buscar" oninput="renderCatalogoFiltrado()" placeholder="🔍 Buscar nombre o código…" style="flex:1;min-width:0;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box">
+        <select id="cat-orden" onchange="renderCatalogoFiltrado()" style="padding:9px 6px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.78rem;background:#fff;max-width:42%">
+          <option value="az">A → Z</option>
+          <option value="za">Z → A</option>
+          <option value="stock-si">Con stock primero</option>
+          <option value="stock-no">Sin stock primero</option>
+          <option value="precio-asc">Menor precio</option>
+          <option value="precio-desc">Mayor precio</option>
+        </select>
+      </div>
+      <select id="cat-filtro-cat" onchange="renderCatalogoFiltrado()" style="width:100%;padding:8px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.85rem;background:#fff;margin-bottom:8px;box-sizing:border-box"><option value="">Todas las categorías</option></select>
+      <div id="cat-contador" style="font-size:0.72rem;color:#999;margin-bottom:8px"></div>
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
@@ -1000,7 +1013,7 @@ function renderPanel(d) {
   _estadoDia = d.cierre || {};
   renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores), arr(d.consumo));
   renderDeudores(arr(d.deudores));
-  renderCatalogo(catalogoCache);
+  renderCatalogoFiltrado();
   renderVisitasKid(d.visitas || {});
   renderConsumoHoy(d.consumo);
   renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache, arr(d.consumo));
@@ -1241,9 +1254,31 @@ function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
 
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────
+// Filtra catalogoCache por búsqueda + categoría, ordena y renderiza. Lo llaman los controles y cargarDatos.
+function renderCatalogoFiltrado() {
+  const q = (document.getElementById('cat-buscar')?.value || '').trim().toLowerCase();
+  const orden = document.getElementById('cat-orden')?.value || 'az';
+  _poblarFiltroCatPanel();
+  const catSel = document.getElementById('cat-filtro-cat')?.value || '';
+  let lista = catalogoCache.slice();
+  if (q) lista = lista.filter(p => (p.nombre || '').toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q));
+  if (catSel) lista = lista.filter(p => (p.categoria || 'Varios') === catSel);
+  lista.sort(_ordenarProd(orden, p => p.nombre || '', p => p.stock || 0, p => p.precioVenta || 0));
+  const cont = document.getElementById('cat-contador');
+  if (cont) cont.textContent = (q || catSel) ? `${lista.length} de ${catalogoCache.length} productos` : `${catalogoCache.length} productos`;
+  renderCatalogo(lista);
+}
+function _poblarFiltroCatPanel() {
+  const sel = document.getElementById('cat-filtro-cat'); if (!sel) return;
+  const cats = [...new Set(catalogoCache.map(p => p.categoria || 'Varios'))].sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+  if (cats.includes(cur)) sel.value = cur;
+}
+
 function renderCatalogo(catalogo) {
   const el = document.getElementById('catalogo-list');
-  if (!catalogo.length) { el.innerHTML = '<div class="empty">Sin productos. Agregá uno!</div>'; return; }
+  if (!catalogo.length) { el.innerHTML = '<div class="empty">Sin productos.</div>'; return; }
   el.innerHTML = catalogo.map(p => {
     const esShuk = p.origen === 'shuk';
     const gan = (p.precioVenta || 0) - (p.costo || 0);
@@ -1255,11 +1290,16 @@ function renderCatalogo(catalogo) {
     const accion = esShuk
       ? `<button class="btn-edit" title="Quitar de Candy" onclick="quitarShukDeCandy('${(p.codigo||'').replace('shuk:','')}')">✕</button>`
       : `<button class="btn-edit" onclick='editarProducto(${JSON.stringify(p)})'>✏️</button>`;
+    const catTxt = (p.categoria && p.categoria !== 'Varios') ? ` · 🏷️ ${p.categoria}` : '';
+    const promoTxt = !esShuk ? (
+      (p.precioOferta > 0 ? ` · <span style="color:#e53935;font-weight:700">🔥 ${fmt(p.precioOferta)}</span>` : '') +
+      (p.cantPack > 0 && p.precioPack > 0 ? ` · <span style="color:#e07b00;font-weight:700">🎁 x${p.cantPack}</span>` : '')
+    ) : '';
     return `<div class="cat-item">
       ${fotoHtml}
       <div class="cat-info">
         <div class="cat-name">${badge}${p.nombre}</div>
-        <div class="cat-code">${p.codigo} · <span style="color:${(p.stock||0) > 0 ? '#2e8b57' : '#c0392b'};font-weight:700">📦 ${p.stock||0}</span></div>
+        <div class="cat-code">${p.codigo} · <span style="color:${(p.stock||0) > 0 ? '#2e8b57' : '#c0392b'};font-weight:700">📦 ${p.stock||0}</span>${catTxt}${promoTxt}</div>
       </div>
       <div class="cat-prices">
         <div class="cat-price">${fmt(p.precioVenta)}</div>
@@ -1710,7 +1750,7 @@ async function guardarProducto() {
     const nuevo = { codigo, nombre, precioVenta: precio, costo, foto, stock: stockFinal };
     const idx = catalogoCache.findIndex(p => p.codigo === (editandoCodigo || codigo));
     if (idx >= 0) catalogoCache[idx] = nuevo; else catalogoCache.push(nuevo);
-    renderCatalogo(catalogoCache);
+    renderCatalogoFiltrado();
     // Si el producto se creó desde "Cargar compra", dejarlo elegido en esa fila
     if (_compraPendiente && cpNuevoIdx >= 0) {
       cpItems[cpNuevoIdx].codigo = codigo;
@@ -1733,7 +1773,7 @@ async function eliminarProducto() {
   if (res?.ok) {
     cerrarModal();
     catalogoCache = catalogoCache.filter(p => p.codigo !== codigo);
-    renderCatalogo(catalogoCache);
+    renderCatalogoFiltrado();
     cargarDatos(true);
   }
 }
