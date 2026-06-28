@@ -26,6 +26,11 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 .categorias-wrap::-webkit-scrollbar { display: none; }
 .cat-chip { flex: 0 0 auto; padding: 7px 14px; border-radius: 18px; border: 1.5px solid #eadcc8; background: #fff; color: #8a6d4a; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
 .cat-chip.activo { background: #b14cff; border-color: #b14cff; color: #fff; }
+.orden-wrap { display: flex; align-items: center; gap: 8px; padding: 6px 16px 0; max-width: 600px; margin: 0 auto; }
+.orden-wrap span { font-size: 0.78rem; color: #999; font-weight: 700; white-space: nowrap; }
+.orden-wrap select { flex: 1; padding: 8px 11px; border: 1.5px solid #eadcc8; border-radius: 12px; background: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: #5a4630; font-weight: 700; outline: none; }
+.cat-header { grid-column: 1/-1; font-weight: 800; color: #b14cff; font-size: 1.02rem; padding: 18px 4px 0; letter-spacing: 0.01em; display: flex; align-items: center; gap: 7px; }
+.cat-header::after { content: ''; flex: 1; height: 2px; background: linear-gradient(90deg, #ecd9ff, transparent); border-radius: 2px; }
 .buscar-input { width: 100%; padding: 12px 16px 12px 40px; border: none; border-radius: 14px; background: white; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; color: #2d1a0a; box-shadow: 0 2px 10px rgba(0,0,0,0.07); outline: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23aaa' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 14px center; }
 .buscar-input::placeholder { color: #bbb; }
 
@@ -134,6 +139,16 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 
 <div class="categorias-wrap" id="categorias"></div>
 
+<div class="orden-wrap">
+  <span>↕️ Ordenar:</span>
+  <select id="orden-tienda" onchange="ordenTienda=this.value;filtrar()">
+    <option value="categoria">Por categoría</option>
+    <option value="precio-asc">Menor precio</option>
+    <option value="precio-desc">Mayor precio</option>
+    <option value="az">A → Z</option>
+  </select>
+</div>
+
 <div class="productos" id="productos">
   <div class="loading">Cargando catálogo... 🍬</div>
 </div>
@@ -233,6 +248,7 @@ const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
 let carrito = {};
 let catalogoData = [];
 let catActiva = 'Todos';
+let ordenTienda = 'categoria';   // por defecto agrupado por categoría
 let productoSeleccionado = null;
 let qtyTmp = 1;
 let productoAviso = null;
@@ -305,17 +321,34 @@ function renderCatalogo(productos, esFiltered) {
       ${boton}
     </div>`;
   };
-  // Disponibles primero; abajo un divisor "Sin stock" y los agotados (siempre se ven).
-  const conStock = productos.filter(p => p.stock > 0);
-  const sinStock = productos.filter(p => !(p.stock > 0));
-  let html = conStock.map(cardHtml).join('');
-  if (sinStock.length) {
-    html += `<div style="grid-column:1/-1;margin:1.4rem 0 0.5rem;border-top:2px dashed #e3a9a9;padding-top:0.95rem;text-align:center">
+  const divisorSinStock = `<div style="grid-column:1/-1;margin:1.4rem 0 0.5rem;border-top:2px dashed #e3a9a9;padding-top:0.95rem;text-align:center">
       <div style="display:inline-block;background:#fdecea;color:#c0392b;font-weight:700;font-size:0.86rem;padding:6px 16px;border-radius:20px;line-height:1.45">🔔 Sin stock <span style="font-weight:500;color:#a85a5a">· dejanos tus datos y te avisamos cuando llegue 👇</span></div>
     </div>`;
-    html += sinStock.map(cardHtml).join('');
+  const conStock = productos.filter(p => p.stock > 0);
+  const sinStock = productos.filter(p => !(p.stock > 0));
+  let html = '';
+  if (ordenTienda === 'categoria' && catActiva === 'Todos') {
+    // Por defecto: agrupado por categoría con encabezados (dentro de cada una, A→Z).
+    const cats = [...new Set(conStock.map(p => p.categoria || 'Varios'))]
+      .sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
+    cats.forEach(c => {
+      const items = conStock.filter(p => (p.categoria || 'Varios') === c).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+      if (items.length) html += `<div class="cat-header">${c}</div>` + items.map(cardHtml).join('');
+    });
+  } else {
+    // Orden plano elegido (menor/mayor precio, A→Z) — también dentro de una categoría filtrada.
+    html += [...conStock].sort(_ordenTiendaFn(ordenTienda)).map(cardHtml).join('');
+  }
+  if (sinStock.length) {
+    html += divisorSinStock + [...sinStock].sort(_ordenTiendaFn(ordenTienda === 'categoria' ? 'az' : ordenTienda)).map(cardHtml).join('');
   }
   el.innerHTML = html;
+}
+function _ordenTiendaFn(o) {
+  if (o === 'precio-asc') return (a, b) => (a.precioVenta || 0) - (b.precioVenta || 0);
+  if (o === 'precio-desc') return (a, b) => (b.precioVenta || 0) - (a.precioVenta || 0);
+  if (o === 'za') return (a, b) => (b.nombre || '').localeCompare(a.nombre || '');
+  return (a, b) => (a.nombre || '').localeCompare(b.nombre || '');   // az / categoria
 }
 
 // ─── SELECCIONAR PRODUCTO ─────────────────────────────────────────
