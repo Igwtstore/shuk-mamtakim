@@ -9795,6 +9795,7 @@ function _remitoTCval() {
 }
 
 function _buildRemitoTexto(v, tc) {
+  const soloMiri = esVistaMiri();   // REGLA: en vista Miri el remito NO muestra NADA de Jony
   const lines = [];
   lines.push(`🧾 *REMITO — Shuk Mamtakim*`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
@@ -9804,9 +9805,12 @@ function _buildRemitoTexto(v, tc) {
   lines.push(`💳 Pago: ${v.formaPago}`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`📦 *DETALLE:*`);
-  v.productos.split(' || ').forEach(l => lines.push(l));
+  // En vista Miri se filtran los productos de Jony; en vista Todo, el detalle completo.
+  (soloMiri ? _lineasPedidoVista(v.productos, true) : v.productos.split(' || ')).forEach(l => lines.push(l));
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-  const usd = parseFloat(v.totalUSD) || 0, ars = parseFloat(v.totalARS) || 0;
+  // Totales: en vista Miri, solo lo de Miri (arsMyri/usdMyri); en Todo, el total del pedido.
+  const usd = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
+  const ars = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
   const totales = [];
   if (ars > 0) totales.push(`$ ${Math.round(ars).toLocaleString('es-AR')}`);
   if (usd > 0) totales.push(`U$S ${usd.toFixed(2)}`);
@@ -9869,9 +9873,12 @@ function copiarRemito() {
 
 function abrirRemitoPDF(v) {
   if (!v) return;
+  const soloMiri = esVistaMiri();   // REGLA: en vista Miri el remito NO muestra NADA de Jony
+  const tARS = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+  const tUSD = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
   const totales = [];
-  if (parseFloat(v.totalARS) > 0) totales.push(`$ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
-  if (parseFloat(v.totalUSD) > 0) totales.push(`U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
+  if (tARS > 0) totales.push(`$ ${Math.round(tARS).toLocaleString('es-AR')}`);
+  if (tUSD > 0) totales.push(`U$S ${tUSD.toFixed(2)}`);
 
   // Productos agrupados por nombre: si hay variantes (ej. 4 Bon O Bon),
   // la línea se matchea por descripción para mostrar la foto correcta.
@@ -9890,8 +9897,8 @@ function abrirRemitoPDF(v) {
     }
     return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
   };
-  // Parsear líneas en columnas con foto
-  const filas = (v.productos||'').split(' || ').map(linea => {
+  // Parsear líneas en columnas con foto (en vista Miri, sin las de Jony)
+  const filas = (soloMiri ? _lineasPedidoVista(v.productos, true) : (v.productos||'').split(' || ')).map(linea => {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u = (\$|U\$S) ([\d.,]+)/);
     if (!m) return `<tr><td colspan="5" style="padding:8px 16px;font-size:0.8rem;color:#666;border-bottom:1px solid #f0ebe3">${linea}</td></tr>`;
     const [, qty, nombreCompleto, moneda, precioUnit, , subtotal] = m;
