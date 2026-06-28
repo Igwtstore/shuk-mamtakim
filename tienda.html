@@ -33,7 +33,7 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 .producto-card { background: white; border-radius: 18px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.07); display: flex; flex-direction: column; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; position: relative; }
 .producto-card:active { transform: scale(0.97); box-shadow: 0 1px 6px rgba(0,0,0,0.1); }
 .producto-foto-wrap { position: relative; width: 100%; aspect-ratio: 1; background: #f5f0e8; overflow: hidden; }
-.producto-foto-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+.producto-foto-wrap img { width: 100%; height: 100%; object-fit: contain; transition: transform 0.3s; }
 .producto-card:hover .producto-foto-wrap img { transform: scale(1.04); }
 .producto-foto-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 3rem; }
 .producto-info { padding: 10px 12px 6px; flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -107,7 +107,7 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 
 /* MODAL CANTIDAD */
 .qty-modal-box { background: white; border-radius: 22px; padding: 28px 24px; width: 100%; max-width: 320px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
-.qty-modal-foto { width: 80px; height: 80px; border-radius: 14px; object-fit: cover; background: #f5f0e8; margin: 0 auto 14px; display: block; }
+.qty-modal-foto { width: 80px; height: 80px; border-radius: 14px; object-fit: contain; background: #f5f0e8; margin: 0 auto 14px; display: block; }
 .qty-modal-box h3 { font-family: 'Fraunces', serif; font-size: 1rem; font-weight: 700; color: #2d1a0a; margin-bottom: 4px; }
 .qty-modal-box p { font-size: 0.88rem; color: #8b6e5a; margin-bottom: 20px; font-weight: 600; }
 .qty-picker { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 20px; }
@@ -255,9 +255,7 @@ function renderCatalogo(productos, esFiltered) {
     el.innerHTML = `<div class="sin-resultados">${esFiltered ? '🔍 Sin resultados' : 'Sin productos disponibles'}</div>`;
     return;
   }
-  // Disponibles primero; los agotados van al final pero SIEMPRE se ven.
-  const ordenados = [...productos].sort((a, b) => ((a.stock > 0 ? 0 : 1) - (b.stock > 0 ? 0 : 1)));
-  el.innerHTML = ordenados.map(p => {
+  const cardHtml = p => {
     const cant = carrito[p.codigo]?.cantidad || 0;
     const agotado = !(p.stock > 0);
     const pocas = !agotado && p.stock <= 5;
@@ -286,7 +284,18 @@ function renderCatalogo(productos, esFiltered) {
       </div>
       ${boton}
     </div>`;
-  }).join('');
+  };
+  // Disponibles primero; abajo un divisor "Sin stock" y los agotados (siempre se ven).
+  const conStock = productos.filter(p => p.stock > 0);
+  const sinStock = productos.filter(p => !(p.stock > 0));
+  let html = conStock.map(cardHtml).join('');
+  if (sinStock.length) {
+    html += `<div style="grid-column:1/-1;margin:1.4rem 0 0.5rem;border-top:2px dashed #e3a9a9;padding-top:0.95rem;text-align:center">
+      <div style="display:inline-block;background:#fdecea;color:#c0392b;font-weight:700;font-size:0.86rem;padding:6px 16px;border-radius:20px;line-height:1.45">🔔 Sin stock <span style="font-weight:500;color:#a85a5a">· dejanos tus datos y te avisamos cuando llegue 👇</span></div>
+    </div>`;
+    html += sinStock.map(cardHtml).join('');
+  }
+  el.innerHTML = html;
 }
 
 // ─── SELECCIONAR PRODUCTO ─────────────────────────────────────────
