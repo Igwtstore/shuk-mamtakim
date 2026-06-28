@@ -10242,14 +10242,17 @@ function renderEditLineas() {
 
 function onTipoChange() {
   poblarSelectorProductos();
-  // Repreciar líneas existentes según el nuevo tipo
+  // Repreciar cada línea según el nuevo tipo, identificando el producto por su ID (robusto).
+  // Antes buscaba por NOMBRE: si no matcheaba exacto (ej. nombre con descripción/variante), la
+  // línea NO se repreciaba y quedaba con el precio viejo → mezcla de precios may/min.
   const tipo = document.getElementById('ep-tipo').value;
-  const esMay = tipo === 'Mayorista';
   _editLineas = _editLineas.map(l => {
-    const p = productos.find(x => x.nombre.toLowerCase() === l.nombre.toLowerCase());
+    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId))
+                       : productos.find(x => (x.nombre || '').toLowerCase() === (l.nombre || '').toLowerCase());
     if (!p) return l;
     const { precioUnit: precio, moneda } = _precioMoneda(p, tipo);
-    return { ...l, precio, moneda };
+    if (isFinite(precio) && precio > 0) return { ...l, precio, moneda };
+    return { ...l, moneda };
   });
   renderEditLineas();
   recalcularEditTotal();
@@ -10452,7 +10455,11 @@ async function guardarEditPedido() {
     if (data.ok) {
       showToast('Pedido actualizado ✓');
       document.getElementById('edit-pedido-overlay').classList.remove('open');
-      setTimeout(() => refreshAdmin(), 1500);
+      // Refresco INMEDIATO con datos frescos: el backend ya escribió (flush), así re-renderizamos
+      // los pedidos al instante y los botones Exportar/Remito quedan con el dato NUEVO, no el viejo.
+      invalidarCache();
+      try { await renderPedidos(); } catch (e) {}
+      renderCaja(); renderCuentaCorriente(); renderCuentaSocios(); renderCajaEnvios();
     } else { showToast('Error: ' + (data.error || 'desconocido')); }
   } catch { showToast('Error de conexión'); }
   btn.textContent = 'Guardar cambios'; btn.disabled = false;
