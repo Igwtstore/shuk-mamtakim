@@ -1594,8 +1594,24 @@ async function asignarCategoriaLote() {
 
 // ─── ARMAR CATÁLOGO (PDF / imagen) ────────────────────────────────
 let _catCandySel = {}, _catCandyLayout = 'lista', _catCandyOrden = 'az';
+let _catCandyMarca = 'candy', _catCandyTel = 'jony', _catCandyQr = '';
+const _CCAT_MARCAS = {
+  shuk:  { nombre: 'SHUK MAMTAKIM', sub: 'Dulces Tradicionales · Frutos Secos', color: '#c9954a',
+           logo: '<img src="icon-512.png" crossorigin="anonymous" style="width:50px;height:50px;border-radius:10px">' },
+  candy: { nombre: 'Candy Shop', sub: 'Golosinas ricas 🍬', color: '#7b2ff7',
+           logo: '<div style="width:50px;height:50px;border-radius:10px;background:linear-gradient(135deg,#ff5fa2,#7b2ff7);display:flex;align-items:center;justify-content:center;font-size:1.7rem">🍬</div>' }
+};
+const _CCAT_TELS = { jony: { nombre: 'Jony', num: '5491131754540' }, meir: { nombre: 'Meir', num: '5491171046383' }, iosi: { nombre: 'Iosi', num: '5491150987261' } };
+function _ccatTelFmt(n) { n = String(n); return n.length >= 13 ? `+${n.slice(0,2)} ${n.slice(2,3)} ${n.slice(3,5)} ${n.slice(5,9)}-${n.slice(9)}` : '+' + n; }
+async function _ccatCargarQR(url) {
+  try { const r = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=170x170&margin=0&data=${encodeURIComponent(url)}`); const b = await r.blob();
+    return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsDataURL(b); }); } catch (e) { return ''; }
+}
 function abrirArmarCatalogoCandy() {
   _catCandySel = {};
+  _catCandyMarca = 'candy';
+  const u = (usuario || '').toLowerCase();
+  _catCandyTel = (u === 'meir' || u === 'iosi') ? u : 'jony';   // default: el WhatsApp del chico logueado
   let ov = document.getElementById('armar-cat-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'armar-cat-ov';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
@@ -1624,6 +1640,17 @@ function _renderArmarCatCandy() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_catCandyTodos()" style="background:none;border:none;color:#c9954a;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="armar-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos</div>'}</div>
     <input id="armar-cat-titulo" placeholder="Título (opcional, ej: Lista junio)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <select onchange="_catCandyMarca=this.value" style="flex:1;padding:8px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.78rem;background:#fff">
+        <option value="candy"${_catCandyMarca==='candy'?' selected':''}>🏷️ Encabezado: Candy</option>
+        <option value="shuk"${_catCandyMarca==='shuk'?' selected':''}>🏷️ Encabezado: Shuk</option>
+      </select>
+      <select onchange="_catCandyTel=this.value" style="flex:1;padding:8px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.78rem;background:#fff">
+        <option value="jony"${_catCandyTel==='jony'?' selected':''}>📱 WhatsApp: Jony</option>
+        <option value="meir"${_catCandyTel==='meir'?' selected':''}>📱 WhatsApp: Meir</option>
+        <option value="iosi"${_catCandyTel==='iosi'?' selected':''}>📱 WhatsApp: Iosi</option>
+      </select>
+    </div>
     <select onchange="_catCandyOrden=this.value;_renderArmarCatCandy()" style="width:100%;padding:8px 10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.82rem;box-sizing:border-box;margin-top:8px;background:#fff">
       ${['az:Ordenar: A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_catCandyOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
     </select>
@@ -1670,25 +1697,41 @@ function _armarCatCandyDoc() {
         <div style="text-align:right;font-size:0.85rem;color:#7b2ff7;font-weight:700;white-space:nowrap">${fmt(p.precioVenta)}</div>
       </div>`).join('');
   }
+  const M = _CCAT_MARCAS[_catCandyMarca] || _CCAT_MARCAS.candy;
+  const T = _CCAT_TELS[_catCandyTel] || _CCAT_TELS.jony;
+  const qr = _catCandyQr ? `<img src="${_catCandyQr}" style="width:74px;height:74px;border-radius:8px;border:1px solid #eee">` : '';
   return `<div style="width:780px;background:#fff;padding:26px 28px;font-family:-apple-system,sans-serif;color:#222;box-sizing:border-box">
-    <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid #7b2ff7;padding-bottom:11px">
-      <div style="font-size:2.4rem">🍬</div>
-      <div style="flex:1"><div style="font-size:1.5rem;font-weight:800;color:#7b2ff7;line-height:1">Candy Shop</div><div style="font-size:0.72rem;color:#999;margin-top:3px">Golosinas ricas 🍬</div></div>
+    <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid ${M.color};padding-bottom:11px">
+      ${M.logo}
+      <div style="flex:1"><div style="font-size:1.5rem;font-weight:800;color:${M.color};line-height:1">${_e(M.nombre)}</div><div style="font-size:0.72rem;color:#999;margin-top:3px">${_e(M.sub)}</div></div>
       <div style="text-align:right;font-size:0.74rem;color:#888"><b style="color:#444">${_e(titulo)}</b><br>${hoy}</div>
     </div>
     ${cuerpo}
+    <div id="armar-cat-pie" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;border-top:1px solid #eee;padding-top:13px">
+      ${qr}
+      <div style="text-align:${qr ? 'left' : 'center'}">
+        <div style="font-size:0.82rem;font-weight:800;color:${M.color}">📱 Pedí por WhatsApp${T.nombre ? (' a ' + _e(T.nombre)) : ''}</div>
+        <div style="font-size:0.95rem;font-weight:700;color:#444;margin-top:2px">${_ccatTelFmt(T.num)}</div>
+        ${qr ? '<div style="font-size:0.66rem;color:#aaa;margin-top:2px">Escaneá el QR y te abre el chat 👈</div>' : ''}
+      </div>
+    </div>
   </div>`;
 }
 async function armarCatCandyGenerar(tipo) {
   const sel = (catalogoCache || []).filter(p => _catCandySel[p.codigo]);
   if (!sel.length) { mostrarToast('Elegí al menos un producto', '#c0392b'); return; }
   mostrarToast(tipo === 'pdf' ? '📄 Generando catálogo…' : '🖼️ Generando imagen…');
+  const _T = _CCAT_TELS[_catCandyTel] || _CCAT_TELS.jony;
+  const _waUrl = `https://wa.me/${_T.num}`;
+  _catCandyQr = await _ccatCargarQR(_waUrl);   // QR como dataURL (escaneable en imagen y PDF)
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff';
   wrap.innerHTML = _armarCatCandyDoc();
   document.body.appendChild(wrap);
   try {
     const h2c = await _candyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas');
+    const _pieEl = wrap.querySelector('#armar-cat-pie');
+    const _pieTop = _pieEl ? _pieEl.offsetTop : 0, _pieH = _pieEl ? _pieEl.offsetHeight : 0;
     const canvas = await h2c(wrap.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
     const archivo = 'catalogo-candy-' + new Date().toISOString().slice(0, 10);
     if (tipo === 'img') {
@@ -1708,6 +1751,13 @@ async function armarCatCandyGenerar(tipo) {
           pdf.addImage(c2.toDataURL('image/png'), 'PNG', m, m, imgW, c2.height * ratio);
           y += sliceH; if (y < canvas.height) pdf.addPage();
         }
+      }
+      // Link clickeable sobre el pie (QR + número) → abre WhatsApp.
+      if (_pieEl) {
+        const topC = _pieTop * 2, hC = _pieH * 2;
+        if (imgH <= pageH) { pdf.link(m, m + topC * ratio, imgW, hC * ratio, { url: _waUrl }); }
+        else { const sliceH = pageH / ratio, pg = Math.floor(topC / sliceH), offC = topC - pg * sliceH;
+          try { pdf.setPage(pg + 1); pdf.link(m, m + offC * ratio, imgW, hC * ratio, { url: _waUrl }); } catch (e) {} }
       }
       pdf.save(archivo + '.pdf');
     }
