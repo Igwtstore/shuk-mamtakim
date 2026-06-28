@@ -1849,10 +1849,11 @@ function _getCatalogoHijosPropios(ss) {
   const hd = ss.getSheetByName('DepositoHijos');
   if (hd && hd.getLastRow() >= 2) hd.getRange(2,1,hd.getLastRow()-1,3).getValues()
     .forEach(r => { if (r[0]) { const c = r[0].toString(); dep[c] = (dep[c]||0) + (parseInt(r[2])||0); } });
-  return h.getRange(2,1,h.getLastRow()-1,5).getValues()
+  const nc = Math.min(6, h.getLastColumn());
+  return h.getRange(2,1,h.getLastRow()-1,nc).getValues()
     .filter(r => r[0])
     .map(r => { const cod = r[0].toString();
-      return { codigo:cod, nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'', stock: dep[cod]||0, categoria: 'Varios' }; });
+      return { codigo:cod, nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'', stock: dep[cod]||0, categoria: (r[5]||'').toString().trim() || 'Varios' }; });
 }
 
 // ── AVISAME cuando vuelva (tienda de Candy) ──────────────────────────────────
@@ -1884,8 +1885,8 @@ function resolverAvisoCandy(ss, p) {
 }
 
 function agregarProductoHijo(ss, p) {
-  const h = getOrCreate(ss, 'CatalogoHijos', ['Codigo','Nombre','PrecioVenta','Costo','Foto']);
-  h.appendRow([dec(p.codigo), dec(p.nombre), parseFloat(p.precioVenta)||0, parseFloat(p.costo)||0, dec(p.foto||'')]);
+  const h = getOrCreate(ss, 'CatalogoHijos', ['Codigo','Nombre','PrecioVenta','Costo','Foto','Categoria']);
+  h.appendRow([dec(p.codigo), dec(p.nombre), parseFloat(p.precioVenta)||0, parseFloat(p.costo)||0, dec(p.foto||''), dec(p.categoria||'') || 'Varios']);
   return { ok: true };
 }
 
@@ -1906,6 +1907,7 @@ function editarProductoHijo(ss, p) {
       h.getRange(i+1,3).setValue(parseFloat(p.precioVenta)||0);
       h.getRange(i+1,4).setValue(parseFloat(p.costo)||0);
       h.getRange(i+1,5).setValue(dec(p.foto||''));
+      if (p.categoria !== undefined) h.getRange(i+1,6).setValue(dec(p.categoria||'') || 'Varios');
       if (nuevoCodigo !== codigo) renombrarCodigoHijos_(ss, codigo, nuevoCodigo);
       return { ok: true };
     }

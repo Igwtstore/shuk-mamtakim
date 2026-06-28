@@ -736,6 +736,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <input class="form-input" id="f-stock" type="number" min="0" placeholder="0">
       <div style="font-size:0.7rem;color:#aaa;margin-top:3px">Lo que hay en el depósito. También se carga solo con cada compra.</div>
     </div>
+    <div class="form-group">
+      <label class="form-label">🏷️ Categoría</label>
+      <input class="form-input" id="f-categoria" type="text" list="cat-candy-list" placeholder="Ej: Chocolate, Caramelo, Snacks…">
+      <datalist id="cat-candy-list"></datalist>
+      <div style="font-size:0.7rem;color:#aaa;margin-top:3px">Para agrupar en la tienda. Elegí una existente o escribí una nueva.</div>
+    </div>
     <div id="ganancia-preview" style="background:#f0fff4; border-radius:10px; padding:10px 12px; margin-bottom:14px; display:none; font-size:0.85rem; color:#2e8b57;">
       Ganancia: <strong id="gp-monto"></strong> · Maaser: <strong id="gp-diezmo"></strong>
     </div>
@@ -1452,6 +1458,13 @@ async function armarCatCandyGenerar(tipo) {
   finally { wrap.remove(); }
 }
 
+// Pobla el datalist de categorías con las que ya existen (para sugerir al cargar/editar productos de Candy).
+function _poblarCatCandyDatalist() {
+  const dl = document.getElementById('cat-candy-list'); if (!dl) return;
+  const cats = [...new Set((catalogoCache || []).map(p => (p.categoria || '').trim()).filter(c => c && c !== 'Varios'))].sort((a, b) => a.localeCompare(b));
+  dl.innerHTML = cats.map(c => `<option value="${c.replace(/"/g, '&quot;')}">`).join('');
+}
+
 // ─── MODAL ────────────────────────────────────────────────────────
 function abrirModal() {
   editandoCodigo = null;
@@ -1463,6 +1476,7 @@ function abrirModal() {
   document.getElementById('f-precio').value = '';
   document.getElementById('f-costo').value = '';
   document.getElementById('f-stock').value = '';
+  document.getElementById('f-categoria').value = ''; _poblarCatCandyDatalist();
   _stockOriginal = 0;
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-preview').innerHTML = '📦';
@@ -1483,6 +1497,7 @@ function editarProducto(p) {
   document.getElementById('f-costo').value = p.costo || '';
   _stockOriginal = parseInt(p.stock) || 0;
   document.getElementById('f-stock').value = _stockOriginal;
+  document.getElementById('f-categoria').value = (p.categoria && p.categoria !== 'Varios') ? p.categoria : ''; _poblarCatCandyDatalist();
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-status').textContent = '';
   previewFoto(p.foto || '');
@@ -1566,11 +1581,12 @@ async function guardarProducto() {
   btn.textContent = 'Guardando...';
   btn.disabled = true;
 
+  const categoria = document.getElementById('f-categoria').value.trim();
   const accion = editandoCodigo ? 'editarProductoHijo' : 'agregarProductoHijo';
   // Al editar, el código original es la llave; si lo cambiaron va aparte como nuevoCodigo
   const params = editandoCodigo
-    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto }
-    : { codigo, nombre, precioVenta: precio, costo, foto };
+    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto, categoria }
+    : { codigo, nombre, precioVenta: precio, costo, foto, categoria };
   const res = await api(accion, params);
 
   btn.textContent = 'Guardar';
