@@ -2271,6 +2271,7 @@ async function generarCatalogoPDF() {
 // ─── ARMADOR DE CATÁLOGO (con fotos · PDF + imagen · elegís productos y plantilla) ──────
 let _acProductos = [], _acSel = {}, _acFiltro = 'todos', _acLayout = 'lista', _acVerMin = true, _acVerMay = true, _acOcultarSinStock = false, _acOrden = 'az';
 let _acMarca = 'shuk', _acTel = 'jony', _acQrDataUrl = '';
+let _acDescGeneral = 0, _acDescProd = {};   // descuentos del catálogo (general % + por producto %)
 // Marcas y teléfonos para personalizar el catálogo (encabezado/pie + WhatsApp).
 const _CAT_MARCAS = {
   shuk:  { nombre: 'SHUK MAMTAKIM', sub: 'Dulces Tradicionales · Frutos Secos', color: '#c9954a',
@@ -2299,6 +2300,20 @@ const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
 };
 function _acPrecioMin(p) { const v = parseFloat(String(p.precioMin).replace(',', '.')) || 0; return v > 0 ? '$ ' + Math.round(v).toLocaleString('es-AR') : '—'; }
 function _acPrecioMay(p) { const v = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0; if (v <= 0) return '—'; return p.moneda === 'U$S' ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR'); }
+// ── DESCUENTOS del catálogo (solo para el catálogo generado; no toca precios reales) ──
+// % por producto (si está definido) pisa el % general. Redondeo SIEMPRE para arriba.
+function _acDescDe(p) { const d = _acDescProd[p.id]; return (d !== undefined && d !== '' && !isNaN(d)) ? (Number(d) || 0) : (Number(_acDescGeneral) || 0); }
+function _acConDesc(v, pct, esDolar) { if (!pct || pct <= 0) return v; const r = v * (1 - pct / 100); return esDolar ? Math.ceil(r * 100) / 100 : Math.ceil(r); }   // pesos: entero arriba; U$S: 2 decimales arriba
+function _acFmtPrecio(v, esDolar) { return esDolar ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR'); }
+// Devuelve {orig, nuevo, pct} si hay descuento, o {txt} si no. cual = 'min' | 'may'.
+function _acPrecioDesc(p, cual) {
+  const esDolar = cual === 'may' && p.moneda === 'U$S';
+  const v = parseFloat(String(cual === 'min' ? p.precioMin : (p.precioMay || '0')).replace(',', '.')) || 0;
+  if (v <= 0) return { txt: '—' };
+  const pct = _acDescDe(p);
+  if (!pct || pct <= 0) return { txt: _acFmtPrecio(v, esDolar) };
+  return { orig: _acFmtPrecio(v, esDolar), nuevo: _acFmtPrecio(_acConDesc(v, pct, esDolar), esDolar), pct: pct };
+}
 function _acEsOculto(p) { return !p.activo || (p.visible || '').trim() === 'Oculto'; }
 async function abrirArmarCatalogo() {
   let ov = document.getElementById('ac-overlay');
@@ -2313,7 +2328,7 @@ async function abrirArmarCatalogo() {
   let lista = Array.isArray(r) ? r : [];
   if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // REGLA: vista Miri no ve lo de Jony
   _acProductos = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || (a.nombre || '').localeCompare(b.nombre || ''));
-  _acSel = {}; _acFiltro = 'todos';
+  _acSel = {}; _acFiltro = 'todos'; _acDescGeneral = 0; _acDescProd = {};
   _acRender();
 }
 function _acFiltrados() {
@@ -2350,6 +2365,10 @@ function _acRender() {
         ${p.desc ? `<div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.desc)}</div>` : ''}
         <div style="font-size:0.66rem;color:var(--texto-suave)">🏷️ ${esc(p.categoria||'Varios')} · ${estado} · ${stkTxt}</div>
       </div>
+      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:2px;flex-shrink:0" title="Descuento de este producto (pisa el general)">
+        <input type="number" min="0" max="100" value="${_acDescProd[p.id] !== undefined ? _acDescProd[p.id] : ''}" oninput="_acSetDescProd('${p.id}', this.value)" placeholder="${_acDescGeneral || '%'}" style="width:42px;padding:4px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.72rem;text-align:center">
+        <span style="font-size:0.66rem;color:#aaa">%</span>
+      </div>
     </label>`;
   }).join('');
   const nSel = Object.keys(_acSel).length;
@@ -2364,6 +2383,13 @@ function _acRender() {
         ${['az:Ordenar: A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_acOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
       </select>
       <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input id="ac-chk-all" type="checkbox" onchange="_acToggleAll(this.checked)" ${lista.length&&lista.every(p=>_acSel[p.id])?'checked':''} style="width:15px;height:15px"> Seleccionar todos los de la lista <span id="ac-contador" style="color:var(--texto-suave)">· ${nSel} elegido${nSel!==1?'s':''}</span></label>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;background:#fff7ef;border:1px solid #f0d9bf;border-radius:8px;padding:6px 9px">
+        <span style="color:#a8690b;font-weight:700">🏷️ Descuento general:</span>
+        <input type="number" min="0" max="100" value="${_acDescGeneral || ''}" onchange="_acDescGeneral = Math.max(0, Math.min(100, Number(this.value) || 0)); _acRender()" placeholder="0" style="width:52px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:6px;text-align:center;font-weight:700">
+        <span style="color:#a8690b;font-weight:700">%</span>
+        <span style="color:#999;font-size:0.68rem">a todo lo elegido</span>
+        ${(_acDescGeneral || Object.keys(_acDescProd).length) ? `<button onclick="_acLimpiarDesc()" style="margin-left:auto;background:none;border:none;color:#c0392b;font-size:0.72rem;cursor:pointer;text-decoration:underline">limpiar</button>` : ''}
+      </div>
     </div>
     <div style="overflow-y:auto;flex:1">${filas || '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>'}</div>
     <div style="padding:0.8rem 1rem;border-top:1px solid var(--gris-medio)">
@@ -2406,16 +2432,23 @@ function _acToggle(id, el) {
   if (chkAll) { const lista = _acFiltrados(); chkAll.checked = lista.length > 0 && lista.every(p => _acSel[p.id]); }
 }
 function _acToggleAll(ch) { _acFiltrados().forEach(p => { if (ch) _acSel[p.id] = true; else delete _acSel[p.id]; }); _acRender(); }
+function _acSetDescProd(id, val) { const n = String(val).trim(); if (n === '') delete _acDescProd[id]; else _acDescProd[id] = Math.max(0, Math.min(100, Number(n) || 0)); }   // no re-renderiza (no perder foco)
+function _acLimpiarDesc() { _acDescGeneral = 0; _acDescProd = {}; _acRender(); }
 function _acBuildDoc() {
   const sel = _acProductos.filter(p => _acSel[p.id]);
   const byCat = {}; sel.forEach(p => { const c = p.categoria || 'Varios'; (byCat[c] = byCat[c] || []).push(p); });
   const cats = Object.keys(byCat).sort((a, b) => getCatIdx({categoria:a}) - getCatIdx({categoria:b}) || a.localeCompare(b));
   const titulo = (document.getElementById('ac-titulo')?.value || '').trim() || 'Catálogo';
   const hoy = new Date().toLocaleDateString('es-AR');
+  const precioUno = (p, cual, label) => {
+    const d = _acPrecioDesc(p, cual);
+    if (d.txt) return `<span style="color:#888;font-size:0.82em">${label}</span> ${d.txt}`;
+    return `<span style="color:#888;font-size:0.82em">${label}</span> <span style="text-decoration:line-through;color:#bbb;font-size:0.86em">${d.orig}</span> <span style="color:#c0392b;font-weight:700">${d.nuevo}</span> <span style="background:#fde8e8;color:#c0392b;font-size:0.6em;font-weight:800;padding:1px 5px;border-radius:4px;vertical-align:middle">-${d.pct}%</span>`;
+  };
   const precio = p => {
     const parts = [];
-    if (_acVerMin) parts.push(`<span style="color:#888;font-size:0.82em">Min</span> ${_acPrecioMin(p)}`);
-    if (_acVerMay) parts.push(`<span style="color:#888;font-size:0.82em">May</span> ${_acPrecioMay(p)}`);
+    if (_acVerMin) parts.push(precioUno(p, 'min', 'Min'));
+    if (_acVerMay) parts.push(precioUno(p, 'may', 'May'));
     return parts.join('<span style="color:#ccc"> · </span>') || '';
   };
   const foto = (p, h) => { const imgs = (p.imagen||'').split(',').map(x=>x.trim()).filter(Boolean);
@@ -2475,7 +2508,10 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
   const hoy = new Date().toLocaleDateString('es-AR');
   const hex = h => { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const cMarca = hex(M.color), gris = [136, 136, 136], negro = [40, 40, 40], linea = [228, 228, 228];
-  const precioTxt = p => { const a = []; if (_acVerMin) a.push('Min ' + _acPrecioMin(p)); if (_acVerMay) a.push('May ' + _acPrecioMay(p)); return a.join('   '); };
+  const precioTxt = p => {
+    const uno = (cual, label) => { const d = _acPrecioDesc(p, cual); return d.txt ? (label + ' ' + d.txt) : (label + ' ' + d.nuevo + ' (-' + d.pct + '%)'); };
+    const a = []; if (_acVerMin) a.push(uno('min', 'Min')); if (_acVerMay) a.push(uno('may', 'May')); return a.join('   ');
+  };
   let y = 0, pag = 0;
   const pieAlto = 92;
   const nuevaPag = enc => {
