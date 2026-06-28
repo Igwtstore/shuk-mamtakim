@@ -743,6 +743,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <datalist id="cat-candy-list"></datalist>
       <div style="font-size:0.7rem;color:#aaa;margin-top:3px">Para agrupar en la tienda. Elegí una existente o escribí una nueva.</div>
     </div>
+
+    <div style="border:1.5px solid #ffe0b2;border-radius:12px;padding:11px 12px;margin-bottom:14px;background:#fffaf3">
+      <div style="font-weight:800;color:#e07b00;font-size:0.92rem;margin-bottom:8px">🔥 Oferta y pack <span style="font-weight:500;color:#bbb;font-size:0.72rem">(opcional)</span></div>
+      <div style="display:flex;gap:8px">
+        <div class="form-group" style="flex:1;margin:0">
+          <label class="form-label" style="font-size:0.78rem">Precio oferta</label>
+          <input class="form-input" id="f-precio-oferta" type="number" min="0" placeholder="0 = sin oferta">
+        </div>
+        <div class="form-group" style="flex:1;margin:0">
+          <label class="form-label" style="font-size:0.78rem">Vence (opcional)</label>
+          <input class="form-input" id="f-fecha-oferta" type="text" placeholder="dd/mm/aaaa">
+        </div>
+      </div>
+      <div style="font-size:0.68rem;color:#aaa;margin:3px 0 9px">Precio rebajado. Vacío/0 = sin oferta. La fecha es opcional (sin fecha, dura hasta que la saques).</div>
+      <div style="display:flex;gap:8px">
+        <div class="form-group" style="flex:1;margin:0">
+          <label class="form-label" style="font-size:0.78rem">Pack: cantidad</label>
+          <input class="form-input" id="f-cant-pack" type="number" min="0" placeholder="Ej: 5">
+        </div>
+        <div class="form-group" style="flex:1;margin:0">
+          <label class="form-label" style="font-size:0.78rem">Precio del pack</label>
+          <input class="form-input" id="f-precio-pack" type="number" min="0" placeholder="Ej: 4000">
+        </div>
+      </div>
+      <div style="font-size:0.68rem;color:#aaa;margin-top:3px">Ej: "llevá <b>5</b> a <b>$4000</b>". En la tienda el precio se aplica solo al llegar a esa cantidad.</div>
+    </div>
+
     <div id="ganancia-preview" style="background:#f0fff4; border-radius:10px; padding:10px 12px; margin-bottom:14px; display:none; font-size:0.85rem; color:#2e8b57;">
       Ganancia: <strong id="gp-monto"></strong> · Maaser: <strong id="gp-diezmo"></strong>
     </div>
@@ -1545,6 +1572,7 @@ function abrirModal() {
   document.getElementById('f-costo').value = '';
   document.getElementById('f-stock').value = '';
   document.getElementById('f-categoria').value = ''; _poblarCatCandyDatalist();
+  ['f-precio-oferta','f-fecha-oferta','f-cant-pack','f-precio-pack'].forEach(id => document.getElementById(id).value = '');
   _stockOriginal = 0;
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-preview').innerHTML = '📦';
@@ -1566,6 +1594,10 @@ function editarProducto(p) {
   _stockOriginal = parseInt(p.stock) || 0;
   document.getElementById('f-stock').value = _stockOriginal;
   document.getElementById('f-categoria').value = (p.categoria && p.categoria !== 'Varios') ? p.categoria : ''; _poblarCatCandyDatalist();
+  document.getElementById('f-precio-oferta').value = p.precioOferta > 0 ? p.precioOferta : '';
+  document.getElementById('f-fecha-oferta').value = p.fechaOferta || '';
+  document.getElementById('f-cant-pack').value = p.cantPack > 0 ? p.cantPack : '';
+  document.getElementById('f-precio-pack').value = p.precioPack > 0 ? p.precioPack : '';
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-status').textContent = '';
   previewFoto(p.foto || '');
@@ -1650,11 +1682,16 @@ async function guardarProducto() {
   btn.disabled = true;
 
   const categoria = document.getElementById('f-categoria').value.trim();
+  const precioOferta = parseFloat(document.getElementById('f-precio-oferta').value) || 0;
+  const fechaOferta = document.getElementById('f-fecha-oferta').value.trim();
+  const cantPack = parseInt(document.getElementById('f-cant-pack').value) || 0;
+  const precioPack = parseFloat(document.getElementById('f-precio-pack').value) || 0;
+  const oferta = { categoria, precioOferta, fechaOferta, cantPack, precioPack };
   const accion = editandoCodigo ? 'editarProductoHijo' : 'agregarProductoHijo';
   // Al editar, el código original es la llave; si lo cambiaron va aparte como nuevoCodigo
   const params = editandoCodigo
-    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto, categoria }
-    : { codigo, nombre, precioVenta: precio, costo, foto, categoria };
+    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto, ...oferta }
+    : { codigo, nombre, precioVenta: precio, costo, foto, ...oferta };
   const res = await api(accion, params);
 
   btn.textContent = 'Guardar';
