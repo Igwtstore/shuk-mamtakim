@@ -2345,12 +2345,11 @@ function _acFiltrados() {
     return true;
   }).sort(_ordenarProd(_acOrden, p => p.nombre || '', p => parseFloat(p.stock) || 0, p => parseFloat(p.precioMin) || 0));
 }
-function _acRender() {
-  const ov = document.getElementById('ac-overlay'); if (!ov) return;
+// Genera solo las filas de la lista (para refrescarlas sin recrear el modal → el buscador no pierde el foco).
+function _acFilasHtml() {
   const lista = _acFiltrados();
-  const fbtn = (f, txt) => `<button onclick="_acSetFiltro('${f}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acFiltro===f?'var(--azul)':'var(--gris-medio)'};background:${_acFiltro===f?'var(--azul)':'#fff'};color:${_acFiltro===f?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
-  const lbtn = (l, txt) => `<button onclick="_acSetLayout('${l}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acLayout===l?'#c9954a':'var(--gris-medio)'};background:${_acLayout===l?'#c9954a':'#fff'};color:${_acLayout===l?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
-  const filas = lista.map(p => {
+  if (!lista.length) return '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>';
+  return lista.map(p => {
     const sel = !!_acSel[p.id];
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
     const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:34px;height:34px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
@@ -2371,12 +2370,25 @@ function _acRender() {
       </div>
     </label>`;
   }).join('');
+}
+// Refresca SOLO la lista (al buscar/filtrar) sin tocar el input → no se pierde el foco al escribir.
+function _acFiltrarLista() {
+  const cont = document.getElementById('ac-lista'); if (cont) cont.innerHTML = _acFilasHtml();
+  const lista = _acFiltrados();
+  const chkAll = document.getElementById('ac-chk-all'); if (chkAll) chkAll.checked = lista.length > 0 && lista.every(p => _acSel[p.id]);
+}
+function _acRender() {
+  const ov = document.getElementById('ac-overlay'); if (!ov) return;
+  const lista = _acFiltrados();
+  const fbtn = (f, txt) => `<button onclick="_acSetFiltro('${f}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acFiltro===f?'var(--azul)':'var(--gris-medio)'};background:${_acFiltro===f?'var(--azul)':'#fff'};color:${_acFiltro===f?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const lbtn = (l, txt) => `<button onclick="_acSetLayout('${l}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acLayout===l?'#c9954a':'var(--gris-medio)'};background:${_acLayout===l?'#c9954a':'#fff'};color:${_acLayout===l?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const filas = _acFilasHtml();
   const nSel = Object.keys(_acSel).length;
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:0.9rem 1rem;border-bottom:1px solid var(--gris-medio)">
       <div style="font-weight:800;font-size:1.05rem;color:#c9954a">📕 Armar catálogo</div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">Elegí los productos (incluí los 🙈 ocultos), la plantilla y qué precios mostrar.</div>
-      <input id="ac-buscar" oninput="_acRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
+      <input id="ac-buscar" oninput="_acFiltrarLista()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
       <div style="display:flex;gap:5px;margin-top:0.5rem;flex-wrap:wrap">${fbtn('todos','Todos')}${fbtn('minorista','🛍️ Min')}${fbtn('mayorista','📦 May')}${fbtn('ambos','👁️ Ambos')}${fbtn('ocultos','🙈 Ocultos')}</div>
       <label style="display:flex;align-items:center;gap:0.35rem;margin-top:0.5rem;font-size:0.75rem;color:#555;cursor:pointer"><input type="checkbox" ${_acOcultarSinStock?'checked':''} onchange="_acToggleSinStock(this.checked)" style="width:15px;height:15px"> 📦 Ocultar productos sin stock</label>
       <select onchange="_acOrden=this.value;_acRender()" style="width:100%;margin-top:0.5rem;padding:0.45rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.78rem;background:#fff">
@@ -2391,7 +2403,7 @@ function _acRender() {
         ${(_acDescGeneral || Object.keys(_acDescProd).length) ? `<button onclick="_acLimpiarDesc()" style="margin-left:auto;background:none;border:none;color:#c0392b;font-size:0.72rem;cursor:pointer;text-decoration:underline">limpiar</button>` : ''}
       </div>
     </div>
-    <div style="overflow-y:auto;flex:1">${filas || '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>'}</div>
+    <div id="ac-lista" style="overflow-y:auto;flex:1">${filas}</div>
     <div style="padding:0.8rem 1rem;border-top:1px solid var(--gris-medio)">
       <div style="display:flex;gap:8px;margin-bottom:0.55rem">
         <select onchange="_acMarca=this.value" style="flex:1;padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.76rem;background:#fff">
@@ -2488,12 +2500,22 @@ function _acBuildDoc() {
     <div id="ac-pie" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;border-top:1px solid #eee;padding-top:13px">
       ${qr}
       <div style="text-align:${qr ? 'left' : 'center'}">
-        <div style="font-size:0.82rem;font-weight:800;color:${M.color}">📱 Pedí por WhatsApp${T.nombre ? (' a ' + esc(T.nombre)) : ''}</div>
+        <div style="font-size:0.82rem;font-weight:800;color:${M.color}">📱 Pedidos por WhatsApp</div>
         <div style="font-size:0.95rem;font-weight:700;color:#444;margin-top:2px">${_telFmt(T.num)}</div>
         ${qr ? '<div style="font-size:0.66rem;color:#aaa;margin-top:2px">Escaneá el QR y te abre el chat 👈</div>' : ''}
       </div>
     </div>
   </div>`;
+}
+// La fuente del PDF (helvetica) no soporta emojis → los saca para que no salgan como basura.
+function _sinEmoji(s) { return String(s == null ? '' : s).replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '').replace(/\s+/g, ' ').trim(); }
+// Inserta la foto respetando su proporción (contain), centrada en el recuadro → no la estira.
+function _addImgFit(pdf, data, x, y, boxW, boxH) {
+  try {
+    const pr = pdf.getImageProperties(data);
+    const r = Math.min(boxW / pr.width, boxH / pr.height), w = pr.width * r, h = pr.height * r;
+    pdf.addImage(data, pr.fileType || 'JPEG', x + (boxW - w) / 2, y + (boxH - h) / 2, w, h, undefined, 'FAST');
+  } catch (e) { try { pdf.addImage(data, 'JPEG', x, y, boxW, boxH, undefined, 'FAST'); } catch (e2) {} }
 }
 // Descarga una imagen y la devuelve como dataURL (para insertarla en el PDF nativo).
 async function _imgADataUrl(url) {
@@ -2520,8 +2542,8 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     if (enc) {
       if (logoData) { try { pdf.addImage(logoData, 'PNG', margin, y, 50, 50); } catch (e) {} }
       const tx = logoData ? margin + 62 : margin;
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...cMarca); pdf.text(M.nombre, tx, y + 22);
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(M.sub, tx, y + 37);
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...cMarca); pdf.text(_sinEmoji(M.nombre), tx, y + 22);
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(_sinEmoji(M.sub), tx, y + 37);
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...negro); pdf.text(titulo, W - margin, y + 16, { align: 'right' });
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(hoy, W - margin, y + 30, { align: 'right' });
       y += 56; pdf.setDrawColor(...cMarca); pdf.setLineWidth(1.5); pdf.line(margin, y, W - margin, y); y += 16;
@@ -2534,7 +2556,7 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
   cats.forEach(c => {
     asegurar(30 + 56);
     pdf.setFillColor(252, 243, 227); pdf.rect(margin, y, W - margin * 2, 22, 'F');
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...cMarca); pdf.text(c.toUpperCase(), margin + 8, y + 15);
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...cMarca); pdf.text(_sinEmoji(c).toUpperCase(), margin + 8, y + 15);
     y += 32;
     const items = byCat[c].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
     if (_acLayout === 'grilla') {
@@ -2544,9 +2566,9 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
         if (col === 0) asegurar(cellH + 8);
         const x = margin + col * (colW + 8), yy = y;
         pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.roundedRect(x, yy, colW, cellH, 5, 5, 'S');
-        if (fotos[p.id]) { try { pdf.addImage(fotos[p.id], 'JPEG', x + 5, yy + 5, colW - 10, 92, undefined, 'FAST'); } catch (e) {} }
+        if (fotos[p.id]) _addImgFit(pdf, fotos[p.id], x + 5, yy + 5, colW - 10, 92);
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(...negro);
-        pdf.text(pdf.splitTextToSize(p.nombre, colW - 12).slice(0, 2), x + 6, yy + 110);
+        pdf.text(pdf.splitTextToSize(_sinEmoji(p.nombre), colW - 12).slice(0, 2), x + 6, yy + 110);
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(...cMarca);
         pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 2), x + 6, yy + 140);
         if (col === 2 || idx === items.length - 1) y += cellH + 8;
@@ -2554,11 +2576,11 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     } else {
       items.forEach(p => {
         asegurar(56);
-        if (fotos[p.id]) { try { pdf.addImage(fotos[p.id], 'JPEG', margin, y, 48, 48, undefined, 'FAST'); } catch (e) {} }
+        if (fotos[p.id]) _addImgFit(pdf, fotos[p.id], margin, y, 48, 48);
         else { pdf.setFillColor(245, 245, 245); pdf.rect(margin, y, 48, 48, 'F'); }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...negro);
-        pdf.text(pdf.splitTextToSize(p.nombre, W - margin * 2 - 210).slice(0, 2), margin + 58, y + 18);
-        if (p.desc) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text((pdf.splitTextToSize(p.desc, W - margin * 2 - 210)[0] || ''), margin + 58, y + 36); }
+        pdf.text(pdf.splitTextToSize(_sinEmoji(p.nombre), W - margin * 2 - 210).slice(0, 2), margin + 58, y + 18);
+        if (p.desc) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text((pdf.splitTextToSize(_sinEmoji(p.desc), W - margin * 2 - 210)[0] || ''), margin + 58, y + 36); }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10.5); pdf.setTextColor(91, 61, 30);
         pdf.text(precioTxt(p), W - margin, y + 24, { align: 'right' });
         pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.line(margin, y + 52, W - margin, y + 52);
@@ -2572,7 +2594,7 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
   let tx = margin;
   if (_acQrDataUrl) { try { pdf.addImage(_acQrDataUrl, 'PNG', margin, pieY + 8, 62, 62); tx = margin + 74; } catch (e) {} }
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(12); pdf.setTextColor(...cMarca);
-  pdf.text('Pedí por WhatsApp' + (T.nombre ? ' a ' + T.nombre : ''), tx, pieY + 30);
+  pdf.text('Pedidos por WhatsApp', tx, pieY + 30);
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(...negro);
   pdf.text(_telFmt(T.num), tx, pieY + 50);
   try { pdf.link(margin, pieY, W - margin * 2, pieAlto - 8, { url: `https://wa.me/${T.num}` }); } catch (e) {}
