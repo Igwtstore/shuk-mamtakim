@@ -2268,7 +2268,16 @@ async function generarCatalogoPDF() {
 }
 
 // ─── ARMADOR DE CATÁLOGO (con fotos · PDF + imagen · elegís productos y plantilla) ──────
-let _acProductos = [], _acSel = {}, _acFiltro = 'todos', _acLayout = 'lista', _acVerMin = true, _acVerMay = true, _acOcultarSinStock = false;
+let _acProductos = [], _acSel = {}, _acFiltro = 'todos', _acLayout = 'lista', _acVerMin = true, _acVerMay = true, _acOcultarSinStock = false, _acOrden = 'az';
+// Ordenador reutilizable de productos.
+const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
+  if (orden === 'za') return getNombre(b).localeCompare(getNombre(a));
+  if (orden === 'stock-si') return (getStock(b) > 0 ? 1 : 0) - (getStock(a) > 0 ? 1 : 0) || getNombre(a).localeCompare(getNombre(b));
+  if (orden === 'stock-no') return (getStock(a) > 0 ? 1 : 0) - (getStock(b) > 0 ? 1 : 0) || getNombre(a).localeCompare(getNombre(b));
+  if (orden === 'precio-asc') return getPrecio(a) - getPrecio(b);
+  if (orden === 'precio-desc') return getPrecio(b) - getPrecio(a);
+  return getNombre(a).localeCompare(getNombre(b));
+};
 function _acPrecioMin(p) { const v = parseFloat(String(p.precioMin).replace(',', '.')) || 0; return v > 0 ? '$ ' + Math.round(v).toLocaleString('es-AR') : '—'; }
 function _acPrecioMay(p) { const v = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0; if (v <= 0) return '—'; return p.moneda === 'U$S' ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR'); }
 function _acEsOculto(p) { return !p.activo || (p.visible || '').trim() === 'Oculto'; }
@@ -2300,7 +2309,7 @@ function _acFiltrados() {
     if (_acFiltro === 'ambos') return p.activo && vis === 'Ambos';
     if (_acFiltro === 'ocultos') return _acEsOculto(p);
     return true;
-  });
+  }).sort(_ordenarProd(_acOrden, p => p.nombre || '', p => parseFloat(p.stock) || 0, p => parseFloat(p.precioMin) || 0));
 }
 function _acRender() {
   const ov = document.getElementById('ac-overlay'); if (!ov) return;
@@ -2332,6 +2341,9 @@ function _acRender() {
       <input id="ac-buscar" oninput="_acRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
       <div style="display:flex;gap:5px;margin-top:0.5rem;flex-wrap:wrap">${fbtn('todos','Todos')}${fbtn('minorista','🛍️ Min')}${fbtn('mayorista','📦 May')}${fbtn('ambos','👁️ Ambos')}${fbtn('ocultos','🙈 Ocultos')}</div>
       <label style="display:flex;align-items:center;gap:0.35rem;margin-top:0.5rem;font-size:0.75rem;color:#555;cursor:pointer"><input type="checkbox" ${_acOcultarSinStock?'checked':''} onchange="_acToggleSinStock(this.checked)" style="width:15px;height:15px"> 📦 Ocultar productos sin stock</label>
+      <select onchange="_acOrden=this.value;_acRender()" style="width:100%;margin-top:0.5rem;padding:0.45rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.78rem;background:#fff">
+        ${['az:Ordenar: A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_acOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
+      </select>
       <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input type="checkbox" onchange="_acToggleAll(this.checked)" ${lista.length&&lista.every(p=>_acSel[p.id])?'checked':''} style="width:15px;height:15px"> Seleccionar todos los de la lista <span style="color:var(--texto-suave)">· ${nSel} elegido${nSel!==1?'s':''}</span></label>
     </div>
     <div style="overflow-y:auto;flex:1">${filas || '<div class="sinpedidos" style="padding:1rem">Sin productos en este filtro</div>'}</div>

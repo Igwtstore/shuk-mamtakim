@@ -1328,7 +1328,7 @@ async function quitarShukDeCandy(id) {
 }
 
 // ─── ARMAR CATÁLOGO (PDF / imagen) ────────────────────────────────
-let _catCandySel = {}, _catCandyLayout = 'lista';
+let _catCandySel = {}, _catCandyLayout = 'lista', _catCandyOrden = 'az';
 function abrirArmarCatalogoCandy() {
   _catCandySel = {};
   let ov = document.getElementById('armar-cat-ov');
@@ -1340,7 +1340,8 @@ function abrirArmarCatalogoCandy() {
 function _renderArmarCatCandy() {
   const ov = document.getElementById('armar-cat-ov'); if (!ov) return;
   const q = (document.getElementById('armar-cat-q')?.value || '').trim().toLowerCase();
-  const lista = (catalogoCache || []).filter(p => !q || (p.nombre || '').toLowerCase().includes(q));
+  const lista = (catalogoCache || []).filter(p => !q || (p.nombre || '').toLowerCase().includes(q))
+    .sort(_ordenarProd(_catCandyOrden, p => p.nombre || '', p => p.stock || 0, p => p.precioVenta || 0));
   const nSel = Object.keys(_catCandySel).filter(k => _catCandySel[k]).length;
   const filas = lista.map(p => {
     const on = !!_catCandySel[p.codigo];
@@ -1358,6 +1359,9 @@ function _renderArmarCatCandy() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_catCandyTodos()" style="background:none;border:none;color:#c9954a;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="armar-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos</div>'}</div>
     <input id="armar-cat-titulo" placeholder="Título (opcional, ej: Lista junio)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
+    <select onchange="_catCandyOrden=this.value;_renderArmarCatCandy()" style="width:100%;padding:8px 10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.82rem;box-sizing:border-box;margin-top:8px;background:#fff">
+      ${['az:Ordenar: A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_catCandyOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
+    </select>
     <div style="display:flex;gap:6px;margin-top:8px">${lbtn('lista', '📄 Lista')}${lbtn('grilla', '🔲 Grilla')}</div>
     <div style="display:flex;gap:6px;margin-top:8px">
       <button onclick="armarCatCandyGenerar('pdf')" style="flex:1;padding:11px;background:#c0392b;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">📄 PDF</button>
