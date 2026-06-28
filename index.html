@@ -4900,10 +4900,11 @@ function cargarComoPedido(i) {
 }
 function actualizarTotalManual() {
   const tipo = document.getElementById('manual-tipo').value;
-  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0;
+  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0, totalU = 0;
   _manualElegibles().forEach(p => {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
+    totalU += qty;
     const esJ = p.dueno === 'Jony';
     const { precioUnit, moneda } = _precioMoneda(p, tipo);
     const monto = precioUnit * qty;
@@ -4913,7 +4914,8 @@ function actualizarTotalManual() {
   const parts = [];
   if (arsJ + arsM > 0) parts.push(`$ ${Math.round(arsJ + arsM).toLocaleString('es-AR')}`);
   if (usdM + usdJ > 0) parts.push(`U$S ${(usdM + usdJ).toFixed(2)}`);
-  document.getElementById('manual-total').textContent = 'Total: ' + (parts.join(' + ') || '$ 0');
+  const _uTxt = totalU > 0 ? ` · ${totalU} u.` : '';
+  document.getElementById('manual-total').textContent = 'Total: ' + (parts.join(' + ') || '$ 0') + _uTxt;
   renderManualSeleccion();
 }
 
