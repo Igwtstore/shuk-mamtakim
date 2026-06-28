@@ -1297,11 +1297,16 @@ function _renderImpShuk() {
   </div>`;
   const bq = document.getElementById('imp-shuk-q'); if (bq && q) { bq.value = q; bq.focus(); }
 }
-async function toggleImpShuk(id, el) {
-  if (el) el.style.pointerEvents = 'none';
-  const r = await api('toggleShukEnCandy', { id });
-  if (r && r.ok) { if (r.importado) _impShukSet.add(id); else _impShukSet.delete(id); }
-  _renderImpShuk();
+let _impShukPend = {};
+function toggleImpShuk(id, el) {
+  const estaba = _impShukSet.has(id);
+  if (estaba) _impShukSet.delete(id); else _impShukSet.add(id);
+  const on = !estaba;
+  // Marcado INSTANTÁNEO: actualiza solo esta fila (sin re-render → no se mueve el scroll).
+  if (el) { el.style.background = on ? '#f0fff4' : '#fff'; const chk = el.querySelector('div'); if (chk) chk.textContent = on ? '✅' : '⬜'; }
+  // Guarda en el backend el estado FINAL, con debounce por producto (idempotente → toques rápidos convergen).
+  clearTimeout(_impShukPend[id]);
+  _impShukPend[id] = setTimeout(() => { api('toggleShukEnCandy', { id, set: on ? '1' : '0' }); }, 350);
 }
 async function quitarShukDeCandy(id) {
   if (!confirm('¿Quitar este producto de Shuk de tu catálogo?')) return;

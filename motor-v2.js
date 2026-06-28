@@ -1539,17 +1539,22 @@ function doGet(e) {
       return json(h.getRange(2,1,h.getLastRow()-1,1).getValues().map(r => (r[0]||'').toString().trim()).filter(Boolean));
     }
     if (accion === 'toggleShukEnCandy') {
-      // Agrega o quita un producto de Shuk del catálogo de Candy (toggle por id de Shuk).
+      // Agrega/quita un producto de Shuk del catálogo de Candy. Param 'set': '1'=importar, '0'=quitar
+      // (idempotente, para el marcado optimista); sin 'set' = toggle. Así los toques rápidos convergen.
       const id = dec(e.parameter.id || '').trim();
       if (!id) return json({ error: 'sin id' });
       const h = getOrCreate(ss, 'ShukEnCandy', ['ShukId', 'Fecha']);
       const ids = h.getLastRow() >= 2 ? h.getRange(2,1,h.getLastRow()-1,1).getValues() : [];
-      for (let i = 0; i < ids.length; i++) {
-        if ((ids[i][0]||'').toString().trim() === id) { h.deleteRow(i + 2); return json({ ok: true, importado: false }); }
+      let rowIdx = -1;
+      for (let i = 0; i < ids.length; i++) { if ((ids[i][0]||'').toString().trim() === id) { rowIdx = i + 2; break; } }
+      const sp = e.parameter.set;
+      const quiero = (sp === '1') ? true : (sp === '0') ? false : (rowIdx === -1);   // toggle si no viene 'set'
+      if (quiero) {
+        if (rowIdx === -1) { h.appendRow([id, Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm')]); h.getRange(h.getLastRow(), 1).setNumberFormat('@'); }
+        return json({ ok: true, importado: true });
       }
-      h.appendRow([id, Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm')]);
-      h.getRange(h.getLastRow(), 1).setNumberFormat('@');
-      return json({ ok: true, importado: true });
+      if (rowIdx !== -1) h.deleteRow(rowIdx);
+      return json({ ok: true, importado: false });
     }
     if (accion === 'registrarVentaHijos')  { return json(registrarVentaHijos(ss, e.parameter)); }
     if (accion === 'registrarVentaLote')   { return json(registrarVentaLote(ss, e.parameter)); }
