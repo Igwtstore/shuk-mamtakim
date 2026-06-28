@@ -1102,20 +1102,42 @@ function doGet(e) {
       return json(_rendicionesData(ss));
     }
     if (accion === 'setStock') {
-      var sh = ss.getSheetByName('Stock'); if (!sh) return json({error:'sin hoja'});
-      var updates = dec(e.parameter.updates||''); var sd = sh.getDataRange().getValues();
-      updates.split(',').forEach(function(u) {
-        var parts = u.split(':'); var pid = parts[0]; var ns = parseInt(parts[1])||0;
-        for (var i = 1; i < sd.length; i++) {
-          if (sd[i][0].toString()===pid) {
-            var antes = parseInt(sd[i][5])||0;
-            sh.getRange(i+1,6).setValue(ns);
-            if (ns !== antes) registrarMovStock_(ss, pid, sd[i][1], ns - antes, antes, ns, 'Ajuste manual (pestaña Stock)');
-            break;
+      // Cada update puede venir como "id:nuevo" (modo viejo) o "id:nuevo:esperado".
+      // Con "esperado": si el stock real ya NO es el que el front creía (hubo una venta mientras
+      // tenía la pantalla abierta), NO se pisa el valor → se aplica el DELTA deseado sobre el real.
+      // Así un guardado con datos viejos nunca borra una venta. Lock para serializar con las ventas.
+      var lockSS = LockService.getScriptLock();
+      try { lockSS.waitLock(20000); } catch (e2) {}
+      try {
+        var sh = ss.getSheetByName('Stock'); if (!sh) return json({error:'sin hoja'});
+        var updates = dec(e.parameter.updates||''); var sd = sh.getDataRange().getValues();
+        var conflictos = [];
+        updates.split(',').forEach(function(u) {
+          var parts = u.split(':'); if (!parts[0]) return;
+          var pid = parts[0]; var ns = parseInt(parts[1])||0;
+          var esperado = parts.length > 2 && parts[2] !== '' ? (parseInt(parts[2])||0) : null;
+          for (var i = 1; i < sd.length; i++) {
+            if (sd[i][0].toString()===pid) {
+              var antes = parseInt(sd[i][5])||0;
+              var finalVal = ns, hayConflicto = false;
+              if (esperado !== null && antes !== esperado) {
+                // El stock cambió (venta) → aplicar el delta que el usuario quería, sin pisar la venta.
+                hayConflicto = true;
+                finalVal = antes + (ns - esperado);
+                if (finalVal < 0) finalVal = 0;
+                conflictos.push({ id: pid, nombre: sd[i][1], esperaba: esperado, encontro: antes, aplicado: finalVal });
+              }
+              if (finalVal !== antes) {
+                sh.getRange(i+1,6).setValue(finalVal);
+                registrarMovStock_(ss, pid, sd[i][1], finalVal - antes, antes, finalVal, hayConflicto ? 'Ajuste manual (pestaña Stock, ajustado por venta en curso)' : 'Ajuste manual (pestaña Stock)');
+              }
+              break;
+            }
           }
-        }
-      });
-      return ok();
+        });
+        SpreadsheetApp.flush();
+        return json({ ok: true, conflictos: conflictos });
+      } finally { try { lockSS.releaseLock(); } catch (e3) {} }
     }
     if (accion === 'agregarProducto') {
       // Candado de idempotencia: doble-tap / reintento de red NO debe crear el producto dos veces.

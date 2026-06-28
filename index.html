@@ -4748,23 +4748,33 @@ function filtrarStockDrawer(q) {
 }
 
 async function guardarStock() {
+  // Mando SOLO los productos que realmente cambiaste, con el valor que el front creía (esperado).
+  // Así un guardado nunca pisa el stock de productos que no tocaste (que pudieron venderse mientras tanto).
+  const cambios = [];
   productos.forEach(p => {
     const inp = document.getElementById('sinput-' + p.id);
-    if (inp) {
-      const nuevo = parseInt(inp.value) || 0;
-      if (p.stock <= 0 && nuevo > 0) {
-        agregarAlPushBuffer('stock', p.nombre + (p.desc ? ' · ' + p.desc.substring(0,35) : ''));
-      }
+    if (!inp) return;
+    const nuevo = parseInt(inp.value) || 0;
+    const esperado = parseInt(p.stock) || 0;
+    if (nuevo !== esperado) {
+      if (esperado <= 0 && nuevo > 0) agregarAlPushBuffer('stock', p.nombre + (p.desc ? ' · ' + p.desc.substring(0,35) : ''));
+      cambios.push(`${p.id}:${nuevo}:${esperado}`);
       p.stock = nuevo;
     }
   });
-  const updates = productos.map(p => `${p.id}:${p.stock}`).join(',');
+  if (!cambios.length) { showToast('No cambiaste ningún stock'); return; }
+  const updates = cambios.join(',');
   const params = new URLSearchParams({ accion: 'setStock', updates });
   renderCatalogo();
   renderStockAdmin();
   renderNotificaciones();
   const r = await apiWrite(params, '✅ Stock guardado en planilla');
-  if (r.ok && _pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes en 45 seg'), 2800);
+  // Si mientras editabas hubo ventas, el sistema las respetó (no las pisó) → avisar.
+  if (r && r.ok && Array.isArray(r.conflictos) && r.conflictos.length) {
+    const lineas = r.conflictos.map(c => `• ${c.nombre}: ibas a dejar ${c.esperaba}→${c.esperaba}, pero ya había ${c.encontro} (entró una venta) → quedó en ${c.aplicado}`).join('\n');
+    setTimeout(() => alert('⚠️ OJO: mientras editabas el stock entró una venta. La respeté (no la pisé) y apliqué tu cambio sobre el stock real:\n\n' + lineas + '\n\nVerificá que los números queden bien.'), 400);
+  }
+  if (r && r.ok && _pushTimer) setTimeout(() => showToast('🔔 Notificación a clientes en 45 seg'), 2800);
 }
 
 let _manualQtys = {};   // cantidades del pedido manual (sobreviven al buscador)
