@@ -1237,7 +1237,16 @@ function renderCatalogo(catalogo) {
 }
 
 // ─── IMPORTAR PRODUCTOS DE SHUK ───────────────────────────────────
-let _impShukProds = [], _impShukSet = new Set(), _impShukFiltro = 'todo';
+let _impShukProds = [], _impShukSet = new Set(), _impShukFiltro = 'todo', _impShukOrden = 'az';
+// Ordenadores reutilizables de productos (para reusar en otros listados a futuro).
+const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
+  if (orden === 'za') return getNombre(b).localeCompare(getNombre(a));
+  if (orden === 'stock-si') return (getStock(b) > 0 ? 1 : 0) - (getStock(a) > 0 ? 1 : 0) || getNombre(a).localeCompare(getNombre(b));
+  if (orden === 'stock-no') return (getStock(a) > 0 ? 1 : 0) - (getStock(b) > 0 ? 1 : 0) || getNombre(a).localeCompare(getNombre(b));
+  if (orden === 'precio-asc') return getPrecio(a) - getPrecio(b);
+  if (orden === 'precio-desc') return getPrecio(b) - getPrecio(a);
+  return getNombre(a).localeCompare(getNombre(b));   // 'az' (default)
+};
 // Resuelve el formato de imagen de Shuk (public_id con/sin folder, o URL) a URL completa de Cloudinary.
 function fotoShuk(val) {
   if (!val) return '';
@@ -1268,7 +1277,8 @@ function _renderImpShuk() {
     if (_impShukFiltro === 'ocultos') return !p.activo || (p.visible || '') === 'Oculto';
     return true;
   };
-  const lista = _impShukProds.filter(p => (!q || (p.nombre || '').toLowerCase().includes(q)) && pasaFiltro(p));
+  const lista = _impShukProds.filter(p => (!q || (p.nombre || '').toLowerCase().includes(q)) && pasaFiltro(p))
+    .sort(_ordenarProd(_impShukOrden, p => p.nombre || '', p => p.stock || 0, p => p.precioMin || 0));
   const filas = lista.map(p => {
     const on = _impShukSet.has(p.id);
     const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
@@ -1292,6 +1302,9 @@ function _renderImpShuk() {
     <div style="font-size:0.72rem;color:#888;margin-bottom:8px">Tocá para agregar/quitar. Aparecen en tu catálogo y se actualizan solos si cambian en Shuk.</div>
     <input id="imp-shuk-q" oninput="_renderImpShuk()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
     <div style="display:flex;gap:5px;margin-bottom:8px">${fbtn('todo', 'Todos')}${fbtn('miri', 'Miri')}${fbtn('jony', 'Jony')}${fbtn('ocultos', '🙈 Ocultos')}</div>
+    <select onchange="_impShukOrden=this.value;_renderImpShuk()" style="width:100%;padding:8px 10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.82rem;box-sizing:border-box;margin-bottom:8px;background:#fff">
+      ${['az:Ordenar: A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_impShukOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
+    </select>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px">${filas || '<div class="empty">Sin productos en este filtro</div>'}</div>
     <button onclick="cerrarImportarShuk()" style="margin-top:10px;width:100%;padding:11px;background:#b14cff;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">Listo</button>
   </div>`;
@@ -1332,7 +1345,7 @@ function _renderArmarCatCandy() {
   const filas = lista.map(p => {
     const on = !!_catCandySel[p.codigo];
     const src = p.foto ? fotoCS(p.foto, 120) : '';
-    return `<div onclick="_toggleCatCandy('${(p.codigo || '').replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#fcf3e3' : '#fff'}">
+    return `<div onclick="_toggleCatCandy('${(p.codigo || '').replace(/'/g, "\\'")}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#fcf3e3' : '#fff'}">
       <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
       ${src ? `<img src="${src}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.68rem;color:#999">${fmt(p.precioVenta)}</div></div>
@@ -1342,7 +1355,7 @@ function _renderArmarCatCandy() {
   ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column">
     <div style="font-weight:800;font-size:1.05rem;color:#c9954a;margin-bottom:6px">📕 Armar catálogo</div>
     <input id="armar-cat-q" oninput="_renderArmarCatCandy()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_catCandyTodos()" style="background:none;border:none;color:#c9954a;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_catCandyTodos()" style="background:none;border:none;color:#c9954a;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="armar-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos</div>'}</div>
     <input id="armar-cat-titulo" placeholder="Título (opcional, ej: Lista junio)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
     <div style="display:flex;gap:6px;margin-top:8px">${lbtn('lista', '📄 Lista')}${lbtn('grilla', '🔲 Grilla')}</div>
@@ -1354,7 +1367,14 @@ function _renderArmarCatCandy() {
   </div>`;
   const bq = document.getElementById('armar-cat-q'); if (bq && q) { bq.value = q; bq.focus(); }
 }
-function _toggleCatCandy(cod) { _catCandySel[cod] = !_catCandySel[cod]; _renderArmarCatCandy(); }
+function _toggleCatCandy(cod, el) {
+  _catCandySel[cod] = !_catCandySel[cod];
+  const on = !!_catCandySel[cod];
+  // Actualiza solo la fila + el contador (sin re-render → no salta el scroll).
+  if (el) { el.style.background = on ? '#fcf3e3' : '#fff'; const chk = el.querySelector('div'); if (chk) chk.textContent = on ? '✅' : '⬜'; }
+  const cnt = document.getElementById('armar-cat-count');
+  if (cnt) cnt.textContent = Object.keys(_catCandySel).filter(k => _catCandySel[k]).length + ' elegidos';
+}
 function _catCandyTodos() {
   const q = (document.getElementById('armar-cat-q')?.value || '').trim().toLowerCase();
   (catalogoCache || []).filter(p => !q || (p.nombre || '').toLowerCase().includes(q)).forEach(p => _catCandySel[p.codigo] = true);
