@@ -235,8 +235,8 @@ function fotoTienda(url, w) {
   return url.replace('/upload/', '/upload/e_trim:10/' + (w ? 'w_' + w + '/' : ''));
 }
 const APPS_URL = 'https://script.google.com/macros/s/AKfycbxO71AD5tBy1KpWCP0K9-uBEZEc7Qv1ehMv3PA3zDQwngwj7XHMLgIY6M7vWosr7-nc/exec';
-const PHONES = { meir: '5491171046383', iosi: '5491150987261' };
-const NOMBRES = { meir: 'Meir', iosi: 'Iosi' };
+const PHONES = { meir: '5491171046383', iosi: '5491150987261', jony: '5491131754540' };
+const NOMBRES = { meir: 'Meir', iosi: 'Iosi', jony: 'Jony' };
 const EMOJIS = { meir: '🍫', iosi: '🍭' };
 
 const params = new URLSearchParams(window.location.search);
@@ -245,10 +245,12 @@ const phone = PHONES[kid];
 const nombreKid = NOMBRES[kid];
 const emojiKid = EMOJIS[kid] || '🍬';
 
+// Jony (adulto): el header dice solo "Candy Shop" y sin "pedí tus golosinas a…".
+const esJony = kid === 'jony';
 document.getElementById('header-emoji').textContent = emojiKid;
-document.getElementById('header-title').textContent = `Candy Shop — ${nombreKid}`;
-document.getElementById('header-sub').textContent = `Pedí tus golosinas a ${nombreKid} 🍬`;
-document.title = `Candy Shop — ${nombreKid} 🍬`;
+document.getElementById('header-title').textContent = esJony ? 'Candy Shop' : `Candy Shop — ${nombreKid}`;
+document.getElementById('header-sub').textContent = esJony ? 'Elegí lo que quieras y hacé tu pedido 🛒' : `Pedí tus golosinas a ${nombreKid} 🍬`;
+document.title = esJony ? 'Candy Shop 🍬' : `Candy Shop — ${nombreKid} 🍬`;
 
 const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
 

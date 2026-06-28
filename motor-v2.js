@@ -35,7 +35,8 @@ const PROTECTED_HIJOS = [
   'getAvisosCandy','resolverAvisoCandy',   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
   'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy',   // importar productos de Shuk al catálogo de Candy
   'setCategoriaHijosLote',   // asignar categoría a varios productos de Candy de una
-  'setFotoHijo'   // setear solo la foto de un producto de Candy (carga rápida)
+  'setFotoHijo',   // setear solo la foto de un producto de Candy (carga rápida)
+  'renombrarCategoriaHijos'   // corregir el nombre de una categoría en todos sus productos
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1594,6 +1595,17 @@ function doGet(e) {
     if (accion === 'resetearStockDia')     { return json(resetearStockDia(ss, e.parameter)); }
     if (accion === 'agregarProductoHijo')  { return json(agregarProductoHijo(ss, e.parameter)); }
     if (accion === 'editarProductoHijo')   { return json(editarProductoHijo(ss, e.parameter)); }
+    if (accion === 'renombrarCategoriaHijos') {
+      const viejo = dec(e.parameter.viejo || '').trim();
+      const nuevo = dec(e.parameter.nuevo || '').trim() || 'Varios';
+      if (!viejo) return json({ error: 'falta categoría' });
+      const h = ss.getSheetByName('CatalogoHijos'); if (!h || h.getLastRow() < 2) return json({ ok: true, n: 0 });
+      const rng = h.getRange(2, 6, h.getLastRow() - 1, 1);   // col 6 = Categoria
+      const vals = rng.getValues(); let n = 0;
+      for (let i = 0; i < vals.length; i++) { if ((vals[i][0] || '').toString().trim() === viejo) { vals[i][0] = nuevo; n++; } }
+      if (n) rng.setValues(vals);
+      return json({ ok: true, n: n, nuevo: nuevo });
+    }
     if (accion === 'setFotoHijo') {
       const cod = dec(e.parameter.codigo || '').trim(); if (!cod) return json({ error: 'falta codigo' });
       const h = ss.getSheetByName('CatalogoHijos'); if (!h || h.getLastRow() < 2) return json({ error: 'sin hoja' });

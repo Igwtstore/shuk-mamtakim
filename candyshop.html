@@ -1557,7 +1557,10 @@ function _renderOrganizarCat() {
     <input id="org-cat-q" oninput="_renderOrganizarCat()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_orgCatTodos()" style="background:none;border:none;color:#2e8b57;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="org-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos propios</div>'}</div>
-    ${(() => { const cats = [...new Set((catalogoCache || []).map(p => (p.categoria || '').trim()).filter(c => c && c !== 'Varios'))].sort((a, b) => a.localeCompare(b)); return `<div style="font-size:0.74rem;color:#555;margin-top:10px;font-weight:700">Tocá una categoría que ya tengas, o escribí una NUEVA abajo (se crea sola) 👇</div>${cats.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">${cats.map(c => `<button type="button" onclick="document.getElementById('org-cat-input').value='${c.replace(/'/g, "\\'")}'" style="padding:5px 11px;border-radius:14px;border:1.5px solid #cfe8d6;background:#f0fff4;color:#2e8b57;font-weight:700;font-size:0.75rem;cursor:pointer">${c}</button>`).join('')}</div>` : '<div style="font-size:0.7rem;color:#bbb;margin-top:4px">(todavía no tenés ninguna — escribí la primera abajo)</div>'}`; })()}
+    ${(() => { const cats = [...new Set((catalogoCache || []).map(p => (p.categoria || '').trim()).filter(c => c && c !== 'Varios'))].sort((a, b) => a.localeCompare(b)); return `<div style="font-size:0.74rem;color:#555;margin-top:10px;font-weight:700">Tocá una categoría para usarla, o el ✏️ para corregir su nombre. O escribí una NUEVA abajo 👇</div>${cats.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">${cats.map(c => `<span style="display:inline-flex;align-items:center;border:1.5px solid #cfe8d6;background:#f0fff4;border-radius:14px;overflow:hidden">
+      <button type="button" onclick="document.getElementById('org-cat-input').value='${c.replace(/'/g, "\\'")}'" style="padding:5px 4px 5px 11px;border:none;background:none;color:#2e8b57;font-weight:700;font-size:0.75rem;cursor:pointer">${c}</button>
+      <button type="button" onclick="_renombrarCat('${c.replace(/'/g, "\\'")}')" title="Renombrar" style="padding:5px 8px 5px 3px;border:none;background:none;cursor:pointer;font-size:0.72rem">✏️</button>
+    </span>`).join('')}</div>` : '<div style="font-size:0.7rem;color:#bbb;margin-top:4px">(todavía no tenés ninguna — escribí la primera abajo)</div>'}`; })()}
     <input id="org-cat-input" placeholder="✍️ Escribí la categoría (ej: Galletitas)" style="width:100%;padding:10px 11px;border:2px solid #2e8b57;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-top:6px">
     <div style="display:flex;gap:6px;margin-top:8px">
       <button onclick="asignarCategoriaLote()" style="flex:1;padding:11px;background:#2e8b57;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">Asignar a los elegidos</button>
@@ -1577,6 +1580,33 @@ function _orgCatTodos() {
   const q = (document.getElementById('org-cat-q')?.value || '').trim().toLowerCase();
   (catalogoCache || []).filter(p => p.origen !== 'shuk' && (!q || (p.nombre || '').toLowerCase().includes(q))).forEach(p => _orgCatSel[p.codigo] = true);
   _renderOrganizarCat();
+}
+// Renombrar (corregir) una categoría → se actualiza en todos sus productos.
+function _renombrarCat(cat) {
+  let ov = document.getElementById('renom-cat-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'renom-cat-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9700;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:18px;max-width:340px;width:100%">
+    <div style="font-weight:800;font-size:1rem;margin-bottom:3px">✏️ Renombrar categoría</div>
+    <div style="font-size:0.72rem;color:#999;margin-bottom:12px">Se corrige en todos los productos de "<b>${cat}</b>".</div>
+    <input id="renom-cat-input" value="${cat.replace(/"/g, '&quot;')}" style="width:100%;padding:11px;border:2px solid #2e8b57;border-radius:12px;font-size:1rem;box-sizing:border-box;margin-bottom:14px">
+    <div style="display:flex;gap:8px">
+      <button onclick="_guardarRenombreCat('${cat.replace(/'/g, "\\'")}')" style="flex:1;padding:12px;background:#2e8b57;color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">Guardar</button>
+      <button onclick="document.getElementById('renom-cat-ov').remove()" style="padding:12px 16px;background:#eee;border:none;border-radius:12px;font-weight:700;cursor:pointer">✕</button>
+    </div>
+  </div>`;
+  setTimeout(() => { const i = document.getElementById('renom-cat-input'); if (i) { i.focus(); i.select(); } }, 100);
+}
+async function _guardarRenombreCat(viejo) {
+  const nuevo = (document.getElementById('renom-cat-input').value || '').trim();
+  if (!nuevo) { mostrarToast('Escribí un nombre', '#c0392b'); return; }
+  if (nuevo === viejo) { document.getElementById('renom-cat-ov').remove(); return; }
+  document.getElementById('renom-cat-ov').remove();
+  mostrarToast('✏️ Renombrando…');
+  const r = await api('renombrarCategoriaHijos', { viejo, nuevo });
+  if (r && r.ok) { mostrarToast(`✓ ${r.n} producto${r.n !== 1 ? 's' : ''} → "${nuevo}"`); await cargarDatos(); _renderOrganizarCat(); }
+  else mostrarToast('⚠️ No se pudo', '#c0392b');
 }
 async function asignarCategoriaLote() {
   const cat = (document.getElementById('org-cat-input')?.value || '').trim();
