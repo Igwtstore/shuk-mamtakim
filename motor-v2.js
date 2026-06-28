@@ -1833,7 +1833,8 @@ function _shukEnCandyData(ss) {
     const p = porId[id];
     const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
     return { codigo: 'shuk:' + id, nombre: p.nombre, precioVenta: parseFloat(p.precioMin) || 0,
-      costo: parseFloat(p.costo) || 0, foto: _fotoShukUrl(foto), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.desc || '' };
+      costo: parseFloat(p.costo) || 0, foto: _fotoShukUrl(foto), stock: parseInt(p.stock) || 0, origen: 'shuk',
+      desc: p.desc || '', categoria: (p.categoria || 'Varios').toString() };
   });
 }
 function getCatalogoHijos(ss) {
@@ -1851,7 +1852,7 @@ function _getCatalogoHijosPropios(ss) {
   return h.getRange(2,1,h.getLastRow()-1,5).getValues()
     .filter(r => r[0])
     .map(r => { const cod = r[0].toString();
-      return { codigo:cod, nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'', stock: dep[cod]||0 }; });
+      return { codigo:cod, nombre:r[1].toString(), precioVenta:parseFloat(r[2])||0, costo:parseFloat(r[3])||0, foto:r[4]?.toString()||'', stock: dep[cod]||0, categoria: 'Varios' }; });
 }
 
 // ── AVISAME cuando vuelva (tienda de Candy) ──────────────────────────────────

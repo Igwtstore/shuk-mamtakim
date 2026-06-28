@@ -22,6 +22,10 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 
 /* BUSCADOR */
 .buscar-wrap { padding: 14px 16px 4px; max-width: 600px; margin: 0 auto; }
+.categorias-wrap { display: flex; gap: 7px; overflow-x: auto; padding: 8px 16px 4px; max-width: 600px; margin: 0 auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.categorias-wrap::-webkit-scrollbar { display: none; }
+.cat-chip { flex: 0 0 auto; padding: 7px 14px; border-radius: 18px; border: 1.5px solid #eadcc8; background: #fff; color: #8a6d4a; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+.cat-chip.activo { background: #b14cff; border-color: #b14cff; color: #fff; }
 .buscar-input { width: 100%; padding: 12px 16px 12px 40px; border: none; border-radius: 14px; background: white; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; color: #2d1a0a; box-shadow: 0 2px 10px rgba(0,0,0,0.07); outline: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23aaa' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 14px center; }
 .buscar-input::placeholder { color: #bbb; }
 
@@ -128,6 +132,8 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
   <input type="text" class="buscar-input" id="buscar" placeholder="Buscar golosina..." oninput="filtrar()">
 </div>
 
+<div class="categorias-wrap" id="categorias"></div>
+
 <div class="productos" id="productos">
   <div class="loading">Cargando catálogo... 🍬</div>
 </div>
@@ -226,6 +232,7 @@ const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
 
 let carrito = {};
 let catalogoData = [];
+let catActiva = 'Todos';
 let productoSeleccionado = null;
 let qtyTmp = 1;
 let productoAviso = null;
@@ -237,6 +244,7 @@ async function cargarCatalogo() {
     const res = await fetch(APPS_URL + '?accion=getCatalogoHijos');
     const data = await res.json();
     catalogoData = data || [];
+    renderCategorias();
     renderCatalogo(catalogoData);
   } catch {
     document.getElementById('productos').innerHTML = '<div class="loading">❌ Error al cargar. Intentá de nuevo.</div>';
@@ -245,9 +253,21 @@ async function cargarCatalogo() {
 
 function filtrar() {
   const q = document.getElementById('buscar').value.toLowerCase().trim();
-  const filtrados = q ? catalogoData.filter(p => p.nombre.toLowerCase().includes(q)) : catalogoData;
-  renderCatalogo(filtrados, true);
+  let filtrados = catalogoData;
+  if (catActiva !== 'Todos') filtrados = filtrados.filter(p => (p.categoria || 'Varios') === catActiva);
+  if (q) filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(q));
+  renderCatalogo(filtrados, !!(q || catActiva !== 'Todos'));
 }
+function renderCategorias() {
+  const el = document.getElementById('categorias'); if (!el) return;
+  const cats = [...new Set(catalogoData.map(p => p.categoria || 'Varios'))]
+    .sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
+  if (cats.length <= 1) { el.style.display = 'none'; return; }   // una sola categoría → no tiene sentido el filtro
+  el.style.display = 'flex';
+  const chip = (c, t) => `<button class="cat-chip ${catActiva === c ? 'activo' : ''}" onclick="setCategoria('${c.replace(/'/g, "\\'")}')">${t}</button>`;
+  el.innerHTML = chip('Todos', '🍬 Todos') + cats.map(c => chip(c, c)).join('');
+}
+function setCategoria(c) { catActiva = c; renderCategorias(); filtrar(); }
 
 function renderCatalogo(productos, esFiltered) {
   const el = document.getElementById('productos');
