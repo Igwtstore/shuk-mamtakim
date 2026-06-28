@@ -349,13 +349,13 @@ function renderCatalogo(productos, esFiltered) {
   let html = '';
   if (ordenTienda === 'categoria' && catActiva === 'Todos') {
     // 🔥 Ofertas arriba de todo (productos con oferta o pack, con stock). Se repiten abajo en su categoría.
-    const promos = conStock.filter(p => _tienePromo(p)).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    const promos = conStock.filter(p => _tienePromo(p)).sort((a, b) => precioUnit(a) - precioUnit(b) || (a.nombre || '').localeCompare(b.nombre || ''));
     if (promos.length) html += `<div class="cat-header cat-header-ofertas">🔥 Ofertas</div>` + promos.map(cardHtml).join('');
     // Luego, agrupado por categoría con encabezados (dentro de cada una, A→Z).
     const cats = [...new Set(conStock.map(p => p.categoria || 'Varios'))]
       .sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
     cats.forEach(c => {
-      const items = conStock.filter(p => (p.categoria || 'Varios') === c).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+      const items = conStock.filter(p => (p.categoria || 'Varios') === c).sort((a, b) => precioUnit(a) - precioUnit(b) || (a.nombre || '').localeCompare(b.nombre || ''));
       if (items.length) html += `<div class="cat-header">${c}</div>` + items.map(cardHtml).join('');
     });
   } else {
