@@ -2462,6 +2462,85 @@ function _acBuildDoc() {
     </div>
   </div>`;
 }
+// Descarga una imagen y la devuelve como dataURL (para insertarla en el PDF nativo).
+async function _imgADataUrl(url) {
+  try { const r = await fetch(url); const b = await r.blob();
+    return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsDataURL(b); }); } catch (e) { return ''; }
+}
+// PDF de CALIDAD IMPRENTA: texto vectorial nativo (nítido a cualquier zoom) + fotos insertadas.
+function _acPdfNativo(pdf, sel, fotos, logoData) {
+  const M = _CAT_MARCAS[_acMarca] || _CAT_MARCAS.shuk, T = _CAT_TELS[_acTel] || _CAT_TELS.jony;
+  const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), margin = 40;
+  const titulo = (document.getElementById('ac-titulo')?.value || '').trim() || 'Catálogo';
+  const hoy = new Date().toLocaleDateString('es-AR');
+  const hex = h => { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const cMarca = hex(M.color), gris = [136, 136, 136], negro = [40, 40, 40], linea = [228, 228, 228];
+  const precioTxt = p => { const a = []; if (_acVerMin) a.push('Min ' + _acPrecioMin(p)); if (_acVerMay) a.push('May ' + _acPrecioMay(p)); return a.join('   '); };
+  let y = 0, pag = 0;
+  const pieAlto = 92;
+  const nuevaPag = enc => {
+    if (pag > 0) pdf.addPage();
+    pag++; y = margin;
+    if (enc) {
+      if (logoData) { try { pdf.addImage(logoData, 'PNG', margin, y, 50, 50); } catch (e) {} }
+      const tx = logoData ? margin + 62 : margin;
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...cMarca); pdf.text(M.nombre, tx, y + 22);
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(M.sub, tx, y + 37);
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...negro); pdf.text(titulo, W - margin, y + 16, { align: 'right' });
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(hoy, W - margin, y + 30, { align: 'right' });
+      y += 56; pdf.setDrawColor(...cMarca); pdf.setLineWidth(1.5); pdf.line(margin, y, W - margin, y); y += 16;
+    }
+  };
+  nuevaPag(true);
+  const asegurar = alto => { if (y + alto > H - pieAlto) nuevaPag(false); };
+  const byCat = {}; sel.forEach(p => { const c = p.categoria || 'Varios'; (byCat[c] = byCat[c] || []).push(p); });
+  const cats = Object.keys(byCat).sort((a, b) => getCatIdx({ categoria: a }) - getCatIdx({ categoria: b }) || a.localeCompare(b));
+  cats.forEach(c => {
+    asegurar(30 + 56);
+    pdf.setFillColor(252, 243, 227); pdf.rect(margin, y, W - margin * 2, 22, 'F');
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...cMarca); pdf.text(c.toUpperCase(), margin + 8, y + 15);
+    y += 32;
+    const items = byCat[c].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    if (_acLayout === 'grilla') {
+      const colW = (W - margin * 2 - 16) / 3, cellH = 152;
+      items.forEach((p, idx) => {
+        const col = idx % 3;
+        if (col === 0) asegurar(cellH + 8);
+        const x = margin + col * (colW + 8), yy = y;
+        pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.roundedRect(x, yy, colW, cellH, 5, 5, 'S');
+        if (fotos[p.id]) { try { pdf.addImage(fotos[p.id], 'JPEG', x + 5, yy + 5, colW - 10, 92, undefined, 'FAST'); } catch (e) {} }
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(...negro);
+        pdf.text(pdf.splitTextToSize(p.nombre, colW - 12).slice(0, 2), x + 6, yy + 110);
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(...cMarca);
+        pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 2), x + 6, yy + 140);
+        if (col === 2 || idx === items.length - 1) y += cellH + 8;
+      });
+    } else {
+      items.forEach(p => {
+        asegurar(56);
+        if (fotos[p.id]) { try { pdf.addImage(fotos[p.id], 'JPEG', margin, y, 48, 48, undefined, 'FAST'); } catch (e) {} }
+        else { pdf.setFillColor(245, 245, 245); pdf.rect(margin, y, 48, 48, 'F'); }
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...negro);
+        pdf.text(pdf.splitTextToSize(p.nombre, W - margin * 2 - 210).slice(0, 2), margin + 58, y + 18);
+        if (p.desc) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text((pdf.splitTextToSize(p.desc, W - margin * 2 - 210)[0] || ''), margin + 58, y + 36); }
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10.5); pdf.setTextColor(91, 61, 30);
+        pdf.text(precioTxt(p), W - margin, y + 24, { align: 'right' });
+        pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.line(margin, y + 52, W - margin, y + 52);
+        y += 58;
+      });
+    }
+  });
+  // Pie con QR + WhatsApp (en la página actual) + link clickeable
+  const pieY = H - pieAlto + 8;
+  pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.line(margin, pieY, W - margin, pieY);
+  let tx = margin;
+  if (_acQrDataUrl) { try { pdf.addImage(_acQrDataUrl, 'PNG', margin, pieY + 8, 62, 62); tx = margin + 74; } catch (e) {} }
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(12); pdf.setTextColor(...cMarca);
+  pdf.text('Pedí por WhatsApp' + (T.nombre ? ' a ' + T.nombre : ''), tx, pieY + 30);
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(...negro);
+  pdf.text(_telFmt(T.num), tx, pieY + 50);
+  try { pdf.link(margin, pieY, W - margin * 2, pieAlto - 8, { url: `https://wa.me/${T.num}` }); } catch (e) {}
+}
 async function generarCatalogo(tipo) {
   const sel = _acProductos.filter(p => _acSel[p.id]);
   if (!sel.length) { showToast('Elegí al menos un producto'); return; }
@@ -2470,46 +2549,36 @@ async function generarCatalogo(tipo) {
   const _T = _CAT_TELS[_acTel] || _CAT_TELS.jony;
   const _waUrl = `https://wa.me/${_T.num}`;
   _acQrDataUrl = await _cargarQR(_waUrl);   // QR como dataURL (escaneable en imagen y PDF)
+  const archivo = 'catalogo-shuk-' + new Date().toISOString().slice(0, 10);
+
+  if (tipo === 'pdf') {
+    // PDF de calidad imprenta: texto vectorial nativo + fotos en alta (no se pixela al ampliar).
+    try {
+      const jspdf = await cargarJsPDF(); const { jsPDF } = jspdf;
+      const logoData = _acMarca === 'shuk' ? await _imgADataUrl('icon-512.png') : '';
+      const fotos = {};
+      await Promise.all(sel.map(async p => {
+        const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+        if (imgs.length) fotos[p.id] = await _imgADataUrl(imgUrl(imgs[0])[0].replace('/w_400,', '/w_600,'));
+      }));
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      _acPdfNativo(pdf, sel, fotos, logoData);
+      pdf.save(archivo + '.pdf');
+      showToast('✅ Catálogo listo');
+    } catch (e) { showToast('⚠️ ' + (e.message || 'no se pudo generar')); }
+    return;
+  }
+
+  // tipo === 'img': "foto" del diseño (raster HD) → PNG para WhatsApp/redes.
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff';
   wrap.innerHTML = _acBuildDoc();
   document.body.appendChild(wrap);
   try {
     const h2c = await cargarHtml2Canvas();
-    const _pieEl = wrap.querySelector('#ac-pie');   // medir el pie ANTES de rasterizar (para el link clickeable del PDF)
-    const _pieTop = _pieEl ? _pieEl.offsetTop : 0, _pieH = _pieEl ? _pieEl.offsetHeight : 0;
     const canvas = await h2c(wrap.firstElementChild, { scale: 3, backgroundColor: '#ffffff', useCORS: true });
-    const archivo = 'catalogo-shuk-' + new Date().toISOString().slice(0, 10);
-    if (tipo === 'img') {
-      const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = archivo + '.png';
-      document.body.appendChild(a); a.click(); a.remove();
-    } else {
-      const jspdf = await cargarJsPDF(); const { jsPDF } = jspdf;
-      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-      const W = pdf.internal.pageSize.getWidth(), m = 20, imgW = W - m * 2, ratio = imgW / canvas.width;
-      const imgH = canvas.height * ratio, pageH = pdf.internal.pageSize.getHeight() - m * 2;
-      if (imgH <= pageH) { pdf.addImage(canvas.toDataURL('image/png'), 'PNG', m, m, imgW, imgH); }
-      else {
-        let y = 0; const sliceH = pageH / ratio;
-        while (y < canvas.height) {
-          const c2 = document.createElement('canvas'); c2.width = canvas.width; c2.height = Math.min(sliceH, canvas.height - y);
-          c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
-          pdf.addImage(c2.toDataURL('image/png'), 'PNG', m, m, imgW, c2.height * ratio);
-          y += sliceH; if (y < canvas.height) pdf.addPage();
-        }
-      }
-      // Link clickeable sobre el pie (QR + número) → abre WhatsApp al tocarlo.
-      if (_pieEl) {
-        const topC = _pieTop * 2, hC = _pieH * 2;
-        if (imgH <= pageH) {
-          pdf.link(m, m + topC * ratio, imgW, hC * ratio, { url: _waUrl });
-        } else {
-          const sliceH = pageH / ratio, pg = Math.floor(topC / sliceH), offC = topC - pg * sliceH;
-          try { pdf.setPage(pg + 1); pdf.link(m, m + offC * ratio, imgW, hC * ratio, { url: _waUrl }); } catch (e) {}
-        }
-      }
-      pdf.save(archivo + '.pdf');
-    }
+    const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = archivo + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
     showToast('✅ Catálogo listo');
   } catch (e) { showToast('⚠️ ' + (e.message || 'no se pudo generar')); }
   finally { wrap.remove(); }
