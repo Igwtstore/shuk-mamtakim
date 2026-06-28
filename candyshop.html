@@ -1645,6 +1645,12 @@ async function asignarCategoriaLote() {
 
 // ─── ARMAR CATÁLOGO (PDF / imagen) ────────────────────────────────
 let _catCandySel = {}, _catCandyLayout = 'lista', _catCandyOrden = 'az';
+let _catCandyDescGeneral = 0, _catCandyDescProd = {};   // descuentos del catálogo de Candy (% general + por producto)
+function _ccatDescDe(cod) { const d = _catCandyDescProd[cod]; return (d !== undefined && d !== '' && !isNaN(d)) ? (Number(d) || 0) : (Number(_catCandyDescGeneral) || 0); }
+function _ccatConDesc(v, pct) { if (!pct || pct <= 0) return v; return Math.ceil(v * (1 - pct / 100)); }   // redondeo para arriba, sin decimales
+function _ccatPrecioDesc(p) { const v = parseFloat(p.precioVenta) || 0; const pct = _ccatDescDe(p.codigo); if (!pct || pct <= 0 || v <= 0) return { txt: fmt(v) }; return { orig: fmt(v), nuevo: fmt(_ccatConDesc(v, pct)), pct: pct }; }
+function _ccatSetDescProd(cod, val) { const n = String(val).trim(); if (n === '') delete _catCandyDescProd[cod]; else _catCandyDescProd[cod] = Math.max(0, Math.min(100, Number(n) || 0)); }
+function _ccatLimpiarDesc() { _catCandyDescGeneral = 0; _catCandyDescProd = {}; _renderArmarCatCandy(); }
 let _catCandyMarca = 'candy', _catCandyTel = 'jony', _catCandyQr = '';
 const _CCAT_MARCAS = {
   shuk:  { nombre: 'SHUK MAMTAKIM', sub: 'Dulces Tradicionales · Frutos Secos', color: '#c9954a',
@@ -1660,6 +1666,7 @@ async function _ccatCargarQR(url) {
 }
 function abrirArmarCatalogoCandy() {
   _catCandySel = {};
+  _catCandyDescGeneral = 0; _catCandyDescProd = {};
   _catCandyMarca = 'candy';
   const u = (usuario || '').toLowerCase();
   _catCandyTel = (u === 'meir' || u === 'iosi') ? u : 'jony';   // default: el WhatsApp del chico logueado
@@ -1682,6 +1689,10 @@ function _renderArmarCatCandy() {
       <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
       ${src ? `<img src="${src}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.68rem;color:#999">${fmt(p.precioVenta)}</div></div>
+      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:2px;flex-shrink:0" title="Descuento de este producto (pisa el general)">
+        <input type="number" min="0" max="100" value="${_catCandyDescProd[p.codigo] !== undefined ? _catCandyDescProd[p.codigo] : ''}" oninput="_ccatSetDescProd('${(p.codigo || '').replace(/'/g, "\\'")}', this.value)" placeholder="${_catCandyDescGeneral || '%'}" style="width:42px;padding:4px;border:1.5px solid #e0d5c9;border-radius:6px;font-size:0.72rem;text-align:center">
+        <span style="font-size:0.66rem;color:#aaa">%</span>
+      </div>
     </div>`;
   }).join('');
   const lbtn = (l, t) => `<button onclick="_catCandyLayout='${l}';_renderArmarCatCandy()" style="flex:1;padding:7px;border:1.5px solid ${_catCandyLayout === l ? '#c9954a' : '#ddd'};background:${_catCandyLayout === l ? '#c9954a' : '#fff'};color:${_catCandyLayout === l ? '#fff' : '#666'};border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">${t}</button>`;
@@ -1689,6 +1700,12 @@ function _renderArmarCatCandy() {
     <div style="font-weight:800;font-size:1.05rem;color:#c9954a;margin-bottom:6px">📕 Armar catálogo</div>
     <input id="armar-cat-q" oninput="_renderArmarCatCandy()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_catCandyTodos()" style="background:none;border:none;color:#c9954a;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="armar-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;background:#fff7ef;border:1px solid #f0d9bf;border-radius:8px;padding:6px 9px;font-size:0.74rem">
+      <span style="color:#a8690b;font-weight:700">🏷️ Descuento general:</span>
+      <input type="number" min="0" max="100" value="${_catCandyDescGeneral || ''}" onchange="_catCandyDescGeneral=Math.max(0,Math.min(100,Number(this.value)||0));_renderArmarCatCandy()" placeholder="0" style="width:50px;padding:4px 6px;border:1.5px solid #e0d5c9;border-radius:6px;text-align:center;font-weight:700">
+      <span style="color:#a8690b;font-weight:700">%</span>
+      ${(_catCandyDescGeneral || Object.keys(_catCandyDescProd).length) ? `<button onclick="_ccatLimpiarDesc()" style="margin-left:auto;background:none;border:none;color:#c0392b;font-size:0.72rem;cursor:pointer;text-decoration:underline">limpiar</button>` : ''}
+    </div>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos</div>'}</div>
     <input id="armar-cat-titulo" placeholder="Título (opcional, ej: Lista junio)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
     <div style="display:flex;gap:6px;margin-top:8px">
@@ -1733,19 +1750,20 @@ function _armarCatCandyDoc() {
   const titulo = (document.getElementById('armar-cat-titulo')?.value || '').trim() || 'Catálogo';
   const hoy = new Date().toLocaleDateString('es-AR');
   const foto = p => p.foto ? `<img src="${fotoCS(p.foto, 1000)}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;background:#faf8f5">🍬</div>`;
+  const precioHtml = p => { const d = _ccatPrecioDesc(p); if (d.txt) return d.txt; return `<span style="text-decoration:line-through;color:#bbb;font-size:0.82em">${d.orig}</span> <span style="color:#c0392b">${d.nuevo}</span> <span style="background:#fde8e8;color:#c0392b;font-size:0.58em;font-weight:800;padding:1px 4px;border-radius:4px;vertical-align:middle">-${d.pct}%</span>`; };
   let cuerpo = '';
   if (_catCandyLayout === 'grilla') {
     cuerpo = `<div style="display:flex;flex-wrap:wrap;gap:10px">` + sel.map(p => `
       <div style="width:calc(33.33% - 7px);border:1px solid #eee;border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
         <div style="height:120px;border-bottom:1px solid #f0f0f0">${foto(p)}</div>
-        <div style="padding:7px 8px;flex:1"><div style="font-weight:700;font-size:0.78rem;color:#222;line-height:1.25">${_e(p.nombre)}</div><div style="font-size:0.82rem;color:#7b2ff7;font-weight:700;margin-top:5px">${fmt(p.precioVenta)}</div></div>
+        <div style="padding:7px 8px;flex:1"><div style="font-weight:700;font-size:0.78rem;color:#222;line-height:1.25">${_e(p.nombre)}</div><div style="font-size:0.82rem;color:#7b2ff7;font-weight:700;margin-top:5px">${precioHtml(p)}</div></div>
       </div>`).join('') + `</div>`;
   } else {
     cuerpo = sel.map(p => `
       <div style="display:flex;align-items:center;gap:11px;padding:7px 0;border-bottom:1px solid #eee">
         <div style="width:48px;height:48px;border-radius:7px;overflow:hidden;flex-shrink:0;border:1px solid #f0f0f0">${foto(p)}</div>
         <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:0.86rem;color:#222">${_e(p.nombre)}</div></div>
-        <div style="text-align:right;font-size:0.85rem;color:#7b2ff7;font-weight:700;white-space:nowrap">${fmt(p.precioVenta)}</div>
+        <div style="text-align:right;font-size:0.85rem;color:#7b2ff7;font-weight:700;white-space:nowrap">${precioHtml(p)}</div>
       </div>`).join('');
   }
   const M = _CCAT_MARCAS[_catCandyMarca] || _CCAT_MARCAS.candy;
@@ -1780,6 +1798,7 @@ function _ccatPdfNativo(pdf, sel, fotos, logoData) {
   const hoy = new Date().toLocaleDateString('es-AR');
   const hex = h => { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const cMarca = hex(M.color), gris = [136, 136, 136], negro = [40, 40, 40], linea = [228, 228, 228];
+  const precioPdf = p => { const d = _ccatPrecioDesc(p); return d.txt ? d.txt : (d.nuevo + ' (-' + d.pct + '%)'); };
   let y = 0, pag = 0; const pieAlto = 92;
   const nuevaPag = enc => {
     if (pag > 0) pdf.addPage();
@@ -1812,7 +1831,7 @@ function _ccatPdfNativo(pdf, sel, fotos, logoData) {
         pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.roundedRect(x, yy, colW, cellH, 5, 5, 'S');
         if (fotos[p.codigo]) { try { pdf.addImage(fotos[p.codigo], 'JPEG', x + 5, yy + 5, colW - 10, 92, undefined, 'FAST'); } catch (e) {} }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(...negro); pdf.text(pdf.splitTextToSize(p.nombre, colW - 12).slice(0, 2), x + 6, yy + 110);
-        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...cMarca); pdf.text(fmt(p.precioVenta), x + 6, yy + 140);
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...cMarca); pdf.text(pdf.splitTextToSize(precioPdf(p), colW - 12).slice(0, 1), x + 6, yy + 140);
         if (col === 2 || idx === items.length - 1) y += cellH + 8;
       });
     } else {
@@ -1821,7 +1840,7 @@ function _ccatPdfNativo(pdf, sel, fotos, logoData) {
         if (fotos[p.codigo]) { try { pdf.addImage(fotos[p.codigo], 'JPEG', margin, y, 48, 48, undefined, 'FAST'); } catch (e) {} }
         else { pdf.setFillColor(245, 245, 245); pdf.rect(margin, y, 48, 48, 'F'); }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...negro); pdf.text(pdf.splitTextToSize(p.nombre, W - margin * 2 - 160).slice(0, 2), margin + 58, y + 22);
-        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...cMarca); pdf.text(fmt(p.precioVenta), W - margin, y + 26, { align: 'right' });
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...cMarca); pdf.text(precioPdf(p), W - margin, y + 26, { align: 'right' });
         pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.line(margin, y + 52, W - margin, y + 52);
         y += 58;
       });
