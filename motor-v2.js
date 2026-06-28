@@ -34,7 +34,8 @@ const PROTECTED_HIJOS = [
   'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA',
   'getAvisosCandy','resolverAvisoCandy',   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
   'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy',   // importar productos de Shuk al catálogo de Candy
-  'setCategoriaHijosLote'   // asignar categoría a varios productos de Candy de una
+  'setCategoriaHijosLote',   // asignar categoría a varios productos de Candy de una
+  'setFotoHijo'   // setear solo la foto de un producto de Candy (carga rápida)
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1593,6 +1594,15 @@ function doGet(e) {
     if (accion === 'resetearStockDia')     { return json(resetearStockDia(ss, e.parameter)); }
     if (accion === 'agregarProductoHijo')  { return json(agregarProductoHijo(ss, e.parameter)); }
     if (accion === 'editarProductoHijo')   { return json(editarProductoHijo(ss, e.parameter)); }
+    if (accion === 'setFotoHijo') {
+      const cod = dec(e.parameter.codigo || '').trim(); if (!cod) return json({ error: 'falta codigo' });
+      const h = ss.getSheetByName('CatalogoHijos'); if (!h || h.getLastRow() < 2) return json({ error: 'sin hoja' });
+      const datos = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues();
+      for (let i = 0; i < datos.length; i++) {
+        if ((datos[i][0] || '').toString() === cod) { h.getRange(i + 2, 5).setValue(dec(e.parameter.foto || '')); return json({ ok: true }); }
+      }
+      return json({ error: 'no encontrado' });
+    }
     if (accion === 'eliminarProductoHijo') { return json(eliminarProductoHijo(ss, e.parameter)); }
     if (accion === 'eliminarVentaHijos')   { return json(eliminarVentaHijos(ss, e.parameter)); }
     if (accion === 'limpiarVentasHijosDia'){ return json(limpiarVentasHijosDia(ss, e.parameter)); }

@@ -427,6 +427,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="cat-contador" style="font-size:0.72rem;color:#999;margin-bottom:8px"></div>
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
+      <button class="btn-add" id="btn-compartir-tienda" style="background:linear-gradient(135deg,#25D366,#128C7E);margin-top:8px" onclick="compartirTienda()">📤 Compartir mi tienda</button>
+      <button class="btn-add" id="btn-fotos-faltantes" style="background:linear-gradient(135deg,#c179ff,#8b3ff0);margin-top:8px;display:none" onclick="abrirFotosFaltantes()">📷 Cargar fotos faltantes</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#2e8b57,#1f6e43);margin-top:8px" onclick="abrirOrganizarCat()">🏷️ Organizar por categoría</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#c9954a,#a06a2c);margin-top:8px" onclick="abrirArmarCatalogoCandy()">📕 Armar catálogo (PDF / imagen)</button>
@@ -1254,6 +1256,120 @@ function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
 
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────
+// ─── STOCK AL TOQUE (mini-modal) ──────────────────────────────────
+function ajustarStockRapido(cod) {
+  const p = catalogoCache.find(x => x.codigo === cod); if (!p) return;
+  let ov = document.getElementById('stock-rapido-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'stock-rapido-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:18px;max-width:330px;width:100%">
+    <div style="font-weight:800;font-size:1rem;margin-bottom:2px">📦 Stock de ${p.nombre}</div>
+    <div style="font-size:0.72rem;color:#999;margin-bottom:14px">Cantidad en el depósito</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button onclick="_stkRapDelta(-1)" style="width:46px;height:46px;border-radius:12px;border:1.5px solid #e0d5c9;background:#fff;font-size:1.5rem;font-weight:800;cursor:pointer">−</button>
+      <input id="stock-rapido-input" type="number" min="0" value="${p.stock || 0}" style="flex:1;text-align:center;padding:11px;border:2px solid #2e8b57;border-radius:12px;font-size:1.3rem;font-weight:800;box-sizing:border-box">
+      <button onclick="_stkRapDelta(1)" style="width:46px;height:46px;border-radius:12px;border:1.5px solid #e0d5c9;background:#fff;font-size:1.5rem;font-weight:800;cursor:pointer">+</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="_guardarStockRapido('${cod.replace(/'/g, "\\'")}')" style="flex:1;padding:12px;background:#2e8b57;color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">Guardar</button>
+      <button onclick="document.getElementById('stock-rapido-ov').remove()" style="padding:12px 16px;background:#eee;border:none;border-radius:12px;font-weight:700;cursor:pointer">✕</button>
+    </div>
+  </div>`;
+  setTimeout(() => { const inp = document.getElementById('stock-rapido-input'); if (inp) { inp.focus(); inp.select(); } }, 100);
+}
+function _stkRapDelta(d) { const inp = document.getElementById('stock-rapido-input'); inp.value = Math.max(0, (parseInt(inp.value) || 0) + d); }
+async function _guardarStockRapido(cod) {
+  const p = catalogoCache.find(x => x.codigo === cod); if (!p) return;
+  const nuevo = parseInt(document.getElementById('stock-rapido-input').value);
+  if (isNaN(nuevo) || nuevo < 0) { mostrarToast('Cantidad inválida', '#c0392b'); return; }
+  document.getElementById('stock-rapido-ov').remove();
+  mostrarToast('📦 Actualizando…');
+  const r = await api('ajustarDepositoManual', { codigo: cod, nombre: p.nombre, cantidad: nuevo });
+  if (r && r.ok) { mostrarToast('✓ Stock: ' + nuevo); cargarDatos(); }
+  else mostrarToast('⚠️ No se pudo', '#c0392b');
+}
+
+// ─── FOTOS QUE FALTAN ─────────────────────────────────────────────
+function _candySinFoto() { return (catalogoCache || []).filter(p => p.origen !== 'shuk' && !p.foto); }
+function abrirFotosFaltantes() {
+  let ov = document.getElementById('fotos-falt-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'fotos-falt-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  _renderFotosFaltantes();
+}
+function _renderFotosFaltantes() {
+  const ov = document.getElementById('fotos-falt-ov'); if (!ov) return;
+  const lista = _candySinFoto();
+  const filas = lista.map(p => `<div id="ff-row-${(p.codigo || '').replace(/[^a-zA-Z0-9]/g, '')}" style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid #eee">
+      <div style="width:42px;height:42px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">📦</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.68rem;color:#999">${p.codigo}</div></div>
+      <label style="background:#b14cff;color:#fff;font-weight:700;font-size:0.78rem;padding:8px 12px;border-radius:10px;cursor:pointer;white-space:nowrap">📷 Subir
+        <input type="file" accept="image/*" style="display:none" onchange="_subirFotoFaltante('${(p.codigo || '').replace(/'/g, "\\'")}', this)">
+      </label>
+    </div>`).join('');
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:460px;width:100%;max-height:86vh;display:flex;flex-direction:column">
+    <div style="font-weight:800;font-size:1.05rem;color:#b14cff;margin-bottom:4px">📷 Fotos que faltan</div>
+    <div style="font-size:0.72rem;color:#888;margin-bottom:10px">${lista.length ? `${lista.length} producto${lista.length !== 1 ? 's' : ''} sin foto. Subí una para cada uno 👇` : '🎉 ¡Todos tus productos tienen foto!'}</div>
+    <div style="overflow:auto;flex:1">${filas}</div>
+    <button onclick="document.getElementById('fotos-falt-ov').remove()" style="margin-top:10px;padding:11px;background:#eee;border:none;border-radius:10px;font-weight:700;cursor:pointer">Cerrar</button>
+  </div>`;
+}
+async function _subirFotoFaltante(cod, input) {
+  const file = input.files[0]; if (!file) return;
+  const rowId = 'ff-row-' + cod.replace(/[^a-zA-Z0-9]/g, '');
+  const row = document.getElementById(rowId);
+  if (row) row.style.opacity = '0.5';
+  mostrarToast('⏳ Subiendo foto…');
+  try {
+    const form = new FormData(); form.append('file', file); form.append('upload_preset', 'candyshop');
+    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.secure_url) throw new Error('sin url');
+    const r = await api('setFotoHijo', { codigo: cod, foto: data.secure_url });
+    if (r && r.ok) {
+      mostrarToast('✓ Foto cargada');
+      const p = catalogoCache.find(x => x.codigo === cod); if (p) p.foto = data.secure_url;   // optimista
+      if (row) row.remove();
+      if (!_candySinFoto().length) { document.getElementById('fotos-falt-ov')?.remove(); }
+      renderCatalogoFiltrado();
+    } else throw new Error('backend');
+  } catch (e) {
+    if (row) row.style.opacity = '1';
+    mostrarToast('❌ No se pudo subir', '#c0392b');
+  }
+}
+
+// ─── COMPARTIR LA TIENDA ──────────────────────────────────────────
+function compartirTienda() {
+  const u = (usuario || '').toLowerCase();
+  if (u === 'meir' || u === 'iosi') { _compartirLink(u, usuario); return; }
+  // Pa (papá) → elegir cuál tienda compartir
+  let ov = document.getElementById('compartir-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'compartir-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:18px;max-width:320px;width:100%;text-align:center">
+    <div style="font-weight:800;font-size:1rem;margin-bottom:12px">📤 ¿Qué tienda compartís?</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="document.getElementById('compartir-ov').remove();_compartirLink('meir','Meir')" style="flex:1;padding:14px;background:linear-gradient(135deg,#5ba3f5,#2c6fad);color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">🧑 Meir</button>
+      <button onclick="document.getElementById('compartir-ov').remove();_compartirLink('iosi','Iosi')" style="flex:1;padding:14px;background:linear-gradient(135deg,#f59b5b,#c45e20);color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">🧑 Iosi</button>
+    </div>
+    <button onclick="document.getElementById('compartir-ov').remove()" style="margin-top:10px;padding:9px 16px;background:#eee;border:none;border-radius:10px;font-weight:700;cursor:pointer">Cancelar</button>
+  </div>`;
+}
+function _compartirLink(kid, nombre) {
+  const url = `https://shuk-mamtakim.vercel.app/tienda.html?kid=${kid}`;
+  const msg = `🍬 ¡Mirá la tienda de golosinas de ${nombre}! Elegí lo que quieras y hacé el pedido 👇\n${url}`;
+  if (navigator.share) {
+    navigator.share({ title: 'Candy Shop ' + nombre, text: msg, url }).catch(() => {});
+  } else {
+    try { navigator.clipboard.writeText(msg); mostrarToast('✓ Link copiado'); } catch (e) {}
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  }
+}
+
 // Filtra catalogoCache por búsqueda + categoría, ordena y renderiza. Lo llaman los controles y cargarDatos.
 function renderCatalogoFiltrado() {
   const q = (document.getElementById('cat-buscar')?.value || '').trim().toLowerCase();
@@ -1266,6 +1382,9 @@ function renderCatalogoFiltrado() {
   lista.sort(_ordenarProd(orden, p => p.nombre || '', p => p.stock || 0, p => p.precioVenta || 0));
   const cont = document.getElementById('cat-contador');
   if (cont) cont.textContent = (q || catSel) ? `${lista.length} de ${catalogoCache.length} productos` : `${catalogoCache.length} productos`;
+  // Botón de fotos faltantes: solo aparece si hay productos propios sin foto.
+  const btnFF = document.getElementById('btn-fotos-faltantes');
+  if (btnFF) { const n = _candySinFoto().length; btnFF.style.display = n ? 'block' : 'none'; btnFF.textContent = `📷 Cargar fotos faltantes (${n})`; }
   renderCatalogo(lista);
 }
 function _poblarFiltroCatPanel() {
@@ -1295,11 +1414,16 @@ function renderCatalogo(catalogo) {
       (p.precioOferta > 0 ? ` · <span style="color:#e53935;font-weight:700">🔥 ${fmt(p.precioOferta)}</span>` : '') +
       (p.cantPack > 0 && p.precioPack > 0 ? ` · <span style="color:#e07b00;font-weight:700">🎁 x${p.cantPack}</span>` : '')
     ) : '';
+    const stockColor = (p.stock || 0) > 0 ? '#2e8b57' : '#c0392b';
+    // El stock de los propios se ajusta al toque; los de Shuk son vivos (stock de Shuk, no se toca acá).
+    const stockHtml = esShuk
+      ? `<span style="color:${stockColor};font-weight:700">📦 ${p.stock || 0}</span>`
+      : `<span onclick="event.stopPropagation();ajustarStockRapido('${(p.codigo || '').replace(/'/g, "\\'")}')" style="color:${stockColor};font-weight:700;cursor:pointer;border-bottom:1px dashed ${stockColor}">📦 ${p.stock || 0} ✏️</span>`;
     return `<div class="cat-item">
       ${fotoHtml}
       <div class="cat-info">
         <div class="cat-name">${badge}${p.nombre}</div>
-        <div class="cat-code">${p.codigo} · <span style="color:${(p.stock||0) > 0 ? '#2e8b57' : '#c0392b'};font-weight:700">📦 ${p.stock||0}</span>${catTxt}${promoTxt}</div>
+        <div class="cat-code">${p.codigo} · ${stockHtml}${catTxt}${promoTxt}</div>
       </div>
       <div class="cat-prices">
         <div class="cat-price">${fmt(p.precioVenta)}</div>
