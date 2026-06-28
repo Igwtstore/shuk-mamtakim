@@ -3275,6 +3275,35 @@ function esCobradoReal(v) {
   return real(v.cajaJony) || real(v.cajaMyri);
 }
 
+// DEUDA RESIDUAL de un pedido = lo que NO entró a una caja de plata real.
+// Con cobro fraccionado (tramos): la parte asignada a "Cta Cte" (CTA_CTE_*). Sin tramos: el total
+// si nunca se cobró, 0 si está cobrado. Devuelve desglose por dueño (para el total con Jony/Miri).
+// CLAVE: un pedido cobrado PARCIALMENTE (parte caja + parte Cta Cte) sigue debiendo la parte Cta Cte.
+function _deudaPedido(v, soloMiri) {
+  const r = { ars: 0, usd: 0, jonyARS: 0, miriARS: 0, jonyUSD: 0, miriUSD: 0 };
+  if (!v || v.estado === 'cancelado' || v.estado === 'cotizacion') return r;
+  let tr = null;
+  if (v.tramos) { try { tr = JSON.parse(v.tramos); } catch (e) { tr = null; } }
+  if (tr && tr.length) {
+    tr.forEach(t => {
+      const monto = parseFloat(t.monto) || 0;
+      if (monto <= 0) return;
+      const esJ = t.dueno === 'J';
+      if (t.caja === 'CTA_CTE_ARS') { if (esJ) r.jonyARS += monto; else r.miriARS += monto; }
+      else if (t.caja === 'CTA_CTE_USD') { if (esJ) r.jonyUSD += monto; else r.miriUSD += monto; }
+    });
+  } else if (!esCobradoReal(v)) {
+    r.jonyARS = parseFloat(v.arsJONY) || 0; r.miriARS = parseFloat(v.arsMyri) || 0;
+    r.jonyUSD = parseFloat(v.usdJONY) || 0; r.miriUSD = parseFloat(v.usdMyri) || 0;
+  }
+  r.ars = soloMiri ? r.miriARS : (r.jonyARS + r.miriARS);
+  r.usd = soloMiri ? r.miriUSD : (r.jonyUSD + r.miriUSD);
+  return r;
+}
+function _tieneDeuda(v, soloMiri) { const d = _deudaPedido(v, soloMiri); return d.ars > 0.005 || d.usd > 0.005; }
+// Cobrado parcial: se cobró algo a caja real PERO todavía queda deuda (parte a Cta Cte).
+function esCobradoParcial(v) { return esCobradoReal(v) && _tieneDeuda(v, false); }
+
 // Nombre lindo de cada caja (igual etiqueta que en Caja · movimientos).
 const _CAJA_LABEL = {
   MP_JONY: 'MP JONY', EFT_JONY: 'EFT $ JONY', ETF_USD_JONY: 'ETF U$S JONY', MP_GABY: 'MP GABY', EFT_MYRI: 'EFT $ MYRI',
@@ -3366,7 +3395,7 @@ async function renderCuentaCorriente() {
     // DEUDA = todo pedido vivo (no cancelado/cotización) que NO esté cobrado de verdad,
     // sin importar la etiqueta de forma de pago. Así no se escapan los que se cobraron "a Cta Cte"
     // ni los marcados con otra forma de pago pero nunca cobrados.
-    let cc = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !esCobradoReal(v));
+    let cc = ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && _tieneDeuda(v, soloMiri));
     if (soloMiri) cc = cc.filter(pedidoEsDeMiri);
     // Pagos acumulados por cliente (solo vista Jony) — clave NORMALIZADA para que crucen aunque difiera la grafía
     // En vista Myri, de cada pago solo cuenta la parte GOLOSINAS (montoARS − montoPitz); la parte
@@ -3388,12 +3417,14 @@ async function renderCuentaCorriente() {
       if (!porCliente[k]) porCliente[k] = { nombre: v.cliente, pedidos: [], totalARS: 0, totalUSD: 0, jonyARS: 0, miriARS: 0, jonyUSD: 0, miriUSD: 0 };
       else porCliente[k].nombre = mejorNombreCliente(porCliente[k].nombre, v.cliente);
       porCliente[k].pedidos.push(v);
-      porCliente[k].totalARS += parseFloat((soloMiri ? v.arsMyri : v.totalARS)||0);
-      porCliente[k].totalUSD += parseFloat((soloMiri ? v.usdMyri : v.totalUSD)||0);
-      porCliente[k].jonyARS += parseFloat(v.arsJONY)||0;
-      porCliente[k].miriARS += parseFloat(v.arsMyri)||0;
-      porCliente[k].jonyUSD += parseFloat(v.usdJONY)||0;
-      porCliente[k].miriUSD += parseFloat(v.usdMyri)||0;
+      // Deuda RESIDUAL del pedido (no el total): si se cobró parte a caja y parte a Cta Cte, solo debe la parte Cta Cte.
+      const d = _deudaPedido(v, soloMiri);
+      porCliente[k].totalARS += d.ars;
+      porCliente[k].totalUSD += d.usd;
+      porCliente[k].jonyARS += d.jonyARS;
+      porCliente[k].miriARS += d.miriARS;
+      porCliente[k].jonyUSD += d.jonyUSD;
+      porCliente[k].miriUSD += d.miriUSD;
     });
     // Restar pagos a cuenta (vista Jony)
     Object.entries(porCliente).forEach(([k, d]) => {
@@ -3539,6 +3570,8 @@ async function renderPedidos() {
       const comiA = parseFloat(v.comiARS || 0);
       const comiU = parseFloat(v.comiUSD || 0);
       const cobrado = esCobradoReal(v);
+      const cobroParcial = esCobradoParcial(v);
+      const _deudaV = _deudaPedido(v, soloMiri);
       const splitParts = [];
       if (!soloMiri && arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
       if (arsM > 0) splitParts.push(`<span>Golosinas MYRI: $ ${Math.round(arsM).toLocaleString('es-AR')}</span>`);
@@ -3588,7 +3621,9 @@ async function renderPedidos() {
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
             <span class="estado-pill estado-${estado}">${estado}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
-            ${cobrado ? `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>` : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`}
+            ${cobroParcial
+              ? `<span style="font-size:0.68rem;color:#c0392b;font-weight:700">🟠 cobro parcial · debe ${[_deudaV.ars > 0 ? '$ ' + Math.round(_deudaV.ars).toLocaleString('es-AR') : '', _deudaV.usd > 0 ? 'U$S ' + _deudaV.usd.toFixed(2) : ''].filter(Boolean).join(' + ')}</span>`
+              : (cobrado ? `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>` : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`)}
             ${comprobanteLinks(v.comprobante)}
           </div>
         </div>
@@ -5978,11 +6013,9 @@ function _mostrarOverlayDetalle(html) {
 function _imputarPedidos(pedidos, pagos, soloMiri) {
   // En vista Myri, de cada pago solo cuenta la parte golosinas (montoARS − montoPitz). USD siempre golosinas.
   const pARS = p => soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
-  const items = (pedidos || []).map(v => ({
-    v,
-    remARS: soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0),
-    remUSD: soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0)
-  }));
+  // El saldo de cada pedido arranca en su DEUDA RESIDUAL (lo que fue a Cta Cte / nunca se cobró),
+  // no en el total: un pedido cobrado parcialmente solo debe la parte que quedó pendiente.
+  const items = (pedidos || []).map(v => { const _d = _deudaPedido(v, soloMiri); return { v, remARS: _d.ars, remUSD: _d.usd }; });
   (pagos || []).filter(p => p.pedidoId).forEach(p => {
     const it = items.find(x => String(x.v.id) === String(p.pedidoId));
     if (it) { it.remARS -= pARS(p); it.remUSD -= parseFloat(p.montoUSD) || 0; }
@@ -6074,9 +6107,13 @@ async function abrirEstadoCuenta(cliente) {
       const ars = parseFloat(v.totalARS) || 0, usd = parseFloat(v.totalUSD) || 0;
       const ts = _tsFecha(v.fecha), fch = (v.fecha || '').split(' ')[0];
       movs.push({ ts, fecha: fch, tipo: 'pedido', concepto: `Pedido #${v.nVenta || '—'} · ${_resumenPedido(v.productos)}`, ars, usd, signo: 1 });
-      if (esCobradoReal(v)) {
+      // Cobro: solo lo que REALMENTE entró a caja (total − deuda residual). Si fue parcial, deja el saldo debiendo.
+      const _dd = _deudaPedido(v, false);
+      const _cobARS = ars - _dd.ars, _cobUSD = usd - _dd.usd;
+      if (_cobARS > 0.005 || _cobUSD > 0.005) {
         const caja = _cajaLbl(v.cajaJony) || _cajaLbl(v.cajaMyri);
-        movs.push({ ts: ts + 1, fecha: fch, tipo: 'cobro', concepto: `✓ Cobrado${caja ? ' (' + caja + ')' : ''}`, ars, usd, signo: -1 });
+        const _parc = (_dd.ars > 0.005 || _dd.usd > 0.005);
+        movs.push({ ts: ts + 1, fecha: fch, tipo: 'cobro', concepto: `✓ Cobrado${_parc ? ' (parcial)' : ''}${caja ? ' (' + caja + ')' : ''}`, ars: _cobARS, usd: _cobUSD, signo: -1 });
       }
     });
   (pagos || []).filter(p => normCliente(p.cliente) === k).forEach(p => {
