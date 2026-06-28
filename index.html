@@ -2522,7 +2522,18 @@ function renderCatalogo() {
   };
   const conStock = filtrados.filter(p => p.stock > 0);
   const sinStock = filtrados.filter(p => p.stock <= 0);
-  let html = conStock.map(card).join('');
+  let html = '';
+  // 🔥 Ofertas arriba de todo (solo en la vista completa: sin búsqueda ni filtro de categoría). Se repiten abajo en su lugar.
+  if (_categoriaActiva === 'Todos' && !query) {
+    const promos = conStock.filter(p => ofertaActiva(p) || packActivo(p));
+    if (promos.length) {
+      html += `<div style="grid-column:1/-1;margin:0.2rem 0 0.7rem;text-align:center">
+        <div style="display:inline-block;background:#fde8e8;color:#c0392b;font-weight:800;font-size:0.9rem;padding:6px 18px;border-radius:20px">🔥 Ofertas</div></div>`;
+      html += promos.map(card).join('');
+      html += `<div style="grid-column:1/-1;margin:0.9rem 0 0.3rem;border-top:1.5px dashed #e8e0d0"></div>`;
+    }
+  }
+  html += conStock.map(card).join('');
   if (sinStock.length) {
     // Divisor full-width (grid-column 1/-1) → arranca en renglón nuevo; las celdas vacías del
     // último renglón con stock quedan en blanco. Abajo, todos los agotados.
