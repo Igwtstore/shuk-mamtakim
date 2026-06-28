@@ -2274,9 +2274,9 @@ let _acMarca = 'shuk', _acTel = 'jony', _acQrDataUrl = '';
 // Marcas y teléfonos para personalizar el catálogo (encabezado/pie + WhatsApp).
 const _CAT_MARCAS = {
   shuk:  { nombre: 'SHUK MAMTAKIM', sub: 'Dulces Tradicionales · Frutos Secos', color: '#c9954a',
-           logo: '<img src="icon-512.png" crossorigin="anonymous" style="width:50px;height:50px;border-radius:10px">' },
+           logo: '<img src="icon-512.png" crossorigin="anonymous" style="width:92px;height:92px;border-radius:14px">' },
   candy: { nombre: 'Candy Shop', sub: 'Golosinas ricas y más 🍬', color: '#b14cff',
-           logo: '<div style="width:50px;height:50px;border-radius:10px;background:linear-gradient(135deg,#ff5fa2,#b14cff);display:flex;align-items:center;justify-content:center;font-size:1.7rem">🍬</div>' }
+           logo: '<div style="width:92px;height:92px;border-radius:14px;background:linear-gradient(135deg,#ff5fa2,#b14cff);display:flex;align-items:center;justify-content:center;font-size:3rem">🍬</div>' }
 };
 const _CAT_TELS = { jony: { nombre: 'Jony', num: '5491131754540' }, meir: { nombre: 'Meir', num: '5491171046383' }, iosi: { nombre: 'Iosi', num: '5491150987261' } };
 function _telFmt(n) { n = String(n); return n.length >= 13 ? `+${n.slice(0,2)} ${n.slice(2,3)} ${n.slice(3,5)} ${n.slice(5,9)}-${n.slice(9)}` : '+' + n; }
@@ -2419,7 +2419,7 @@ function _acBuildDoc() {
     return parts.join('<span style="color:#ccc"> · </span>') || '';
   };
   const foto = (p, h) => { const imgs = (p.imagen||'').split(',').map(x=>x.trim()).filter(Boolean);
-    return imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
+    return imgs.length ? `<img src="${imgUrl(imgs[0])[0].replace('/w_400,', '/w_1000,')}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
   let cuerpo = '';
   cats.forEach(c => {
     cuerpo += `<div style="background:#fcf3e3;color:#c9954a;font-weight:800;font-size:0.82rem;padding:5px 10px;border-radius:6px;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em">${esc(c)}</div>`;
@@ -2478,7 +2478,7 @@ async function generarCatalogo(tipo) {
     const h2c = await cargarHtml2Canvas();
     const _pieEl = wrap.querySelector('#ac-pie');   // medir el pie ANTES de rasterizar (para el link clickeable del PDF)
     const _pieTop = _pieEl ? _pieEl.offsetTop : 0, _pieH = _pieEl ? _pieEl.offsetHeight : 0;
-    const canvas = await h2c(wrap.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const canvas = await h2c(wrap.firstElementChild, { scale: 3, backgroundColor: '#ffffff', useCORS: true });
     const archivo = 'catalogo-shuk-' + new Date().toISOString().slice(0, 10);
     if (tipo === 'img') {
       const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = archivo + '.png';
