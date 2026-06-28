@@ -415,6 +415,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#2e8b57,#1f6e43);margin-top:8px" onclick="abrirOrganizarCat()">🏷️ Organizar por categoría</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#c9954a,#a06a2c);margin-top:8px" onclick="abrirArmarCatalogoCandy()">📕 Armar catálogo (PDF / imagen)</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff8f00,#f4511e);margin-top:8px" onclick="flyerDelDia()">⚡ Flyer del día (se arma solo)</button>
@@ -1331,6 +1332,72 @@ async function quitarShukDeCandy(id) {
   if (!confirm('¿Quitar este producto de Shuk de tu catálogo?')) return;
   await api('toggleShukEnCandy', { id });
   cargarDatos();
+}
+
+// ─── ORGANIZAR POR CATEGORÍA (asignar en lote) ────────────────────
+let _orgCatSel = {};
+function abrirOrganizarCat() {
+  _orgCatSel = {};
+  let ov = document.getElementById('org-cat-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'org-cat-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  _renderOrganizarCat();
+}
+function _renderOrganizarCat() {
+  const ov = document.getElementById('org-cat-ov'); if (!ov) return;
+  const q = (document.getElementById('org-cat-q')?.value || '').trim().toLowerCase();
+  // Solo productos PROPIOS de Candy (los de Shuk traen su categoría de Shuk, no se editan acá).
+  const lista = (catalogoCache || []).filter(p => p.origen !== 'shuk').filter(p => !q || (p.nombre || '').toLowerCase().includes(q));
+  const nSel = Object.keys(_orgCatSel).filter(k => _orgCatSel[k]).length;
+  const filas = lista.map(p => {
+    const on = !!_orgCatSel[p.codigo];
+    const src = p.foto ? fotoCS(p.foto, 120) : '';
+    const cat = (p.categoria && p.categoria !== 'Varios') ? `🏷️ ${p.categoria}` : '<span style="color:#c0392b">sin categoría</span>';
+    return `<div onclick="_toggleOrgCat('${(p.codigo || '').replace(/'/g, "\\'")}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
+      <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
+      ${src ? `<img src="${src}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.66rem;color:#999">${cat}</div></div>
+    </div>`;
+  }).join('');
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column">
+    <div style="font-weight:800;font-size:1.05rem;color:#2e8b57;margin-bottom:6px">🏷️ Organizar por categoría</div>
+    <div style="font-size:0.72rem;color:#888;margin-bottom:8px">Elegí varios productos y asignales una categoría de una sola vez.</div>
+    <input id="org-cat-q" oninput="_renderOrganizarCat()" placeholder="🔍 Buscar…" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_orgCatTodos()" style="background:none;border:none;color:#2e8b57;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="org-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
+    <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos propios</div>'}</div>
+    <input id="org-cat-input" list="cat-candy-list" placeholder="Categoría a asignar (ej: Chocolate)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button onclick="asignarCategoriaLote()" style="flex:1;padding:11px;background:#2e8b57;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer">Asignar a los elegidos</button>
+      <button onclick="document.getElementById('org-cat-ov').remove()" style="padding:11px 14px;background:#eee;border:none;border-radius:10px;font-weight:700;cursor:pointer">✕</button>
+    </div>
+  </div>`;
+  _poblarCatCandyDatalist();
+  const bq = document.getElementById('org-cat-q'); if (bq && q) { bq.value = q; bq.focus(); }
+}
+function _toggleOrgCat(cod, el) {
+  _orgCatSel[cod] = !_orgCatSel[cod];
+  const on = !!_orgCatSel[cod];
+  if (el) { el.style.background = on ? '#f0fff4' : '#fff'; const chk = el.querySelector('div'); if (chk) chk.textContent = on ? '✅' : '⬜'; }
+  const cnt = document.getElementById('org-cat-count'); if (cnt) cnt.textContent = Object.keys(_orgCatSel).filter(k => _orgCatSel[k]).length + ' elegidos';
+}
+function _orgCatTodos() {
+  const q = (document.getElementById('org-cat-q')?.value || '').trim().toLowerCase();
+  (catalogoCache || []).filter(p => p.origen !== 'shuk' && (!q || (p.nombre || '').toLowerCase().includes(q))).forEach(p => _orgCatSel[p.codigo] = true);
+  _renderOrganizarCat();
+}
+async function asignarCategoriaLote() {
+  const cat = (document.getElementById('org-cat-input')?.value || '').trim();
+  if (!cat) { mostrarToast('Escribí una categoría', '#c0392b'); return; }
+  const cods = Object.keys(_orgCatSel).filter(k => _orgCatSel[k]);
+  if (!cods.length) { mostrarToast('Elegí al menos un producto', '#c0392b'); return; }
+  mostrarToast('🏷️ Asignando…');
+  const r = await api('setCategoriaHijosLote', { codigos: cods.join(','), categoria: cat });
+  if (r && r.ok) {
+    mostrarToast(`✓ ${r.n} producto${r.n !== 1 ? 's' : ''} en "${cat}"`);
+    const ov = document.getElementById('org-cat-ov'); if (ov) ov.remove();
+    cargarDatos();
+  } else mostrarToast('⚠️ No se pudo asignar', '#c0392b');
 }
 
 // ─── ARMAR CATÁLOGO (PDF / imagen) ────────────────────────────────

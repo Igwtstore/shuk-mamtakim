@@ -33,7 +33,8 @@ const PROTECTED_HIJOS = [
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
   'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA',
   'getAvisosCandy','resolverAvisoCandy',   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
-  'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy'   // importar productos de Shuk al catálogo de Candy
+  'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy',   // importar productos de Shuk al catálogo de Candy
+  'setCategoriaHijosLote'   // asignar categoría a varios productos de Candy de una
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1533,6 +1534,21 @@ function doGet(e) {
 
     // ─── SISTEMA HIJOS ────────────────────────────────────────────────────────
     if (accion === 'getCatalogoHijos')     { return json(getCatalogoHijos(ss)); }
+    if (accion === 'setCategoriaHijosLote') {
+      // Asigna una categoría a varios productos de Candy (códigos separados por coma) de una sola vez.
+      const cods = dec(e.parameter.codigos || '').split(',').map(s => s.trim()).filter(Boolean);
+      const cat = dec(e.parameter.categoria || '').trim() || 'Varios';
+      if (!cods.length) return json({ error: 'sin códigos' });
+      const h = getOrCreate(ss, 'CatalogoHijos', ['Codigo','Nombre','PrecioVenta','Costo','Foto','Categoria']);
+      if (h.getLastRow() < 2) return json({ ok: true, n: 0 });
+      const set = {}; cods.forEach(c => set[c] = true);
+      const datos = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues();
+      let n = 0;
+      for (let i = 0; i < datos.length; i++) {
+        if (set[(datos[i][0] || '').toString()]) { h.getRange(i + 2, 6).setValue(cat); n++; }
+      }
+      return json({ ok: true, n: n, categoria: cat });
+    }
     if (accion === 'getShukEnCandy') {
       const h = ss.getSheetByName('ShukEnCandy');
       if (!h || h.getLastRow() < 2) return json([]);
