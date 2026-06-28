@@ -61,6 +61,10 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 .producto-card.agotada .producto-foto-placeholder { filter: grayscale(0.85) opacity(0.55); }
 .badge-agotado { position: absolute; top: 8px; left: 8px; background: #6b6b6b; color: white; border-radius: 8px; padding: 3px 8px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.03em; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 .badge-ultimas { position: absolute; top: 8px; left: 8px; background: #ff8c00; color: white; border-radius: 8px; padding: 3px 8px; font-size: 0.64rem; font-weight: 800; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.badge-oferta { position: absolute; top: 8px; left: 8px; background: #e53935; color: white; border-radius: 8px; padding: 3px 8px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.03em; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.precio-tachado { text-decoration: line-through; color: #bbb; font-size: 0.78rem; font-weight: 600; margin-right: 4px; }
+.precio-oferta { color: #e53935; }
+.badge-pack { display: inline-block; background: #fff3e0; color: #e07b00; font-weight: 800; font-size: 0.72rem; padding: 3px 8px; border-radius: 8px; margin-top: 4px; }
 .btn-avisame { margin: 6px 10px 10px; padding: 9px 10px; background: #fff; color: #b14cff; border: 1.5px solid #e7c6ff; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
 .btn-avisame:active { background: #faf2ff; }
 .btn-avisame.pedido { background: #f3e8ff; color: #8b2fd6; border-color: #d9b3ff; }
@@ -143,6 +147,7 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
   <span>↕️ Ordenar:</span>
   <select id="orden-tienda" onchange="ordenTienda=this.value;filtrar()">
     <option value="categoria">Por categoría</option>
+    <option value="ofertas">🔥 Ofertas primero</option>
     <option value="precio-asc">Menor precio</option>
     <option value="precio-desc">Mayor precio</option>
     <option value="az">A → Z</option>
@@ -300,7 +305,8 @@ function renderCatalogo(productos, esFiltered) {
       : '';
     const placeholder = `<div class="producto-foto-placeholder" style="${p.foto ? 'display:none' : ''}">${emojiKid}</div>`;
     const badge = agotado ? '<span class="badge-agotado">AGOTADO</span>'
-      : (pocas ? `<span class="badge-ultimas">¡Quedan ${p.stock}!</span>` : '');
+      : (ofertaActiva(p) ? '<span class="badge-oferta">OFERTA</span>'
+      : (pocas ? `<span class="badge-ultimas">¡Quedan ${p.stock}!</span>` : ''));
     let boton;
     if (agotado) {
       const ped = _avisados.has(p.codigo);
@@ -316,7 +322,10 @@ function renderCatalogo(productos, esFiltered) {
       </div>
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
-        <div class="producto-precio">${fmt(p.precioVenta)}</div>
+        <div class="producto-precio">${ofertaActiva(p)
+          ? `<span class="precio-tachado">${fmt(p.precioVenta)}</span><span class="precio-oferta">${fmt(p.precioOferta)}</span>`
+          : fmt(p.precioVenta)}</div>
+        ${packActivo(p) ? `<div class="badge-pack">🎁 Llevá ${p.cantPack} a ${fmt(p.precioPack)}</div>` : ''}
       </div>
       ${boton}
     </div>`;
@@ -345,10 +354,35 @@ function renderCatalogo(productos, esFiltered) {
   el.innerHTML = html;
 }
 function _ordenTiendaFn(o) {
-  if (o === 'precio-asc') return (a, b) => (a.precioVenta || 0) - (b.precioVenta || 0);
-  if (o === 'precio-desc') return (a, b) => (b.precioVenta || 0) - (a.precioVenta || 0);
+  if (o === 'precio-asc') return (a, b) => precioUnit(a) - precioUnit(b);   // por precio EFECTIVO (con oferta)
+  if (o === 'precio-desc') return (a, b) => precioUnit(b) - precioUnit(a);
   if (o === 'za') return (a, b) => (b.nombre || '').localeCompare(a.nombre || '');
+  if (o === 'ofertas') return (a, b) => ((_tienePromo(b) ? 1 : 0) - (_tienePromo(a) ? 1 : 0)) || (a.nombre || '').localeCompare(b.nombre || '');
   return (a, b) => (a.nombre || '').localeCompare(b.nombre || '');   // az / categoria
+}
+// ─── OFERTAS Y PACKS (precio efectivo) ────────────────────────────
+function ofertaActiva(p) {
+  if (!(p.precioOferta > 0)) return false;
+  if (p.fechaOferta) {
+    const parts = p.fechaOferta.split('/');
+    if (parts.length >= 3) {
+      const vence = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 23, 59, 59);
+      if (!isNaN(vence.getTime()) && new Date() > vence) return false;   // venció
+    }
+  }
+  return true;
+}
+function packActivo(p) { return p.cantPack > 0 && p.precioPack > 0; }
+function _tienePromo(p) { return ofertaActiva(p) || packActivo(p); }
+function precioUnit(p) { return ofertaActiva(p) ? p.precioOferta : (p.precioVenta || 0); }
+// Subtotal con pack automático: cada grupo de cantPack se cobra a precioPack; el resto, al unitario.
+function subtotalItem(p, cant) {
+  const unit = precioUnit(p);
+  if (packActivo(p) && cant >= p.cantPack) {
+    const packs = Math.floor(cant / p.cantPack);
+    return packs * p.precioPack + (cant % p.cantPack) * unit;
+  }
+  return cant * unit;
 }
 
 // ─── SELECCIONAR PRODUCTO ─────────────────────────────────────────
@@ -361,14 +395,28 @@ function seleccionarProducto(codigo) {
   if (productoSeleccionado.foto) { fotoEl.src = fotoTienda(productoSeleccionado.foto, 900); fotoEl.style.display = 'block'; }
   else { fotoEl.style.display = 'none'; }
   document.getElementById('qty-nombre').textContent = productoSeleccionado.nombre;
-  document.getElementById('qty-precio').textContent = fmt(productoSeleccionado.precioVenta) + ' c/u';
   document.getElementById('qty-val').textContent = qtyTmp;
+  _actualizarQtyPrecio();
   document.getElementById('qty-overlay').classList.add('open');
 }
 
 function cambiarQty(delta) {
   qtyTmp = Math.max(1, qtyTmp + delta);
   document.getElementById('qty-val').textContent = qtyTmp;
+  _actualizarQtyPrecio();
+}
+function _actualizarQtyPrecio() {
+  const p = productoSeleccionado; if (!p) return;
+  const unit = precioUnit(p);
+  let html = ofertaActiva(p)
+    ? `<span class="precio-tachado">${fmt(p.precioVenta)}</span><span class="precio-oferta">${fmt(unit)}</span> c/u`
+    : `${fmt(unit)} c/u`;
+  if (packActivo(p)) {
+    html += qtyTmp >= p.cantPack
+      ? ` · 🎁 subtotal <b>${fmt(subtotalItem(p, qtyTmp))}</b>`
+      : ` · 🎁 Llevá ${p.cantPack} a ${fmt(p.precioPack)}`;
+  }
+  document.getElementById('qty-precio').innerHTML = html;
 }
 
 function confirmarAgregar() {
@@ -384,7 +432,7 @@ function confirmarAgregar() {
 function actualizarFab() {
   const items = Object.values(carrito);
   const totalCant = items.reduce((s, i) => s + i.cantidad, 0);
-  const totalMonto = items.reduce((s, i) => s + i.precioVenta * i.cantidad, 0);
+  const totalMonto = items.reduce((s, i) => s + subtotalItem(i, i.cantidad), 0);
   const fab = document.getElementById('cart-fab');
   const cnt = document.getElementById('cart-count');
   cnt.textContent = totalCant;
@@ -417,14 +465,23 @@ function renderCarrito() {
 
   let total = 0;
   body.innerHTML = items.map(item => {
-    const subtotal = item.precioVenta * item.cantidad;
+    const subtotal = subtotalItem(item, item.cantidad);
     total += subtotal;
+    const unit = precioUnit(item);
+    const packAplicado = packActivo(item) && item.cantidad >= item.cantPack;
+    const precioTxt = ofertaActiva(item)
+      ? `<span class="precio-tachado">${fmt(item.precioVenta)}</span>${fmt(unit)} c/u`
+      : `${fmt(unit)} c/u`;
+    const packTxt = packActivo(item)
+      ? `<div style="font-size:0.68rem;color:#e07b00;font-weight:700">${packAplicado ? '🎁 ¡pack aplicado!' : `🎁 Llevá ${item.cantPack} a ${fmt(item.precioPack)}`}</div>`
+      : '';
     const foto = item.foto ? `<img class="cart-item-foto" src="${fotoTienda(item.foto, 200)}" onerror="this.style.display='none'">` : '';
     return `<div class="cart-item">
       ${foto}
       <div class="cart-item-info">
         <div class="cart-item-name">${item.nombre}</div>
-        <div class="cart-item-price">${fmt(item.precioVenta)} c/u</div>
+        <div class="cart-item-price">${precioTxt}</div>
+        ${packTxt}
       </div>
       <div class="qty-control">
         <button class="qty-btn" onclick="cambiarCantidad('${item.codigo}', -1)">−</button>
@@ -468,9 +525,10 @@ function confirmarPedido() {
   let total = 0;
   let msg = `🍬 *Pedido Candy Shop*\n👤 *${nombre}*\n\n`;
   items.forEach(item => {
-    const subtotal = item.precioVenta * item.cantidad;
+    const subtotal = subtotalItem(item, item.cantidad);
     total += subtotal;
-    msg += `• ${item.cantidad}x ${item.nombre} — ${fmt(subtotal)}\n`;
+    const promo = (packActivo(item) && item.cantidad >= item.cantPack) ? ' 🎁' : (ofertaActiva(item) ? ' 🔥' : '');
+    msg += `• ${item.cantidad}x ${item.nombre} — ${fmt(subtotal)}${promo}\n`;
   });
   msg += `\n💰 *Total: ${fmt(total)}*`;
   if (nota) msg += `\n📝 ${nota}`;
