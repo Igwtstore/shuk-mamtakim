@@ -374,6 +374,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="stat"><div class="stat-num" id="s-vis-total">—</div><div class="stat-label">Total</div></div>
       </div>
     </div>
+    <div class="card" id="pedidos-card" style="display:none;border:2px solid #2c6fad">
+      <div class="card-title">📥 Pedidos de la tienda <span id="pedidos-count" style="background:#2c6fad;color:#fff;border-radius:10px;padding:1px 9px;font-size:0.72rem;font-weight:800"></span></div>
+      <div id="pedidos-list"></div>
+    </div>
     <div class="card" id="avisos-card" style="display:none">
       <div class="card-title">🔔 Te piden (agotados)</div>
       <div id="avisos-list"></div>
@@ -1030,6 +1034,59 @@ function renderPanel(d) {
   renderStockRestante(d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.ventas), catalogoCache, arr(d.consumo));
   renderCierreDia(arr(d.ventas), catalogoCache, d.stockDia && !d.stockDia.error ? d.stockDia : {}, arr(d.consumo));
   renderAvisos();
+  renderPedidosPendientes(arr(d.pedidos));
+}
+
+// ── Pedidos que entraron por la tienda (pendientes de cobrar) ──────────────
+let _pedidosPendientes = [];
+let _pedidoCobrandoId = '';
+function renderPedidosPendientes(peds) {
+  _pedidosPendientes = Array.isArray(peds) ? peds : [];
+  const card = document.getElementById('pedidos-card');
+  const list = document.getElementById('pedidos-list');
+  const cnt = document.getElementById('pedidos-count');
+  if (!card || !list) return;
+  if (!_pedidosPendientes.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  if (cnt) cnt.textContent = _pedidosPendientes.length;
+  list.innerHTML = _pedidosPendientes.map(p => {
+    const lineas = (p.items || []).map(it => `${it.cantidad}× ${esc(it.nombre)}`).join(' · ');
+    return `<div style="border:1px solid #e8e0d5;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fbf9f6">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+        <div><div style="font-weight:800;color:#5c3d1e">👤 ${esc(p.cliente)}</div>
+        <div style="font-size:0.74rem;color:#9b8a76;margin-top:2px">${esc(p.fecha)}${p.nota ? ' · 📝 ' + esc(p.nota) : ''}</div></div>
+        <div style="font-weight:800;color:#2c6fad;white-space:nowrap">${fmt(p.total)}</div>
+      </div>
+      <div style="font-size:0.82rem;color:#6b5a48;margin:6px 0">${esc(lineas)}</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="cobrarPedido('${p.pedidoId}')" style="flex:1;background:#1a7a3c;color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-family:inherit;cursor:pointer">💵 Cobrar</button>
+        <button onclick="cancelarPedido('${p.pedidoId}')" style="background:#f3e6e6;color:#c0392b;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function cobrarPedido(pedidoId) {
+  const ped = _pedidosPendientes.find(p => p.pedidoId === pedidoId);
+  if (!ped) return;
+  abrirWizard();                       // resetea el wizard (y _pedidoCobrandoId)
+  wCliente = ped.cliente;
+  const elc = document.getElementById('w-cliente'); if (elc) elc.value = ped.cliente;
+  (ped.items || []).forEach(it => {    // precargo los productos del pedido en el carrito de venta
+    const prod = (catalogoCache || []).find(c => String(c.codigo) === String(it.codigo));
+    const base = prod ? { ...prod } : { codigo: it.codigo, nombre: it.nombre, precioVenta: it.precio };
+    wProductosSeleccionados[it.codigo] = { ...base, qty: parseInt(it.cantidad) || 1, precioCustom: it.precio };
+  });
+  _pedidoCobrandoId = pedidoId;        // al confirmar la venta, marco el pedido cobrado
+  renderProductosGrid();
+  renderWizardStep(2);                 // salta a "cantidades" (ya con productos) → luego pago
+  renderCantidades();
+}
+async function cancelarPedido(pedidoId) {
+  const ped = _pedidosPendientes.find(p => p.pedidoId === pedidoId);
+  if (!confirm(`¿Cancelar el pedido de ${ped ? ped.cliente : 'este cliente'}?\nSe devuelve al stock lo reservado.`)) return;
+  await api('cancelarPedidoHijo', { pedidoId });
+  await cargarDatos();
+  mostrarToast('Pedido cancelado · stock devuelto');
 }
 
 // 🔔 Avisos: clientes que pidieron un producto agotado desde la tienda. Se resuelven al reponer.
@@ -3057,7 +3114,7 @@ let deudoresCache = [];
 const WIZARD_TITLES = ['¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
 
 function abrirWizard() {
-  wStep = 0; wCliente = ''; wVentaId = ''; wProductosSeleccionados = {}; wPago = ''; seleccionarMetodo('efectivo');
+  wStep = 0; wCliente = ''; wVentaId = ''; wProductosSeleccionados = {}; wPago = ''; _pedidoCobrandoId = ''; seleccionarMetodo('efectivo');
   document.getElementById('w-cliente').value = '';
   document.getElementById('w-monto-parcial').value = '';
   ['w-cliente-deuda', 'w-cuenta-preview'].forEach(id => { const e = document.getElementById(id); if (e) e.innerHTML = ''; });
@@ -3365,6 +3422,8 @@ async function confirmarVentaWizard() {
   }
   await api('registrarVentaLote', loteParams);
   wVentaId = '';   // venta completada OK → la próxima usa un id nuevo
+  // Si esta venta sale de un pedido de la tienda, marcarlo cobrado (su stock ya estaba reservado).
+  if (_pedidoCobrandoId) { try { await api('cobrarPedidoHijo', { pedidoId: _pedidoCobrandoId }); } catch (e) {} _pedidoCobrandoId = ''; }
 
   cerrarWizard();
   document.getElementById('fab-venta').style.setProperty('display','flex','important');

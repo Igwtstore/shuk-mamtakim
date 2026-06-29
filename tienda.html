@@ -538,14 +538,26 @@ function confirmarPedido() {
 
   let total = 0;
   let msg = `🍬 *Pedido Candy Shop*\n👤 *${nombre}*\n\n`;
+  const itemsPedido = [];
   items.forEach(item => {
     const subtotal = subtotalItem(item, item.cantidad);
     total += subtotal;
     const promo = (packActivo(item) && item.cantidad >= item.cantPack) ? ' 🎁' : (ofertaActiva(item) ? ' 🔥' : '');
     msg += `• ${item.cantidad}x ${item.nombre} — ${fmt(subtotal)}${promo}\n`;
+    itemsPedido.push({ codigo: item.codigo, nombre: item.nombre, cantidad: item.cantidad,
+      precio: Math.round(subtotal / item.cantidad), subtotal: Math.round(subtotal) });
   });
   msg += `\n💰 *Total: ${fmt(total)}*`;
   if (nota) msg += `\n📝 ${nota}`;
+
+  // Registrar el pedido en el panel del chico (entra como PENDIENTE + reserva stock). Fire-and-forget:
+  // no esperamos la respuesta, así el WhatsApp se abre al instante (sin que lo bloquee el navegador).
+  const pedidoId = 'PH' + Date.now() + Math.random().toString(36).slice(2, 6);
+  try {
+    const params = new URLSearchParams({ accion: 'registrarPedidoHijo', hijo: kid, cliente: nombre,
+      items: JSON.stringify(itemsPedido), total: String(Math.round(total)), pedidoId, nota });
+    fetch(APPS_URL + '?' + params.toString()).catch(() => {});
+  } catch (e) {}
 
   document.getElementById('checkout-overlay').classList.remove('open');
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
