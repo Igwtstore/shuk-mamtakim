@@ -2483,9 +2483,9 @@ function _acBuildDoc() {
   };
   const precio = p => {
     const parts = [];
-    if (_acVerMin) parts.push(precioUno(p, 'min', 'Min'));
-    if (_acVerMay) parts.push(precioUno(p, 'may', 'May'));
-    return parts.join('<span style="color:#ccc"> · </span>') || '';
+    if (_acVerMin) parts.push(precioUno(p, 'min', 'Por unidad'));
+    if (_acVerMay) parts.push(precioUno(p, 'may', 'Por mayor'));
+    return parts.join('<br>') || '';
   };
   const foto = (p, h) => { const imgs = (p.imagen||'').split(',').map(x=>x.trim()).filter(Boolean);
     return imgs.length ? `<img src="${imgUrl(imgs[0])[0].replace('/w_400,', '/w_1000,')}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
@@ -2576,8 +2576,8 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
   const cMarca = hex(M.color), gris = [136, 136, 136], negro = [40, 40, 40], linea = [228, 228, 228];
   const precioTxt = p => {
     const uno = (cual, label) => { const d = _acPrecioDesc(p, cual); return d.txt ? (label + ' ' + d.txt) : (label + ' ' + d.nuevo + ' (-' + d.pct + '%)'); };
-    const a = []; if (_acVerMin) a.push(uno('min', 'Min')); if (_acVerMay) a.push(uno('may', 'May'));
-    let s = a.join('   ');
+    const a = []; if (_acVerMin) a.push(uno('min', 'Por unidad')); if (_acVerMay) a.push(uno('may', 'Por mayor'));
+    let s = a.join('\n');               // cada precio en su línea (las etiquetas son largas)
     const ref = _acRefTxt(p);
     if (ref) s += '\n(' + ref + ')';   // equivalencia en pesos, en su propia línea
     return s;
@@ -2614,9 +2614,9 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     y += 32;
     const items = byCat[c].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
     if (_acLayout === 'grilla') {
-      const colW = (W - margin * 2 - 16) / 3, fotoSz = 118;          // foto cuadrada grande pero que entran 9 por hoja
+      const colW = (W - margin * 2 - 16) / 3, fotoSz = 110;          // foto cuadrada; entran 9 por hoja con precio en 2 líneas
       const fotoX0 = (colW - fotoSz) / 2;                            // centrada en la celda
-      const cellH = fotoSz + 70;                                     // foto + nombre + descripción + precio (centrados)
+      const cellH = fotoSz + 78;                                     // foto + nombre + descripción + precio (2 líneas, centrados)
       items.forEach((p, idx) => {
         const col = idx % 3;
         if (col === 0) asegurar(cellH + 8);
@@ -2636,7 +2636,7 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
           ty += dL.length * 7 + 1;
         }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(...cMarca);
-        pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 2), cx, ty + 3, { align: 'center' });
+        pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 3), cx, ty + 3, { align: 'center' });
         if (col === 2 || idx === items.length - 1) y += cellH + 8;
       });
     } else {
