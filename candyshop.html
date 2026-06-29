@@ -1701,7 +1701,7 @@ async function asignarCategoriaLote() {
 }
 
 // ─── ARMAR CATÁLOGO (PDF / imagen) ────────────────────────────────
-let _catCandySel = {}, _catCandyLayout = 'lista', _catCandyOrden = 'az';
+let _catCandySel = {}, _catCandyLayout = 'lista', _catCandyOrden = 'az', _catCandyOcultarSinStock = false;
 let _catCandyDescGeneral = 0, _catCandyDescProd = {};   // descuentos del catálogo de Candy (% general + por producto)
 function _ccatDescDe(cod) { const d = _catCandyDescProd[cod]; return (d !== undefined && d !== '' && !isNaN(d)) ? (Number(d) || 0) : (Number(_catCandyDescGeneral) || 0); }
 function _ccatConDesc(v, pct) { if (!pct || pct <= 0) return v; return Math.ceil(v * (1 - pct / 100)); }   // redondeo para arriba, sin decimales
@@ -1736,7 +1736,8 @@ function abrirArmarCatalogoCandy() {
 // Solo las filas (para refrescar al buscar sin recrear el input → no se pierde el foco).
 function _ccatFilasHtml() {
   const q = (document.getElementById('armar-cat-q')?.value || '').trim().toLowerCase();
-  const lista = (catalogoCache || []).filter(p => !q || (p.nombre || '').toLowerCase().includes(q))
+  const lista = (catalogoCache || []).filter(p => (!q || (p.nombre || '').toLowerCase().includes(q))
+      && (!_catCandyOcultarSinStock || (parseFloat(p.stock) || 0) > 0))
     .sort(_ordenarProd(_catCandyOrden, p => p.nombre || '', p => p.stock || 0, p => p.precioVenta || 0));
   if (!lista.length) return '<div class="empty">Sin productos</div>';
   return lista.map(p => {
@@ -1770,6 +1771,7 @@ function _renderArmarCatCandy() {
       <span style="color:#a8690b;font-weight:700">%</span>
       ${(_catCandyDescGeneral || Object.keys(_catCandyDescProd).length) ? `<button onclick="_ccatLimpiarDesc()" style="margin-left:auto;background:none;border:none;color:#c0392b;font-size:0.72rem;cursor:pointer;text-decoration:underline">limpiar</button>` : ''}
     </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:0.74rem;color:#666;cursor:pointer"><input type="checkbox" ${_catCandyOcultarSinStock?'checked':''} onchange="_catCandyOcultarSinStock=this.checked;_renderArmarCatCandy()" style="width:15px;height:15px"> 📦 Ocultar productos sin stock</label>
     <div id="armar-cat-lista" style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas}</div>
     <input id="armar-cat-titulo" placeholder="Título (opcional, ej: Lista junio)" style="width:100%;padding:9px 11px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.88rem;box-sizing:border-box;margin-top:8px">
     <div style="display:flex;gap:6px;margin-top:8px">
