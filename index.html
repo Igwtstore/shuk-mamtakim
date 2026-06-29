@@ -10166,6 +10166,7 @@ function abrirEditarPedido(v) {
   poblarSelectorProductos();
   document.getElementById('ep-descuento').value = '';
   const _epe = document.getElementById('ep-envio'); if (_epe) { const en = _enviosPorVenta[v.id]; _epe.value = (en && en.cobrado) ? en.cobrado : ''; }
+  const _eptc = document.getElementById('ep-tc'); if (_eptc) _eptc.value = (parseFloat(v.tipoCambio) > 0) ? v.tipoCambio : '';
 
   renderEditLineas();
   recalcularEditTotal();
@@ -10451,6 +10452,8 @@ async function guardarEditPedido() {
   // Envío cobrado al cliente (puede setearse/editarse acá).
   const _epEnv = document.getElementById('ep-envio');
   if (_epEnv && _epEnv.value !== '') params.set('envioCobrado', String(Math.round(parseFloat(_epEnv.value) || 0)));
+  const _epTc = document.getElementById('ep-tc');
+  if (_epTc && parseFloat(_epTc.value) > 0) params.set('tipoCambio', String(parseFloat(_epTc.value)));
   // Una cotización todavía no descontó stock: no se mandan deltas ni se ajusta el catálogo local.
   const esCotiz = (_editPedidoActual.estado || '') === 'cotizacion';
   if (deltas.length && !esCotiz) params.set('stockDeltas', deltas.join(','));
@@ -10623,6 +10626,10 @@ function cerrarEditPedido() {
 
       <div class="edit-section-label">📦 Envío $ <span style="font-weight:400;color:var(--texto-suave)">(cobrado al cliente — el costo se carga al cobrar)</span></div>
       <input type="number" id="ep-envio" min="0" step="any" placeholder="0"
+        style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.92rem;box-sizing:border-box;outline:none;margin-bottom:0.6rem" />
+
+      <div class="edit-section-label">💱 Tipo de cambio <span style="font-weight:400;color:var(--texto-suave)">(U$S 1 = $ — necesario para la ganancia de golosinas vendidas en pesos)</span></div>
+      <input type="number" id="ep-tc" min="0" step="any" placeholder="ej: 1500"
         style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.92rem;box-sizing:border-box;outline:none;margin-bottom:0.6rem" />
 
       <div class="edit-total-box">

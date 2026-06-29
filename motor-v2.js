@@ -695,6 +695,9 @@ function doGet(e) {
           if (e.parameter.comiARS  !== undefined) h.getRange(i+1,15).setValue(parseFloat(e.parameter.comiARS)||0);
           if (e.parameter.comiUSD  !== undefined) h.getRange(i+1,16).setValue(parseFloat(e.parameter.comiUSD)||0);
           if (e.parameter.usdJONY  !== undefined) { _asegurarColUsdJony_(h); h.getRange(i+1,28).setValue(parseFloat(e.parameter.usdJONY)||0); }
+          // Tipo de cambio de la venta (col 19): lo usa la ganancia multi-moneda para convertir el
+          // costo U$S de las golosinas vendidas en $ (minorista). Permite arreglar ventas viejas sin TC.
+          if (e.parameter.tipoCambio !== undefined && parseFloat(e.parameter.tipoCambio) > 0) h.getRange(i+1,19).setValue(parseFloat(e.parameter.tipoCambio));
           // Ajuste de stock por la edición (productos agregados/quitados/cantidades cambiadas).
           // delta positivo = devolver al stock, negativo = descontar.
           // OJO: una cotización todavía NO descontó stock, así que sus deltas NO se aplican
