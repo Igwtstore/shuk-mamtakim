@@ -37,7 +37,8 @@ const PROTECTED_HIJOS = [
   'setCategoriaHijosLote',   // asignar categoría a varios productos de Candy de una
   'setFotoHijo',   // setear solo la foto de un producto de Candy (carga rápida)
   'renombrarCategoriaHijos',   // corregir el nombre de una categoría en todos sus productos
-  'setConfigCandy'   // switch global de la tienda (mostrar stock)
+  'setConfigCandy',   // switch global de la tienda (mostrar stock)
+  'cobrarPedidoHijo', 'cancelarPedidoHijo'   // gestionar pedidos pendientes (registrarPedidoHijo queda PÚBLICO: lo usa la tienda)
 ];
 
 // Verifica un token de sesión Supabase contra /auth/v1/user. Cachea el resultado 5 min
@@ -1772,6 +1773,9 @@ function doGet(e) {
     if (accion === 'getComprasHijos')      { return json(getComprasHijos(ss)); }
     if (accion === 'getDepositoHijos')     { return json(getDepositoHijos(ss)); }
     if (accion === 'panelHijos')           { return json(panelHijos(ss, e.parameter)); }
+    if (accion === 'registrarPedidoHijo')  { return json(registrarPedidoHijo(ss, e.parameter)); }   // PÚBLICA: la tienda registra el pedido
+    if (accion === 'cobrarPedidoHijo')     { e.parameter.estado = 'cobrado';   return json(setEstadoPedidoHijo(ss, e.parameter)); }
+    if (accion === 'cancelarPedidoHijo')   { e.parameter.estado = 'cancelado'; return json(setEstadoPedidoHijo(ss, e.parameter)); }
     if (accion === 'comprasTabHijos')      { return json({ proveedores: getProveedoresHijos(ss), compras: getComprasHijos(ss), deposito: getDepositoHijos(ss) }); }
     if (accion === 'flyerTexto')           { return json(flyerTexto(e.parameter)); }
     if (accion === 'fondoFlyer')           { return json(fondoFlyer(e.parameter)); }
@@ -2890,8 +2894,80 @@ function panelHijos(ss, p) {
     stockDia: getStockDia(ss, p),
     consumo: getConsumoHoy(ss, p),
     cierre: estadoDiaHijos_(ss, p.hijo),
-    visitas: visitasHijoResumen_(ss, (p.hijo || '').toLowerCase())
+    visitas: visitasHijoResumen_(ss, (p.hijo || '').toLowerCase()),
+    pedidos: getPedidosHijos(ss, p.hijo)   // pedidos que entraron por la tienda, pendientes de cobrar
   };
+}
+
+// ── Pedidos de la tienda Candy: entran como PENDIENTES y RESERVAN stock (descuentan el depósito) ──
+// Igual que el Shuk: el cliente pide en la web → queda en el panel del chico para cobrarlo. La
+// reserva evita que se sobrevenda lo mismo (la tienda ve menos stock). Al cancelar, se devuelve.
+function registrarPedidoHijo(ss, p) {
+  // Anti-duplicado por pedidoId (reintento por red caída: llegó el request, se perdió la respuesta).
+  if (p.pedidoId) {
+    const c = CacheService.getScriptCache(); const k = 'ph_' + dec(p.pedidoId);
+    if (c.get(k)) return { ok: true, dup: true };
+    c.put(k, '1', 900);
+  }
+  let items;
+  try { items = JSON.parse(dec(p.items || '[]')); } catch (e) { return { error: 'items inválido' }; }
+  if (!items.length) return { error: 'sin items' };
+  const hijo = dec(p.hijo || ''), cliente = dec(p.cliente || '');
+  if (!hijo || !cliente) return { error: 'falta hijo o cliente' };
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) {}
+  try {
+    // Reserva: descuenta el depósito por cada item (la tienda verá menos stock → no se sobrevende).
+    items.forEach(it => {
+      const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString();
+      if (cant > 0 && cod) ajustarDeposito_(ss, cod, dec(it.nombre || ''), -cant);
+    });
+    const h = getOrCreate(ss, 'PedidosHijos', ['Fecha', 'Hijo', 'Cliente', 'Telefono', 'Items', 'Total', 'Estado', 'PedidoId', 'Nota']);
+    const total = parseFloat(p.total) || items.reduce((s, it) => s + (parseFloat(it.subtotal) || 0), 0);
+    const pedidoId = dec(p.pedidoId || ('PH' + Date.now()));
+    h.appendRow([new Date(), hijo, cliente, dec(p.telefono || ''), dec(p.items || '[]'), Math.round(total), 'pendiente', pedidoId, dec(p.nota || '')]);
+    SpreadsheetApp.flush();
+    return { ok: true, pedidoId };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+function getPedidosHijos(ss, hijo) {
+  const h = ss.getSheetByName('PedidosHijos');
+  if (!h || h.getLastRow() < 2) return [];
+  return h.getRange(2, 1, h.getLastRow() - 1, 9).getValues()
+    .map(r => ({
+      fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy HH:mm') : (r[0] || '').toString(),
+      hijo: (r[1] || '').toString(), cliente: (r[2] || '').toString(), telefono: (r[3] || '').toString(),
+      items: (function () { try { return JSON.parse(r[4] || '[]'); } catch (e) { return []; } })(),
+      total: parseFloat(r[5]) || 0, estado: (r[6] || '').toString(), pedidoId: (r[7] || '').toString(), nota: (r[8] || '').toString()
+    }))
+    .filter(x => x.estado === 'pendiente' && (!hijo || x.hijo.toLowerCase() === hijo.toLowerCase()));
+}
+// Marca un pedido como cobrado (la venta se registró aparte con el flujo normal) o cancelado
+// (devuelve al depósito el stock que se había reservado). Idempotente.
+function setEstadoPedidoHijo(ss, p) {
+  const pedidoId = dec(p.pedidoId || ''), estado = dec(p.estado || '');
+  if (!pedidoId || ['cobrado', 'cancelado'].indexOf(estado) === -1) return { error: 'parámetros inválidos' };
+  const h = ss.getSheetByName('PedidosHijos');
+  if (!h || h.getLastRow() < 2) return { error: 'sin pedidos' };
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) {}
+  try {
+    const d = h.getRange(2, 1, h.getLastRow() - 1, 9).getValues();
+    for (let i = 0; i < d.length; i++) {
+      if ((d[i][7] || '').toString() === pedidoId) {
+        if ((d[i][6] || '').toString() !== 'pendiente') return { ok: true, yaProcesado: true };   // ya cobrado/cancelado: no repetir
+        if (estado === 'cancelado') {   // devolver el stock reservado
+          let items = []; try { items = JSON.parse(d[i][4] || '[]'); } catch (e) {}
+          items.forEach(it => { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString();
+            if (cant > 0 && cod) ajustarDeposito_(ss, cod, dec(it.nombre || ''), cant); });
+        }
+        h.getRange(i + 2, 7).setValue(estado);
+        SpreadsheetApp.flush();
+        return { ok: true };
+      }
+    }
+    return { error: 'no encontrado' };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
 // dd/MM/yyyy → número comparable (yyyymmdd). '' → 0.
