@@ -9879,6 +9879,38 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ── Auto-actualización transparente: reemplaza al Cmd+Shift+R ──
+// Al volver a la app (foco) compara el ETag del HTML; si cambió (subimos algo nuevo), recarga sola.
+// No interrumpe si estás escribiendo o con un modal abierto. Anti-loop: máx 1 recarga por minuto.
+(function () {
+  let _ver = null;
+  function _ocupado() {
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return true;
+    return [].some.call(document.querySelectorAll('.open,[style*="display:flex"],[style*="display: flex"]'), function (el) {
+      const s = getComputedStyle(el);
+      return s.position === 'fixed' && s.display !== 'none' && el.offsetParent !== null && el.offsetHeight > 80;
+    });
+  }
+  async function _chk() {
+    try {
+      const res = await fetch(location.pathname + '?_v=' + Date.now(), { cache: 'no-store' });
+      const et = res.headers.get('etag') || res.headers.get('last-modified') || '';
+      if (!et) return;
+      if (_ver === null) { _ver = et; return; }                 // primera vez: guarda la versión actual
+      if (et !== _ver && !_ocupado()) {
+        const last = +(sessionStorage.getItem('_verRl') || 0);
+        if (Date.now() - last < 60000) return;                  // anti-loop
+        sessionStorage.setItem('_verRl', String(Date.now()));
+        location.reload();
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) _chk(); });
+  window.addEventListener('focus', _chk);
+  setTimeout(_chk, 4000);                                       // primer chequeo: fija la versión con la que cargó
+})();
+
 // ─── REMITO ──────────────────────────────────────────────────────────────────
 let _remitoTexto = '';
 let _remitoVenta = null;

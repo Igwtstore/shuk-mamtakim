@@ -1,4 +1,4 @@
-const CACHE = 'shuk-v3';
+const CACHE = 'shuk-v4';
 const STATIC = ['/', '/index.html', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -40,9 +40,9 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Página principal → network first, cache fallback
+  // Página principal → SIEMPRE de la red, sin caché HTTP (así se ve la última versión). Cache solo offline.
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' })
       .then(res => {
         if (res.ok) {
           const clone = res.clone();
