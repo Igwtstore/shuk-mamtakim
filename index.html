@@ -2610,9 +2610,9 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     y += 32;
     const items = byCat[c].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
     if (_acLayout === 'grilla') {
-      const colW = (W - margin * 2 - 16) / 3, fotoSz = 100;          // foto cuadrada compacta → entran 9 por hoja
+      const colW = (W - margin * 2 - 16) / 3, fotoSz = 118;          // foto cuadrada grande pero que entran 9 por hoja
       const fotoX0 = (colW - fotoSz) / 2;                            // centrada en la celda
-      const cellH = fotoSz + 74;                                     // foto + nombre + descripción + precio (centrados)
+      const cellH = fotoSz + 70;                                     // foto + nombre + descripción + precio (centrados)
       items.forEach((p, idx) => {
         const col = idx % 3;
         if (col === 0) asegurar(cellH + 8);
