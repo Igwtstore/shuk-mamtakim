@@ -10263,23 +10263,34 @@ function abrirEditarPedido(v) {
   _editLineas.forEach(l => {
     if (!l.nombre) return;
     // Match por nombre actual O anteriores (historial) → renombrar no rompe pedidos viejos.
+    const ld = (l.descripcion || '').trim().toLowerCase();
+    const _descOk = c => { const pd = (c.desc || '').trim().toLowerCase(); return pd && ld && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim())); };
     let cands = productos.filter(p => p.nombre === l.nombre);
     if (!cands.length) cands = productos.filter(p => _matchNombreProd(p, l.nombre));
-    if (!cands.length) return;
-    let pl = cands[0];
-    if (cands.length > 1) {
-      if (l.descripcion) {
-        const ld = l.descripcion.toLowerCase();
-        pl = cands.find(c => {
-          const pd = (c.desc || '').toLowerCase();
-          return pd && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim()));
-        }) || null;
-      } else {
+    let pl = null;
+    if (cands.length === 1) {
+      // Un solo candidato: confiar solo si su descripción coincide (o no hay desc para comparar).
+      // Si la línea tiene desc y NO coincide, es un match dudoso (historial perdido) → ir al difuso.
+      pl = (!ld || !(cands[0].desc || '').trim() || _descOk(cands[0])) ? cands[0] : null;
+    } else if (cands.length > 1) {
+      if (l.descripcion) pl = cands.find(_descOk) || null;
+      else {
         const esMay = (v.tipo || '') === 'Mayorista';
         pl = cands.find(c => {
           const precio = esMay ? parseFloat((c.precioMay || '0').toString().replace(',', '.')) : (parseFloat(c.precioMin) || 0);
           return Math.abs(precio - l.precio) < 0.01;
         }) || null;
+      }
+    }
+    // Fallback DIFUSO: el producto que más palabras (>2 letras) comparte con "nombre · desc" de la línea,
+    // mirando su nombre + descripción. Cubre el renombrado sin historial (Pitzujim → Pitzujim-Sabor).
+    if (!pl) {
+      const palabras = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[()0-9.,!¡¿?·\-]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+      const lp = palabras(l.nombre + ' ' + (l.descripcion || ''));
+      if (lp.length) {
+        let best = null, score = 0;
+        productos.forEach(p => { const cp = palabras((p.nombre || '') + ' ' + (p.desc || '')); const sc = lp.filter(w => cp.indexOf(w) !== -1).length; if (sc > score) { score = sc; best = p; } });
+        if (score >= 2) pl = best;
       }
     }
     if (!pl) return;
