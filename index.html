@@ -1272,6 +1272,7 @@
   </div>
   <div class="admin-card" data-seccion="stock">
     <div class="admin-titulo">📦 Stock disponible</div>
+    <input id="stock-buscar" oninput="renderStockTotal()" placeholder="🔍 Buscar producto para editar…" style="width:100%;margin-bottom:0.6rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none">
     <div id="stock-total-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
   </div>
   <div class="admin-card">
@@ -5287,7 +5288,7 @@ async function subirArchivosCloudinary() {
 // ─── EDITOR DE PRODUCTO ───────────────────────────────────────────
 // Fotos del editor: UNA sola lista ordenable (existentes + nuevas mezcladas). La 1ª = portada.
 // Cada item: {k:'old', v:idCloudinary} | {k:'new', v:File}. Se reordena con drag & drop o ⭐.
-let _epId = null, _epMedia = [], _epDragIdx = null;
+let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHome = null;
 
 function poblarEditorProductos() {
   // El buscador lee de `productos` en vivo; si está abierto, refresca resultados
@@ -5414,16 +5415,38 @@ async function analizarFotoEditor() {
 }
 
 function cerrarEditorProducto() {
-  document.getElementById('ep-form').style.display = 'none';
-  document.getElementById('ep-buscar').value = '';
+  const form = document.getElementById('ep-form');
+  if (_epPopup) {                                   // venía como ventana flotante (desde Stock)
+    if (_epFormHome) _epFormHome.appendChild(form); // devolver el editor a su lugar (Catálogo)
+    const ov = document.getElementById('ep-popup-ov'); if (ov) ov.style.display = 'none';
+    _epPopup = false;
+    if (typeof renderStockTotal === 'function') renderStockTotal();   // refrescar Stock (con la edición + la búsqueda intacta)
+  }
+  form.style.display = 'none';
+  const epb = document.getElementById('ep-buscar'); if (epb) epb.value = '';
   const res = document.getElementById('ep-resultados'); if (res) res.style.display = 'none';
   _epId = null; _epMedia = [];
 }
 
+// Editar un producto SIN salir de Stock: el editor se abre como ventana flotante encima.
 function irAEditarProducto(id) {
-  setPanelSeccion('catalogo');
+  const form = document.getElementById('ep-form');
+  let ov = document.getElementById('ep-popup-ov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'ep-popup-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:1rem;overflow-y:auto';
+    ov.onclick = e => { if (e.target === ov) cerrarEditorProducto(); };
+    const box = document.createElement('div'); box.id = 'ep-popup-box';
+    box.style.cssText = 'background:#fff;border-radius:14px;max-width:560px;width:100%;margin:auto;padding:1rem';
+    ov.appendChild(box); document.body.appendChild(ov);
+  }
+  if (!_epFormHome) _epFormHome = form.parentNode;   // recordar su lugar para devolverlo al cerrar
+  document.getElementById('ep-popup-box').appendChild(form);
+  form.style.display = 'block';
+  ov.style.display = 'flex';
+  _epPopup = true;
   elegirProductoEditor(id);
-  setTimeout(() => document.getElementById('ep-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  ov.scrollTop = 0;
 }
 
 function cargarProductoEditor(id) {
@@ -5562,10 +5585,8 @@ async function eliminarProductoEditor() {
   if (!confirm(`¿Eliminar "${p?.nombre}"? Se oculta de la tienda y el panel (el historial de ventas se conserva).`)) return;
   const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: _epId, activo: 'NO' }), '🙈 Producto ocultado');
   if (!r.error) {
-    document.getElementById('ep-form').style.display = 'none';
-    document.getElementById('ep-buscar').value = '';
-    _epId = null;
     await cargarProductos();
+    cerrarEditorProducto();   // maneja también el modo ventana flotante (devuelve el editor + refresca Stock)
     poblarEditorProductos();
   }
 }
@@ -5576,10 +5597,8 @@ async function borrarProductoEditor() {
   if (!confirm(`¿BORRAR DEFINITIVAMENTE "${p?.nombre}"?\n\nSe va del catálogo para siempre. Si solo querés que no se venda más, mejor usá "Ocultar" (conserva el historial).\n\n¿Seguro?`)) return;
   const r = await apiWrite(new URLSearchParams({ accion: 'eliminarProducto', id: _epId }), '🗑️ Producto borrado');
   if (!r.error) {
-    document.getElementById('ep-form').style.display = 'none';
-    document.getElementById('ep-buscar').value = '';
-    _epId = null;
     await cargarProductos();
+    cerrarEditorProducto();   // maneja también el modo ventana flotante
     poblarEditorProductos();
   }
 }
@@ -7777,9 +7796,10 @@ function renderStockTotal() {
   const cont = document.getElementById('stock-total-lista');
   if (!cont) return;
   if (!productos.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Cargando productos…</div>'; return; }
-  const lista = productosVisibles().filter(p => (p.stock||0) > 0)
+  const q = (document.getElementById('stock-buscar')?.value || '').trim().toLowerCase();
+  const lista = productosVisibles().filter(p => (p.stock||0) > 0 && (!q || (p.nombre||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)))
     .sort((a,b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
-  if (!lista.length) { cont.innerHTML = '<div style="padding:0.5rem 0;color:var(--texto-suave);font-size:0.85rem">Sin stock cargado.</div>'; return; }
+  if (!lista.length) { cont.innerHTML = `<div style="padding:0.5rem 0;color:var(--texto-suave);font-size:0.85rem">${q ? 'Nada que coincida con la búsqueda.' : 'Sin stock cargado.'}</div>`; return; }
   const totalU = lista.reduce((s,p) => s + (p.stock||0), 0);
   cont.innerHTML = `<div style="font-weight:700;margin-bottom:0.6rem;font-size:0.88rem">${lista.length} productos · ${totalU} unidades en total</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:0.6rem">
