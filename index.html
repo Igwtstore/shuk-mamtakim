@@ -2485,7 +2485,7 @@ function _acBuildDoc() {
     return parts.join('<span style="color:#ccc"> · </span>') || '';
   };
   const foto = (p, h) => { const imgs = (p.imagen||'').split(',').map(x=>x.trim()).filter(Boolean);
-    return imgs.length ? `<img src="${imgUrl(imgs[0])[0].replace('/w_400,', '/w_1000,')}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
+    return imgs.length ? `<img src="${imgUrl(imgs[0])[0].replace('/w_400,', '/w_1000,')}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
   let cuerpo = '';
   cats.forEach(c => {
     cuerpo += `<div style="background:#fcf3e3;color:#c9954a;font-weight:800;font-size:0.82rem;padding:5px 10px;border-radius:6px;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em">${esc(c)}</div>`;
@@ -2543,6 +2543,26 @@ async function _imgADataUrl(url) {
   try { const r = await fetch(url); const b = await r.blob();
     return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsDataURL(b); }); } catch (e) { return ''; }
 }
+// Igual, pero recorta la imagen a un CUADRADO (cover, centrado) → en el catálogo todas las fotos
+// quedan parejas, del mismo tamaño, sin deformarse. El recorte se hace en un canvas sobre el dataURL
+// (ya local → sin problemas de CORS).
+async function _imgADataUrlCuadrada(url, sz) {
+  const dataUrl = await _imgADataUrl(url);
+  if (!dataUrl) return '';
+  return await new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const s = Math.min(img.width, img.height), sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+        const cv = document.createElement('canvas'); cv.width = sz; cv.height = sz;
+        cv.getContext('2d').drawImage(img, sx, sy, s, s, 0, 0, sz, sz);
+        res(cv.toDataURL('image/jpeg', 0.85));
+      } catch (e) { res(dataUrl); }
+    };
+    img.onerror = () => res(dataUrl);
+    img.src = dataUrl;
+  });
+}
 // PDF de CALIDAD IMPRENTA: texto vectorial nativo (nítido a cualquier zoom) + fotos insertadas.
 function _acPdfNativo(pdf, sel, fotos, logoData) {
   const M = _CAT_MARCAS[_acMarca] || _CAT_MARCAS.shuk, T = _CAT_TELS[_acTel] || _CAT_TELS.jony;
@@ -2590,17 +2610,19 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     y += 32;
     const items = byCat[c].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
     if (_acLayout === 'grilla') {
-      const colW = (W - margin * 2 - 16) / 3, cellH = 152;
+      const colW = (W - margin * 2 - 16) / 3, fotoSz = colW - 10, cellH = fotoSz + 52;   // foto CUADRADA → todas parejas
       items.forEach((p, idx) => {
         const col = idx % 3;
         if (col === 0) asegurar(cellH + 8);
         const x = margin + col * (colW + 8), yy = y;
         pdf.setDrawColor(...linea); pdf.setLineWidth(0.5); pdf.roundedRect(x, yy, colW, cellH, 5, 5, 'S');
-        if (fotos[p.id]) _addImgFit(pdf, fotos[p.id], x + 5, yy + 5, colW - 10, 92);
+        if (fotos[p.id]) { try { const pr = pdf.getImageProperties(fotos[p.id]); pdf.addImage(fotos[p.id], pr.fileType || 'JPEG', x + 5, yy + 5, fotoSz, fotoSz, undefined, 'FAST'); } catch (e) {} }
+        else { pdf.setFillColor(245, 245, 245); pdf.rect(x + 5, yy + 5, fotoSz, fotoSz, 'F'); }
+        const txtY = yy + fotoSz + 18;
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(...negro);
-        pdf.text(pdf.splitTextToSize(_sinEmoji(p.nombre), colW - 12).slice(0, 2), x + 6, yy + 110);
+        pdf.text(pdf.splitTextToSize(_sinEmoji(p.nombre), colW - 12).slice(0, 2), x + 6, txtY);
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(...cMarca);
-        pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 3), x + 6, yy + 132);
+        pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 3), x + 6, txtY + 22);
         if (col === 2 || idx === items.length - 1) y += cellH + 8;
       });
     } else {
@@ -2648,7 +2670,7 @@ async function generarCatalogo(tipo) {
       const fotos = {};
       await Promise.all(sel.map(async p => {
         const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
-        if (imgs.length) fotos[p.id] = await _imgADataUrl(imgUrl(imgs[0])[0].replace('/w_400,', '/w_600,'));
+        if (imgs.length) fotos[p.id] = await _imgADataUrlCuadrada(imgUrl(imgs[0])[0].replace('/w_400,', '/w_600,'), 600);
       }));
       const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
       _acPdfNativo(pdf, sel, fotos, logoData);
