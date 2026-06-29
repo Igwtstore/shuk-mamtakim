@@ -850,6 +850,7 @@
 <body>
 
 <header class="header">
+  <div style="position:fixed;top:3px;right:9px;font-size:0.66rem;opacity:0.55;pointer-events:none;z-index:9999;color:#aaa">בס״ד</div>
   <div class="header-inner">
     <div class="logo" style="display:flex;align-items:center;gap:0.6rem">
       <img src="https://res.cloudinary.com/dq2boloyp/image/upload/h_44,w_44,c_fill,r_8,f_auto/app_icon_rmbyhb.png" alt="Shuk Mamtakim" style="height:40px;width:40px;border-radius:8px;object-fit:cover;flex-shrink:0" />
@@ -2226,6 +2227,8 @@ async function generarCatalogoPDF() {
     doc.text('Dulces Tradicionales · Frutos Secos', margin, 64);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...negro);
     doc.text('Lista de Precios — ' + tipoActual.toUpperCase(), margin, 86);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...gris);
+    doc.text('BS"D', W - margin, 34, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...gris);
     doc.text(hoy, W - margin, 86, { align: 'right' });
     doc.setDrawColor(...dorado); doc.setLineWidth(1.2);
@@ -2515,7 +2518,7 @@ function _acBuildDoc() {
     <div style="display:flex;align-items:center;gap:13px;border-bottom:2.5px solid ${M.color};padding-bottom:11px">
       ${M.logo}
       <div style="flex:1"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:800;color:${M.color};line-height:1">${esc(M.nombre)}</div><div style="font-size:0.72rem;color:#999;margin-top:3px">${esc(M.sub)}</div></div>
-      <div style="text-align:right;font-size:0.74rem;color:#888"><b style="color:#444">${esc(titulo)}</b><br>${hoy}</div>
+      <div style="text-align:right;font-size:0.74rem;color:#888"><div style="font-size:0.72rem;color:#777;margin-bottom:1px">בס״ד</div><b style="color:#444">${esc(titulo)}</b><br>${hoy}</div>
     </div>
     ${cuerpo}
     <div id="ac-pie" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;border-top:1px solid #eee;padding-top:13px">
@@ -2589,8 +2592,9 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
       const tx = logoData ? margin + 62 : margin;
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...cMarca); pdf.text(_sinEmoji(M.nombre), tx, y + 22);
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(_sinEmoji(M.sub), tx, y + 37);
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...negro); pdf.text(titulo, W - margin, y + 16, { align: 'right' });
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(hoy, W - margin, y + 30, { align: 'right' });
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5); pdf.setTextColor(...gris); pdf.text('BS"D', W - margin, y + 6, { align: 'right' });
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...negro); pdf.text(titulo, W - margin, y + 18, { align: 'right' });
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gris); pdf.text(hoy, W - margin, y + 32, { align: 'right' });
       y += 56; pdf.setDrawColor(...cMarca); pdf.setLineWidth(1.5); pdf.line(margin, y, W - margin, y); y += 16;
       if (_acRefPesos && _acTcRef > 0) {   // aclaración del TC usado para la referencia en pesos
         pdf.setFont('helvetica', 'italic'); pdf.setFontSize(7.5); pdf.setTextColor(...gris);
