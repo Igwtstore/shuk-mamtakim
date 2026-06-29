@@ -160,13 +160,105 @@ function _asegurarColTramos_(h) {
   if (h.getRange(1, 29).getValue() !== 'Pagos Tramos') h.getRange(1, 29).setValue('Pagos Tramos');
 }
 
+// ── Ganancia Pitzujim/golosinas de Jony — MULTI-MONEDA, en vivo (con los costos actuales) ──
+// La ganancia se separa por la MONEDA EN QUE SE VENDIÓ (lo que entra a caja). Modelo del usuario:
+//   Pitzujim → costo $, venta $ (may/min);  Golosinas de Jony → costo U$S, venta may U$S / min $.
+// Si la venta fue en $ pero el costo está en U$S (golosina minorista), se convierte el costo con el
+// TC de la venta (col 19). Recalcula en vivo: al cargar costos, la ganancia se actualiza sola.
+// OJO: muchos productos comparten el nombre "Pitzujim" (se distinguen por la DESCRIPCIÓN: "Manies
+// Sabor Grill", "Nueces Pecan Lotus"...). Por eso el mapa guarda VARIOS productos por nombre y el
+// match desempata por descripción. Verificado en /tmp/test_ganancia_pitz.js (9 casos).
+function _mapaProdJony_(ss) {
+  const map = {};   // nombreLower → [ {id, moneda, costo, desc}, ... ]
+  const st = ss.getSheetByName('Stock');
+  if (!st || st.getLastRow() < 2) return map;
+  const costos = {};   // id → {u:unidades, c:costoTotal} de CostosJony (promedio ponderado), una sola lectura
+  const cj = ss.getSheetByName('CostosJony');
+  if (cj && cj.getLastRow() >= 2) {
+    cj.getRange(2, 1, cj.getLastRow() - 1, Math.max(5, cj.getLastColumn())).getValues().forEach(r => {
+      const id = (r[1] || '').toString(); if (!id) return;
+      if (!costos[id]) costos[id] = { u: 0, c: 0 };
+      costos[id].u += parseFloat(r[3]) || 0;
+      costos[id].c += parseFloat(r[4]) || 0;
+    });
+  }
+  const nc = Math.min(31, st.getLastColumn());
+  st.getRange(2, 1, st.getLastRow() - 1, nc).getValues().forEach(r => {
+    const id = (r[0] || '').toString(); if (!id) return;
+    if ((r[14] || '').toString().trim() !== 'Jony') return;            // SOLO Jony (su ganancia/Maaser)
+    const moneda = ((r[17] || '$').toString().trim() === 'U$S') ? 'U$S' : '$';
+    let costo;
+    if (costos[id] && costos[id].u > 0) costo = costos[id].c / costos[id].u;   // promedio de compras
+    else costo = parseFloat(String(r[29] || '0').replace(',', '.')) || 0;      // fallback: costo manual (col 30)
+    const entry = { id, moneda, costo, desc: (r[2] || '').toString().trim().toLowerCase() };
+    const push = key => { if (key) (map[key] = map[key] || []).push(entry); };
+    push((r[1] || '').toString().trim().toLowerCase());
+    (r[30] || '').toString().split('|').forEach(n => push(n.trim().toLowerCase()));   // historial de nombres
+  });
+  return map;
+}
+function _parseLineaVenta_(linea) {
+  const m = (linea || '').match(/^•\s*(\d+)x\s+(.+?)\s+—\s+(\$|U\$S)\s+([\d.,]+)\s+c\/u/);
+  if (!m) return null;
+  const cuerpo = m[2].replace(/\s*\[-\d+%\]\s*$/, '');     // quita el tag de descuento [-X%]
+  const partes = cuerpo.split(' · ');
+  const moneda = m[3] === 'U$S' ? 'U$S' : '$';
+  let precio;
+  if (moneda === 'U$S') precio = parseFloat(m[4].replace(',', '.'));
+  else precio = parseInt(m[4].replace(/\./g, '').replace(',', ''), 10);   // pesos: punto = miles
+  return { qty: parseInt(m[1], 10), nombre: partes[0].trim(), desc: partes.slice(1).join(' · ').trim(), moneda, precio };
+}
+// Desempata varios productos con el MISMO nombre (caso Pitzujim) usando la descripción de la línea.
+function _matchProdLinea_(cands, descLinea) {
+  if (!cands || !cands.length) return null;
+  if (cands.length === 1) return cands[0];
+  const ld = (descLinea || '').toLowerCase().trim();
+  if (ld) {
+    let hit = cands.find(c => c.desc === ld);                                                       // exacto
+    if (hit) return hit;
+    hit = cands.find(c => c.desc && (ld.startsWith(c.desc.substring(0, 30)) || c.desc.startsWith(ld.substring(0, 30))));   // prefijo (desc truncada)
+    if (hit) return hit;
+  }
+  return null;   // ambiguo y sin desc que matchee → no lo cuento (mejor que sumar un costo errado)
+}
+function _gananciaPitzVenta_(productosStr, mapa, tc) {
+  const out = { ars: 0, usd: 0, faltaCosto: [], faltaTC: false };
+  (productosStr || '').split(' || ').forEach(linea => {
+    const t = (linea || '').trim();
+    if (!t || t[0] !== '•') return;                   // ignora notas / "🏷️ Descuento global"
+    const L = _parseLineaVenta_(t);
+    if (!L) return;
+    const cands = mapa[L.nombre.toLowerCase()];
+    if (!cands || !cands.length) return;              // no es de Jony / no existe → no cuenta
+    const p = _matchProdLinea_(cands, L.desc);
+    if (!p) return;                                   // ambiguo, no identificado → no cuenta
+    if (!(p.costo > 0)) {                             // sin costo → no cuenta, se reporta con nombre + desc
+      const etq = L.nombre + (L.desc ? ' · ' + L.desc : '');
+      if (out.faltaCosto.indexOf(etq) === -1) out.faltaCosto.push(etq);
+      return;
+    }
+    let costoEnVenta = p.costo;
+    if (L.moneda !== p.moneda) {
+      if (!(tc > 0)) { out.faltaTC = true; return; }       // no puedo convertir sin TC → no cuento, reporto
+      if (L.moneda === '$' && p.moneda === 'U$S') costoEnVenta = p.costo * tc;       // costo U$S → pesos
+      else if (L.moneda === 'U$S' && p.moneda === '$') costoEnVenta = p.costo / tc;  // costo $ → U$S
+    }
+    const gan = (L.precio - costoEnVenta) * L.qty;
+    if (L.moneda === 'U$S') out.usd += gan; else out.ars += gan;
+  });
+  out.ars = Math.round(out.ars);
+  out.usd = Math.round(out.usd * 100) / 100;
+  return out;
+}
+
 function gananciaJonyPeriodo_(ss) {
-  const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, items: [] };
+  const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, pitzARS: 0, pitzUSD: 0, items: [], faltaCosto: [], faltaTC: false };
   const h = ss.getSheetByName('Ventas');
   if (!h || h.getLastRow() < 2) return out;
   const CAJAS_ARS = ['MP_GABY', 'EFT_MYRI', 'EFT_JONY', 'MP_JONY', 'CTA_CTE_ARS'];
   const d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   const real = c => !!c && !String(c).startsWith('CTA_CTE');
+  const mapa = _mapaProdJony_(ss);                         // mapa de productos de Jony (nombre → costo+moneda), una vez
   for (let i = 0; i < d.length; i++) {
     const r = d[i];
     const estado = (r[7] || '').toString().trim();
@@ -176,7 +268,10 @@ function gananciaJonyPeriodo_(ss) {
     const arsM = parseFloat(r[12]) || 0, usdM = parseFloat(r[13]) || 0;
     const comiARS = parseFloat(r[14]) || 0, comiUSD = parseFloat(r[15]) || 0;
     const cajaM = (r[17] || '').toString(), tc = parseFloat(r[18]) || 0;
-    const pitz = parseFloat(r[24]) || 0;                    // col 25 GananciaPitz
+    // Ganancia Pitzujim EN VIVO: recalcula desde los productos + costos actuales + TC de la venta (multi-moneda).
+    const gp = _gananciaPitzVenta_((r[4] || '').toString(), mapa, tc);
+    gp.faltaCosto.forEach(n => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
+    if (gp.faltaTC) out.faltaTC = true;
     const sinComi = (r[26] || '').toString().toUpperCase() === 'SI';   // col 27: saldo cargado SIN comisión
     let cARS = 0, cUSD = 0;
     if (arsM > 0 && !sinComi) cARS += comiARS || Math.round(arsM * 0.15);
@@ -184,10 +279,12 @@ function gananciaJonyPeriodo_(ss) {
       if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
       else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
     }
-    out.comisionARS += cARS; out.comisionUSD += cUSD; out.pitz += pitz;
-    out.items.push({ nVenta: r[10], cliente: (r[2] || '').toString(), comiARS: cARS, comiUSD: cUSD, pitz: pitz,
+    out.comisionARS += cARS; out.comisionUSD += cUSD;
+    out.pitzARS += gp.ars; out.pitzUSD += gp.usd;
+    out.items.push({ nVenta: r[10], cliente: (r[2] || '').toString(), comiARS: cARS, comiUSD: cUSD, pitz: gp.ars, pitzUSD: gp.usd,
       fecha: r[1] instanceof Date ? Utilities.formatDate(r[1], TZ, 'dd/MM/yyyy HH:mm') : (r[1] || '').toString() });
   }
+  out.pitz = out.pitzARS;   // compat con código que aún lee out.pitz (= ganancia Pitzujim en pesos)
   return out;
 }
 
@@ -1235,11 +1332,13 @@ function doGet(e) {
       per.items.forEach(it => {
         if (it.comiARS > 0 || it.comiUSD > 0) liveMovs.push({ fecha: it.fecha, tipo: 'comision_miri',
           descripcion: 'Comisión ' + it.cliente + (it.comiUSD > 0 ? ' · U$S ' + it.comiUSD : ''), monto: it.comiARS });
-        if (it.pitz > 0) liveMovs.push({ fecha: it.fecha, tipo: 'ganancia_pitzujim', descripcion: 'Pitzujim — ' + it.cliente, monto: it.pitz });
+        if (it.pitz > 0 || it.pitzUSD > 0) liveMovs.push({ fecha: it.fecha, tipo: 'ganancia_pitzujim',
+          descripcion: 'Pitzujim — ' + it.cliente + (it.pitzUSD > 0 ? ' · U$S ' + it.pitzUSD : ''), monto: it.pitz, montoUSD: it.pitzUSD || 0 });
       });
-      const balance = per.comisionARS + per.pitz + manualARS;
-      return json({ balance, balanceUSD: per.comisionUSD, comisionARS: per.comisionARS, comisionUSD: per.comisionUSD,
-        pitz: per.pitz, movimientos: manual.concat(liveMovs) });
+      const balance = per.comisionARS + per.pitzARS + manualARS;
+      return json({ balance, balanceUSD: Math.round((per.comisionUSD + per.pitzUSD) * 100) / 100,
+        comisionARS: per.comisionARS, comisionUSD: per.comisionUSD, pitz: per.pitzARS, pitzUSD: per.pitzUSD,
+        faltaCosto: per.faltaCosto, faltaTC: per.faltaTC, movimientos: manual.concat(liveMovs) });
     }
     if (accion === 'registrarRetiro') {
       const h = getOrCreate(ss, 'GananciasJony', ['Fecha','Tipo','Descripcion','Monto']);
@@ -1256,8 +1355,8 @@ function doGet(e) {
       // el diezmo, marca esas ventas como liquidadas (col 26) para que el período vuelva a CERO,
       // y registra el corte (incluye lo pagado a Myri, que viene del cálculo de socios del front).
       const per = gananciaJonyPeriodo_(ss);
-      const gananciaARS = Math.round(per.comisionARS + per.pitz);
-      const gananciaUSD = Math.round(per.comisionUSD * 100) / 100;
+      const gananciaARS = Math.round(per.comisionARS + per.pitzARS);
+      const gananciaUSD = Math.round((per.comisionUSD + per.pitzUSD) * 100) / 100;
       const diezmoARS = Math.round(gananciaARS * 0.10);
       const diezmoUSD = Math.round(gananciaUSD * 0.10 * 100) / 100;
       const corteId = 'C' + Date.now();

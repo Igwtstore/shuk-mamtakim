@@ -965,6 +965,7 @@
         <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Maaser (10%)</div><div class="dash-num" id="gan-diezmo" style="color:#c0392b">—</div></div>
         <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">A retirar (90%)</div><div class="dash-num" id="gan-retiro" style="color:var(--azul)">—</div></div>
       </div>
+      <div id="gan-faltacosto" style="display:none;margin-bottom:1rem;background:#fff3e6;border:1px solid #f0d9a8;border-radius:8px;padding:0.6rem 0.8rem;font-size:0.8rem;color:#9a6b00;line-height:1.5"></div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
         <button onclick="hacerCorteFlow()" style="padding:0.5rem 1.2rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">✂️ Hacer corte (cerrar período)</button>
         <button onclick="abrirSaldoInicialModal()" style="padding:0.5rem 1rem;background:var(--gris);color:var(--texto-suave);border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;cursor:pointer">Saldo inicial</button>
@@ -1789,7 +1790,7 @@
       <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:0.15rem">Podés adjuntar varios (ej. pagos a cuenta). Se suman a los que ya tenga el pedido.</div>
     </div>
     <div id="cobro-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">Tipo de cambio — U$S 1 = $</label>
+      <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">💱 Tipo de cambio del día — U$S 1 = $ <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(informalo siempre)</span></label>
       <input type="number" id="cobro-tc" placeholder="ej: 1200" min="1" oninput="cobro_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
       <div id="cobro-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
     </div>
@@ -8463,6 +8464,16 @@ async function renderGanancias() {
   document.getElementById('gan-total').textContent = '$ ' + Math.round(balance).toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + balanceUSD.toFixed(2) : '');
   document.getElementById('gan-diezmo').textContent = '$ ' + diezmo.toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + (balanceUSD*0.1).toFixed(2) : '');
   document.getElementById('gan-retiro').textContent = '$ ' + retiro.toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + (balanceUSD*0.9).toFixed(2) : '');
+  // Aviso: productos de Jony SIN costo cargado (su ganancia no está contada) → para que el Maaser sea exacto.
+  const _fc = (ganData && ganData.faltaCosto) || [];
+  const _fcBox = document.getElementById('gan-faltacosto');
+  if (_fcBox) {
+    let _h = '';
+    if (_fc.length) _h += `⚠️ <b>${_fc.length} producto(s) de Jony sin costo</b> → su ganancia todavía NO está contada. Cargales el costo en el editor masivo (filtro <b>Jony</b> → columna <b>Costo</b>):<br><span style="color:#7a5a1a">${_fc.map(esc).join(' · ')}</span>`;
+    if (ganData && ganData.faltaTC) _h += (_h ? '<br><br>' : '') + '⚠️ Hay una venta minorista con golosina (costo U$S) <b>sin tipo de cambio</b> → esa ganancia no se contó. Reabrí esa venta y cobrala poniendo el TC del día.';
+    _fcBox.style.display = _h ? 'block' : 'none';
+    _fcBox.innerHTML = _h;
+  }
   // Movimientos combinados (ganancias + compras recientes)
   const movs = [...(ganData.movimientos||[])].reverse();
   const lista = document.getElementById('gan-movimientos');
@@ -9312,7 +9323,9 @@ function cobro_recalcAjuste() {
 }
 function cobro_onSelectChange() {
   const tcw = document.getElementById('cobro-tc-wrap');
-  if (tcw) tcw.style.display = _cobroNecesitaTC() ? 'block' : 'none';
+  // TC SIEMPRE visible: el usuario informa el tipo de cambio del día en CADA cobro (incluso ventas
+  // 100% en pesos), para que el balance de ganancias multi-moneda de Jony pueda convertir costos U$S.
+  if (tcw) tcw.style.display = 'block';
   cobro_recalcAjuste();
   cobro_calcularTC();
 }
