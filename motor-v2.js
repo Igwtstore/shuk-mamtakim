@@ -190,7 +190,7 @@ function _mapaProdJony_(ss) {
     let costo;
     if (costos[id] && costos[id].u > 0) costo = costos[id].c / costos[id].u;   // promedio de compras
     else costo = parseFloat(String(r[29] || '0').replace(',', '.')) || 0;      // fallback: costo manual (col 30)
-    const entry = { id, moneda, costo, desc: (r[2] || '').toString().trim().toLowerCase() };
+    const entry = { id, moneda, costo, desc: (r[2] || '').toString().trim().toLowerCase(), nombre: (r[1] || '').toString().trim().toLowerCase() };
     const push = key => { if (key) (map[key] = map[key] || []).push(entry); };
     push((r[1] || '').toString().trim().toLowerCase());
     (r[30] || '').toString().split('|').forEach(n => push(n.trim().toLowerCase()));   // historial de nombres
@@ -209,17 +209,32 @@ function _parseLineaVenta_(linea) {
   return { qty: parseInt(m[1], 10), nombre: partes[0].trim(), desc: partes.slice(1).join(' · ').trim(), moneda, precio };
 }
 // Desempata varios productos con el MISMO nombre (caso Pitzujim) usando la descripción de la línea.
+// Robusto al renombrado: si el usuario metió el sabor en el NOMBRE (ej. "Pitzujim - Manies Sabor
+// Grill") y borró la descripción, igual matchea por palabras compartidas nombre↔desc de la venta vieja.
 function _matchProdLinea_(cands, descLinea) {
   if (!cands || !cands.length) return null;
   if (cands.length === 1) return cands[0];
   const ld = (descLinea || '').toLowerCase().trim();
   if (ld) {
-    let hit = cands.find(c => c.desc === ld);                                                       // exacto
+    let hit = cands.find(c => c.desc === ld);                                                       // 1) desc exacta
     if (hit) return hit;
-    hit = cands.find(c => c.desc && (ld.startsWith(c.desc.substring(0, 30)) || c.desc.startsWith(ld.substring(0, 30))));   // prefijo (desc truncada)
+    hit = cands.find(c => c.desc && (ld.startsWith(c.desc.substring(0, 30)) || c.desc.startsWith(ld.substring(0, 30))));   // 2) prefijo (desc truncada)
     if (hit) return hit;
   }
-  return null;   // ambiguo y sin desc que matchee → no lo cuento (mejor que sumar un costo errado)
+  // 3) desempate difuso: el candidato que más palabras (>2 letras) comparte con la desc de la venta,
+  //    mirando su nombre + desc (cubre el caso "el sabor se mudó al nombre y se borró la descripción").
+  const palabras = s => (s || '').toLowerCase().replace(/[()0-9.,!¡¿?·\-]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  const lp = palabras(ld);
+  if (lp.length) {
+    let best = null, bestScore = 0;
+    cands.forEach(c => {
+      const cp = palabras(c.nombre + ' ' + c.desc);
+      const score = lp.filter(w => cp.indexOf(w) !== -1).length;
+      if (score > bestScore) { bestScore = score; best = c; }
+    });
+    if (bestScore >= 1) return best;
+  }
+  return null;   // ambiguo y nada que matchee → no lo cuento (mejor que sumar un costo errado)
 }
 function _gananciaPitzVenta_(productosStr, mapa, tc) {
   const out = { ars: 0, usd: 0, faltaCosto: [], faltaTC: false };
