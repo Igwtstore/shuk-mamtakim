@@ -1344,7 +1344,7 @@
           <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option><option value="Oculto">🙈 Oculto (solo ventas internas)</option></select>
         </div>
       </div>
-      <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (⭐ = portada · ✕ = quitar)</label></div>
+      <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (arrastrá para ordenar · ⭐ = portada · ✕ = quitar)</label></div>
       <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
       <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
       <button type="button" onclick="abrirCopiarFotoDe('editor')" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar foto de otro producto</button>
@@ -5240,7 +5240,7 @@ async function _copiarFotoElegir(foto, el) {
   showToast('📋 Copiando la foto…');
   const nuevoId = await copiarFotoCloudinary(foto);
   if (!nuevoId) { showToast('⚠️ No se pudo copiar la foto'); if (el) { el.style.pointerEvents = ''; el.style.opacity = ''; } return; }
-  if (_copiarDestino === 'editor') { _epFotos.push(nuevoId); renderFotosEditor(); }
+  if (_copiarDestino === 'editor') { _epMedia.push({ k: 'old', v: nuevoId }); renderFotosEditor(); }
   else { _npCopiadas.push(nuevoId); renderNpCopiadas(); }
   showToast('✓ Foto copiada');
   const ov = document.getElementById('copiar-foto-ov'); if (ov) ov.remove();
@@ -5285,7 +5285,9 @@ async function subirArchivosCloudinary() {
 }
 
 // ─── EDITOR DE PRODUCTO ───────────────────────────────────────────
-let _epId = null, _epFotos = [], _epNuevas = [];
+// Fotos del editor: UNA sola lista ordenable (existentes + nuevas mezcladas). La 1ª = portada.
+// Cada item: {k:'old', v:idCloudinary} | {k:'new', v:File}. Se reordena con drag & drop o ⭐.
+let _epId = null, _epMedia = [], _epDragIdx = null;
 
 function poblarEditorProductos() {
   // El buscador lee de `productos` en vivo; si está abierto, refresca resultados
@@ -5393,7 +5395,7 @@ function epCategoriaChange(sel) {
 }
 // IA en el editor: mira la foto actual del producto y sugiere nombre/descripción/categoría.
 async function analizarFotoEditor() {
-  const ref = (_epFotos || [])[0];
+  const ref = ((_epMedia.find(m => m.k === 'old')) || {}).v;
   if (!ref) { showToast('Este producto no tiene foto para analizar'); return; }
   const status = document.getElementById('ep-status');
   status.textContent = '✨ La IA está mirando la foto...';
@@ -5415,7 +5417,7 @@ function cerrarEditorProducto() {
   document.getElementById('ep-form').style.display = 'none';
   document.getElementById('ep-buscar').value = '';
   const res = document.getElementById('ep-resultados'); if (res) res.style.display = 'none';
-  _epId = null; _epNuevas = [];
+  _epId = null; _epMedia = [];
 }
 
 function irAEditarProducto(id) {
@@ -5432,8 +5434,7 @@ function cargarProductoEditor(id) {
   const form = document.getElementById('ep-form');
   if (!p) { form.style.display = 'none'; _epId = null; return; }
   _epId = p.id;
-  _epFotos = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
-  _epNuevas = [];
+  _epMedia = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean).map(id => ({ k: 'old', v: id }));
   document.getElementById('ep-nombre').value = p.nombre || '';
   document.getElementById('ep-desc').value = p.desc || '';
   { const eb = document.getElementById('ep-descbot'); if (eb) eb.value = p.descBot || ''; }
@@ -5453,40 +5454,60 @@ function cargarProductoEditor(id) {
 
 function renderFotosEditor() {
   const cont = document.getElementById('ep-fotos');
-  let html = _epFotos.map((f, i) => {
-    const esVid = esVideo(f);
+  if (!cont) return;
+  cont.innerHTML = _epMedia.map((m, i) => {
+    const esVid = m.k === 'old' ? esVideo(m.v) : m.v.type.startsWith('video/');
+    const src = m.k === 'old' ? imgUrl(m.v)[0] : URL.createObjectURL(m.v);
     const media = esVid
-      ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem">🎬</div>`
-      : `<img src="${imgUrl(f)[0]}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onerror="this.style.opacity=0.3">`;
-    return `<div style="position:relative">${media}
-      ${i === 0 ? '<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(0,0,0,0.5);color:#fff;border-radius:0 0 8px 8px">portada</div>'
-                : `<button type="button" onclick="portadaFotoEditor(${i})" title="Hacer portada" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c9954a;color:#fff;font-size:0.65rem;cursor:pointer;line-height:1">⭐</button>`}
-      <button type="button" onclick="quitarFotoEditor(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
+      ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem;pointer-events:none">🎬</div>`
+      : `<img src="${src}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px;pointer-events:none" ${m.k === 'new' ? 'onload="URL.revokeObjectURL(this.src)"' : 'onerror="this.style.opacity=0.3"'}>`;
+    const esPortada = i === 0;
+    const label = esPortada
+      ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:var(--dorado);color:#fff;font-weight:700;border-radius:0 0 8px 8px;pointer-events:none">★ portada</div>`
+      : (m.k === 'new' ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(26,122,60,0.75);color:#fff;border-radius:0 0 8px 8px;pointer-events:none">nueva</div>` : '');
+    const btnPortada = esPortada ? '' : `<button type="button" onclick="portadaFotoEditor(${i})" title="Hacer portada" style="position:absolute;top:-6px;left:-6px;width:24px;height:24px;border-radius:50%;border:none;background:#c9954a;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1;z-index:2">⭐</button>`;
+    return `<div class="ep-foto-item" data-idx="${i}" style="position:relative;cursor:grab;touch-action:none;border-radius:8px">
+      ${media}${label}${btnPortada}
+      <button type="button" onclick="quitarFotoEditor(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1;z-index:2">✕</button>
     </div>`;
-  }).join('');
-  html += _epNuevas.map((f, i) => {
-    const esVid = f.type.startsWith('video/');
-    const media = esVid
-      ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem">🎬</div>`
-      : `<img src="${URL.createObjectURL(f)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px" onload="URL.revokeObjectURL(this.src)">`;
-    return `<div style="position:relative">${media}
-      <div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(26,122,60,0.75);color:#fff;border-radius:0 0 8px 8px">nueva</div>
-      <button type="button" onclick="quitarNuevaEditor(${i})" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#c0392b;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1">✕</button>
-    </div>`;
-  }).join('');
-  cont.innerHTML = html || '<div class="sinpedidos" style="grid-column:1/-1">Sin fotos — agregá abajo</div>';
+  }).join('') || '<div class="sinpedidos" style="grid-column:1/-1">Sin fotos — agregá abajo</div>';
+  _epFotosDragInit();
 }
-
-function portadaFotoEditor(i) { _epFotos.unshift(_epFotos.splice(i, 1)[0]); renderFotosEditor(); }
-function quitarFotoEditor(i) { _epFotos.splice(i, 1); renderFotosEditor(); }
-function quitarNuevaEditor(i) { _epNuevas.splice(i, 1); renderFotosEditor(); }
+// Drag & drop (mouse + touch, vía pointer events): arrastrá una foto sobre otra para reordenar.
+// La 1ª de la fila es la portada, así que arrastrar al frente = elegir portada.
+function _epFotosDragInit() {
+  const cont = document.getElementById('ep-fotos'); if (!cont) return;
+  cont.querySelectorAll('.ep-foto-item').forEach(el => el.addEventListener('pointerdown', _epDragStart));
+}
+function _epDragStart(e) {
+  if (e.target.closest('button')) return;                  // tocó ⭐ o ✕ → no es un arrastre
+  const item = e.currentTarget;
+  _epDragIdx = +item.dataset.idx;
+  try { item.setPointerCapture(e.pointerId); } catch (er) {}
+  item.style.opacity = '0.45';
+  const destDe = ev => { const t = document.elementFromPoint(ev.clientX, ev.clientY); return t && t.closest ? t.closest('.ep-foto-item') : null; };
+  const marcar = el => { document.querySelectorAll('.ep-foto-item').forEach(x => x.style.outline = ''); if (el) el.style.outline = '2px dashed var(--azul)'; };
+  const move = ev => { const d = destDe(ev); marcar(d && +d.dataset.idx !== _epDragIdx ? d : null); };
+  const up = ev => {
+    item.removeEventListener('pointermove', move);
+    item.removeEventListener('pointerup', up);
+    const d = destDe(ev);
+    if (d && _epDragIdx != null) { const destIdx = +d.dataset.idx; if (destIdx !== _epDragIdx) { const [mv] = _epMedia.splice(_epDragIdx, 1); _epMedia.splice(destIdx, 0, mv); } }
+    _epDragIdx = null;
+    renderFotosEditor();
+  };
+  item.addEventListener('pointermove', move);
+  item.addEventListener('pointerup', up);
+}
+function portadaFotoEditor(i) { if (i > 0 && i < _epMedia.length) { _epMedia.unshift(_epMedia.splice(i, 1)[0]); renderFotosEditor(); } }
+function quitarFotoEditor(i) { _epMedia.splice(i, 1); renderFotosEditor(); }
 
 function agregarFotosEditor(input) {
   const nuevos = Array.from(input.files || []);
   input.value = '';
   for (const f of nuevos) {
-    if (_epFotos.length + _epNuevas.length >= 5) { showToast('Máximo 5 archivos por producto'); break; }
-    _epNuevas.push(f);
+    if (_epMedia.length >= 5) { showToast('Máximo 5 archivos por producto'); break; }
+    _epMedia.push({ k: 'new', v: f });
   }
   renderFotosEditor();
 }
@@ -5494,11 +5515,14 @@ function agregarFotosEditor(input) {
 async function guardarEdicionProducto() {
   if (!_epId) return;
   const status = document.getElementById('ep-status');
-  // Subir las fotos nuevas
-  for (let i = 0; i < _epNuevas.length; i++) {
-    const f = _epNuevas[i];
-    const esVid = f.type.startsWith('video/');
-    status.textContent = `Subiendo ${i + 1}/${_epNuevas.length}...`;
+  // Subir las fotos nuevas EN SU POSICIÓN y armar el orden final (la 1ª de la lista = portada).
+  const idsFinal = [];
+  const totalNuevas = _epMedia.filter(m => m.k === 'new').length;
+  let subidas = 0;
+  for (const m of _epMedia) {
+    if (m.k === 'old') { idsFinal.push(m.v); continue; }
+    const f = m.v, esVid = f.type.startsWith('video/');
+    status.textContent = `Subiendo ${++subidas}/${totalNuevas}...`;
     const fd = new FormData();
     fd.append('file', f);
     fd.append('upload_preset', CLOUDINARY_PRESET);
@@ -5506,10 +5530,10 @@ async function guardarEdicionProducto() {
     try {
       const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${esVid ? 'video' : 'image'}/upload`, { method: 'POST', body: fd });
       const data = await res.json();
-      if (data.secure_url) _epFotos.push(esVid ? data.secure_url : data.public_id);
+      if (data.secure_url) idsFinal.push(esVid ? data.secure_url : data.public_id);
     } catch (e) {}
   }
-  _epNuevas = [];
+  _epMedia = idsFinal.map(id => ({ k: 'old', v: id }));   // ya subido todo → ahora son existentes
   const _errF = validarPreciosProducto(document.getElementById('ep-visible').value || 'Ambos',
     document.getElementById('ep-pmay').value, document.getElementById('ep-pmin').value);
   if (_errF) { showToast(_errF); status.textContent = ''; return; }
@@ -5526,7 +5550,7 @@ async function guardarEdicionProducto() {
     dueno: document.getElementById('ep-dueno').value,
     moneda: document.getElementById('ep-moneda').value === 'U$S' ? 'U$S' : '$',
     visible: document.getElementById('ep-visible').value,
-    imagen: _epFotos.join(',') || '__VACIO__'
+    imagen: idsFinal.join(',') || '__VACIO__'
   }), '💾 Producto actualizado ✓');
   status.textContent = '';
   if (!r.error) { await cargarProductos(); cerrarEditorProducto(); }   // cerrar tras guardar (el toast confirma)
