@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Todas las funcionalidades v2.74</title>
+<title>Shuk Mamtakim — Todas las funcionalidades v2.90</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -24,12 +24,28 @@
 <body>
 <div class="top">
   <h1>🍬 Shuk Mamtakim</h1>
-  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.74 · Junio 2026</p>
+  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.90 · Junio 2026</p>
 </div>
 <div class="wrap">
 
 <div class="sec">
   <h2>✨ Novedades recientes</h2>
+  <div class="item">🛡️ <b>Red de seguridad (control automático)</b> <span class="new">v2.90</span> — una batería de pruebas automáticas verifica los cálculos donde está la plata (ganancia, Maaser, deudas, comisión, precios, packs y ofertas) antes de cada actualización. Si un cambio rompería algo, se detecta antes de que llegue a tu pantalla.</div>
+  <div class="item">🏷️ <b>"Por unidad / Por mayor" en el catálogo</b> <span class="new">v2.89</span> — las etiquetas de precio dejaron de decir "Min/May" (que algunos clientes confundían con cantidad mínima/máxima) y ahora dicen claro "Por unidad" y "Por mayor".</div>
+  <div class="item">🙏 <b>בס״ד en todo el sistema</b> <span class="new">v2.88</span> — en el extremo superior derecho de las tiendas, los paneles y los catálogos (PDF e imagen).</div>
+  <div class="item">🖼️ <b>Catálogo más prolijo</b> <span class="new">v2.87</span> — fotos todas del mismo tamaño (parejas, sin deformar), 9 productos por hoja para no desperdiciar papel, con la descripción de cada producto y todo el texto centrado.</div>
+  <div class="item">💱 <b>Referencia en pesos en el catálogo</b> <span class="new">v2.86</span> — casilla opcional: para los precios en dólares mostrás abajo la equivalencia en pesos según un tipo de cambio de referencia que cargás. No toca tus precios reales, solo el catálogo.</div>
+  <div class="item">🔄 <b>Se actualiza solo (adiós Ctrl+Shift+R)</b> <span class="new">v2.85</span> — cuando subimos una mejora, la app la toma sola al volver a ella. Ya no hay que cerrar y reabrir ni refrescar a mano, ni vos ni los chicos.</div>
+  <div class="item">🔍 <b>Editar productos desde Stock</b> <span class="new">v2.84</span> — buscador en "Stock disponible" y, al tocar ✏️, el editor se abre como ventana flotante sin sacarte de Stock. Cambiás una foto, guardás y seguís ahí con tu búsqueda — editás uno tras otro sin perder el lugar.</div>
+  <div class="item">🖱️ <b>Fotos del producto: arrastrar para ordenar</b> <span class="new">v2.83</span> — las fotos (las que ya tenía y las nuevas) en una sola fila. La 1ª es la portada; la elegís arrastrando la que quieras al frente o tocando su ⭐. Cualquier foto, nueva o vieja, puede ser portada.</div>
+  <div class="item">📥 <b>Pedidos de Candy entran solos al panel</b> <span class="new">v2.82</span> — cuando un cliente pide por la página de Candy, el pedido entra como pendiente al panel del chico (reservando el stock) además de avisar por WhatsApp. Con un botón se cobra (precarga la venta) o se cancela (devuelve el stock).</div>
+  <div class="item">📕 <b>Catálogo de Candy a la par del Shuk</b> <span class="new">v2.81</span> — buscador, descuentos general y por producto, encabezado, teléfono, orden, lista o grilla, PDF e imagen, y filtro para ocultar productos sin stock.</div>
+  <div class="item">💱 <b>Tipo de cambio editable en cada venta</b> <span class="new">v2.80</span> — al cobrar se informa siempre el TC del día (incluso ventas en pesos), y se puede corregir el de una venta vieja desde su editor. Lo usa el cálculo de ganancia multi-moneda.</div>
+  <div class="item">💰 <b>Ganancia y Maaser separados en $ y U$S</b> <span class="new">v2.79</span> — la ganancia de Pitzujim/golosinas se calcula por moneda, convirtiendo el costo en dólares con el TC cuando hace falta. Un verificador avisa qué productos no tienen costo cargado. El Maaser sale exacto de cada moneda. Solo lo ve Jony.</div>
+  <div class="item">🛠️ <b>Editar venta: precios y refresco arreglados</b> <span class="new">v2.78</span> — al cambiar una venta de mayorista a minorista reprecia bien todas las líneas; y al guardar, exportar/remito muestran el dato nuevo al instante (no el viejo).</div>
+  <div class="item">🔥 <b>Candy: ofertas, packs y categorías</b> <span class="new">v2.77</span> — tienda agrupada por categoría, con ofertas (con vencimiento opcional) y packs con precio automático en el carrito. Asignador de categorías en lote y corrección de nombres de categoría.</div>
+  <div class="item">💳 <b>Cobro fraccionado</b> <span class="new">v2.76</span> — un pedido se cobra repartido en varias cajas y monedas (parte efectivo, parte MP, parte a cuenta corriente). Un cobro parcial a cuenta corriente ya NO borra la deuda: queda registrado lo que falta.</div>
+  <div class="item">🔒 <b>Privacidad del remito + total de unidades</b> <span class="new">v2.75</span> — en la vista de Miri el remito (WhatsApp y PDF) no muestra nada de Jony. Y el pedido manual indica el total de unidades.</div>
   <div class="item">📦 <b>Caja Envíos</b> <span class="new">v2.74</span> — caja paralela para el costo de envío, dividida Miri / Jony. Cargás cuánto le cobrás al cliente (en el pedido manual o al editar) y al confirmar el cobro ponés el costo real del cadete y quién lo pagó. La Caja Envíos muestra entró / salió / saldo corriente (puede quedar negativo si hacés envío gratis). Si el cadete lo pagó el otro socio, queda asentado en la Cuenta entre socios. En vista Miri solo se ven sus envíos.</div>
   <div class="item">🧾 <b>Remito en pesos para clientes en dólares</b> <span class="new">v2.73</span> — al exportar el remito de un pedido en U$S, podés tildar "💵 Mostrar equivalente en pesos" y elegir el tipo de cambio: 🔄 Auto (el dólar que toma la página) o ponerlo a mano. El remito (texto, WhatsApp y PDF) sale con el total convertido a pesos, el TC usado (a título informativo) y la fecha y hora de emisión. Además el PDF ahora se ajusta solo a A4 y se arreglaron fotos que no aparecían en el remito cuando el nombre del producto tiene " · " (ej. Carnival · Tangy Candy): antes buscaba solo la primera palabra y quedaba el placeholder.</div>
   <div class="item">📱 <b>Tienda encuadrada en el celular</b> <span class="new">v2.72</span> — se arregló un desborde horizontal (un panel lateral oculto ensanchaba la página) que en el iPhone descalzaba la vista y dejaba el botón Carrito fuera de pantalla. Ahora la tienda entra justa, sin scroll lateral ni zoom raro. El cliente entra, agrega y ve el carrito al toque.</div>
@@ -207,7 +223,7 @@
   <div class="item">📖 <b>Documentación versionada</b> — docs técnicas con historial de versiones en /docs.html, y este inventario en /funcionalidades.html.</div>
 </div>
 
-<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.74 · Junio 2026 — se actualiza con cada release</div>
+<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.90 · Junio 2026 — se actualiza con cada release</div>
 </div>
 </body>
 </html>

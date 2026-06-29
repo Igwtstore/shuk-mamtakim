@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 2.74 · Junio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 2.90 · Junio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -657,6 +657,22 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v2.90</td><td>Jun 2026</td><td><strong>🛡️ Red de seguridad (control automático).</strong> Batería de pruebas automáticas que verifica los cálculos de plata (ganancia, Maaser, deudas, comisión, precios, packs y ofertas) antes de cada actualización, para que un cambio no rompa algo sin que se detecte.</td></tr>
+      <tr><td>v2.89</td><td>Jun 2026</td><td><strong>🏷️ "Por unidad / Por mayor" en el catálogo.</strong> Reemplaza "Min/May", que algunos clientes confundían con cantidad mínima/máxima.</td></tr>
+      <tr><td>v2.88</td><td>Jun 2026</td><td><strong>🙏 בס״ד en todo el sistema.</strong> En el extremo superior derecho de tiendas, paneles y catálogos (PDF e imagen).</td></tr>
+      <tr><td>v2.87</td><td>Jun 2026</td><td><strong>🖼️ Catálogo más prolijo.</strong> Fotos parejas (mismo tamaño, sin deformar), 9 productos por hoja, con descripción y texto centrado.</td></tr>
+      <tr><td>v2.86</td><td>Jun 2026</td><td><strong>💱 Referencia en pesos en el catálogo.</strong> Casilla opcional: muestra debajo de los precios en dólares su equivalencia en pesos según un TC de referencia. No toca los precios reales.</td></tr>
+      <tr><td>v2.85</td><td>Jun 2026</td><td><strong>🔄 Se actualiza solo.</strong> La app toma las mejoras nuevas al volver a ella; se terminó el tener que cerrar/reabrir o refrescar a mano (Ctrl+Shift+R).</td></tr>
+      <tr><td>v2.84</td><td>Jun 2026</td><td><strong>🔍 Editar productos desde Stock.</strong> Buscador en "Stock disponible" y editor en ventana flotante (no te saca de Stock): cambiás una foto, guardás y seguís ahí mismo con tu búsqueda.</td></tr>
+      <tr><td>v2.83</td><td>Jun 2026</td><td><strong>🖱️ Fotos del producto: arrastrar para ordenar.</strong> Existentes y nuevas en una sola fila; la 1ª es la portada (la elegís arrastrando o con ⭐). Cualquier foto, nueva o vieja, puede ser portada.</td></tr>
+      <tr><td>v2.82</td><td>Jun 2026</td><td><strong>📥 Pedidos de Candy entran solos al panel.</strong> El pedido de la tienda Candy entra como pendiente al panel del chico (reservando stock) + avisa por WhatsApp. Botón para cobrar (precarga la venta) o cancelar (devuelve stock).</td></tr>
+      <tr><td>v2.81</td><td>Jun 2026</td><td><strong>📕 Catálogo de Candy a la par del Shuk.</strong> Buscador, descuentos general y por producto, encabezado, teléfono, orden, lista/grilla, PDF e imagen, y ocultar productos sin stock.</td></tr>
+      <tr><td>v2.80</td><td>Jun 2026</td><td><strong>💱 Tipo de cambio editable en cada venta.</strong> Se informa siempre el TC del día al cobrar y se puede corregir el de una venta vieja desde su editor. Lo usa el cálculo de ganancia multi-moneda.</td></tr>
+      <tr><td>v2.79</td><td>Jun 2026</td><td><strong>💰 Ganancia y Maaser separados en $ y U$S.</strong> La ganancia de Pitzujim/golosinas se calcula por moneda (convirtiendo el costo en dólares con el TC). Verificador de productos sin costo. Maaser exacto por moneda. Solo lo ve Jony.</td></tr>
+      <tr><td>v2.78</td><td>Jun 2026</td><td><strong>🛠️ Editar venta: precios y refresco arreglados.</strong> Al pasar de mayorista a minorista reprecia bien todas las líneas; y al guardar, exportar/remito muestran el dato nuevo al instante.</td></tr>
+      <tr><td>v2.77</td><td>Jun 2026</td><td><strong>🔥 Candy: ofertas, packs y categorías.</strong> Tienda agrupada por categoría, ofertas con vencimiento opcional y packs con precio automático en el carrito. Asignador de categorías en lote.</td></tr>
+      <tr><td>v2.76</td><td>Jun 2026</td><td><strong>💳 Cobro fraccionado.</strong> Un pedido se cobra repartido en varias cajas y monedas. Un cobro parcial a cuenta corriente ya NO borra la deuda: queda registrado lo que falta.</td></tr>
+      <tr><td>v2.75</td><td>Jun 2026</td><td><strong>🔒 Privacidad del remito + total de unidades.</strong> En vista Miri el remito (WhatsApp y PDF) no muestra nada de Jony. El pedido manual indica el total de unidades.</td></tr>
       <tr><td>v2.74</td><td>Jun 2026</td><td><strong>📦 Caja Envíos (costo de envío).</strong> Caja paralela para los envíos, dividida Miri / Jony, con entrada / salida / saldo corriente (puede quedar negativo si el envío es gratis). Se carga "Envío $" al armar el pedido manual o al editarlo (lo que se le cobra al cliente), y al confirmar el cobro se completa el costo real del cadete y quién lo pagó. La diferencia (cobrado − costo) es la ganancia / pérdida del envío del dueño del pedido. Si el cadete lo pagó el otro socio, la deuda queda asentada (derivada, idempotente) en la Cuenta entre socios. Respeta la privacidad: en vista Miri solo se ven sus envíos. <em>Pendiente:</em> pedidos compartidos (productos de Miri + Jony en la misma venta).</td></tr>
       <tr><td>v2.73</td><td>Jun 2026</td><td><strong>Remito en pesos para clientes en dólares + PDF que se ajusta solo a A4.</strong> 🧾 Al exportar el remito de un pedido en U$S podés tildar <strong>"💵 Mostrar equivalente en pesos"</strong> y elegir el tipo de cambio: <strong>🔄 Auto</strong> (el dólar que toma la página de bluelytics) o <strong>manual</strong>. El remito (texto, WhatsApp y PDF) sale con el total convertido a pesos, el <strong>TC usado a título informativo</strong> y la <strong>fecha y hora de emisión</strong> (se actualiza al momento de copiar/enviar). 🖨️ El <strong>PDF ahora se ajusta solo a A4 portrait</strong> (contenido a 190mm + 10mm de margen = 210mm exactos) — sale a escala 100% sin tener que tocar escala ni orientación. 🖼️ El remito no encontraba la foto cuando el <strong>nombre del producto tiene " · "</strong> (ej. "Carnival · Tangy Candy"): buscaba solo la primera palabra. Ahora matchea el nombre completo, así que esas fotos vuelven a salir (antes quedaba el 🍬). También reconoce fotos guardadas como URL completa (importadas de Candy). También: el texto de las fichas de la tienda quedó <strong>centrado</strong>, y las herramientas de catálogo (📄/📕/🖼️) ya no se ven en la tienda del cliente, solo en el panel.</td></tr>
       <tr><td>v2.72</td><td>Jun 2026</td><td><strong>Encuadre en el celular + recuperar carritos que no llegaron.</strong> 📱 Se arregló un desborde horizontal (un panel lateral oculto ensanchaba la página) que en el iPhone descalzaba la vista y dejaba el botón Carrito fuera de pantalla — ahora la tienda entra justa. 🛒 La tienda guarda el carrito completo (productos, cantidades, total y datos del cliente) apenas llega al checkout aunque no termine; en Analítica se ve y se puede "Cargar como pedido".</td></tr>
@@ -710,7 +726,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v2.74 · Junio 2026 · Uso interno
+  Documentación v2.90 · Junio 2026 · Uso interno
 </div>
 
 </div>
