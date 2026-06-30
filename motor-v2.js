@@ -2943,9 +2943,12 @@ function registrarPedidoHijo(ss, p) {
     return { ok: true, pedidoId };
   } finally { try { lock.releaseLock(); } catch (e) {} }
 }
+// 'jony' (nombre que usa la tienda ?kid=jony) y 'Pa' (perfil del panel) son la MISMA persona.
+function _normHijo_(s) { const x = (s || '').toString().trim().toLowerCase(); return (x === 'jony' || x === 'pa') ? 'pa' : x; }
 function getPedidosHijos(ss, hijo) {
   const h = ss.getSheetByName('PedidosHijos');
   if (!h || h.getLastRow() < 2) return [];
+  const hn = _normHijo_(hijo);
   return h.getRange(2, 1, h.getLastRow() - 1, 9).getValues()
     .map(r => ({
       fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'dd/MM/yyyy HH:mm') : (r[0] || '').toString(),
@@ -2953,7 +2956,7 @@ function getPedidosHijos(ss, hijo) {
       items: (function () { try { return JSON.parse(r[4] || '[]'); } catch (e) { return []; } })(),
       total: parseFloat(r[5]) || 0, estado: (r[6] || '').toString(), pedidoId: (r[7] || '').toString(), nota: (r[8] || '').toString()
     }))
-    .filter(x => x.estado === 'pendiente' && (!hijo || x.hijo.toLowerCase() === hijo.toLowerCase()));
+    .filter(x => x.estado === 'pendiente' && (!hijo || _normHijo_(x.hijo) === hn));
 }
 // Marca un pedido como cobrado (la venta se registró aparte con el flujo normal) o cancelado
 // (devuelve al depósito el stock que se había reservado). Idempotente.
