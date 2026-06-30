@@ -3528,7 +3528,7 @@ async function renderCuentaCorriente() {
       ].filter(Boolean).join(' + ');
       const cliEsc = cliente.replace(/'/g, "\\'");
       const btnPago = soloMiri ? '' :
-        `<button onclick="abrirPagoCuenta('${cliEsc}','',${Math.round(data.totalARS)},${data.totalUSD.toFixed(2)})"
+        `<button onclick="abrirPagoCuenta('${cliEsc}','',0,${Math.round(data.totalARS)},${data.totalUSD.toFixed(2)})"
           style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px;margin-right:4px">💵 Pago a cuenta</button>`;
       return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
