@@ -1137,13 +1137,15 @@ function doGet(e) {
       const montoARS = parseFloat(e.parameter.montoARS||0) || 0;
       const montoUSD = parseFloat(e.parameter.montoUSD||0) || 0;
       const montoPitz = parseFloat(e.parameter.montoPitz||0) || 0;  // parte ARS que es Pitzujim (resto = golosinas)
+      const tcPago = parseFloat(e.parameter.tipoCambio||0) || 0;     // si pagó los U$S en pesos: TC para la caja
       if (montoARS === 0 && montoUSD === 0) return json({error:'monto vacío'});
       const comprobante = dec(e.parameter.comprobante || '');
       const pedidoId = dec(e.parameter.pedidoId || '');
       const row = h.getLastRow() + 1;
-      h.appendRow([fecha, dec(e.parameter.cliente||''), pedidoId, montoARS, montoUSD, dec(e.parameter.caja||''), dec(e.parameter.nota||'Pago a cuenta'), montoPitz, comprobante]);
+      h.appendRow([fecha, dec(e.parameter.cliente||''), pedidoId, montoARS, montoUSD, dec(e.parameter.caja||''), dec(e.parameter.nota||'Pago a cuenta'), montoPitz, comprobante, tcPago]);
       h.getRange(row,1).setNumberFormat('@');
       if (h.getRange(1,9).getValue() !== 'Comprobante') h.getRange(1,9).setValue('Comprobante');
+      if (h.getRange(1,10).getValue() !== 'TC') h.getRange(1,10).setValue('TC');
       // Acumular el/los comprobante(s) del pago en el pedido (Ventas col 22) para verlos en su tarjeta.
       if (comprobante && pedidoId) {
         const hv = ss.getSheetByName('Ventas');
@@ -2762,12 +2764,13 @@ function _rendicionesData(ss) {
 }
 function _pagosData(ss) {
   const h = ss.getSheetByName('Pagos'); if (!h || h.getLastRow() < 2) return [];
-  return h.getRange(2,1,h.getLastRow()-1,8).getValues().map(r => ({
+  const nc = Math.max(8, Math.min(10, h.getLastColumn()));   // incluye TC (col 10) si existe; pagos viejos → tc=0
+  return h.getRange(2,1,h.getLastRow()-1,nc).getValues().map(r => ({
     fecha: r[0] instanceof Date ? Utilities.formatDate(r[0],TZ,'dd/MM/yyyy HH:mm') : r[0].toString(),
     cliente: (r[1]||'').toString(), pedidoId: (r[2]||'').toString(),
     montoARS: parseFloat(r[3])||0, montoUSD: parseFloat(r[4])||0,
     caja: (r[5]||'').toString(), nota: (r[6]||'').toString(),
-    montoPitz: parseFloat(r[7])||0
+    montoPitz: parseFloat(r[7])||0, tc: parseFloat(r[9])||0
   }));
 }
 function _clientesData(ss) {
