@@ -1880,6 +1880,9 @@
           <option value="MP_JONY">MP JONY</option>
           <option value="ETF_USD_JONY">ETF U$S JONY</option>
         </optgroup>
+        <optgroup label="Otro">
+          <option value="PERDON">🎁 Perdón / Redondeo (no entra a ninguna caja)</option>
+        </optgroup>
       </select>
     </div>
     <!-- TC: aparece si se paga una deuda en U$S pero con PESOS (monto U$S > 0 + caja de pesos) -->
@@ -6674,27 +6677,30 @@ async function renderCaja() {
     // Pagos a cuenta: ingresan a la caja elegida y bajan la cuenta corriente
     if (Array.isArray(pagosCuenta)) pagosCuenta.forEach(p => {
       const aRS = parseFloat(p.montoARS)||0, uSD = parseFloat(p.montoUSD)||0;
-      const desc = `Pago cta ${p.cliente||''} ${p.fecha||''}`;
+      const esPerdon = p.caja === 'PERDON';   // perdón/redondeo: baja la deuda, NO entra a ninguna caja
+      const desc = esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`;
       if (aRS > 0 && p.caja) {
-        movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
+        if (!esPerdon) movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
         // La baja de la Cta Cte se parte en Pitzujim (dueno J) y golosinas, según el pago,
         // para que el desglose cierre y Myri no vea la parte de Pitzujim.
         const pitzPay = Math.min(parseFloat(p.montoPitz) || 0, aRS);
-        if (pitzPay > 0) movs.push({ desc: `↳ baja Cta Cte (Pitzujim)`, col: 'CTA_CTE_ARS', val: -pitzPay, mon: 'ARS', tipo: 'venta', dueno: 'J' });
-        if (aRS - pitzPay > 0) movs.push({ desc: `↳ baja Cta Cte`, col: 'CTA_CTE_ARS', val: -(aRS - pitzPay), mon: 'ARS', tipo: 'venta' });
+        if (pitzPay > 0) movs.push({ desc: esPerdon ? `🎁 perdón Cta Cte (Pitzujim)` : `↳ baja Cta Cte (Pitzujim)`, col: 'CTA_CTE_ARS', val: -pitzPay, mon: 'ARS', tipo: 'venta', dueno: 'J' });
+        if (aRS - pitzPay > 0) movs.push({ desc: esPerdon ? `🎁 perdón Cta Cte` : `↳ baja Cta Cte`, col: 'CTA_CTE_ARS', val: -(aRS - pitzPay), mon: 'ARS', tipo: 'venta' });
       }
       if (uSD > 0 && p.caja) {
-        // Si pagó la deuda en U$S pero con PESOS a un tipo de cambio (a una caja de pesos): la plata
-        // entra EN PESOS a la caja (uSD×tc) — así Miri ve la guita real que entró; la deuda en
-        // dólares igual baja en U$S (no es una conversión de la deuda, es cómo pagó).
-        const ptc = parseFloat(p.tc) || 0;
-        const cajaUSD = _CAJAS_USD.includes(p.caja) || p.caja === 'CTA_CTE_USD';
-        if (ptc > 0 && !cajaUSD) {
-          movs.push({ desc: `${desc} (U$S ${uSD} × $${ptc})`, col: p.caja, val: Math.round(uSD * ptc), mon: 'ARS', tipo: 'venta' });
-        } else {
-          movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta' });
+        if (!esPerdon) {
+          // Si pagó la deuda en U$S pero con PESOS a un tipo de cambio (a una caja de pesos): la plata
+          // entra EN PESOS a la caja (uSD×tc) — así Miri ve la guita real que entró; la deuda en
+          // dólares igual baja en U$S (no es una conversión de la deuda, es cómo pagó).
+          const ptc = parseFloat(p.tc) || 0;
+          const cajaUSD = _CAJAS_USD.includes(p.caja) || p.caja === 'CTA_CTE_USD';
+          if (ptc > 0 && !cajaUSD) {
+            movs.push({ desc: `${desc} (U$S ${uSD} × $${ptc})`, col: p.caja, val: Math.round(uSD * ptc), mon: 'ARS', tipo: 'venta' });
+          } else {
+            movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta' });
+          }
         }
-        movs.push({ desc: `↳ baja Cta Cte`, col: 'CTA_CTE_USD', val: -uSD, mon: 'USD', tipo: 'venta' });
+        movs.push({ desc: esPerdon ? `🎁 perdón Cta Cte` : `↳ baja Cta Cte`, col: 'CTA_CTE_USD', val: -uSD, mon: 'USD', tipo: 'venta' });
       }
     });
 
@@ -9551,7 +9557,7 @@ function cerrarPagoModal() {
 function pago_evalTC() {
   const usd = parseFloat(document.getElementById('pago-usd')?.value) || 0;
   const caja = document.getElementById('pago-caja')?.value || '';
-  const cajaPesos = !!caja && _CAJAS_USD.indexOf(caja) === -1;
+  const cajaPesos = !!caja && caja !== 'PERDON' && _CAJAS_USD.indexOf(caja) === -1;
   const w = document.getElementById('pago-tc-wrap');
   if (w) w.style.display = (usd > 0 && cajaPesos) ? 'block' : 'none';
   pago_calcularTC();
