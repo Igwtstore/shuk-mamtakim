@@ -1851,6 +1851,13 @@
         <input type="number" id="pago-gol" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
     </div>
+    <!-- Elegir a qué pedido imputar (deuda total, si el cliente tiene varios con saldo) -->
+    <div id="pago-pedido-wrap" style="display:none;margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">¿A qué pedido imputar?</label>
+      <select id="pago-pedido-sel" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
+        <option value="">Automático (el más viejo primero)</option>
+      </select>
+    </div>
     <!-- Monto único (pago a deuda total del cliente) -->
     <div id="pago-single-wrap" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto $ (pesos)</label>
@@ -3534,7 +3541,7 @@ async function renderCuentaCorriente() {
       ].filter(Boolean).join(' + ');
       const cliEsc = cliente.replace(/'/g, "\\'");
       const btnPago = soloMiri ? '' :
-        `<button onclick="abrirPagoCuenta('${cliEsc}','',0,${Math.round(data.totalARS)},${data.totalUSD.toFixed(2)})"
+        `<button onclick="abrirPagoCuenta('${cliEsc}','',0,${Math.round(data.totalARS)},${data.totalUSD.toFixed(2)},${i})"
           style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px;margin-right:4px">💵 Pago a cuenta</button>`;
       return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
@@ -3596,6 +3603,17 @@ async function renderPedidos() {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
     }
+    // Deuda VIVA por pedido: imputa TODOS los pagos del cliente (atados a un pedido + generales FIFO)
+    // a sus pedidos, para que cada tarjeta muestre lo que se debe HOY (no la deuda del cobro original).
+    const deudaViva = {};
+    {
+      const _porCli = {};
+      ventas.forEach(v => { const k = normCliente(v.cliente); (_porCli[k] = _porCli[k] || []).push(v); });
+      Object.keys(_porCli).forEach(k => {
+        const _pg = (pagos || []).filter(p => normCliente(p.cliente) === k);
+        _imputarPedidos(_porCli[k], _pg, soloMiri).forEach(it => { deudaViva[it.v.id] = { ars: it.remARS, usd: it.remUSD }; });
+      });
+    }
     // Pagado por pedido, separado en Pitzujim / golosinas
     const pagadoPed = {};
     (pagos || []).forEach(p => {
@@ -3644,7 +3662,11 @@ async function renderPedidos() {
       const comiU = parseFloat(v.comiUSD || 0);
       const cobrado = esCobradoReal(v);
       const cobroParcial = esCobradoParcial(v);
-      const _deudaV = _deudaPedido(v, soloMiri);
+      const _deudaCobro = _deudaPedido(v, soloMiri);                  // deuda de cómo se cobró (sin pagos a cuenta)
+      const _deudaV = deudaViva[v.id] || _deudaCobro;                 // deuda VIVA: descontando los pagos a cuenta
+      const _debeV = _deudaV.ars > 0.005 || _deudaV.usd > 0.005;
+      const _vivaStr = [_deudaV.ars > 0 ? '$ ' + Math.round(_deudaV.ars).toLocaleString('es-AR') : '', _deudaV.usd > 0 ? 'U$S ' + _deudaV.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
+      const _huboPagoCta = (_deudaCobro.ars - _deudaV.ars > 0.005) || (_deudaCobro.usd - _deudaV.usd > 0.005);
       const splitParts = [];
       if (!soloMiri && arsJ > 0) splitParts.push(`<span style="color:var(--verde);font-weight:600">JONY: $ ${Math.round(arsJ).toLocaleString('es-AR')}</span>`);
       if (arsM > 0) splitParts.push(`<span>Golosinas MYRI: $ ${Math.round(arsM).toLocaleString('es-AR')}</span>`);
@@ -3694,9 +3716,11 @@ async function renderPedidos() {
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
             <span class="estado-pill estado-${estado}">${estado}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
-            ${cobroParcial
-              ? `<span style="font-size:0.68rem;color:#c0392b;font-weight:700">🟠 cobro parcial · debe ${[_deudaV.ars > 0 ? '$ ' + Math.round(_deudaV.ars).toLocaleString('es-AR') : '', _deudaV.usd > 0 ? 'U$S ' + _deudaV.usd.toFixed(2) : ''].filter(Boolean).join(' + ')}</span>`
-              : (cobrado ? `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>` : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`)}
+            ${cobrado
+              ? (_debeV ? `<span style="font-size:0.68rem;color:#c0392b;font-weight:700">🟠 cobro parcial · debe ${_vivaStr}</span>` : `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>`)
+              : (_huboPagoCta
+                  ? (_debeV ? `<span style="font-size:0.68rem;color:#c0392b;font-weight:700">🟠 debe ${_vivaStr}</span>` : `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ pagado</span>`)
+                  : `<span style="font-size:0.68rem;color:var(--dorado);font-weight:600">⏳ pend. cobro</span>`)}
             ${comprobanteLinks(v.comprobante)}
           </div>
         </div>
@@ -9474,9 +9498,23 @@ function cerrarModalCobro() {
 let _pagoCliente = '', _pagoPedidoId = '';
 // Per-pedido: (cliente, pedidoId, remPitz, remGolARS, remGolUSD) — muestra reparto Pitz/golosinas, default Pitzujim-primero.
 // Per-cliente (deuda total): (cliente, '', 0, netARS, netUSD) — monto único, sin reparto.
-function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD) {
+function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx) {
   _pagoCliente = cliente; _pagoPedidoId = pedidoId || '';
   const esPedido = !!_pagoPedidoId;
+  // Selector "¿a qué pedido imputar?": solo en deuda total, si el cliente tiene varios pedidos con saldo.
+  const _pedSel = document.getElementById('pago-pedido-sel'), _pedWrap = document.getElementById('pago-pedido-wrap');
+  if (_pedSel && _pedWrap) {
+    _pedSel.innerHTML = '<option value="">Automático (el más viejo primero)</option>';
+    let _hay = false;
+    if (!esPedido && ccIdx != null && window._ccData && window._ccData[ccIdx]) {
+      _itemsConSaldo(window._ccData[ccIdx].items).forEach(it => {
+        const ds = [it.remARS > 0 ? '$ ' + Math.round(it.remARS).toLocaleString('es-AR') : '', it.remUSD > 0 ? 'U$S ' + it.remUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+        _pedSel.innerHTML += `<option value="${it.v.id}">#${it.v.nVenta || it.v.id} · debe ${ds}</option>`;
+        _hay = true;
+      });
+    }
+    _pedWrap.style.display = _hay ? '' : 'none';
+  }
   document.getElementById('pago-split-wrap').style.display = esPedido ? '' : 'none';
   document.getElementById('pago-single-wrap').style.display = esPedido ? 'none' : '';
   document.getElementById('pago-ars').value = '';
@@ -9542,8 +9580,12 @@ async function confirmarPagoCuenta() {
   const tcVis = document.getElementById('pago-tc-wrap').style.display !== 'none';
   const tcPago = tcVis ? (parseFloat(document.getElementById('pago-tc').value) || 0) : 0;
   if (tcVis && tcPago <= 0) { showToast('Poné el tipo de cambio (pagó los U$S en pesos)'); return; }
+  // En deuda total, si se eligió un pedido específico en el selector, atar el pago a ese pedido (si no, FIFO).
+  let _pedFinal = _pagoPedidoId;
+  const _ps = document.getElementById('pago-pedido-sel');
+  if (!_pagoPedidoId && _ps && _ps.value) _pedFinal = _ps.value;
   const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
-  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pagoPedidoId, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta' });
+  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta' });
   if (comprobante) params.set('comprobante', comprobante);
   cerrarPagoModal();
   const r = await apiWrite(params, '💵 Pago registrado ✓');
