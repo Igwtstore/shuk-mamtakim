@@ -289,11 +289,22 @@ function gananciaJonyPeriodo_(ss) {
     gp.faltaCosto.forEach(n => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
     if (gp.faltaTC) out.faltaTC = true;
     const sinComi = (r[26] || '').toString().toUpperCase() === 'SI';   // col 27: saldo cargado SIN comisión
+    const tieneTramos = (r[28] || '').toString().trim() !== '';         // col 29: cobro fraccionado
     let cARS = 0, cUSD = 0;
-    if (arsM > 0 && !sinComi) cARS += comiARS || Math.round(arsM * 0.15);
-    if (usdM > 0 && !sinComi) {
-      if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
-      else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
+    if (!sinComi) {
+      if (tieneTramos) {
+        // Cobro fraccionado: el backend ya derivó la comisión POR TRAMO (cada parte en su caja y
+        // moneda) y la guardó en cols 15/16. Se usa tal cual; recalcular usdM×tc acá ignoraría cómo
+        // entró realmente la plata (parte en dólares, parte a cuenta corriente) → desfasaría con el
+        // cuadro de socios. Así la pestaña Ganancias coincide con el cuadro y el Maaser sale exacto.
+        cARS = comiARS; cUSD = comiUSD;
+      } else {
+        if (arsM > 0) cARS += comiARS || Math.round(arsM * 0.15);
+        if (usdM > 0) {
+          if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
+          else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
+        }
+      }
     }
     out.comisionARS += cARS; out.comisionUSD += cUSD;
     out.pitzARS += gp.ars; out.pitzUSD += gp.usd;
