@@ -945,6 +945,8 @@ function volverAHoy() {
 let editandoCodigo = null;
 
 const fmt = n => '$' + Math.round(parseFloat(n)||0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+// Escape de HTML (faltaba y rompía el render de los pedidos de la tienda al usar esc()).
+const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
 // ─── LOGIN ────────────────────────────────────────────────────────
 function login(nombre) {
