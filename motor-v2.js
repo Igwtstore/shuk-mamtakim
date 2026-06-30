@@ -267,6 +267,20 @@ function _gananciaPitzVenta_(productosStr, mapa, tc) {
   return out;
 }
 
+// Comisión 15% de Miri de UNA venta para el cómputo del período (en pesos y en U$S).
+// Si la venta se cobró en partes (tramos), usa la comisión YA derivada por tramo (cols 15/16); si no,
+// la calcula, convirtiendo la de dólares a pesos solo cuando entraron a una caja de pesos con TC.
+function _comiPeriodoVenta_(arsM, usdM, comiARS, comiUSD, cajaM, tc, sinComi, tieneTramos, CAJAS_ARS) {
+  if (sinComi) return { cARS: 0, cUSD: 0 };
+  if (tieneTramos) return { cARS: comiARS, cUSD: comiUSD };   // cobro fraccionado: respetar lo guardado por tramo
+  let cARS = 0, cUSD = 0;
+  if (arsM > 0) cARS += comiARS || Math.round(arsM * 0.15);
+  if (usdM > 0) {
+    if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
+    else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
+  }
+  return { cARS, cUSD };
+}
 function gananciaJonyPeriodo_(ss) {
   const out = { comisionARS: 0, comisionUSD: 0, pitz: 0, pitzARS: 0, pitzUSD: 0, items: [], faltaCosto: [], faltaTC: false };
   const h = ss.getSheetByName('Ventas');
@@ -290,22 +304,7 @@ function gananciaJonyPeriodo_(ss) {
     if (gp.faltaTC) out.faltaTC = true;
     const sinComi = (r[26] || '').toString().toUpperCase() === 'SI';   // col 27: saldo cargado SIN comisión
     const tieneTramos = (r[28] || '').toString().trim() !== '';         // col 29: cobro fraccionado
-    let cARS = 0, cUSD = 0;
-    if (!sinComi) {
-      if (tieneTramos) {
-        // Cobro fraccionado: el backend ya derivó la comisión POR TRAMO (cada parte en su caja y
-        // moneda) y la guardó en cols 15/16. Se usa tal cual; recalcular usdM×tc acá ignoraría cómo
-        // entró realmente la plata (parte en dólares, parte a cuenta corriente) → desfasaría con el
-        // cuadro de socios. Así la pestaña Ganancias coincide con el cuadro y el Maaser sale exacto.
-        cARS = comiARS; cUSD = comiUSD;
-      } else {
-        if (arsM > 0) cARS += comiARS || Math.round(arsM * 0.15);
-        if (usdM > 0) {
-          if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15);
-          else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100;
-        }
-      }
-    }
+    const { cARS, cUSD } = _comiPeriodoVenta_(arsM, usdM, comiARS, comiUSD, cajaM, tc, sinComi, tieneTramos, CAJAS_ARS);
     out.comisionARS += cARS; out.comisionUSD += cUSD;
     out.pitzARS += gp.ars; out.pitzUSD += gp.usd;
     out.items.push({ nVenta: r[10], cliente: (r[2] || '').toString(), comiARS: cARS, comiUSD: cUSD, pitz: gp.ars, pitzUSD: gp.usd,
