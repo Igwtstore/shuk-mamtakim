@@ -330,6 +330,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="icon-btn" onclick="abrirCargaStock()" title="Stock del día">📦</button>
       <button class="icon-btn" onclick="abrirRetroWizard()" title="Cargar ventas pasadas">📅</button>
       <button class="icon-btn" onclick="recargarTodo(this)">↻</button>
+      <button class="icon-btn" onclick="cambiarPerfil()" title="Cambiar de perfil (sin reponer la clave)">👤 Cambiar</button>
       <button class="icon-btn" onclick="logout()">Salir</button>
     </div>
   </div>
@@ -4800,6 +4801,19 @@ function logout() {
   document.getElementById('fab-venta').style.display = 'none';
   document.getElementById('login').style.display = 'flex';
   document.getElementById('panel').style.display = 'none';
+}
+
+// Cambiar de perfil (Meir/Iosi/Pa) SIN cerrar la sesión de Supabase → NO vuelve a pedir la clave.
+// Limpia el perfil guardado (para que al recargar no vuelva clavado al anterior) y el caché de panel.
+function cambiarPerfil() {
+  usuario = null;
+  _reqGen++;   // descarta respuestas en vuelo del perfil anterior
+  Object.keys(localStorage).filter(k => k.startsWith('cs_panel_')).forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('cs_usuario');
+  localStorage.removeItem('cs_usuario');
+  document.getElementById('fab-venta').style.display = 'none';
+  document.getElementById('panel').style.display = 'none';
+  document.getElementById('login').style.display = 'flex';
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
