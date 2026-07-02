@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🩺 Diagnóstico — Shuk Mamtakim</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family:-apple-system,'Segoe UI',sans-serif; background:#fdf8f0; color:#1a1a2e; max-width:640px; margin:0 auto; padding:1.2rem; }
+  h1 { font-size:1.2rem; }
+  .row { background:#fff; border-radius:10px; padding:0.8rem 1rem; margin-bottom:0.55rem; box-shadow:0 1px 4px rgba(0,0,0,0.06); display:flex; justify-content:space-between; gap:0.6rem; align-items:center; font-size:0.9rem; }
+  .ok { color:#1a7a3a; font-weight:800; white-space:nowrap; }
+  .mal { color:#c0392b; font-weight:800; }
+  .det { font-size:0.72rem; color:#6b6b7a; margin-top:2px; }
+  #info { font-size:0.7rem; color:#6b6b7a; margin-top:1rem; word-break:break-all; }
+  button { background:#1a1a2e; color:#fff; border:none; border-radius:10px; padding:0.7rem 1.2rem; font-weight:800; cursor:pointer; font-size:0.95rem; margin-bottom:1rem; }
+</style>
+</head>
+<body>
+<h1>🩺 Diagnóstico del sistema</h1>
+<p style="font-size:0.85rem;color:#6b6b7a">Corre 5 chequeos desde <b>este</b> navegador. Sacale captura al resultado y mandala.</p>
+<button onclick="correr()">▶️ Correr diagnóstico</button>
+<div id="out"></div>
+<div id="info"></div>
+<script>
+const SB_URL = 'https://soarkknjewgcewryxqac.supabase.co';
+const ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
+const sb = supabase.createClient(SB_URL, ANON);
+const out = document.getElementById('out');
+function fila(nombre, ok, detalle) {
+  out.innerHTML += `<div class="row"><div>${nombre}<div class="det">${detalle || ''}</div></div><div class="${ok ? 'ok' : 'mal'}">${ok ? '✅ OK' : '❌ FALLA'}</div></div>`;
+}
+async function medir(fn) {
+  const t0 = Date.now();
+  try { const r = await fn(); return { ok: true, ms: Date.now() - t0, r }; }
+  catch (e) { return { ok: false, ms: Date.now() - t0, err: String(e).slice(0, 160) }; }
+}
+async function correr() {
+  out.innerHTML = ''; document.getElementById('info').textContent = '';
+  // 1) Internet básico (CDN neutral)
+  const a = await medir(async () => { const r = await fetch('https://dolarapi.com/v1/dolares/blue'); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  fila('1 · Internet (API externa)', a.ok, a.ok ? a.ms + ' ms' : a.err);
+  // 2) Catálogo por REST (llave pública)
+  const b = await medir(async () => { const r = await fetch(SB_URL + '/rest/v1/productos?select=id&limit=1', { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON } }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  fila('2 · Base de datos (catálogo público)', b.ok, b.ok ? b.ms + ' ms' : b.err);
+  // 3) Motor (acción pública)
+  const c = await medir(async () => { const r = await fetch(SB_URL + '/functions/v1/api?accion=getEstadoTienda'); const j = await r.json(); if (j.error) throw new Error(j.error); return j; });
+  fila('3 · Motor del sistema (público)', c.ok, c.ok ? c.ms + ' ms · tienda ' + (c.r.estado || '?') : c.err);
+  // 4) Sesión guardada en este navegador
+  const s = await medir(async () => { const { data } = await sb.auth.getSession(); if (!data.session) throw new Error('SIN sesión — logueate en el panel y volvé a correr'); return data.session; });
+  fila('4 · Sesión de este navegador', s.ok, s.ok ? (s.r.user?.email || '?') + ' · vence ' + new Date((s.r.expires_at || 0) * 1000).toLocaleTimeString('es-AR') : s.err);
+  // 5) Motor con sesión (acción protegida, solo lectura)
+  if (s.ok) {
+    const d = await medir(async () => { const r = await fetch(SB_URL + '/functions/v1/api?accion=getEstadoTienda&token=' + encodeURIComponent(s.r.access_token)); const j = await r.json(); if (j.error) throw new Error(j.error); return j; });
+    const e = await medir(async () => { const r = await fetch(SB_URL + '/functions/v1/api?accion=notificaciones&token=' + encodeURIComponent(s.r.access_token)); const j = await r.json(); if (j.error) throw new Error(j.error); if (!Array.isArray(j)) throw new Error('respuesta rara'); return j; });
+    fila('5 · Motor con tu sesión (lectura protegida)', d.ok && e.ok, (d.ok && e.ok) ? d.ms + ' + ' + e.ms + ' ms' : (d.err || e.err));
+  } else {
+    fila('5 · Motor con tu sesión', false, 'sin sesión para probar (ver punto 4)');
+  }
+  document.getElementById('info').textContent = new Date().toLocaleString('es-AR') + ' · ' + navigator.userAgent;
+}
+</script>
+</body>
+</html>
