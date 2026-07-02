@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Todas las funcionalidades v2.91</title>
+<title>Shuk Mamtakim — Todas las funcionalidades v3.01</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -24,12 +24,17 @@
 <body>
 <div class="top">
   <h1>🍬 Shuk Mamtakim</h1>
-  <p>Todas las funcionalidades del sistema, explicadas en criollo · v2.91 · Junio 2026</p>
+  <p>Todas las funcionalidades del sistema, explicadas en criollo · v3.01 · Julio 2026</p>
 </div>
 <div class="wrap">
 
 <div class="sec">
   <h2>✨ Novedades recientes</h2>
+  <div class="item">🚀 <b>Motor nuevo: Supabase</b> <span class="new">v3.00</span> — todo el sistema (Shuk + Candy + tiendas + bot + IA + backup) pasó de Google Sheets a una base de datos real. Se acabaron los "No se pudo cargar": el panel responde en milisegundos. Verificado con más de 300 controles automáticos contra el sistema viejo (misma plata, mismas deudas, mismo Maaser, centavo por centavo) y días de prueba en paralelo que cazaron 16 problemas antes de tocar tu operación. Google queda unos días de respaldo y después se apaga. Bonus de seguridad: los costos ya no son visibles públicamente.</div>
+  <div class="item">🗄️ <b>Backup automático en la nube nueva</b> <span class="new">v3.00</span> — cada hora se guarda una copia completa de TODA la base (35 tablas) con 30 días de historia. Sin hacer nada.</div>
+  <div class="item">🩺 <b>Página de diagnóstico</b> <span class="new">v3.01</span> — si algo dice "no se pudo cargar", entrás a Diagnóstico (link en la pestaña Analítica del panel) y en 30 segundos ves si el problema es tu internet, el navegador, la sesión o el sistema. Cinco chequeos con semáforo verde/rojo.</div>
+  <div class="item">🔍 <b>Trazar producto por identidad exacta</b> <span class="new">v3.01</span> — la trazabilidad ahora identifica cada venta por el ID interno del producto: dos productos gemelos con nombre casi igual (los Bon O Bon de caja y de kilo) ya no mezclan sus compras.</div>
+  <div class="item">🚪 <b>"Salir" y "Cambiar" bien separados en el panel de los chicos</b> <span class="new">v3.01</span> — Salir cierra todo y pide la clave; Cambiar pasa de un chico a otro sin clave. Antes "Salir" te dejaba en un limbo donde nada cargaba.</div>
   <div class="item">💰 <b>Maaser exacto en cobros fraccionados</b> <span class="new">v2.91</span> — la pestaña Ganancias contaba de más la comisión de los pedidos cobrados en partes y en dólares (los convertía a pesos en bloque), desfasándose del cuadro de socios. Ahora usa la comisión real ya calculada parte por parte → la pestaña Ganancias y el cuadro coinciden, y el Maaser sale exacto.</div>
   <div class="item">✏️ <b>Editar pedidos viejos tras renombrar productos</b> <span class="new">v2.91</span> — al renombrar productos, editar un pedido anterior limitaba mal las cantidades (no dejaba subir aunque hubiera stock) porque no reconocía el producto. Ahora lo identifica por la descripción y el sabor (ignorando acentos), así el "máx" usa el stock real de cada uno.</div>
   <div class="item">🛡️ <b>Red de seguridad (control automático)</b> <span class="new">v2.90</span> — una batería de pruebas automáticas verifica los cálculos donde está la plata (ganancia, Maaser, deudas, comisión, precios, packs y ofertas) antes de cada actualización. Si un cambio rompería algo, se detecta antes de que llegue a tu pantalla.</div>
@@ -225,7 +230,7 @@
   <div class="item">📖 <b>Documentación versionada</b> — docs técnicas con historial de versiones en /docs.html, y este inventario en /funcionalidades.html.</div>
 </div>
 
-<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v2.91 · Junio 2026 — se actualiza con cada release</div>
+<div class="pie">Shuk Mamtakim · Inventario de funcionalidades · v3.01 · Julio 2026 — se actualiza con cada release</div>
 </div>
 </body>
 </html>
