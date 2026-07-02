@@ -1168,6 +1168,7 @@
       <button class="filtro-estado-btn" onclick="setFiltroEstado('preparando',this)">🔧 Preparando</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('entregado',this)">✓ Entregado</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('cancelado',this)">✕ Cancelado</button>
+      <button class="filtro-estado-btn" id="pedidos-orden-btn" onclick="togglePedidosOrden(this)" title="Cambiar el orden de la lista">⬇️ Más nuevos primero</button>
     </div>
     <div id="pedidos-contador" style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.4rem"></div>
     <div class="pedidos-lista" id="pedidos-lista">
@@ -3612,6 +3613,12 @@ function _ccTotalFooter(entries, soloMiri) {
     </div>`;
 }
 
+let _pedidosOrden = 'desc';   // 'desc' = más nuevos primero (como siempre) · 'asc' = del #1 para arriba
+function togglePedidosOrden(btn) {
+  _pedidosOrden = _pedidosOrden === 'desc' ? 'asc' : 'desc';
+  if (btn) btn.textContent = _pedidosOrden === 'desc' ? '⬇️ Más nuevos primero' : '⬆️ Más viejos primero';
+  renderPedidos();
+}
 async function renderPedidos() {
   const lista = document.getElementById('pedidos-lista');
   lista.innerHTML = '<div class="sinpedidos">Cargando pedidos...</div>';
@@ -3651,7 +3658,11 @@ async function renderPedidos() {
       pagadoPed[p.pedidoId].golUSD += parseFloat(p.montoUSD)||0;
     });
     const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
-    let todos = [...ventas].reverse();
+    // Orden EXPLÍCITO por número de venta (no confiar en el orden en que llega la lista),
+    // con el botón ⬇️/⬆️ para elegir: más nuevos primero (default) o del #1 para arriba.
+    let todos = [...ventas].sort((a, b) => _pedidosOrden === 'asc'
+      ? (parseInt(a.nVenta) || 0) - (parseInt(b.nVenta) || 0)
+      : (parseInt(b.nVenta) || 0) - (parseInt(a.nVenta) || 0));
     if (soloMiri) todos = todos.filter(pedidoEsDeMiri);
     const activos = ['cotizacion','pendiente','preparando'];   // cotizaciones arriba: requieren tu decisión
     const pendientes = todos.filter(v => activos.includes(v.estado || 'pendiente'))
@@ -3810,9 +3821,14 @@ async function renderPedidos() {
       pedidosFiltrados = pendientes;
       // Se muestra TODO el historial: primero los que aún deben, después los ya pagados/cancelados.
       // Va dentro de un recuadro con scroll (no alarga la página al infinito).
-      const debenAun = historial.filter(v => v.estado !== 'cancelado' && !esCobradoReal(v));
-      const yaListos = historial.filter(v => v.estado === 'cancelado' || esCobradoReal(v));
-      historialFiltrado = [...debenAun, ...yaListos];
+      // En modo ⬆️ "más viejos primero" NO se agrupa: lista corrida #1→#N (pedido del usuario).
+      if (_pedidosOrden === 'asc') {
+        historialFiltrado = historial;
+      } else {
+        const debenAun = historial.filter(v => v.estado !== 'cancelado' && !esCobradoReal(v));
+        const yaListos = historial.filter(v => v.estado === 'cancelado' || esCobradoReal(v));
+        historialFiltrado = [...debenAun, ...yaListos];
+      }
     } else if (['cotizacion','pendiente','preparando'].includes(filtro)) {
       pedidosFiltrados = todos.filter(v => (v.estado||'pendiente') === filtro);
       historialFiltrado = [];

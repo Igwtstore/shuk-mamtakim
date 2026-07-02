@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.02</title>
+<title>Shuk Mamtakim — Documentación v3.03</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 3.02 · Julio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 3.03 · Julio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -288,6 +288,7 @@
       <div class="feature-card"><div class="title">💸 Gastos / Rendiciones</div><div class="desc">Registro de egresos asignados a cada columna de caja. Transferencias incluidas.</div></div>
       <div class="feature-card nuevo"><div class="title">🖨️ Remito PDF<span class="badge-new">nuevo</span></div><div class="desc">Comprobante profesional con banner del Shuk, foto de cada producto, columnas de precio unitario y subtotal. Imprimible o guardable como PDF.</div></div>
       <div class="feature-card nuevo"><div class="title">⬇️ Exportar CSV<span class="badge-new">nuevo</span></div><div class="desc">Exportación de ventas a CSV para análisis externo.</div></div>
+      <div class="feature-card nuevo"><div class="title">↕️ Orden de pedidos a elección<span class="badge-new">v3.03</span></div><div class="desc">Botón nuevo junto a los filtros de Pedidos: "⬇️ Más nuevos primero" (como siempre: activos arriba y, en el historial, los que aún te deben antes que los cerrados) o "⬆️ Más viejos primero" (lista corrida del #1 en adelante, sin agrupar). Además, renombrar un producto desde el editor ahora guarda el nombre anterior en un historial invisible: el Maaser sigue contando las ventas viejas y no se pierde nada.</div></div>
       <div class="feature-card nuevo"><div class="title">🔍 Trazar con filtro Miri/Jony + privacidad<span class="badge-new">v3.02</span></div><div class="desc">En "Trazar producto" (vista Jony) podés filtrar el buscador por dueño — Todos / Miri / Jony — y cada resultado muestra su etiqueta de dueño. En la vista de Miri no aparece nada de Jony (ni el filtro ni sus productos), con doble candado.</div></div>
       <div class="feature-card nuevo"><div class="title">🔧 Ajustes del estreno + 🩺 Diagnóstico<span class="badge-new">v3.01</span></div><div class="desc">Pulido del primer día sobre el motor nuevo: "Salir" del panel de los chicos ahora lleva a la pantalla de clave (antes dejaba elegir perfil sin sesión y nada cargaba), la sesión de los chicos se renueva sola otra vez, y "Trazar producto" identifica cada venta por el ID exacto del producto (antes dos productos gemelos con nombre parecido podían mezclar sus compras). Nuevo: página de Diagnóstico (5 chequeos desde tu navegador, link en Analítica) y motor siempre "caliente" (se acabó el tirón de la primera carga).</div></div>
       <div class="feature-card nuevo"><div class="title">🚀 Motor nuevo: Supabase<span class="badge-new">v3.00</span></div><div class="desc">Todo el sistema (Shuk + Candy + tiendas) pasó de Google Sheets a una base de datos real (Supabase). Se acabaron los "No se pudo cargar": el panel responde en milisegundos. La migración se verificó con más de 300 controles automáticos contra el sistema viejo (misma plata, mismas deudas, mismo Maaser, centavo por centavo) y un período de prueba en paralelo. Google queda unos días de respaldo y después se apaga. Bonus de seguridad: los costos ya no son visibles públicamente (antes la planilla era técnicamente accesible).</div></div>
@@ -662,6 +663,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.03</td><td>Jul 2026</td><td><strong>↕️ Orden de pedidos a elección + renombrado seguro.</strong> Botón ⬇️/⬆️ en Pedidos: más nuevos primero (agrupado: deudores arriba) o lista corrida del #1. El editor simple de producto guarda el nombre viejo al renombrar (historial nombres_prev) → el Maaser sigue matcheando las ventas viejas.</td></tr>
       <tr><td>v3.02</td><td>Jul 2026</td><td><strong>🔍 Trazar producto: filtro por dueño + privacidad.</strong> Chips Todos/Miri/Jony en el buscador (solo vista Jony) + etiqueta de dueño en cada resultado. Vista Miri: sin filtro y sin productos de Jony (candado doble: buscador + trazado directo).</td></tr>
       <tr><td>v3.01</td><td>Jul 2026</td><td><strong>🔧 Ajustes del estreno del motor nuevo.</strong> "Salir" del candyshop va a la pantalla de clave (no al selector sin sesión); la renovación automática de la sesión de los chicos volvió a funcionar (el mensaje de error del motor tenía otro texto); "Trazar producto" ahora identifica por ID exacto vía stockUpdates (dos Bon O Bon gemelos mezclaban compras porque la línea de venta trunca la descripción a 45 caracteres); página 🩺 diagnostico.html (5 chequeos desde el navegador, linkeada en Analítica); keep-warm del motor cada 5 min (adiós arranque en frío de ~1,5 s).</td></tr>
       <tr><td>v3.00</td><td>Jul 2026</td><td><strong>🚀 MIGRACIÓN COMPLETA A SUPABASE.</strong> Todo el backend (Shuk + Candy + tiendas + bot + IA + backup) corre sobre base de datos real. ~40× más rápido, sin límites de Apps Script. Verificado con 300+ controles automáticos contra Google (plata idéntica al centavo) + días simulados en paralelo que cazaron 14 problemas antes de tocar producción. Backup horario a Storage con retención 30 días. Google queda de respaldo hasta apagarse.</td></tr>
@@ -735,7 +737,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.02 · Julio 2026 · Uso interno
+  Documentación v3.03 · Julio 2026 · Uso interno
 </div>
 
 </div>
