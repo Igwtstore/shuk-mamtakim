@@ -1225,7 +1225,9 @@ Deno.serve(async (req) => {
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
-  if (PUBLICAS.indexOf(accion) === -1 && !conSecreto && !(await sesionValida(token))) return json({ error: 'no autorizado — iniciá sesión de nuevo' });
+  // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
+  //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
+  if (PUBLICAS.indexOf(accion) === -1 && !conSecreto && !(await sesionValida(token))) return json({ error: 'no autorizado' });
 
   try {
     // ═══ TIENDA PÚBLICA (sin login) ═══════════════════════════════════════════
@@ -1344,11 +1346,23 @@ Deno.serve(async (req) => {
     }
     if (accion === 'editarProducto') {
       const id = P(body, 'id');
-      const pr = await sbGet('productos', 'select=stock,nombre&id=eq.' + encodeURIComponent(id));
+      const pr = await sbGet('productos', 'select=stock,nombre,nombres_prev&id=eq.' + encodeURIComponent(id));
       if (!pr.length) return json({ error: 'producto no encontrado' });
       const patch: any = {};
       const map: any = { nombre: 'nombre', desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda', imagen: 'imagen' };
       Object.keys(map).forEach((k) => { if (has(k)) patch[map[k]] = P(body, k); });
+      // RENOMBRADO SEGURO también en el editor simple (antes solo el masivo lo tenía): el nombre
+      // viejo se guarda en nombres_prev → el Maaser/ganancia Pitzujim sigue matcheando las ventas
+      // viejas por texto, y nada de la historia se pierde.
+      if (has('nombre')) {
+        const actual = (pr[0].nombre || '').toString().trim(), nuevo = P(body, 'nombre').trim();
+        if (nuevo && actual && nuevo !== actual) {
+          const prev = (pr[0].nombres_prev || '').toString();
+          const lista = prev ? prev.split('|').map((s: string) => s.trim()).filter(Boolean) : [];
+          if (lista.indexOf(actual) === -1) lista.push(actual);
+          patch.nombres_prev = lista.join(' | ');
+        }
+      }
       if (has('precioMay')) patch.precio_may = parseFloat(P(body, 'precioMay').replace(',', '.')) || 0;
       if (has('precioMin')) patch.precio_min = parseFloat(P(body, 'precioMin').replace(',', '.')) || 0;
       if (has('activo')) patch.activo = P(body, 'activo').toUpperCase() !== 'NO';
