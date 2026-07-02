@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shuk Mamtakim — Tienda (Supabase)</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root { --tinta:#1a1a2e; --dorado:#c9954a; --dorado2:#e0b25f; --verde:#1a7a3a; --rojo:#c0392b; --suave:#6b6b7a; --crema:#fdf8f0; --gris:#e8e6e0; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,'Segoe UI',sans-serif; color:var(--tinta); background:var(--crema); margin:0; padding-bottom:5rem; }
+  header { background:var(--tinta); color:#fff; padding:0.9rem 1.1rem; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:20; }
+  header h1 { font-size:1.15rem; margin:0; color:var(--dorado2); }
+  header .bsd { font-size:0.7rem; color:#9a9a9a; }
+  .cart-btn { background:var(--dorado); color:var(--tinta); border:none; border-radius:20px; padding:0.5rem 1rem; font-weight:800; cursor:pointer; font-size:0.9rem; }
+  .cart-btn .n { background:var(--tinta); color:#fff; border-radius:10px; padding:1px 7px; margin-left:4px; font-size:0.75rem; }
+  .barra { max-width:1000px; margin:0 auto; padding:0.8rem 1rem 0; }
+  .velo { background:#fff; border:1.5px solid var(--verde); border-radius:10px; padding:0.5rem 0.9rem; font-size:0.8rem; color:var(--verde); margin-bottom:0.7rem; }
+  .toggle { display:flex; gap:0.4rem; margin-bottom:0.7rem; }
+  .toggle button { flex:1; padding:0.55rem; border:1.5px solid var(--gris); background:#fff; border-radius:8px; font-weight:700; cursor:pointer; color:var(--suave); }
+  .toggle button.on { background:var(--tinta); color:#fff; border-color:var(--tinta); }
+  #buscar { width:100%; padding:0.7rem 1rem; border:1.5px solid var(--gris); border-radius:10px; font-size:1rem; margin-bottom:1rem; outline:none; }
+  .cat-tit { font-size:1.05rem; font-weight:800; margin:1.2rem 0 0.5rem; color:var(--dorado); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0.8rem; }
+  .card { background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); display:flex; flex-direction:column; }
+  .foto { width:100%; aspect-ratio:1; object-fit:cover; background:#f2ede3; display:block; }
+  .ph { width:100%; aspect-ratio:1; background:#f2ede3; display:flex; align-items:center; justify-content:center; font-size:2rem; }
+  .info { padding:0.5rem 0.6rem; flex:1; display:flex; flex-direction:column; }
+  .nom { font-weight:700; font-size:0.82rem; line-height:1.25; margin-bottom:0.2rem; flex:1; }
+  .pre { color:var(--dorado); font-weight:800; font-size:1rem; }
+  .add { margin-top:0.4rem; background:var(--verde); color:#fff; border:none; border-radius:8px; padding:0.45rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  .add.ag { background:var(--dorado); }
+  /* carrito */
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:40; display:none; align-items:flex-end; justify-content:center; }
+  .ov.open { display:flex; }
+  .cart { background:#fff; width:100%; max-width:520px; border-radius:18px 18px 0 0; max-height:85vh; display:flex; flex-direction:column; }
+  .cart h2 { margin:0; padding:1rem 1.2rem; border-bottom:1px solid var(--gris); }
+  .cart-body { overflow-y:auto; padding:0.5rem 1.2rem; flex:1; }
+  .ci { display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0; border-bottom:1px solid var(--gris); }
+  .ci .cn { flex:1; font-size:0.85rem; font-weight:600; }
+  .ci .cp { font-weight:800; color:var(--dorado); white-space:nowrap; }
+  .qc { display:flex; align-items:center; gap:0.4rem; }
+  .qc button { width:28px; height:28px; border-radius:50%; border:1.5px solid var(--gris); background:#fff; font-weight:800; cursor:pointer; }
+  .cart-foot { padding:1rem 1.2rem; border-top:1px solid var(--gris); }
+  .tot { display:flex; justify-content:space-between; font-weight:800; font-size:1.1rem; margin-bottom:0.7rem; }
+  .wa { width:100%; background:#25d366; color:#fff; border:none; border-radius:12px; padding:0.9rem; font-weight:800; font-size:1rem; cursor:pointer; }
+  .vacio { text-align:center; color:var(--suave); padding:2rem; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🍬 Shuk Mamtakim</h1><div class="bsd">בס״ד · Tienda (sistema nuevo)</div></div>
+  <button class="cart-btn" onclick="abrirCart()">🛒 Carrito<span class="n" id="cart-n">0</span></button>
+</header>
+<div class="barra">
+  <div id="velo" class="velo">Cargando catálogo de Supabase…</div>
+  <div class="toggle">
+    <button id="t-min" class="on" onclick="setModo('min')">🛒 Por unidad</button>
+    <button id="t-may" onclick="setModo('may')">📦 Por mayor</button>
+  </div>
+  <input id="buscar" placeholder="🔍 Buscá un producto..." oninput="render()">
+</div>
+<div class="barra" id="cont"></div>
+
+<div class="ov" id="cart-ov">
+  <div class="cart">
+    <h2>🛒 Tu pedido</h2>
+    <div class="cart-body" id="cart-body"></div>
+    <div class="cart-foot">
+      <input id="cli-nombre" placeholder="Tu nombre (para el pedido)" style="width:100%;padding:0.7rem 1rem;border:1.5px solid var(--gris);border-radius:10px;font-size:0.95rem;margin-bottom:0.6rem;outline:none;box-sizing:border-box">
+      <div class="tot"><span>Total</span><span id="cart-tot">$ 0</span></div>
+      <button class="wa" onclick="pedirWA()">📲 Pedir por WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sb = supabase.createClient('https://soarkknjewgcewryxqac.supabase.co', 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2');
+  const WA = '5491131754540';
+  const CB = 'https://res.cloudinary.com/dq2boloyp/image/upload', T = '/w_300,h_300,c_fill,q_auto,f_auto/';
+  let TODOS = [], MODO = 'min', CART = {}, TC = 0;
+  // Tipo de cambio en vivo (para la referencia en pesos de los precios en U$S), como en el Shuk real.
+  fetch('https://dolarapi.com/v1/dolares/blue').then(r => r.json()).then(d => { TC = d.venta || 0; if (TODOS.length) render(); }).catch(() => {});
+
+  function urlsFoto(f) {
+    if (!f) return [];
+    f = String(f).trim().replace(/\s+$/, '');
+    if (/^https?:\/\//i.test(f)) return f.indexOf('res.cloudinary.com') !== -1 ? [f.replace('/upload/', '/upload' + T), f] : [f];
+    const ext = f.split('.').pop().toLowerCase(), sinExt = f.replace(/\.[^.]+$/, ''), cl = CB + T + 'shuk-mamtakim/';
+    return [cl + f, cl + sinExt + '.' + ext.toUpperCase() + '.' + ext, cl + sinExt + '.jpg', cl + sinExt + '.jpeg', cl + sinExt + '.JPG', CB + T + f];
+  }
+  window.fbFoto = el => { let u = []; try { u = JSON.parse(el.dataset.u || '[]'); } catch {} if (u.length) { el.src = u.shift(); el.dataset.u = JSON.stringify(u); } else el.outerHTML = '<div class="ph">🍬</div>'; };
+  // Mayorista: en la MONEDA del producto (golosinas de Miri = U$S, Pitzujim de Jony = $). Minorista: siempre $.
+  const precioDe = p => MODO === 'may'
+    ? { v: parseFloat(String(p.precio_may).replace(',', '.')) || 0, mon: (p.moneda === 'U$S' ? 'U$S' : '$') }
+    : { v: parseFloat(String(p.precio_min).replace(',', '.')) || 0, mon: '$' };
+  const fmtMon = (v, mon) => mon === 'U$S' ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR');
+  const fmt = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  window.setModo = m => { MODO = m; document.getElementById('t-min').className = m === 'min' ? 'on' : ''; document.getElementById('t-may').className = m === 'may' ? 'on' : ''; render(); };
+
+  function tarjeta(p, agotado) {
+    const cands = urlsFoto(p.imagen);
+    const foto = cands.length ? `<img class="foto" src="${cands[0]}" data-u='${JSON.stringify(cands.slice(1)).replace(/'/g, '&#39;')}' onerror="fbFoto(this)">` : `<div class="ph">🍬</div>`;
+    const enCart = CART[p.id]; const pr = precioDe(p);
+    const ref = (pr.mon === 'U$S' && TC > 0) ? `<div style="font-size:0.68rem;color:var(--suave);margin-top:-1px">≈ $ ${Math.round(pr.v * TC).toLocaleString('es-AR')}</div>` : '';
+    return `<div class="card" style="${agotado ? 'opacity:0.6' : ''}">${foto}<div class="info">
+      <div class="nom">${esc(p.nombre)}</div>
+      <div class="pre">${fmtMon(pr.v, pr.mon)}</div>${ref}
+      ${agotado ? '<div style="margin-top:0.4rem;text-align:center;color:var(--suave);font-size:0.75rem;font-weight:700">😴 Sin stock</div>'
+                : `<button class="add ${enCart ? 'ag' : ''}" onclick="addCart('${p.id}')">${enCart ? '✓ ' + enCart + ' en carrito' : '+ Agregar'}</button>`}
+    </div></div>`;
+  }
+  function render() {
+    const q = (document.getElementById('buscar').value || '').toLowerCase().trim();
+    let lista = TODOS.filter(p => precioDe(p).v > 0);
+    if (q) lista = lista.filter(p => (p.nombre || '').toLowerCase().includes(q));
+    const cont = document.getElementById('cont');
+    if (!lista.length) { cont.innerHTML = '<div class="vacio">Sin resultados.</div>'; return; }
+    const conStock = lista.filter(p => (parseFloat(p.stock) || 0) > 0);
+    const sinStock = lista.filter(p => (parseFloat(p.stock) || 0) <= 0);
+    const cats = {};
+    conStock.forEach(p => { const c = (p.categoria || 'Varios').trim() || 'Varios'; (cats[c] = cats[c] || []).push(p); });
+    let html = Object.keys(cats).sort().map(cat => `<div class="cat-tit">${esc(cat)}</div><div class="grid">${cats[cat].map(p => tarjeta(p, false)).join('')}</div>`).join('');
+    if (sinStock.length) html += `<div class="cat-tit" style="color:var(--suave);border-top:2px dashed var(--gris);padding-top:1rem;margin-top:1.5rem">🔔 Sin stock · avisanos y te avisamos cuando llegue</div><div class="grid">${sinStock.map(p => tarjeta(p, true)).join('')}</div>`;
+    cont.innerHTML = html;
+  }
+
+  window.addCart = id => { CART[id] = (CART[id] || 0) + 1; actualizarN(); render(); };
+  function actualizarN() { document.getElementById('cart-n').textContent = Object.values(CART).reduce((a, b) => a + b, 0); }
+  window.abrirCart = () => { renderCart(); document.getElementById('cart-ov').classList.add('open'); };
+  document.getElementById('cart-ov').addEventListener('click', e => { if (e.target.id === 'cart-ov') e.currentTarget.classList.remove('open'); });
+
+  function renderCart() {
+    const body = document.getElementById('cart-body');
+    const items = Object.keys(CART).map(id => ({ p: TODOS.find(x => String(x.id) === String(id)), q: CART[id] })).filter(x => x.p);
+    if (!items.length) { body.innerHTML = '<div class="vacio">Carrito vacío 🍬</div>'; document.getElementById('cart-tot').textContent = '$ 0'; return; }
+    let totARS = 0, totUSD = 0;
+    body.innerHTML = items.map(({ p, q }) => {
+      const pr = precioDe(p); const sub = pr.v * q;
+      if (pr.mon === 'U$S') totUSD += sub; else totARS += sub;
+      return `<div class="ci">
+        <div class="cn">${esc(p.nombre)}<br><span style="color:var(--suave);font-size:0.75rem">${fmtMon(pr.v, pr.mon)} c/u</span></div>
+        <div class="qc"><button onclick="chg('${p.id}',-1)">−</button><b>${q}</b><button onclick="chg('${p.id}',1)">+</button></div>
+        <div class="cp">${fmtMon(sub, pr.mon)}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('cart-tot').textContent = [totARS > 0 ? fmt(totARS) : '', totUSD > 0 ? 'U$S ' + totUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+  }
+  window.chg = (id, d) => { CART[id] = (CART[id] || 0) + d; if (CART[id] <= 0) delete CART[id]; actualizarN(); renderCart(); render(); };
+
+  window.pedirWA = () => {
+    const items = Object.keys(CART).map(id => ({ p: TODOS.find(x => String(x.id) === String(id)), q: CART[id] })).filter(x => x.p);
+    if (!items.length) { alert('Agregá algo al carrito 🍬'); return; }
+    let totARS = 0, totUSD = 0;
+    const lineas = items.map(({ p, q }) => { const pr = precioDe(p); const s = pr.v * q; if (pr.mon === 'U$S') totUSD += s; else totARS += s; return `• ${q}x ${p.nombre} — ${fmtMon(s, pr.mon)}`; });
+    const totStr = [totARS > 0 ? fmt(totARS) : '', totUSD > 0 ? 'U$S ' + totUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+    const nombre = (document.getElementById('cli-nombre').value || '').trim();
+    if (!nombre) { alert('Poné tu nombre para el pedido 🙂'); document.getElementById('cli-nombre').focus(); return; }
+    const msg = `¡Hola! Soy *${nombre}*. Quiero hacer este pedido (${MODO === 'may' ? 'por mayor' : 'por unidad'}):\n\n${lineas.join('\n')}\n\n*Total: ${totStr}*`;
+    window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), '_blank');
+  };
+
+  (async () => {
+    const t0 = performance.now();
+    const { data, error } = await sb.from('productos').select('id,nombre,categoria,precio_min,precio_may,imagen,moneda,stock').eq('visible', true).order('nombre');
+    const ms = Math.round(performance.now() - t0);
+    const velo = document.getElementById('velo');
+    if (error) { velo.style.color = 'var(--rojo)'; velo.textContent = '❌ ' + error.message; return; }
+    TODOS = data;
+    velo.innerHTML = `✅ Catálogo cargado (${data.length} productos) en <b>${ms} ms</b> — leído de Supabase 🚀`;
+    render();
+  })();
+</script>
+</body>
+</html>

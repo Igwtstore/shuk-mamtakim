@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ Mini-tienda sobre Supabase — prueba en vivo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root { --tinta:#1a1a2e; --dorado:#c9954a; --verde:#1a7a3a; --rojo:#c0392b; --suave:#6b6b7a; --crema:#fdf8f0; --gris:#e8e6e0; --miri:#b14cff; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,'Segoe UI',sans-serif; color:var(--tinta); background:var(--crema); margin:0; padding:1.2rem; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 0.2rem; }
+  .sub { color:var(--suave); font-size:0.9rem; margin-bottom:0.8rem; }
+  .velo { background:#fff; border:2px solid var(--verde); border-radius:12px; padding:0.8rem 1.1rem; margin-bottom:1rem; }
+  .velo b { color:var(--verde); }
+  .velo .big { font-size:1.4rem; }
+  .comp { color:var(--suave); font-size:0.85rem; margin-top:0.2rem; }
+  #buscar { width:100%; padding:0.7rem 1rem; border:1.5px solid var(--gris); border-radius:10px; font-size:1rem; margin-bottom:1rem; outline:none; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0.8rem; }
+  .card { background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+  .foto { width:100%; aspect-ratio:1; object-fit:cover; background:#f2ede3; display:block; }
+  .ph { width:100%; aspect-ratio:1; background:#f2ede3; display:flex; align-items:center; justify-content:center; font-size:2rem; }
+  .info { padding:0.5rem 0.6rem; }
+  .nom { font-weight:700; font-size:0.82rem; line-height:1.25; margin-bottom:0.2rem; }
+  .pre { color:var(--dorado); font-weight:800; font-size:0.95rem; }
+  .meta { font-size:0.68rem; color:var(--suave); margin-top:0.2rem; display:flex; justify-content:space-between; align-items:center; }
+  .badge { font-size:0.6rem; font-weight:800; padding:1px 5px; border-radius:5px; }
+  .b-jony { background:#e6f4ea; color:var(--verde); }
+  .b-miri { background:#f3e6ff; color:var(--miri); }
+  .err { background:#fdecea; border:2px solid var(--rojo); color:var(--rojo); border-radius:12px; padding:1rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🍬 Mini-tienda sobre Supabase</h1>
+  <div class="sub">Prueba en vivo — el catálogo lee <b>directo de la base nueva</b>, sin pasar por Google.</div>
+  <div id="velo" class="velo">Cargando de Supabase…</div>
+  <input id="buscar" placeholder="🔍 Buscá un producto..." oninput="filtrar(this.value)" style="display:none">
+  <div id="grid" class="grid"></div>
+</div>
+<script>
+  const sb = supabase.createClient(
+    'https://soarkknjewgcewryxqac.supabase.co',
+    'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2'
+  );
+  const CB = 'https://res.cloudinary.com/dq2boloyp/image/upload';
+  const T = '/w_300,h_300,c_fill,q_auto,f_auto/';   // resize+optim
+  // Réplica de imgUrl() del Shuk: arma la lista de URLs candidatas según el formato del nombre.
+  function urlsFoto(f) {
+    if (!f) return [];
+    f = String(f).trim().replace(/\s+$/, '');
+    if (/^https?:\/\//i.test(f)) return f.indexOf('res.cloudinary.com') !== -1 ? [f.replace('/upload/', '/upload' + T), f] : [f];
+    const ext = f.split('.').pop().toLowerCase();
+    const sinExt = f.replace(/\.[^.]+$/, '');
+    const cl = CB + T + 'shuk-mamtakim/';
+    return [cl + f, cl + sinExt + '.' + ext.toUpperCase() + '.' + ext, cl + sinExt + '.jpg', cl + sinExt + '.jpeg', cl + sinExt + '.JPG', CB + T + f, CB + T + sinExt];
+  }
+  window.fbFoto = el => {   // onerror: prueba la siguiente URL de la lista; si no hay más, placeholder
+    let u = []; try { u = JSON.parse(el.dataset.u || '[]'); } catch {}
+    if (u.length) { el.src = u.shift(); el.dataset.u = JSON.stringify(u); } else el.outerHTML = '<div class="ph">🍬</div>';
+  };
+  let TODOS = [];
+  const fmt = n => n ? '$ ' + Number(n).toLocaleString('es-AR') : '—';
+  function pintar(lista) {
+    document.getElementById('grid').innerHTML = lista.map(p => {
+      const cands = urlsFoto(p.imagen);
+      const foto = cands.length
+        ? `<img class="foto" src="${cands[0]}" data-u='${JSON.stringify(cands.slice(1)).replace(/'/g, "&#39;")}' onerror="fbFoto(this)">`
+        : `<div class="ph">🍬</div>`;
+      const badge = p.dueno === 'Jony' ? '<span class="badge b-jony">JONY</span>'
+                  : p.dueno === 'Miri' ? '<span class="badge b-miri">MIRI</span>' : '<span></span>';
+      return `<div class="card">${foto}<div class="info">
+        <div class="nom">${p.nombre || ''}</div>
+        <div class="pre">${fmt(p.precio_min)}</div>
+        <div class="meta">${badge}<span>📦 ${p.stock ?? 0}</span></div>
+      </div></div>`;
+    }).join('');
+  }
+  window.filtrar = q => {
+    q = (q || '').toLowerCase().trim();
+    pintar(!q ? TODOS : TODOS.filter(p => (p.nombre || '').toLowerCase().includes(q)));
+  };
+  (async () => {
+    const t0 = performance.now();
+    const { data, error } = await sb.from('productos')
+      .select('nombre,stock,precio_min,dueno,imagen').eq('visible', true).order('nombre');
+    const ms = Math.round(performance.now() - t0);
+    const velo = document.getElementById('velo');
+    if (error) { velo.className = 'err'; velo.textContent = '❌ ' + error.message; return; }
+    TODOS = data;
+    velo.innerHTML = `✅ <span class="big"><b>${data.length}</b> productos en <b>${ms} ms</b></span>
+      <div class="comp">En Google esto tardaba ~2.600 ms → <b>${Math.max(1, Math.round(2600/Math.max(ms,1)))}× más rápido</b>. Y así de rápido va a andar TODO. 🚀</div>`;
+    document.getElementById('buscar').style.display = 'block';
+    pintar(data);
+  })();
+</script>
+</body>
+</html>

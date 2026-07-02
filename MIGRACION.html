@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Informe — Migrar de Google a Supabase</title>
+<style>
+  :root { --tinta:#1a1a2e; --dorado:#c9954a; --verde:#1a7a3a; --rojo:#c0392b; --suave:#6b6b7a; --crema:#fdf8f0; --gris:#e8e6e0; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,'Segoe UI',sans-serif; color:var(--tinta); background:var(--crema); margin:0; padding:0 1rem 4rem; line-height:1.6; }
+  .wrap { max-width:860px; margin:0 auto; }
+  header.cover { text-align:center; padding:3rem 1rem 2rem; }
+  header.cover h1 { font-size:2rem; margin:0 0 0.4rem; }
+  header.cover .sub { color:var(--suave); font-size:1rem; }
+  header.cover .meta { color:var(--dorado); font-weight:700; font-size:0.82rem; margin-top:0.8rem; text-transform:uppercase; letter-spacing:0.05em; }
+  h2 { font-size:1.35rem; margin:2.4rem 0 0.8rem; padding-bottom:0.4rem; border-bottom:2px solid var(--gris); }
+  h3 { font-size:1.05rem; margin:1.4rem 0 0.5rem; }
+  .tldr { background:#fff; border:2px solid var(--dorado); border-radius:14px; padding:1.2rem 1.4rem; margin:1rem 0; }
+  .tldr b { color:var(--dorado); }
+  table { width:100%; border-collapse:collapse; margin:1rem 0; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.05); font-size:0.92rem; }
+  th,td { padding:0.7rem 0.9rem; text-align:left; border-bottom:1px solid var(--gris); vertical-align:top; }
+  th { background:var(--tinta); color:#fff; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.03em; }
+  tr:last-child td { border-bottom:none; }
+  .gana { color:var(--verde); font-weight:700; }
+  .pierde { color:var(--rojo); font-weight:700; }
+  .card { background:#fff; border-radius:12px; padding:1rem 1.3rem; margin:0.8rem 0; box-shadow:0 2px 10px rgba(0,0,0,0.05); }
+  .card.verde { border-left:5px solid var(--verde); }
+  .card.rojo { border-left:5px solid var(--rojo); }
+  .card.dorado { border-left:5px solid var(--dorado); }
+  .fase { display:flex; gap:0.8rem; align-items:flex-start; margin:0.6rem 0; }
+  .fase .n { background:var(--tinta); color:#fff; min-width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; }
+  .pie { text-align:center; color:var(--suave); font-size:0.8rem; margin-top:3rem; }
+  .reco { background:var(--tinta); color:#fff; border-radius:14px; padding:1.4rem 1.6rem; margin:1.5rem 0; }
+  .reco h2 { color:#fff; border-color:rgba(255,255,255,0.2); margin-top:0; }
+  .reco b { color:var(--dorado); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="cover">
+  <h1>🚀 ¿Mudamos el sistema a una base de datos real?</h1>
+  <div class="sub">De Google Apps Script + Sheets → Supabase · pros, contras y plan</div>
+  <div class="meta">Informe para Jony · Junio 2026 · Uso interno</div>
+</header>
+
+<div class="tldr">
+  <b>En 30 segundos:</b> Hoy el sistema corre sobre una "planilla gigante en la nube" (Google Sheets) manejada por Apps Script. Es <b>gratis y cómodo, pero lento</b> y no escala. Mudarlo a <b>Supabase</b> (una base de datos de verdad, la que ya usás para el login) te da <b>velocidad y escala</b> — el precio es <b>trabajo de mudanza</b> (semanas) y perder la comodidad de editar a mano en la planilla. <b>No es urgente hoy; es el paso para vender el sistema en serio.</b>
+</div>
+
+<h2>1. Qué tenés hoy (y por qué arrancamos así)</h2>
+<p>Tu sistema son tres piezas:</p>
+<table>
+  <tr><th>Pieza</th><th>Qué hace</th></tr>
+  <tr><td><b>Google Sheets</b></td><td>Es la <b>base de datos</b>: ahí viven productos, ventas, pagos, stock. Es una planilla.</td></tr>
+  <tr><td><b>Apps Script</b></td><td>Es el <b>motor</b> (backend): lee/escribe la planilla y le contesta a la página.</td></tr>
+  <tr><td><b>Vercel</b></td><td>Sirve la <b>página</b> (lo que ves). Esto NO se toca, queda igual.</td></tr>
+</table>
+<p><b>Por algo arrancamos así, y fue la decisión correcta para empezar:</b></p>
+<div class="card dorado">
+  ✅ <b>$0 de costo.</b> Cero. &nbsp;·&nbsp; ✅ <b>Cero infraestructura</b> que mantener (Google se encarga). &nbsp;·&nbsp; ✅ Ves y <b>editás los datos a mano</b> en la planilla (comodísimo para corregir o cargar saldos viejos del Excel). &nbsp;·&nbsp; ✅ <b>Backup automático</b> a Drive. &nbsp;·&nbsp; ✅ Arrancaste <b>sin contratar nada</b> y validaste que el sistema sirve.
+</div>
+<p>Para <b>nacer y probar</b>, no había nada mejor. Pero tiene un techo, y lo estás tocando.</p>
+
+<h2>2. El problema (lo que te pasó hoy)</h2>
+<table>
+  <tr><th>Síntoma</th><th>Causa de fondo</th></tr>
+  <tr><td>"No se pudo cargar"</td><td>Apps Script es un motor <b>compartido y gratuito</b>: cada consulta arranca "en frío" y tarda <b>1 a 5 segundos</b>, y Google limita cuántas podés hacer a la vez.</td></tr>
+  <tr><td>Todo lento al abrir el panel</td><td>Google Sheets <b>no es una base de datos</b>, es una planilla. Leerla entera es lento, y el panel pide muchas cosas juntas.</td></tr>
+  <tr><td>No aguantaría varias tiendas</td><td>Si mañana vendés el sistema a 5 negocios usando a la vez, Sheets + Apps Script <b>se satura</b>.</td></tr>
+</table>
+
+<h2>3. A dónde se mudaría: Supabase</h2>
+<p>Supabase es una <b>base de datos profesional</b> (PostgreSQL) en la nube, con login, almacenamiento de archivos y API automática. <b>Ya la estás usando</b> para que entres al panel. La idea es que también guarde los <b>datos</b> (productos, ventas, pagos…).</p>
+
+<h2>4. ¿Hay otras opciones? Sí — y por qué Supabase</h2>
+<p>Supabase no es la única. Estas son las alternativas reales:</p>
+<table>
+  <tr><th>Opción</th><th>Qué es</th><th>Mantenimiento</th><th>¿Como tus planillas?</th></tr>
+  <tr><td><b>Supabase</b> ⭐</td><td>Base de datos SQL (tablas) + login + archivos, todo incluido. Código abierto.</td><td>Casi cero</td><td class="gana">Sí (filas y columnas)</td></tr>
+  <tr><td><b>Firebase</b> (Google)</td><td>Lo mismo, pero de Google. Guarda "documentos" (otro modelo más raro).</td><td>Casi cero</td><td class="pierde">No</td></tr>
+  <tr><td><b>Neon / PlanetScale</b></td><td>Solo la base de datos, ultrarrápida; el resto se arma aparte.</td><td>Poco</td><td class="gana">Sí (tablas)</td></tr>
+  <tr><td><b>Servidor propio</b> (VPS)</td><td>Alquilás una máquina y ponés todo vos.</td><td class="pierde">Alto (lo cuidás vos)</td><td>Depende</td></tr>
+</table>
+<div class="card rojo">
+  ⚠️ <b>Ojo con el "servidor dedicado":</b> suena bien, pero es <b>más</b> trabajo, no menos. Ahí vos pasás a ser el encargado del servidor (seguridad, copias de respaldo, que no se caiga). Hoy de todo eso se encarga Google gratis. Por eso conviene un servicio "todo incluido".
+</div>
+<div class="card verde">
+  <h3 style="margin-top:0;color:var(--verde)">Por qué Supabase entre todas</h3>
+  <ul>
+    <li><b>Es SQL = tablas con filas y columnas</b> → lo más parecido a las planillas que ya manejás (Firebase usa un modelo más difícil de entender).</li>
+    <li><b>Código abierto = tus datos son TUYOS</b> y exportables. No quedás "preso" de nadie (con Firebase quedás atado a Google).</li>
+    <li><b>Ya la usás para el login</b> → una sola cuenta para todo, menos piezas.</li>
+  </ul>
+  <p style="margin-bottom:0"><b>Ninguna te ata para siempre</b> — los datos siempre se pueden mover a otra.</p>
+</div>
+
+<h2>5. ¿Se reemplaza TODO o una parte?</h2>
+<table>
+  <tr><th>Opción</th><th>Qué pasa</th><th>Veredicto</th></tr>
+  <tr><td><b>A — Mudanza total</b></td><td>Sheets y Apps Script <b>se jubilan</b>. La página habla directo con Supabase.</td><td class="gana">Recomendada. Lo más rápido y limpio.</td></tr>
+  <tr><td><b>B — Híbrida</b></td><td>Los datos van a Supabase, pero Apps Script sigue de "traductor" en el medio.</td><td class="pierde">Mantiene la lentitud del cold-start. No vale la pena.</td></tr>
+  <tr><td><b>C — No migrar</b></td><td>Quedarse en Sheets y solo optimizar.</td><td>Válido por ahora, pero el techo sigue ahí.</td></tr>
+</table>
+
+<h2>6. Lo que GANÁS y lo que PERDÉS (lo que pediste)</h2>
+<div class="card verde">
+  <h3 style="margin-top:0;color:var(--verde)">✅ Lo que GANÁS con Supabase</h3>
+  <ul>
+    <li><b>Velocidad:</b> respuestas en <b>milésimas de segundo</b> en vez de 1-5 seg. Chau "No se pudo cargar".</li>
+    <li><b>Aguanta gente a la vez:</b> varias tiendas/usuarios sin caerse → <b>clave para vender</b>.</li>
+    <li><b>Escala de verdad:</b> miles de ventas y se filtra/busca al instante.</li>
+    <li><b>Datos sólidos:</b> una base de datos no se "rompe" si alguien toca mal una celda.</li>
+    <li><b>Imagen profesional:</b> un sistema vendible no corre sobre una planilla.</li>
+  </ul>
+</div>
+<div class="card rojo">
+  <h3 style="margin-top:0;color:var(--rojo)">❌ Lo que PERDÉS / el costo</h3>
+  <ul>
+    <li><b>Editar a mano en la planilla:</b> hoy abrís el Sheet y corregís. Eso se pierde — todo pasa a hacerse desde pantallas. <i>(Mitigable: te puedo hacer una "vista de tabla" para editar masivo, que ya casi tenés con el editor masivo.)</i></li>
+    <li><b>Costo:</b> Supabase es <b>gratis</b> hasta ~500 MB y 50.000 usuarios/mes. Para tu volumen, gratis te alcanza un buen tiempo. Después, plan Pro <b>~US$ 25/mes</b>.</li>
+    <li><b>Trabajo de mudanza:</b> diseñar la base, copiar los datos y reescribir el motor. <b>Semanas</b> de laburo (mío), no un fin de semana.</li>
+    <li><b>Otro proveedor del que dependés</b> (aunque Supabase es código abierto y los datos son exportables — no quedás "preso").</li>
+    <li><b>El backup cambia:</b> ya no es "a Drive" sino el de Supabase (automático, pero distinto a lo que conocés).</li>
+  </ul>
+</div>
+
+<h2>7. Comparación lado a lado</h2>
+<table>
+  <tr><th></th><th>Hoy (Apps Script + Sheets)</th><th>Supabase</th></tr>
+  <tr><td><b>Velocidad</b></td><td>1-5 seg por consulta 🐢</td><td class="gana">milésimas ⚡</td></tr>
+  <tr><td><b>Varios a la vez</b></td><td>Se satura</td><td class="gana">Sin problema</td></tr>
+  <tr><td><b>Costo</b></td><td class="gana">$0</td><td>$0 ahora, ~US$25/mes al crecer</td></tr>
+  <tr><td><b>Editar a mano</b></td><td class="gana">Sí, en la planilla</td><td>No (solo por pantallas)</td></tr>
+  <tr><td><b>Mantenimiento</b></td><td class="gana">Cero (Google)</td><td>Casi cero (Supabase gestiona)</td></tr>
+  <tr><td><b>Vender a otras tiendas</b></td><td>No escala</td><td class="gana">Hecho para eso</td></tr>
+  <tr><td><b>Riesgo de "romperse"</b></td><td>Una celda mal tocada descuadra</td><td class="gana">Base sólida</td></tr>
+</table>
+
+<h2>8. Cómo se haría (sin romper nada)</h2>
+<div class="fase"><div class="n">0</div><div><b>Diseñar la base.</b> Definir las tablas (productos, ventas, pagos, stock…) — el espejo de tus hojas de hoy.</div></div>
+<div class="fase"><div class="n">1</div><div><b>Copiar los datos.</b> Un script que pasa todo de Sheets a Supabase, sin tocar el original.</div></div>
+<div class="fase"><div class="n">2</div><div><b>Reescribir el motor.</b> Las funciones de hoy (cobrar, vender, calcular Maaser) pasan a consultar Supabase.</div></div>
+<div class="fase"><div class="n">3</div><div><b>Probar en paralelo.</b> El sistema nuevo corre al lado del viejo; el blindaje compara que dé lo mismo. Sheets queda de respaldo.</div></div>
+<div class="fase"><div class="n">4</div><div><b>Cortar.</b> Cuando todo esté verde, se apaga Sheets. Listo.</div></div>
+
+<div class="reco">
+  <h2>🎯 Mi recomendación honesta</h2>
+  <p><b>No migres todavía.</b> El sistema funciona y la lentitud, aunque molesta, se baja optimizando el panel (gratis, lo hago ya).</p>
+  <p><b>La migración es EL paso para vender el sistema</b> (white-label). El día que arranques en serio con varias tiendas, Sheets no aguanta y Supabase sí — ahí se justifica el trabajo de semanas y el ~US$25/mes.</p>
+  <p><b>Plan sugerido:</b> 1) ahora optimizo el panel + nivelo las opciones de plata; 2) seguimos con el white-label sobre Sheets; 3) cuando haya 2-3 tiendas reales o sientas el techo, migramos a Supabase con el plan de arriba. <b>Vos decidís el cuándo — yo te dejo el camino listo.</b></p>
+</div>
+
+<div class="pie">Shuk Mamtakim · Informe de migración · Junio 2026 — borrador para decisión, no es un compromiso de fecha</div>
+</div>
+</body>
+</html>
