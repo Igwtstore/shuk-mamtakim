@@ -946,7 +946,9 @@
   <!-- ANALÍTICA TAB -->
   <div id="admin-tab-analitica" style="display:none">
     <div class="admin-card">
-      <div class="admin-titulo">📈 Analítica de visitantes</div>
+      <div class="admin-titulo" style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem">📈 Analítica de visitantes
+        <a href="diagnostico.html" target="_blank" style="font-size:0.72rem;font-weight:700;color:var(--azul);text-decoration:none;border:1.5px solid var(--azul);border-radius:8px;padding:0.3rem 0.6rem;white-space:nowrap">🩺 Diagnóstico del sistema</a>
+      </div>
       <div style="display:flex;gap:6px;margin:0.5rem 0 0.25rem">
         <button class="psec-btn activo" id="ana-p-7" onclick="setAnaPeriodo(7,this)">7 días</button>
         <button class="psec-btn" id="ana-p-30" onclick="setAnaPeriodo(30,this)">30 días</button>
@@ -7968,6 +7970,21 @@ async function trazarProducto() {
   const ventas = await apiGet('ventas').catch(() => []);
   const filas = []; let totalU = 0;
   (Array.isArray(ventas) ? ventas : []).filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
+    // Método EXACTO: stockUpdates guarda "id:cantidad" de cada producto vendido. El texto de la
+    // línea trunca la descripción a 45 caracteres y confunde productos gemelos (los dos Bon O Bon
+    // "Bombones rellenos..." x18 y x60 quedan idénticos en el texto — descalce que cazó el usuario).
+    const su = (v.stockUpdates || '').toString().trim();
+    if (su && /^\d+:/.test(su)) {
+      su.split(',').forEach(u => {
+        const pp = u.split(':');
+        if (String(pp[0]) !== String(id)) return;
+        const q = parseInt(pp[1]) || 0; if (!q) return;
+        totalU += q;
+        filas.push({ cliente: v.cliente, fecha: v.fecha || '', qty: q });
+      });
+      return;
+    }
+    // Ventas viejas sin stockUpdates (ej. saldos cargados): match por texto, como antes.
     (v.productos || '').split(' || ').forEach(l => {
       const m = l.match(/(\d+)x\s+(.+?)\s+—/);   // descriptor completo (nombre · desc) hasta el precio
       if (m && m[2].trim() === clave) {
