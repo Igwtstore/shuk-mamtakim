@@ -1168,7 +1168,7 @@
       <button class="filtro-estado-btn" onclick="setFiltroEstado('preparando',this)">🔧 Preparando</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('entregado',this)">✓ Entregado</button>
       <button class="filtro-estado-btn" onclick="setFiltroEstado('cancelado',this)">✕ Cancelado</button>
-      <button class="filtro-estado-btn" id="pedidos-orden-btn" onclick="togglePedidosOrden(this)" title="Cambiar el orden de la lista">⬇️ Más nuevos primero</button>
+      <button class="filtro-estado-btn" id="pedidos-orden-btn" onclick="togglePedidosOrden(this)" title="Cambiar el orden: más nuevos primero o lista corrida del #1" style="white-space:nowrap">⬇️ Nuevos 1º</button>
     </div>
     <div id="pedidos-contador" style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.4rem"></div>
     <div class="pedidos-lista" id="pedidos-lista">
@@ -3616,7 +3616,7 @@ function _ccTotalFooter(entries, soloMiri) {
 let _pedidosOrden = 'desc';   // 'desc' = más nuevos primero (como siempre) · 'asc' = del #1 para arriba
 function togglePedidosOrden(btn) {
   _pedidosOrden = _pedidosOrden === 'desc' ? 'asc' : 'desc';
-  if (btn) btn.textContent = _pedidosOrden === 'desc' ? '⬇️ Más nuevos primero' : '⬆️ Más viejos primero';
+  if (btn) btn.textContent = _pedidosOrden === 'desc' ? '⬇️ Nuevos 1º' : '⬆️ Del #1';
   renderPedidos();
 }
 async function renderPedidos() {
