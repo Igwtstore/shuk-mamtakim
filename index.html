@@ -1994,7 +1994,9 @@ window.fetch = function(url, opts) {
   }
   return _origFetch(url, opts);
 };
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxO71AD5tBy1KpWCP0K9-uBEZEc7Qv1ehMv3PA3zDQwngwj7XHMLgIY6M7vWosr7-nc/exec';
+const APPS_SCRIPT_URL = 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';   // motor Supabase (switch 2026-07-02)
+const SB_REST = 'https://soarkknjewgcewryxqac.supabase.co/rest/v1';
+const SB_ANON_H = { apikey: 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2', Authorization: 'Bearer sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2' };
 
 // STORAGE
 const DB_KEY = 'shuk_pedidos_v1';
@@ -2053,32 +2055,46 @@ async function cargarProductos() {
   const catalogo = document.getElementById('catalogo');
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
   try {
-    const r = await fetch(SHEET_URL);
-    const text = await r.text();
-    const rows = parseCSV(text);
-    productos = rows.slice(1).map(r => ({
-      id: parseInt(r[0]),
-      nombre: r[1],
-      desc: r[2],
-      precioMay: r[3],
-      precioMin: parseFloat((r[4]||'0').replace(',','.')),
-      stock: parseInt(r[5]||'0'),
-      imagen: r[6],
-      activo: (r[7]||'SI').trim().toUpperCase() === 'SI',
-      categoria: (r[8]||'Varios').trim(),
-      visible: (r[9]||'Ambos').trim(),
-      precioOferta: parseFloat((r[10]||'0').replace(',','.')),
-      fechaOferta: (r[11]||'').trim(),
-      cantPack: parseInt(r[12]||'0'),
-      precioPack: parseFloat((r[13]||'0').replace(',','.')),
-      dueno: (r[14]||'').trim(),
-      visibleOferta: (r[15]||'Ambos').trim(),
-      descBot: (r[16]||'').trim(),
-      moneda: ((r[17]||'$').trim() === 'U$S') ? 'U$S' : '$',
-      candyCod: (r[28]||'').trim(),   // vínculo de stock compartido con Candy (col 29)
-      costo: parseFloat((r[29]||'0').toString().replace(',','.')) || 0,   // col 30
-      nombresPrev: (r[30]||'').toString().trim()   // col 31: nombres anteriores (historial)
+    // Catálogo desde Supabase (columnas públicas; costo/candyCod son privados)
+    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda&order=id', { headers: SB_ANON_H });
+    const data = await r.json();
+    productos = data.map(p => ({
+      id: parseInt(p.id),
+      nombre: p.nombre || '',
+      desc: p.descripcion || '',
+      precioMay: (p.precio_may == null ? '' : p.precio_may).toString(),
+      precioMin: parseFloat(p.precio_min) || 0,
+      stock: parseInt(p.stock) || 0,
+      imagen: p.imagen || '',
+      activo: p.activo !== false,
+      categoria: (p.categoria || 'Varios').trim(),
+      visible: (p.visible_cat || 'Ambos').trim(),
+      precioOferta: parseFloat(p.precio_oferta) || 0,
+      fechaOferta: (p.fecha_oferta || '').trim(),
+      cantPack: parseInt(p.cant_pack) || 0,
+      precioPack: parseFloat(p.precio_pack) || 0,
+      dueno: (p.dueno || '').trim(),
+      visibleOferta: 'Ambos',   // col 16 de la hoja: constante 'Ambos'
+      descBot: '',              // privado → se completa abajo con sesión
+      moneda: ((p.moneda || '$').trim() === 'U$S') ? 'U$S' : '$',
+      candyCod: '',             // privado → se completa abajo con sesión
+      costo: 0,                 // privado → se completa abajo con sesión
+      nombresPrev: ''           // privado → se completa abajo con sesión
     })).filter(p => p.activo && p.id);
+    // Con sesión de admin, completar los campos privados desde el backend
+    try {
+      let tokP = _authToken;
+      try { const g = await _sb.auth.getSession(); tokP = g.data.session?.access_token || tokP; } catch (e) {}
+      if (tokP) {
+        const full = await fetch(APPS_SCRIPT_URL + '?accion=getProductosAdmin&token=' + encodeURIComponent(tokP)).then(r => r.json());
+        const porId = {};
+        (Array.isArray(full) ? full : []).forEach(f => porId[String(f.id)] = f);
+        productos.forEach(p => {
+          const f = porId[String(p.id)];
+          if (f) { p.costo = parseFloat(f.costo) || 0; p.descBot = f.descBot || ''; p.nombresPrev = f.nombresPrev || ''; p.candyCod = (f.candyCod || '').trim(); }
+        });
+      }
+    } catch (e) {}
     // Stock compartido: para los productos vinculados a Candy, el stock real es el del depósito.
     if (productos.some(p => p.candyCod)) {
       try {
@@ -3153,9 +3169,9 @@ function enviarPedido(_stockVerificado) {
   // El catálogo del navegador puede estar viejo (la página abierta hace rato): antes de
   // mandar el pedido se relee el stock real de la planilla. Evita sobreventas.
   if (!_stockVerificado) {
-    fetch(SHEET_URL + '&t=' + Date.now()).then(r => r.text()).then(csv => {
+    fetch(SB_REST + '/productos?select=id,stock&t=' + Date.now(), { headers: SB_ANON_H }).then(r => r.json()).then(data => {
       const frescos = {};
-      parseCSV(csv).slice(1).forEach(r => { frescos[parseInt(r[0])] = parseInt(r[5]||'0') || 0; });
+      data.forEach(p => { frescos[parseInt(p.id)] = parseInt(p.stock) || 0; });
       const cortos = items.filter(it => frescos[it.id] !== undefined && it.qty > frescos[it.id]);
       if (cortos.length) {
         cortos.forEach(it => {
@@ -9802,6 +9818,7 @@ async function verificarAdmin() {
     sessionStorage.setItem('adminAuth', '1');
     localStorage.setItem('shuk_no_track', '1');   // este navegador es del equipo: no cuenta en Analítica
     setSocio(socio);
+    cargarProductos();   // recargar con la sesión (completa costo/candyCod/descBot)
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('modo-bar').style.display = '';
     setModo('admin');
