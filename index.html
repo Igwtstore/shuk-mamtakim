@@ -1178,6 +1178,11 @@
     <div class="admin-titulo">🔍 Trazar producto</div>
     <input type="text" id="trazar-buscar" placeholder="🔍 Buscá el producto (elite, sopa, pitzujim...)" oninput="filtrarTrazar()" onfocus="filtrarTrazar()" autocomplete="off"
       style="padding:0.6rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;width:100%;outline:none;box-sizing:border-box;margin-bottom:0.4rem" />
+    <div id="trazar-duenos" style="display:none;gap:6px;margin-bottom:0.4rem">
+      <button class="psec-btn activo" id="trz-d-todos" onclick="setTrazarDueno('', this)">Todos</button>
+      <button class="psec-btn" id="trz-d-miri" onclick="setTrazarDueno('Miri', this)">Miri</button>
+      <button class="psec-btn" id="trz-d-jony" onclick="setTrazarDueno('Jony', this)">Jony</button>
+    </div>
     <div id="trazar-resultados" style="display:none;max-height:240px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-bottom:0.6rem"></div>
     <select id="trazar-sel" style="display:none"><option value=""></option></select>
     <div id="trazar-result"><div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div></div>
@@ -7930,12 +7935,25 @@ function _claveProducto(p) {
 }
 function _llenarTrazarSelect() { /* reemplazado por el buscador filtrarTrazar() */ }
 
+let _trazarDueno = '';   // '' = todos · 'Miri' · 'Jony' (el filtro solo existe en vista Jony)
+function setTrazarDueno(d, btn) {
+  _trazarDueno = d;
+  document.querySelectorAll('#trazar-duenos .psec-btn').forEach(b => b.classList.remove('activo'));
+  if (btn) btn.classList.add('activo');
+  filtrarTrazar();
+}
 function filtrarTrazar() {
   const q = (document.getElementById('trazar-buscar')?.value || '').toLowerCase().trim();
   const cont = document.getElementById('trazar-resultados');
   if (!cont) return;
+  // Filtro por dueño: solo tiene sentido (y solo se muestra) en la vista de Jony.
+  // En vista Miri, productosVisibles() ya excluye lo de Jony (regla de privacidad).
+  const chips = document.getElementById('trazar-duenos');
+  if (chips) chips.style.display = esVistaMiri() ? 'none' : 'flex';
+  const fDueno = esVistaMiri() ? '' : _trazarDueno;
   let lista = productosVisibles().filter(p =>
-    !q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
+    (!fDueno || (fDueno === 'Jony' ? p.dueno === 'Jony' : p.dueno !== 'Jony')) &&
+    (!q || p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q)));
   lista = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre)).slice(0, 20);
   cont.style.display = 'block';
   if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.7rem">Sin resultados</div>'; return; }
@@ -7945,6 +7963,7 @@ function filtrarTrazar() {
         <div style="font-size:0.85rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
         <div style="font-size:0.7rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((p.desc || '').substring(0, 50))}</div>
       </div>
+      ${!esVistaMiri() ? `<span style="font-size:0.62rem;font-weight:800;padding:2px 7px;border-radius:8px;background:${p.dueno === 'Jony' ? '#fdf1dc' : '#e8f0fd'};color:${p.dueno === 'Jony' ? '#b8860b' : '#2f5fb3'}">${p.dueno === 'Jony' ? 'Jony' : 'Miri'}</span>` : ''}
       <span style="color:var(--dorado);font-size:0.8rem">🔍</span>
     </div>`).join('');
 }
@@ -7965,6 +7984,9 @@ async function trazarProducto() {
   if (!id) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div>'; return; }
   const prod = productos.find(p => String(p.id) === String(id));
   if (!prod) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Producto no encontrado.</div>'; return; }
+  // Candado de privacidad: en vista Miri no se traza nada de Jony (regla sagrada, defensa extra
+  // además del buscador que ya lo excluye).
+  if (esVistaMiri() && prod.dueno === 'Jony') { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div>'; return; }
   const clave = _claveProducto(prod);
   cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Buscando…</div>';
   const ventas = await apiGet('ventas').catch(() => []);
