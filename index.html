@@ -3817,6 +3817,7 @@ async function renderPedidos() {
 
     const filtro = _filtroEstadoActual || 'todos';
     let pedidosFiltrados, historialFiltrado;
+    let _histGrupos = null;   // en 'todos' (modo normal): grupos visibles Te-deben / Cerrados
     if (filtro === 'todos') {
       pedidosFiltrados = pendientes;
       // Se muestra TODO el historial: primero los que aún deben, después los ya pagados/cancelados.
@@ -3825,9 +3826,13 @@ async function renderPedidos() {
       if (_pedidosOrden === 'asc') {
         historialFiltrado = historial;
       } else {
-        const debenAun = historial.filter(v => v.estado !== 'cancelado' && !esCobradoReal(v));
-        const yaListos = historial.filter(v => v.estado === 'cancelado' || esCobradoReal(v));
+        // Agrupa por deuda VIVA (el mismo criterio del cartelito ✓pagado/🟠debe de cada tarjeta):
+        // un pedido saldado con pagos a cuenta va a "cerrados" aunque su caja diga Cta Cte.
+        const _debeViva = v => { const d = deudaViva[v.id]; return d ? (d.ars > 0.5 || d.usd > 0.005) : !esCobradoReal(v); };
+        const debenAun = historial.filter(v => v.estado !== 'cancelado' && _debeViva(v));
+        const yaListos = historial.filter(v => v.estado === 'cancelado' || !_debeViva(v));
         historialFiltrado = [...debenAun, ...yaListos];
+        _histGrupos = { debenAun, yaListos };
       }
     } else if (['cotizacion','pendiente','preparando'].includes(filtro)) {
       pedidosFiltrados = todos.filter(v => (v.estado||'pendiente') === filtro);
@@ -3841,10 +3846,15 @@ async function renderPedidos() {
       ? pedidosFiltrados.map(v => renderCard(v, true)).join('')
       : '<div class="sinpedidos">Sin pedidos en este estado.</div>';
 
+    const _subTit = (txt, color) => `<div style="font-size:0.72rem;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:0.04em;margin:0.5rem 4px;padding-top:0.3rem">${txt}</div>`;
+    const _histInner = _histGrupos
+      ? (_histGrupos.debenAun.length ? _subTit('🟠 Te deben todavía (' + _histGrupos.debenAun.length + ')', '#b8860b') + _histGrupos.debenAun.map(v => renderCard(v, false)).join('') : '') +
+        (_histGrupos.yaListos.length ? _subTit('✓ Cobrados y cerrados (' + _histGrupos.yaListos.length + ')', 'var(--verde)') + _histGrupos.yaListos.map(v => renderCard(v, false)).join('') : '')
+      : historialFiltrado.map(v => renderCard(v, false)).join('');
     const htmlHistorial = historialFiltrado.length
       ? `<div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.5rem">Historial (${historialFiltrado.length})</div>` +
         `<div style="max-height:560px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--gris-medio);border-radius:10px;padding:6px">` +
-        historialFiltrado.map(v => renderCard(v, false)).join('') +
+        _histInner +
         `</div>`
       : '';
 
@@ -5045,7 +5055,7 @@ function actualizarTotalManual() {
     if (!qty) return;
     totalU += qty;
     const esJ = p.dueno === 'Jony';
-    const { precioUnit, moneda } = _precioMoneda(p, tipo);
+    const { precioUnit, moneda } = _precioManual(p, tipo);
     const monto = precioUnit * qty;
     if (moneda === 'U$S') { if (esJ) usdJ += monto; else usdM += monto; }
     else { if (esJ) arsJ += monto; else arsM += monto; }
@@ -5059,6 +5069,18 @@ function actualizarTotalManual() {
 }
 
 // Canasta del pedido manual: lo elegido queda siempre a la vista, aunque el buscador lo filtre.
+// El PRECIO unitario es editable por línea (para descuentos/acuerdos): prellenado con el de
+// lista; si lo cambiás, ese es el que viaja en la venta (sin tener que editar después).
+let _manualPrecios = {};   // id → precio unitario custom (en la moneda del producto)
+function _precioManual(p, tipo) {
+  const base = _precioMoneda(p, tipo);
+  const custom = parseFloat(_manualPrecios[p.id]);
+  return (custom > 0) ? { precioUnit: custom, moneda: base.moneda, custom: true } : { ...base, custom: false };
+}
+function setManualPrecio(id, val) {
+  _manualPrecios[id] = val;
+  actualizarTotalManual();
+}
 function renderManualSeleccion() {
   const wrap = document.getElementById('manual-seleccion');
   const lista = document.getElementById('manual-seleccion-lista');
@@ -5069,16 +5091,28 @@ function renderManualSeleccion() {
   wrap.style.display = '';
   lista.innerHTML = items.map(p => {
     const qty = _manualQtys[p.id];
-    const { precioUnit, moneda } = _precioMoneda(p, tipo);
+    const { precioUnit, moneda, custom } = _precioManual(p, tipo);
+    const base = _precioMoneda(p, tipo);
     const sub = precioUnit * qty;
     const subStr = moneda === 'U$S' ? `U$S ${sub.toFixed(2)}` : `$ ${Math.round(sub).toLocaleString('es-AR')}`;
+    const sym = moneda === 'U$S' ? 'U$S' : '$';
+    const listaHint = custom ? `<div style="font-size:0.62rem;color:var(--texto-suave);text-align:right">lista: ${sym} ${moneda === 'U$S' ? base.precioUnit.toFixed(2) : Math.round(base.precioUnit).toLocaleString('es-AR')}</div>` : '';
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;border-bottom:1px solid #d8ecdf">
       <span style="font-weight:800;color:var(--verde);min-width:34px;text-align:center">${qty}×</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
         ${p.desc ? `<div style="font-size:0.68rem;color:var(--texto-suave)">${p.desc.substring(0,45)}</div>` : ''}
       </div>
-      <span style="font-size:0.78rem;font-weight:700;white-space:nowrap">${subStr}</span>
+      <div style="display:flex;flex-direction:column;align-items:flex-end">
+        <div style="display:flex;align-items:center;gap:3px">
+          <span style="font-size:0.7rem;color:var(--texto-suave)">${sym}</span>
+          <input type="number" min="0" step="any" value="${custom ? _manualPrecios[p.id] : (moneda === 'U$S' ? base.precioUnit : Math.round(base.precioUnit))}"
+            onchange="setManualPrecio(${p.id}, this.value)" title="Precio unitario (editalo si acordaste otro)"
+            style="width:84px;padding:0.3rem 0.4rem;border:1.5px solid ${custom ? 'var(--dorado)' : '#d8ecdf'};border-radius:6px;font-size:0.8rem;font-weight:700;text-align:right;box-sizing:border-box" />
+        </div>
+        ${listaHint}
+      </div>
+      <span style="font-size:0.78rem;font-weight:700;white-space:nowrap;min-width:76px;text-align:right">${subStr}</span>
       <button onclick="quitarManualItem(${p.id})" title="Sacar del pedido"
         style="background:#fde8e8;border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;color:#e05c2a;font-size:0.9rem;flex-shrink:0">×</button>
     </div>`;
@@ -5087,6 +5121,7 @@ function renderManualSeleccion() {
 
 function quitarManualItem(id) {
   _manualQtys[id] = 0;
+  delete _manualPrecios[id];
   renderManualProductos();   // refresca lista (input en 0), total y canasta
 }
 
@@ -5103,9 +5138,7 @@ function cargarPedidoManual() {
   const _aCero = _manualElegibles().filter(p => {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return false;
-    const precio = tipo === 'Mayorista'
-      ? parseFloat((p.precioMay || '0').toString().replace(',', '.'))
-      : (parseFloat(p.precioMin) || 0);
+    const precio = _precioManual(p, tipo).precioUnit;
     return !(precio > 0);
   });
   if (_aCero.length) {
@@ -5122,7 +5155,7 @@ function cargarPedidoManual() {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
     const esJ = p.dueno === 'Jony';
-    const { precioUnit, moneda } = _precioMoneda(p, tipo);
+    const { precioUnit, moneda } = _precioManual(p, tipo);
     const monto = precioUnit * qty;
     if (moneda === 'U$S') { if (esJ) usdJ += monto; else usdM += monto; }
     else { if (esJ) arsJ += monto; else arsM += monto; }
@@ -5157,6 +5190,7 @@ function cargarPedidoManual() {
     .then(data => {
       if (data.ok) {
         showToast('Pedido registrado ✓');
+        _manualPrecios = {};
         document.getElementById('manual-cliente').value = '';
         const _me = document.getElementById('manual-envio'); if (_me) _me.value = '';
         renderManualProductos();
