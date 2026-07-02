@@ -4392,11 +4392,11 @@ async function cargarHistoria() {
   const consumoAll = arr(all[HIJOS.length]);
   const idx = HIJOS.indexOf(quien);
   const mias = idx >= 0 ? res[idx] : await api('ventasPeriodo', { hijo: quien });
-  if (mias === null) {   // error real (no vacío): NO pintar "sin historial"
+  if (!Array.isArray(mias)) {   // error real (null o {error:...}): NO pintar "sin historial" ni colgarse
     document.getElementById('historia-list').innerHTML = '<div class="card"><div class="empty">No se pudo cargar 😕 <a onclick="cargarHistoria()" style="color:#5c3d1e;font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div></div>';
     return;
   }
-  const porHijo = {}; HIJOS.forEach((h, i) => { porHijo[h] = res[i] || []; });
+  const porHijo = {}; HIJOS.forEach((h, i) => { porHijo[h] = arr(res[i]); });   // un {error} de otro perfil no cuelga el render
   renderHistoria(mias, porHijo, quien, consumoAll);
 }
 
@@ -4799,8 +4799,11 @@ function logout() {
   _reqGen++;   // descarta respuestas en vuelo
   const hl = document.getElementById('historia-list'); if (hl) hl.innerHTML = '';
   document.getElementById('fab-venta').style.display = 'none';
-  document.getElementById('login').style.display = 'flex';
+  // Salir = sesión CERRADA → a la pantalla de CLAVE (no al selector de perfiles: sin sesión
+  // el panel no puede cargar nada). Para cambiar de chico sin clave está el botón "Cambiar".
+  document.getElementById('login').style.display = 'none';
   document.getElementById('panel').style.display = 'none';
+  document.getElementById('pantalla-clave').style.display = 'flex';
 }
 
 // Cambiar de perfil (Meir/Iosi/Pa) SIN cerrar la sesión de Supabase → NO vuelve a pedir la clave.
