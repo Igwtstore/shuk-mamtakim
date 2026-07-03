@@ -2273,15 +2273,32 @@ function pk_dibujar() {
     : sel.length === 2 ? [[275, 490, 400, -0.07], [625, 490, 400, 0.07]]
     : sel.length === 3 ? [[245, 400, 320, -0.09], [655, 400, 320, 0.09], [450, 630, 320, 0.02]]
     : [[262, 370, 300, -0.08], [638, 370, 300, 0.08], [262, 645, 300, 0.05], [638, 645, 300, -0.05]];
+  // Foto válida: si es un producto de Shuk con varias, la primera SIN video (fotos[]); si falla, null.
   const cargas = sel.slice(0, poses.length).map(x => new Promise(res => {
+    const src = (x.p.fotos && x.p.fotos[0]) || x.p.foto;
+    if (!src) return res(null);
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload = () => res(img); img.onerror = () => res(null);
-    img.src = x.p.foto;
+    img.src = src;
   }));
   Promise.all(cargas).then(imgs => {
     if (gen !== _pkGen) return;   // hubo otro dibujado más nuevo → este se descarta
+    // Si una foto no cargó, NO desaparece el producto: va una tarjetita con el nombre (antes
+    // se salteaba en silencio y el pack ×3 mostraba 2 — lo cazó el usuario).
     imgs.forEach((img, i) => {
-      if (!img) return;
+      if (!img) {
+        const [cx, cy, tam, rot] = poses[i];
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+        ctx.shadowColor = 'rgba(60,30,90,0.25)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 8;
+        ctx.fillStyle = '#faf5ff'; ctx.fillRect(-tam / 2, -tam / 2, tam, tam);
+        ctx.shadowColor = 'transparent';
+        ctx.font = (tam * 0.3) + 'px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('🍬', 0, -tam * 0.05);
+        ctx.fillStyle = '#5a3d80'; ctx.font = '700 ' + Math.round(tam * 0.09) + 'px DM Sans, sans-serif';
+        ctx.fillText((sel[i].p.nombre || '').slice(0, 20), 0, tam * 0.24);
+        ctx.restore();
+        return;
+      }
       const [cx, cy, tam, rot] = poses[i];
       const r = Math.min(tam / img.width, tam / img.height);
       const w = img.width * r, h = img.height * r;
@@ -2291,10 +2308,9 @@ function pk_dibujar() {
       ctx.restore();
     });
     imgs.forEach((img, i) => {   // globitos en pasada aparte: siempre ARRIBA de las fotos
-      if (!img) return;
       const [cx, cy, tam, rot] = poses[i];
-      const r = Math.min(tam / img.width, tam / img.height);
-      const w = img.width * r, h = img.height * r;
+      const r = img ? Math.min(tam / img.width, tam / img.height) : 1;
+      const w = img ? img.width * r : tam, h = img ? img.height * r : tam;
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
       const bx = w / 2 - 14, by = h / 2 - 14;
       ctx.beginPath(); ctx.arc(bx, by, 42, 0, 7); ctx.fillStyle = '#b14cff'; ctx.fill();

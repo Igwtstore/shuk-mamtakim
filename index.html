@@ -5472,7 +5472,12 @@ let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHom
 
 // ═══ 🎁 ARMAR FOTO DE PACK (Shuk) — gemelo del de Candy con paleta/logo Yuk ═══
 let _pk2Sel = {}, _pk2Gen = 0;
-const _pk2Foto = p => { const f = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0]; return f ? imgUrl(f)[0] : ''; };
+const _pk2Foto = p => {
+  // primera FOTO válida (saltea videos — si no, el producto desaparecía del pack)
+  const f = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)
+    .filter(x => !/\.(mp4|webm|mov)(\?|$)/i.test(x) && x.indexOf('/video/') === -1)[0];
+  return f ? imgUrl(f)[0] : '';
+};
 function abrirArmarPackShuk() {
   let ov = document.getElementById('pk2-overlay');
   if (!ov) {
@@ -5576,8 +5581,31 @@ function pk2_dibujar() {
       }
       ctx.restore();
     };
-    imgs.forEach((img, i) => { if (img) dib(img, i, false); });
-    imgs.forEach((img, i) => { if (img) dib(img, i, true); });
+    imgs.forEach((img, i) => {
+      if (img) { dib(img, i, false); return; }
+      // Foto que no cargó → tarjetita con el nombre (nada desaparece del pack)
+      const [cx, cy, tam, rot] = poses[i];
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+      ctx.shadowColor = 'rgba(90,60,20,0.25)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 8;
+      ctx.fillStyle = '#fdf8ee'; ctx.fillRect(-tam / 2, -tam / 2, tam, tam);
+      ctx.shadowColor = 'transparent';
+      ctx.font = (tam * 0.3) + 'px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('🥜', 0, -tam * 0.05);
+      ctx.fillStyle = '#7a5a1a'; ctx.font = '700 ' + Math.round(tam * 0.09) + 'px DM Sans, sans-serif';
+      ctx.fillText((sel[i].p.nombre || '').slice(0, 20), 0, tam * 0.24);
+      ctx.restore();
+    });
+    imgs.forEach((img, i) => {
+      if (img) { dib(img, i, true); return; }
+      const [cx, cy, tam, rot] = poses[i];
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+      const bx = tam / 2 - 14, by = tam / 2 - 14;
+      ctx.beginPath(); ctx.arc(bx, by, 42, 0, 7); ctx.fillStyle = '#1a1a2e'; ctx.fill();
+      ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = '800 40px DM Sans, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('×' + sel[i].qty, bx, by + 14);
+      ctx.restore();
+    });
     ctx.save(); ctx.shadowColor = 'rgba(26,26,46,0.3)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5;
     rr(255, 812, 390, 66, 33); ctx.fillStyle = '#1a1a2e'; ctx.fill(); ctx.restore();
     ctx.fillStyle = '#c9954a'; ctx.font = '800 34px Fraunces, DM Sans, serif'; ctx.textAlign = 'center';
