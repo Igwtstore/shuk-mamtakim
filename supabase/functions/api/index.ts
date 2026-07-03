@@ -313,6 +313,9 @@ async function confirmarCobro(body: any) {
   if (has('comprobante')) { const prevC = (v.comprobante || '').toString().trim(); const nuevoC = P(body, 'comprobante').trim(); patch.comprobante = prevC ? (prevC + '\n' + nuevoC) : nuevoC; }
 
   await sbPatch('ventas', 'id=eq.' + encodeURIComponent(id), patch);
+  // Circuito F3: si la venta interna del cliente "Candy" se cobró con TC, la compra espejo
+  // de Candy pasa de U\$S crudo a pesos reales (CS<nVenta> — solo esa).
+  if ((v.cliente || '').toString().trim() === 'Candy' && tc > 0) { try { await convertirComprasCircuito(tc, 'CS' + v.n_venta); } catch { /**/ } }
 
   // ── ENVÍO (upsert idempotente) ──
   if (has('envioCosto') || has('envioCobrado')) {
@@ -561,6 +564,26 @@ async function asegurarGenuinoShuk(codigo: string, cant: number, contexto: strin
     compras.push({ dueno: f.dueno, paquetes: c.paquetes, nVenta: ins.nVenta });
   }
   return { ok: true, compras };
+}
+// ═══ CIRCUITO F3 — al PAGAR la deuda del cliente "Candy" con TC, las compras del circuito
+// que quedaron en U$S crudo se pasan a PESOS con ese TC real → recién ahí Candy conoce su
+// ganancia real (vendió en $, compró en U$S). El "mensaje interno" queda en la propia compra.
+async function convertirComprasCircuito(tc: number, soloCompraId = '') {
+  if (!(tc > 0)) return 0;
+  let q = 'select=id,compra_id,codigo,costo_unit,costo_total&registrado_por=eq.' + encodeURIComponent('circuito U\$S');
+  if (soloCompraId) q += '&compra_id=eq.' + encodeURIComponent(soloCompraId);
+  const rows = await sbGet('candy_compras', q);
+  const codigos = new Set<string>();
+  for (const r of rows) {
+    await sbPatch('candy_compras', 'id=eq.' + r.id, {
+      costo_unit: Math.round((parseFloat(r.costo_unit) || 0) * tc * 100) / 100,
+      costo_total: Math.round((parseFloat(r.costo_total) || 0) * tc * 100) / 100,
+      registrado_por: 'circuito · pagada a \$' + tc + '/U\$S',
+    });
+    if (r.codigo) codigos.add(r.codigo.toString());
+  }
+  for (const c of codigos) await actualizarCostoPromedio(c);
+  return rows.length;
 }
 async function actualizarCostoPromedio(codigo: string) {
   const compras = await sbGet('candy_compras', 'select=cantidad,costo_total&codigo=eq.' + encodeURIComponent(codigo));
@@ -1652,6 +1675,19 @@ Deno.serve(async (req) => {
     if (accion === 'registrarPagoCuenta') {
       if (N(body, 'montoARS') === 0 && N(body, 'montoUSD') === 0) return json({ error: 'monto vacío' });
       await sbInsert('pagos', { fecha: fechaAhora(), cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: N(body, 'montoPitz'), caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante') });
+      // Circuito F3: pago del cliente "Candy" con TC → convertir compras del circuito a pesos.
+      // Atado a un pedido → solo la compra de esa venta; general → todas las pendientes en U\$S.
+      if ((P(body, 'cliente') || '').trim() === 'Candy' && N(body, 'tipoCambio') > 0) {
+        try {
+          let soloF3 = '';
+          const pidF3 = P(body, 'pedidoId');
+          if (pidF3) {
+            const vF3 = await sbGet('ventas', 'select=n_venta&id=eq.' + encodeURIComponent(pidF3));
+            if (vF3.length) soloF3 = 'CS' + vF3[0].n_venta;
+          }
+          await convertirComprasCircuito(N(body, 'tipoCambio'), soloF3);
+        } catch { /**/ }
+      }
       return json({ ok: true });
     }
     if (accion === 'registrarMovSocio') {
