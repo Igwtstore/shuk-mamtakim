@@ -7029,7 +7029,13 @@ async function renderCuentaSocios() {
   let comiDebeU = 0, jonyTieneU = 0;
 
   const MYRI_ARS = ['MP_GABY','EFT_MYRI'];   // cajas de Myri en pesos
+  // Detalle por venta de las líneas cruzadas (conciliación pedida por el usuario): qué ventas
+  // componen "Ventas tuyas que cobró Myri" y "Ventas de Myri que cobraste vos".
+  const detPitzMyri = [], detJonyTiene = [];
+  const _vPorId = {}; ventas.forEach(v => { _vPorId[String(v.id)] = v; });
   ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
+    const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU };
+    (() => {
     if (v.corte) return;   // ya liquidado en un corte → no cuenta en el período actual
     if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
     const fp = (v.formaPago||'').trim();
@@ -7099,10 +7105,16 @@ async function renderCuentaSocios() {
         else if (JONY_BOXES_CC.includes(colUSD)) jonyTieneU += (usdM - comiU);
       }
     }
+    })();
+    const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
+    if (_dPm > 0.004) detPitzMyri.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dPm, usd: 0 });
+    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU });
   });
 
   // Pagos a cuenta de un pedido (con reparto Pitzujim/golosinas): alimentan la cuenta de socios
   (pagos || []).forEach(p => {
+    const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU };
+    (() => {
     if (!p.pedidoId) return;   // los pagos a deuda general no se reparten
     const caja = (p.caja||'').trim();
     const pitz = parseFloat(p.montoPitz)||0;
@@ -7119,6 +7131,11 @@ async function renderCuentaSocios() {
       if (caja === 'ETF_USD_MYRI') comiDebeU += comiU2;
       else if (JONY_BOXES_CC.includes(caja)) jonyTieneU += (golUSD - comiU2);
     }
+    })();
+    const _vp = _vPorId[String(p.pedidoId)] || {};
+    const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
+    if (_dPm > 0.004) detPitzMyri.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
+    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, pago: true });
   });
 
   const saldadoARS = parseFloat(liq.totalARS)||0, saldadoUSD = parseFloat(liq.totalUSD)||0;
@@ -7158,12 +7175,27 @@ async function renderCuentaSocios() {
     // Desglose para Myri: de dónde sale lo que le debe (o le deben) a Jony. + = le debe más a Jony.
     const filaM = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
       `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'#c0392b':'var(--verde)'};white-space:nowrap">${sign} ${f(val)}</span></div>`;
+    const filaDetM = (lbl, val, sign, det, verbo) => {
+      if (Math.abs(val) < 1) return '';
+      if (!det || !det.length) return filaM(lbl, val, sign);
+      const lineas = det.map(d => {
+        const montos = [d.ars > 0.5 ? f(Math.round(d.ars)) : '', d.usd > 0.004 ? 'U$S ' + d.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
+        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''} — ${verbo} ${montos}</div>`;
+      }).join('');
+      return `<details style="padding:2px 0">
+        <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
+          <span style="color:var(--texto-suave)">${lbl} <span style="font-size:0.62rem;color:var(--dorado)">▸ ver detalle</span></span>
+          <span style="font-weight:600;color:${sign==='+'?'#c0392b':'var(--verde)'};white-space:nowrap">${sign} ${f(val)}</span>
+        </summary>
+        <div style="padding:0.3rem 0 0.2rem 0.6rem">${lineas}</div>
+      </details>`;
+    };
     const hayDetalle = [comiDebe, pitzMyri, jonyTiene, movsARS, saldadoARS].some(x => Math.abs(x) >= 1);
     if (hayDetalle) html += `<div style="background:var(--gris);border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
       <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">De dónde sale este saldo con Jony:</div>
       ${filaM('Comisión de tus ventas (15% para Jony)', comiDebe, '+')}
-      ${filaM('Ventas de Jony que cobraste vos (se las debés)', pitzMyri, '+')}
-      ${filaM('Tus golosinas que cobró Jony (te las debe)', jonyTiene, '−')}
+      ${filaDetM('Ventas de Jony que cobraste vos (se las debés)', pitzMyri, '+', detPitzMyri, 'cobraste')}
+      ${filaDetM('Tus golosinas que cobró Jony (te las debe)', jonyTiene, '−', detJonyTiene, 'cobró')}
       ${manualARS > 0 ? filaM('Adelantos que te pagó Jony', manualARS, '+') : (manualARS < 0 ? filaM('Adelantos a tu favor', -manualARS, '−') : '')}
       ${(enviosARS !== 0 && enviosDetalle.length) ? `
       <details style="padding:2px 0">
@@ -7183,6 +7215,22 @@ async function renderCuentaSocios() {
     // Desglose claro para Jony: de dónde sale el saldo (ventas cruzadas)
     const fila = (lbl, val, sign) => Math.abs(val) < 1 ? '' :
       `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${f(val)}</span></div>`;
+    // Fila con detalle desplegable venta por venta (conciliación): mismo patrón que envíos.
+    const filaDet = (lbl, val, sign, det, verbo) => {
+      if (Math.abs(val) < 1) return '';
+      if (!det || !det.length) return fila(lbl, val, sign);
+      const lineas = det.map(d => {
+        const montos = [d.ars > 0.5 ? f(Math.round(d.ars)) : '', d.usd > 0.004 ? 'U$S ' + d.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
+        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''} — ${verbo} ${montos}</div>`;
+      }).join('');
+      return `<details style="padding:2px 0">
+        <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
+          <span style="color:var(--texto-suave)">${lbl} <span style="font-size:0.62rem;color:var(--dorado)">▸ ver detalle</span></span>
+          <span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${f(val)}</span>
+        </summary>
+        <div style="padding:0.3rem 0 0.2rem 0.6rem">${lineas}</div>
+      </details>`;
+    };
     const neto = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
     // Envíos cobrados por Myri: renglón propio y clickeable con el detalle (para que quede clarísimo de qué es la deuda).
     const filaEnvios = (enviosARS !== 0 && enviosDetalle.length) ? `
@@ -7198,8 +7246,8 @@ async function renderCuentaSocios() {
     html += `<div style="background:var(--gris);border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
       <div style="font-size:0.68rem;color:var(--texto-suave);margin-bottom:0.3rem">Por las ventas cruzadas entre vos y Myri:</div>
       ${fila('Comisión que Myri te debe', comiDebe, '+')}
-      ${fila('Ventas tuyas que cobró Myri (te las debe)', pitzMyri, '+')}
-      ${fila('Ventas de Myri que cobraste vos (se las debés)', jonyTiene, '−')}
+      ${filaDet('Ventas tuyas que cobró Myri (te las debe)', pitzMyri, '+', detPitzMyri, 'cobró')}
+      ${filaDet('Ventas de Myri que cobraste vos (se las debés)', jonyTiene, '−', detJonyTiene, 'cobraste')}
       ${manualARS > 0 ? fila('Adelantos que te hizo pagar (te los debe)', manualARS, '+') : (manualARS < 0 ? fila('Adelantos a favor de Myri', -manualARS, '−') : '')}
       ${filaEnvios}
       ${saldadoARS !== 0 ? fila('Ya saldado', saldadoARS, '−') : ''}
