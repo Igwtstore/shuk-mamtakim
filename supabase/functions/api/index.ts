@@ -81,28 +81,115 @@ function mapaProdJony(productos: any[]) {
   });
   return map;
 }
-function calcularGanancias(ventas: any[], productos: any[]) {
+// ── Opción A (2026-07-03): la ganancia también cuenta lo CUBIERTO por pagos a cuenta ──
+// Un pedido sin cobro confirmado pero tapado (total o parcialmente) por pagos a cuenta del
+// cliente ES plata que entró: su comisión y su ganancia Pitzujim cuentan para el Maaser.
+// La imputación replica 1:1 la de Cuenta socios (v3.08): residuales por componente
+// {pitz $ / golosinas $ / golosinas U$S / pitz U$S}, atados primero, generales FIFO.
+const _fparMin = (f: string) => {
+  const p = (f || '').split(' '), d = (p[0] || '').split('/'), h = (p[1] || '0:0').split(':');
+  return d.length < 3 ? 0 : new Date(+d[2], +d[1] - 1, +d[0], +h[0] || 0, +h[1] || 0).getTime();
+};
+function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
+  const real = (c: string) => !!c && !String(c).startsWith('CTA_CTE');
+  const norm = (s: any) => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  // Pool de deuda por cliente: TODAS las ventas (incluye las ya liquidadas en cortes, para que
+  // los pagos viejos sigan imputando ahí y no "salten" a ventas nuevas después de un corte).
+  const res: any = {}, porId: any = {};
+  ventas.forEach((v) => {
+    const e = (v.estado || '').toString().trim();
+    if (e === 'cancelado' || e === 'cotizacion') return;
+    let tr: any[] | null = null; try { tr = JSON.parse((v.tramos || '').toString() || 'null'); } catch { tr = null; }
+    const d = { jA: 0, mA: 0, jU: 0, mU: 0 };
+    if (tr && tr.length) tr.forEach((t) => {
+      const m = parseFloat(t.monto) || 0; if (m <= 0) return;
+      if (t.caja === 'CTA_CTE_ARS') { if (t.dueno === 'J') d.jA += m; else d.mA += m; }
+      else if (t.caja === 'CTA_CTE_USD') { if (t.dueno === 'J') d.jU += m; else d.mU += m; }
+    });
+    else if (!real(v.caja_jony) && !real(v.caja_myri)) {
+      d.jA = parseFloat(v.ars_jony) || 0; d.mA = parseFloat(v.ars_myri) || 0;
+      d.jU = parseFloat(v.usd_jony) || 0; d.mU = parseFloat(v.usd_myri) || 0;
+    }
+    const it = { v, ...d, cub: { jA: 0, mA: 0, jU: 0, mU: 0 } };   // cub: cubierto que CUENTA (pagos > último corte)
+    porId[String(v.id)] = it;
+    if (d.jA <= 0 && d.mA <= 0 && d.jU <= 0 && d.mU <= 0) return;
+    (res[norm(v.cliente)] = res[norm(v.cliente)] || []).push(it);
+  });
+  Object.values(res).forEach((l: any) => l.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha)));
+  const ord = [...(pagos || [])].sort((a, b) => _fparMin(a.fecha) - _fparMin(b.fecha));
+  // Atados: consumen la deuda de SU pedido (montoPitz dice cuánto fue Pitzujim)
+  ord.filter((p) => p.pedido_id).forEach((p) => {
+    const it = porId[String(p.pedido_id)]; if (!it) return;
+    const cuenta = _fparMin(p.fecha) > msCorte && (p.caja || '') !== 'PERDON';
+    const pz = Math.min(parseFloat(p.monto_pitz) || 0, it.jA);
+    const gA = Math.min(Math.max(0, (parseFloat(p.monto_ars) || 0) - (parseFloat(p.monto_pitz) || 0)), it.mA);
+    const gU = Math.min(parseFloat(p.monto_usd) || 0, it.mU);
+    it.jA -= pz; it.mA -= gA; it.mU -= gU;
+    if (cuenta) { it.cub.jA += pz; it.cub.mA += gA; it.cub.mU += gU; }
+  });
+  // Generales: FIFO por componente (Pitzujim primero en $, golosinas primero en U$S)
+  ord.filter((p) => !p.pedido_id && (p.caja || '') !== 'PERDON').forEach((p) => {
+    const cuenta = _fparMin(p.fecha) > msCorte;
+    let pA = parseFloat(p.monto_ars) || 0, pU = parseFloat(p.monto_usd) || 0;
+    (res[norm(p.cliente)] || []).forEach((it: any) => {
+      let a = Math.min(pA, it.jA); it.jA -= a; pA -= a; if (cuenta) it.cub.jA += a;
+      a = Math.min(pA, it.mA); it.mA -= a; pA -= a; if (cuenta) it.cub.mA += a;
+      a = Math.min(pU, it.mU); it.mU -= a; pU -= a; if (cuenta) it.cub.mU += a;
+      a = Math.min(pU, it.jU); it.jU -= a; pU -= a; if (cuenta) it.cub.jU += a;
+    });
+  });
+  return porId;   // ventaId → { v, cub:{jA,mA,jU,mU}, ... }
+}
+function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCorte: number) {
   const out = { comisionARS: 0, comisionUSD: 0, pitzARS: 0, pitzUSD: 0, faltaCosto: [] as string[], faltaTC: false };
   const real = (c: string) => !!c && !String(c).startsWith('CTA_CTE');
   const mapa = mapaProdJony(productos);
+  const cober = coberturaPagos(ventas, pagos, msCorte);
   ventas.forEach((v) => {
     const estado = (v.estado || '').toString().trim();
     if (estado === 'cancelado' || estado === 'cotizacion') return;
-    if (!(real(v.caja_jony) || real(v.caja_myri))) return;
     if ((v.corte || '').toString().trim()) return;
-    const arsM = parseFloat(v.ars_myri) || 0, usdM = parseFloat(v.usd_myri) || 0;
-    const comiARS = parseFloat(v.comi_ars) || 0, comiUSD = parseFloat(v.comi_usd) || 0;
-    const cajaM = (v.caja_myri || '').toString(), tc = parseFloat(v.tipo_cambio) || 0;
-    const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
-    gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
-    if (gp.faltaTC) out.faltaTC = true;
+    const cobrada = real(v.caja_jony) || real(v.caja_myri);
     const sinComi = (v.sin_comi || '').toString().toUpperCase() === 'SI';
-    const tieneTramos = (v.tramos || '').toString().trim() !== '';
-    const { cARS, cUSD } = comiPeriodo(arsM, usdM, comiARS, comiUSD, cajaM, tc, sinComi, tieneTramos);
-    out.comisionARS += cARS; out.comisionUSD += cUSD; out.pitzARS += gp.ars; out.pitzUSD += gp.usd;
+    const tc = parseFloat(v.tipo_cambio) || 0;
+    if (cobrada) {
+      // Cobro confirmado: cuenta completo (comportamiento de siempre)
+      const arsM = parseFloat(v.ars_myri) || 0, usdM = parseFloat(v.usd_myri) || 0;
+      const comiARS = parseFloat(v.comi_ars) || 0, comiUSD = parseFloat(v.comi_usd) || 0;
+      const cajaM = (v.caja_myri || '').toString();
+      const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
+      gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
+      if (gp.faltaTC) out.faltaTC = true;
+      const tieneTramos = (v.tramos || '').toString().trim() !== '';
+      const { cARS, cUSD } = comiPeriodo(arsM, usdM, comiARS, comiUSD, cajaM, tc, sinComi, tieneTramos);
+      out.comisionARS += cARS; out.comisionUSD += cUSD; out.pitzARS += gp.ars; out.pitzUSD += gp.usd;
+      return;
+    }
+    // Opción A: sin cobro confirmado pero CUBIERTA por pagos a cuenta → cuenta lo cubierto
+    const it = cober[String(v.id)]; if (!it) return;
+    const c = it.cub;
+    if (c.jA <= 0.5 && c.mA <= 0.5 && c.jU <= 0.005 && c.mU <= 0.005) return;
+    if (!sinComi) {
+      out.comisionARS += Math.round(c.mA * 0.15);
+      out.comisionUSD += Math.round(c.mU * 0.15 * 100) / 100;
+    }
+    const bJ = (parseFloat(v.ars_jony) || 0) + (parseFloat(v.usd_jony) || 0);
+    const fJ = bJ > 0 ? Math.min(1, (c.jA + c.jU) / bJ) : 0;
+    if (fJ > 0) {
+      const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
+      gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
+      if (gp.faltaTC) out.faltaTC = true;
+      out.pitzARS += Math.round(gp.ars * fJ); out.pitzUSD += Math.round(gp.usd * fJ * 100) / 100;
+    }
   });
+  out.pitzARS = Math.round(out.pitzARS); out.comisionARS = Math.round(out.comisionARS);
   out.comisionUSD = Math.round(out.comisionUSD * 100) / 100; out.pitzUSD = Math.round(out.pitzUSD * 100) / 100;
   return out;
+}
+// Fecha del último corte (en ms) — los pagos anteriores ya quedaron liquidados en ese corte.
+async function msUltimoCorte() {
+  const c = await sbGet('cortes', 'select=fecha&order=id.desc&limit=1');
+  return c.length ? _fparMin((c[0].fecha || '').toString()) : 0;
 }
 function envioCobradoEnCajaDe(cajaJony: string, cajaMyri: string) {
   const cj = (cajaJony || '').toString(), cm = (cajaMyri || '').toString();
@@ -577,9 +664,10 @@ async function procesarBandejaFn() {
 // Resumen JSON del negocio para "preguntale a tu negocio" (portado de resumenNegocio_).
 async function resumenNegocio() {
   const r: any = { hoy: fechaAhora().slice(0, 10) };
-  const [ventas, gastos, productos, candyVentas, candyCC, deposito] = await Promise.all([
+  const [ventas, gastos, productos, candyVentas, candyCC, deposito, pagosJ, msC] = await Promise.all([
     sbGet('ventas', 'select=*&order=n_venta'), sbGet('gastos', 'select=*'), sbGet('productos', 'select=*'),
     sbGet('candy_ventas', 'select=*'), sbGet('candy_cc', 'select=hijo,cliente,monto'), sbGet('candy_deposito', 'select=*'),
+    sbGet('pagos', 'select=*&order=id'), msUltimoCorte(),
   ]);
   // Ventas Shuk: por mes + por cliente + por producto
   const porMes: any = {}, porCliente: any = {}, porProducto: any = {};
@@ -625,7 +713,7 @@ async function resumenNegocio() {
   r.stockShuk = productos.filter((p: any) => p.nombre && p.activo !== false)
     .map((p: any) => ({ nombre: p.nombre.toString() + (p.descripcion ? ' · ' + p.descripcion.toString() : ''), stock: parseInt(p.stock) || 0, precioMay: (p.precio_may ?? '').toString(), precioMin: (p.precio_min ?? '').toString() }));
   // Ganancias Jony EN VIVO (comisión + Pitzujim del período), consistente con el panel
-  const perJ = calcularGanancias(ventas, productos);
+  const perJ = calcularGanancias(ventas, productos, pagosJ, msC);
   r.gananciasJonyAcumulado = Math.round(perJ.comisionARS + perJ.pitzARS);
   // Candy: ventas por mes/hijo + productos top + deudores + depósito
   const vh: any = {}, prodH: any = {};
@@ -1842,8 +1930,8 @@ Deno.serve(async (req) => {
     if (accion === 'hacerCorte') {
       // Liquida la ganancia cobrada del período: calcula el Maaser, marca esas ventas con el corteId
       // (para que el período vuelva a 0) y registra el corte.
-      const [ventas, productos] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev')]);
-      const per = calcularGanancias(ventas, productos);
+      const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
+      const per = calcularGanancias(ventas, productos, pagos, msC);
       const gananciaARS = Math.round(per.comisionARS + per.pitzARS);
       const gananciaUSD = Math.round((per.comisionUSD + per.pitzUSD) * 100) / 100;
       const diezmoARS = Math.round(gananciaARS * 0.10);
@@ -1886,8 +1974,8 @@ Deno.serve(async (req) => {
     }
 
     if (accion === 'getGanancias') {
-      const [ventas, productos] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev')]);
-      const p = calcularGanancias(ventas, productos);
+      const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
+      const p = calcularGanancias(ventas, productos, pagos, msC);
       const balance = p.comisionARS + p.pitzARS;
       return json({ balance, balanceUSD: Math.round((p.comisionUSD + p.pitzUSD) * 100) / 100, comisionARS: p.comisionARS, comisionUSD: p.comisionUSD, pitz: p.pitzARS, pitzUSD: p.pitzUSD, movimientos: [], faltaCosto: p.faltaCosto, faltaTC: p.faltaTC });
     }
