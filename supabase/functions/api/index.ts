@@ -336,7 +336,7 @@ const ventaFront = (v: any) => ({
 const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, tc: parseFloat(p.tc) || 0 });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
-const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1) });
+const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString() });
 const rendFront = (r: any) => ({ fecha: r.fecha, desc: r.descripcion, monto: r.monto, moneda: r.moneda, columna: r.columna || '', comprobante: (r.comprobante || '').toString() });
 
 // _enviosData: saldo y deuda derivada de la caja de envíos (idempotente).
@@ -504,34 +504,63 @@ async function ajustarDeposito(codigo: string, nombre: string, delta: number, or
 async function asegurarGenuinoShuk(codigo: string, cant: number, contexto: string) {
   if (!codigo.startsWith('shuk:') || cant <= 0) return { ok: true };
   const pid = codigo.slice(5);
-  const pr = await sbGet('productos', 'select=id,nombre,dueno,moneda,precio_may,stock,unidades_por_paquete&id=eq.' + encodeURIComponent(pid));
+  const pr = await sbGet('productos', 'select=id,nombre,dueno,moneda,precio_may,costo,stock,unidades_por_paquete,vinculo&id=eq.' + encodeURIComponent(pid));
   if (!pr.length) return { ok: true };   // producto desconocido → comportamiento viejo
   const p = pr[0];
-  if ((p.dueno || '').toString().trim() !== 'Miri') return { ok: true };   // solo Miri (Pitzujim quedan como están)
   const dep = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(codigo));
   const genuino = dep.length ? (parseFloat(dep[0].cantidad) || 0) : 0;
   if (genuino >= cant) return { ok: true };   // alcanza con lo genuino
-  const upp = Math.max(1, parseInt(p.unidades_por_paquete) || 1);
-  const paquetes = Math.ceil((cant - genuino) / upp);
-  const stockShuk = parseInt(p.stock) || 0;
-  if (stockShuk < paquetes) return { error: 'Sin stock en el Shuk: hacen falta ' + paquetes + ' paquete(s) de "' + p.nombre + '" y hay ' + stockShuk };
-  const precioMay = parseFloat(String(p.precio_may || '0').replace(',', '.')) || 0;
-  const unit = Math.round(precioMay * 0.85 * 100) / 100;   // mayorista − 15% (sin comisión: ese ES el descuento)
-  const total = Math.round(unit * paquetes * 100) / 100;
-  const esUSD = (p.moneda || '$').toString().trim() === 'U$S';
-  // Venta interna en el Shuk: cliente "Candy", deuda en Cta Cte, sin comisión.
-  const fila: any = { fecha: fechaAhora(), cliente: 'Candy', tipo: 'Mayorista',
-    productos: '• ' + paquetes + 'x ' + p.nombre + ' — ' + (esUSD ? 'U$S ' + unit.toFixed(2) : '$ ' + Math.round(unit)) + ' c/u = ' + (esUSD ? 'U$S ' + total.toFixed(2) : '$ ' + Math.round(total)),
-    forma_pago: 'Cuenta corriente', notas: '🔗 Circuito Candy↔Shuk · ' + contexto, estado: 'entregado',
-    total_ars: esUSD ? 0 : Math.round(total), total_usd: esUSD ? total : 0,
-    ars_jony: 0, ars_myri: esUSD ? 0 : Math.round(total), usd_myri: esUSD ? total : 0, usd_jony: 0,
-    comi_ars: 0, comi_usd: 0, caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: pid + ':' + paquetes, sin_comi: 'SI' };
-  const ins = await insertarVentaAtomica(fila);
-  if ('error' in ins) return { error: 'circuito: ' + ins.error };
-  await moverStockShuk(pid, -paquetes, '🔗 Compra Candy #' + ins.nVenta + ' (circuito)');
-  await ajustarDeposito(codigo, p.nombre, paquetes * upp, '🔗 Apertura de paquete Shuk (compra interna #' + ins.nVenta + ')');
-  await sbInsert('candy_compras', { compra_id: 'CS' + ins.nVenta, fecha: fechaAhora().slice(0, 10), proveedor: 'Shuk (Miri)', proveedor_id: 'shuk', codigo, producto: p.nombre, cantidad: paquetes * upp, costo_unit: Math.round((unit / upp) * 100) / 100, costo_total: total, registrado_por: 'circuito' + (esUSD ? ' U$S' : '') });
-  return { ok: true, compro: paquetes, nVenta: ins.nVenta };
+  // FAMILIA de gemelos (vínculo explícito al publicar): mismo producto con stock de varios dueños.
+  const grupo = (p.vinculo || '').toString().trim();
+  let familia = [p];
+  if (grupo) {
+    const fam = await sbGet('productos', 'select=id,nombre,dueno,moneda,precio_may,costo,stock,unidades_por_paquete,vinculo&or=(vinculo.eq.' + encodeURIComponent(grupo) + ',id.eq.' + encodeURIComponent(grupo) + ')');
+    if (fam.length) familia = fam;
+  }
+  // Prioridad del usuario: JONY primero (Candy compra AL COSTO → cero ganancia/Maaser/comisión),
+  // después MIRI (mayorista −15%). Compra HÍBRIDA si hace falta: una venta interna POR DUEÑO.
+  const fuentes = familia.filter((f: any) => ['Jony', 'Miri'].includes((f.dueno || '').toString().trim()) && (parseInt(f.stock) || 0) > 0)
+    .sort((a: any, b: any) => ((a.dueno === 'Jony') ? 0 : 1) - ((b.dueno === 'Jony') ? 0 : 1));
+  let faltan = cant - genuino;
+  // 1º pasada: ¿la familia entera alcanza? (validar TODO antes de escribir nada)
+  const plan: any[] = [];
+  for (const f of fuentes) {
+    if (faltan <= 0) break;
+    const uppF = Math.max(1, parseInt(f.unidades_por_paquete) || 1);
+    const paqNec = Math.ceil(faltan / uppF);
+    const paqF = Math.min(paqNec, parseInt(f.stock) || 0);
+    if (paqF <= 0) continue;
+    const esJony = (f.dueno || '').toString().trim() === 'Jony';
+    const unitF = esJony
+      ? (parseFloat(String(f.costo || '0').replace(',', '.')) || 0)                       // Jony: AL COSTO
+      : Math.round((parseFloat(String(f.precio_may || '0').replace(',', '.')) || 0) * 0.85 * 100) / 100;   // Miri: may −15%
+    plan.push({ f, paquetes: paqF, upp: uppF, unit: unitF, esJony });
+    faltan -= paqF * uppF;
+  }
+  if (faltan > 0) {
+    const nombres = familia.map((f: any) => '"' + f.nombre + '" (' + (f.dueno || '?') + ': ' + (parseInt(f.stock) || 0) + ')').join(', ');
+    return { error: 'Sin stock en el Shuk para cubrir ' + cant + ' unidades. Disponible: ' + nombres };
+  }
+  // 2º pasada: ejecutar el plan — una venta interna por fuente usada.
+  const compras: any[] = [];
+  for (const c of plan) {
+    const f = c.f, esUSD = (f.moneda || '$').toString().trim() === 'U$S';
+    const total = Math.round(c.unit * c.paquetes * 100) / 100;
+    const fila: any = { fecha: fechaAhora(), cliente: 'Candy', tipo: 'Mayorista',
+      productos: '• ' + c.paquetes + 'x ' + f.nombre + ' — ' + (esUSD ? 'U$S ' + c.unit.toFixed(2) : '$ ' + Math.round(c.unit)) + ' c/u = ' + (esUSD ? 'U$S ' + total.toFixed(2) : '$ ' + Math.round(total)),
+      forma_pago: 'Cuenta corriente', notas: '🔗 Circuito Candy↔Shuk · ' + contexto + (c.esJony ? ' · al costo (Jony)' : ''), estado: 'entregado',
+      total_ars: esUSD ? 0 : Math.round(total), total_usd: esUSD ? total : 0,
+      ars_jony: (!esUSD && c.esJony) ? Math.round(total) : 0, ars_myri: (!esUSD && !c.esJony) ? Math.round(total) : 0,
+      usd_myri: (esUSD && !c.esJony) ? total : 0, usd_jony: (esUSD && c.esJony) ? total : 0,
+      comi_ars: 0, comi_usd: 0, caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: f.id + ':' + c.paquetes, sin_comi: 'SI' };
+    const ins = await insertarVentaAtomica(fila);
+    if ('error' in ins) return { error: 'circuito: ' + ins.error };
+    await moverStockShuk(String(f.id), -c.paquetes, '🔗 Compra Candy #' + ins.nVenta + ' (circuito' + (c.esJony ? ' · Jony al costo' : '') + ')');
+    await ajustarDeposito(codigo, p.nombre, c.paquetes * c.upp, '🔗 Apertura de paquete Shuk (compra interna #' + ins.nVenta + (c.esJony ? ' · Jony' : ' · Miri') + ')');
+    await sbInsert('candy_compras', { compra_id: 'CS' + ins.nVenta, fecha: fechaAhora().slice(0, 10), proveedor: c.esJony ? 'Shuk (Jony, al costo)' : 'Shuk (Miri)', proveedor_id: 'shuk', codigo, producto: f.nombre, cantidad: c.paquetes * c.upp, costo_unit: Math.round((c.unit / c.upp) * 100) / 100, costo_total: total, registrado_por: 'circuito' + (esUSD ? ' U$S' : '') });
+    compras.push({ dueno: f.dueno, paquetes: c.paquetes, nVenta: ins.nVenta });
+  }
+  return { ok: true, compras };
 }
 async function actualizarCostoPromedio(codigo: string) {
   const compras = await sbGet('candy_compras', 'select=cantidad,costo_total&codigo=eq.' + encodeURIComponent(codigo));
@@ -1412,6 +1441,22 @@ Deno.serve(async (req) => {
         if (recPH.length >= 4) return json({ error: 'rate' });
         if (recPH.length && Date.now() - new Date(recPH[0].creado).getTime() < 90000) return json({ error: 'rate' });
       }
+      // ── Segunda validación de stock (pedida por el usuario: como la del Shuk) ──
+      // Mientras el cliente cargaba el carrito pudo venderse stock. Se chequea acá, ANTES de
+      // registrar nada. "♾️ Siempre disponible" y el switch global de stock apagado quedan exentos.
+      // Los shuk:<id> los valida el circuito (asegurarGenuinoShuk) más abajo con la familia real.
+      const mostrarStockPH = (await getConfig('candy_mostrar_stock', '1')) !== '0';
+      if (mostrarStockPH) {
+        for (const it of items) {
+          const cod = (it.codigo || '').toString(), cant = parseInt(it.cantidad) || 0;
+          if (!cod || cant <= 0 || cod.startsWith('shuk:')) continue;
+          const cpV = await sbGet('candy_productos', 'select=siempre_disp&codigo=eq.' + encodeURIComponent(cod));
+          if (cpV.length && cpV[0].siempre_disp === true) continue;
+          const depV = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(cod));
+          const dispV = depV.length ? (parseFloat(depV[0].cantidad) || 0) : 0;
+          if (dispV < cant) return json({ error: 'stock', detalle: 'De "' + (it.nombre || cod) + '" quedan ' + Math.max(0, Math.floor(dispV)) + ' y pediste ' + cant });
+        }
+      }
       const pedidoId = Q('pedidoId') || 'PH' + Date.now();
       // Anti-duplicado (reintento por red caída): pedido_id es UNIQUE → el segundo insert rebota
       // ANTES de reservar stock (equivale al cache de 15 min del motor viejo, pero permanente).
@@ -1515,6 +1560,7 @@ Deno.serve(async (req) => {
       if (has('activo')) patch.activo = P(body, 'activo').toUpperCase() !== 'NO';
       if (has('visible')) { patch.visible_cat = P(body, 'visible'); patch.visible = P(body, 'visible') !== 'No'; }   // Ambos/Min/May + boolean
       if (has('unidadesPorPaquete')) patch.unidades_por_paquete = Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1);   // Circuito Candy↔Shuk: cuántas unidades trae el paquete/bolsa
+      if (body.vinculo !== undefined) patch.vinculo = P(body, 'vinculo');   // gemelos: mismo producto con stock de los dos dueños ('' = desvincular)
       if (has('stock')) { const antes = parseInt(pr[0].stock) || 0, nsx = parseInt(P(body, 'stock')) || 0; patch.stock = nsx; if (nsx !== antes) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: id, producto: pr[0].nombre, cambio: nsx - antes, antes, despues: nsx, origen: 'Edición manual (editor de producto)' }); }
       await sbPatch('productos', 'id=eq.' + encodeURIComponent(id), patch);
       return json({ ok: true });
@@ -1563,6 +1609,7 @@ Deno.serve(async (req) => {
           if (k === 'costo') { patch.costo = parseFloat(v.replace(',', '.')) || 0; return; }
           if (k === 'visible') { patch.visible_cat = v; patch.visible = v !== 'No'; return; }
           if (k === 'unidadesPorPaquete') { patch.unidades_por_paquete = Math.max(1, parseInt(v) || 1); return; }
+          if (k === 'vinculo') { patch.vinculo = (v === '__VACIO__' ? '' : v); return; }
           if (map[k]) patch[map[k]] = (v === '__VACIO__' ? '' : v);
         });
         if (patch.stock !== undefined) { const antes = parseInt(pr[0].stock) || 0; if (patch.stock !== antes) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: id, producto: pr[0].nombre, cambio: patch.stock - antes, antes, despues: patch.stock, origen: 'Editor masivo' }); }
@@ -2209,12 +2256,21 @@ Deno.serve(async (req) => {
       const conCosto = await sesionValida(token);
       const [cat, dep, shukEn, prods] = await Promise.all([
         sbGet('candy_productos', 'select=*'), sbGet('candy_deposito', 'select=codigo,cantidad'),
-        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion'),
+        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo'),
       ]);
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
+      // Circuito F2: stock ofrecido de un shuk:<id> = genuino Candy + TODA la familia de gemelos
+      // (paquetes × unidades por paquete, Jony y Miri juntos). El tope lo pone el sistema.
+      const stockFamiliar = (p: any) => {
+        const grupo = (p.vinculo || '').toString().trim();
+        const fam = grupo ? prods.filter((f: any) => (f.vinculo || '').toString().trim() === grupo || String(f.id) === grupo) : [p];
+        const paqUni = (fam.length ? fam : [p]).filter((f: any) => ['Jony', 'Miri'].includes((f.dueno || '').toString().trim()))
+          .reduce((sm: number, f: any) => sm + (parseInt(f.stock) || 0) * Math.max(1, parseInt(f.unidades_por_paquete) || 1), 0);
+        return (depMap['shuk:' + p.id] || 0) + paqUni;
+      };
       const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() }));
+      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() }));
       return json(propios.concat(shuk));
     }
     if (accion === 'panelHijos') {

@@ -501,8 +501,16 @@ function seleccionarProducto(codigo) {
   document.getElementById('qty-overlay').classList.add('open');
 }
 
+function _maxQty(p) {
+  // El tope lo pone el sistema: hasta el stock ofrecido (genuino + familia de paquetes del Shuk).
+  if (!p) return 99;
+  return (!mostrarStockTienda || p.siempreDisp) ? 99 : Math.max(1, parseInt(p.stock) || 0);
+}
 function cambiarQty(delta) {
-  qtyTmp = Math.max(1, qtyTmp + delta);
+  const max = _maxQty(productoSeleccionado);
+  const nuevo = Math.max(1, qtyTmp + delta);
+  if (nuevo > max) { toast('📦 Hay ' + max + ' disponibles como máximo'); qtyTmp = max; }
+  else qtyTmp = nuevo;
   document.getElementById('qty-val').textContent = qtyTmp;
   _actualizarQtyPrecio();
 }
@@ -599,6 +607,8 @@ function renderCarrito() {
 
 function cambiarCantidad(codigo, delta) {
   if (!carrito[codigo]) return;
+  const maxC = _maxQty(catalogoData.find(p => p.codigo === codigo) || carrito[codigo]);
+  if (delta > 0 && carrito[codigo].cantidad + delta > maxC) { toast('📦 Hay ' + maxC + ' disponibles como máximo'); return; }
   carrito[codigo].cantidad += delta;
   if (carrito[codigo].cantidad <= 0) delete carrito[codigo];
   guardarCarrito();
@@ -649,21 +659,44 @@ function confirmarPedido() {
   msg += `\n💰 *Total: ${fmt(total)}*`;
   if (nota) msg += `\n📝 ${nota}`;
 
-  // Registrar el pedido en el panel del chico (entra como PENDIENTE + reserva stock). Fire-and-forget:
-  // no esperamos la respuesta, así el WhatsApp se abre al instante (sin que lo bloquee el navegador).
+  // ── Segunda validación (como el Shuk): se registra el pedido y se ESPERA la respuesta ──
+  // Si el stock cambió mientras el cliente cargaba el carrito, se le avisa acá y NO se abre
+  // WhatsApp. Truco anti-bloqueo: la ventana se abre YA (en el gesto del click) y se le pone
+  // la dirección después. Si la red no responde en 6s, el pedido sigue por WhatsApp igual.
+  registrarYEnviar(nombre, nota, itemsPedido, total, msg, huella);
+}
+async function registrarYEnviar(nombre, nota, itemsPedido, total, msg, huella) {
+  const btn = document.querySelector('#checkout-overlay .btn-enviar');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Confirmando stock…'; }
+  const win = window.open('', '_blank');   // se abre en el gesto del usuario → no lo bloquea el navegador
   const pedidoId = 'PH' + Date.now() + Math.random().toString(36).slice(2, 6);
+  let r = null;
   try {
     const params = new URLSearchParams({ accion: 'registrarPedidoHijo', hijo: kid, cliente: nombre,
       items: JSON.stringify(itemsPedido), total: String(Math.round(total)), pedidoId, nota, vid: _vid });
-    fetch(APPS_URL + '?' + params.toString()).catch(() => {});
-  } catch (e) {}
+    const res = await Promise.race([
+      fetch(APPS_URL + '?' + params.toString()),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))
+    ]);
+    r = await res.json();
+  } catch (e) { r = { ok: true, offline: true }; }   // sin respuesta → que el pedido viaje por WhatsApp igual
+  if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.orig || btn.innerHTML.replace('⏳ Confirmando stock…', 'Enviar pedido'); }
+  if (r && r.error && r.error !== 'rate') {
+    if (win) try { win.close(); } catch (e) {}
+    const det = r.detalle || 'Se acaba de vender parte del stock';
+    toast('😔 ' + det);
+    alert('😔 Justo se vendió parte del stock:\n\n' + det + '\n\nAjustá la cantidad y volvé a enviar.');
+    cargarCatalogo();   // stock fresco para que corrija
+    return;   // NO se borra el carrito ni se abre WhatsApp
+  }
   // Huella para el aviso de repetido + limpiar el carrito guardado (el pedido ya salió)
   try { localStorage.setItem('candy_ultimo_pedido', JSON.stringify({ h: huella, t: Date.now() })); } catch (e) {}
   localStorage.removeItem(_CART_KEY);
-
+  carrito = {}; actualizarFab();
   document.getElementById('checkout-overlay').classList.remove('open');
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  if (win) { try { win.location = url; } catch (e) { window.open(url, '_blank'); } }
+  else window.open(url, '_blank');
 }
 
 // ─── AVISAME (producto agotado) ───────────────────────────────────

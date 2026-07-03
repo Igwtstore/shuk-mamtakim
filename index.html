@@ -1367,6 +1367,9 @@
         <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Cuántas unidades sueltas trae el paquete/bolsa cerrada (lo usa Candy para vender por unidad)">📦 U. por paquete</label>
           <input type="number" id="ep-upp" min="1" step="1" value="1" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
         </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:180px"><label title="Si el MISMO producto existe con stock de los dos dueños, vinculalos: Candy los ve como uno solo y compra primero de Jony (al costo) y después de Miri">🔗 Producto gemelo</label>
+          <button type="button" id="ep-vinculo-btn" onclick="abrirVincularGemelo()" style="width:100%;padding:0.6rem;border:1.5px dashed var(--gris-medio);border-radius:8px;background:#fff;cursor:pointer;font-size:0.78rem;color:var(--texto-suave);font-family:'DM Sans',sans-serif">Sin vincular</button>
+        </div>
       </div>
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (arrastrá para ordenar · ⭐ = portada · ✕ = quitar)</label></div>
       <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
@@ -2085,7 +2088,7 @@ async function cargarProductos() {
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
   try {
     // Catálogo desde Supabase (columnas públicas; costo/candyCod son privados)
-    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete&order=id', { headers: SB_ANON_H });
+    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,vinculo&order=id', { headers: SB_ANON_H });
     const data = await r.json();
     productos = data.map(p => ({
       id: parseInt(p.id),
@@ -2099,6 +2102,7 @@ async function cargarProductos() {
       categoria: (p.categoria || 'Varios').trim(),
       visible: (p.visible_cat || 'Ambos').trim(),
       unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1),
+      vinculo: (p.vinculo || '').trim(),
       precioOferta: parseFloat(p.precio_oferta) || 0,
       fechaOferta: (p.fecha_oferta || '').trim(),
       cantPack: parseInt(p.cant_pack) || 0,
@@ -5470,6 +5474,80 @@ async function subirArchivosCloudinary() {
 // Cada item: {k:'old', v:idCloudinary} | {k:'new', v:File}. Se reordena con drag & drop o ⭐.
 let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHome = null;
 
+// ═══ 🔗 GEMELOS (Circuito): vincular el mismo producto con stock de los dos dueños ═══
+let _epVinculo = '';
+function _epVinculoRender() {
+  const btn = document.getElementById('ep-vinculo-btn'); if (!btn) return;
+  if (!_epVinculo) { btn.textContent = 'Sin vincular'; btn.style.color = 'var(--texto-suave)'; return; }
+  const otros = productos.filter(x => String(x.id) !== String(_epId) && ((x.vinculo || '') === _epVinculo || String(x.id) === _epVinculo));
+  btn.textContent = otros.length ? '🔗 ' + otros.map(x => x.nombre).join(' + ').slice(0, 40) : 'Sin vincular';
+  btn.style.color = otros.length ? '#1a7a3c' : 'var(--texto-suave)';
+}
+function abrirVincularGemelo() {
+  let ov = document.getElementById('gem-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'gem-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:440px;max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
+        <b style="flex:1;font-size:0.9rem">🔗 ¿Este producto ya existe?</b>
+        <input id="gem-buscar" oninput="gem_render()" placeholder="🔍 Buscar…" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:0.85rem;width:130px">
+        <button onclick="document.getElementById('gem-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button>
+      </div>
+      <div style="font-size:0.68rem;color:#888;padding:4px 12px">Marcá el producto que es EL MISMO (con stock del otro dueño). Candy los va a ver como uno solo y compra primero de Jony (al costo), después de Miri.</div>
+      <div id="gem-list" style="overflow:auto;flex:1;padding:6px 12px;min-height:100px"></div>
+      <div style="padding:8px 12px;border-top:1px solid #eee">${'<button onclick="gem_desvincular()" style="width:100%;padding:8px;border:none;background:#fdecea;color:#c0392b;border-radius:8px;font-weight:700;cursor:pointer">Quitar vínculo</button>'}</div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'gem-overlay') ov.style.display = 'none'; };
+  }
+  ov.style.display = 'flex';
+  gem_render();
+}
+function gem_render() {
+  const q = (document.getElementById('gem-buscar').value || '').toLowerCase().trim();
+  const yo = productos.find(x => String(x.id) === String(_epId));
+  const items = productos.filter(x => String(x.id) !== String(_epId)
+    && (!q || (x.nombre || '').toLowerCase().includes(q))
+    && (!yo || (x.dueno || '') !== (yo.dueno || '') || q));   // por defecto: los del OTRO dueño primero
+  document.getElementById('gem-list').innerHTML = items.slice(0, 40).map(x => {
+    const f = (x.imagen || '').split(',').map(v => v.trim()).filter(Boolean)[0];
+    const src = f ? imgUrl(f)[0] : '';
+    const ya = _epVinculo && ((x.vinculo || '') === _epVinculo || String(x.id) === _epVinculo);
+    return `<div onclick="gem_elegir('${x.id}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f5f1ea;cursor:pointer;${ya ? 'background:#eef9f0' : ''}">
+      ${src ? `<img src="${src}" style="width:40px;height:40px;object-fit:contain;background:#f7f2e8;border-radius:8px">` : '<div style="width:40px;height:40px;background:#f7f2e8;border-radius:8px"></div>'}
+      <div style="flex:1;min-width:0"><div style="font-size:0.82rem;font-weight:600">${esc(x.nombre)}</div>
+      <div style="font-size:0.66rem;color:#999">${esc(x.dueno || '?')} · stock ${x.stock}${x.desc ? ' · ' + esc(x.desc.slice(0, 26)) : ''}</div></div>
+      ${ya ? '<span style="color:#1a7a3c;font-weight:800">✓</span>' : ''}
+    </div>`;
+  }).join('') || '<div class="sinpedidos">Sin candidatos</div>';
+}
+async function gem_elegir(otroId) {
+  const otro = productos.find(x => String(x.id) === String(otroId));
+  if (!otro) return;
+  // grupo = vínculo existente del otro, o su id. Se graban LOS DOS al toque (cero intervención después).
+  const grupo = (otro.vinculo || '').trim() || String(otro.id);
+  if (!(otro.vinculo || '').trim()) {
+    const r1 = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: String(otro.id), vinculo: grupo }), '');
+    if (r1 && r1.error) { showToast('⚠️ No se pudo vincular'); return; }
+    otro.vinculo = grupo;
+  }
+  const r2 = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: String(_epId), vinculo: grupo }), '🔗 Vinculados ✓');
+  if (r2 && r2.error) { showToast('⚠️ No se pudo vincular'); return; }
+  _epVinculo = grupo;
+  const yo = productos.find(x => String(x.id) === String(_epId)); if (yo) yo.vinculo = grupo;
+  _epVinculoRender();
+  document.getElementById('gem-overlay').style.display = 'none';
+}
+async function gem_desvincular() {
+  const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: String(_epId), vinculo: '' }), 'Vínculo quitado');
+  if (r && r.error) return;
+  _epVinculo = '';
+  const yo = productos.find(x => String(x.id) === String(_epId)); if (yo) yo.vinculo = '';
+  _epVinculoRender();
+  document.getElementById('gem-overlay').style.display = 'none';
+}
+
 // ═══ 🎁 ARMAR FOTO DE PACK (Shuk) — gemelo del de Candy con paleta/logo Yuk ═══
 let _pk2Sel = {}, _pk2Gen = 0;
 const _pk2Foto = p => {
@@ -5814,6 +5892,8 @@ function cargarProductoEditor(id) {
   epMonedaChange();
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
   { const eu = document.getElementById('ep-upp'); if (eu) eu.value = p.unidadesPorPaquete || 1; }
+  _epVinculo = p.vinculo || '';
+  _epVinculoRender();
   document.getElementById('ep-nuevas').value = '';
   document.getElementById('ep-status').textContent = '';
   renderFotosEditor();
@@ -5919,6 +5999,7 @@ async function guardarEdicionProducto() {
     moneda: document.getElementById('ep-moneda').value === 'U$S' ? 'U$S' : '$',
     visible: document.getElementById('ep-visible').value,
     unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
+    vinculo: _epVinculo || '__VACIO__',
     imagen: idsFinal.join(',') || '__VACIO__'
   }), '💾 Producto actualizado ✓');
   status.textContent = '';
