@@ -5558,9 +5558,12 @@ function pk2_dibujar() {
     : sel.length === 3 ? [[245, 400, 320, -0.09], [655, 400, 320, 0.09], [450, 630, 320, 0.02]]
     : [[262, 370, 300, -0.08], [638, 370, 300, 0.08], [262, 645, 300, 0.05], [638, 645, 300, -0.05]];
   const cargas = sel.slice(0, poses.length).map(x => new Promise(res => {
+    const src = _pk2Foto(x.p);
+    if (!src) return res(null);
+    // copia fresca con CORS (la caché de las miniaturas sin CORS rompía la carga para canvas)
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload = () => res(img); img.onerror = () => res(null);
-    img.src = _pk2Foto(x.p);
+    img.src = src + (src.indexOf('?') === -1 ? '?xo=1' : '&xo=1');
   }));
   Promise.all(cargas).then(imgs => {
     if (gen !== _pk2Gen) return;

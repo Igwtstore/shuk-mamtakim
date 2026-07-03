@@ -2277,9 +2277,11 @@ function pk_dibujar() {
   const cargas = sel.slice(0, poses.length).map(x => new Promise(res => {
     const src = (x.p.fotos && x.p.fotos[0]) || x.p.foto;
     if (!src) return res(null);
+    // CAUSA RAÍZ del "pack ×3 muestra 2": si la foto ya se vio como miniatura, el navegador la
+    // cacheó SIN permisos CORS y la carga para canvas falla. Se pide una copia fresca (&xo=1).
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload = () => res(img); img.onerror = () => res(null);
-    img.src = src;
+    img.src = src + (src.indexOf('?') === -1 ? '?xo=1' : '&xo=1');
   }));
   Promise.all(cargas).then(imgs => {
     if (gen !== _pkGen) return;   // hubo otro dibujado más nuevo → este se descarta
