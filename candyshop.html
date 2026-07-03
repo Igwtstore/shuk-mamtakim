@@ -441,6 +441,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="btn-add" id="btn-fotos-faltantes" style="background:linear-gradient(135deg,#c179ff,#8b3ff0);margin-top:8px;display:none" onclick="abrirFotosFaltantes()">📷 Cargar fotos faltantes</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#2e8b57,#1f6e43);margin-top:8px" onclick="abrirOrganizarCat()">🏷️ Organizar por categoría</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#455a64,#263238);margin-top:8px" onclick="abrirCandyMasivo()">📋 Editor masivo (planilla)</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#c9954a,#a06a2c);margin-top:8px" onclick="abrirArmarCatalogoCandy()">📕 Armar catálogo (PDF / imagen)</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);margin-top:8px" onclick="abrirFlyer()">🎨 Armar flyer con IA</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff8f00,#f4511e);margin-top:8px" onclick="flyerDelDia()">⚡ Flyer del día (se arma solo)</button>
@@ -990,6 +991,110 @@ function showTab(id, btn) {
 // Devuelve los datos, o null SOLO si falló de verdad tras varios reintentos.
 // Apps Script a veces responde un error transitorio (HTML "La secuencia se
 // completó pero no mostró ningún valor") bajo llamadas concurrentes → reintentamos.
+// ═══ EDITOR MASIVO (planilla) — paridad con el masivo del Shuk ═══
+function toast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2e3a2f;color:#fff;padding:11px 20px;border-radius:22px;font-weight:700;font-size:0.88rem;z-index:900;box-shadow:0 6px 20px rgba(0,0,0,0.3);white-space:nowrap';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+let _cmOrig = {}, _cmCambios = {}, _cmData = [];
+async function abrirCandyMasivo() {
+  let ov = document.getElementById('cmasivo-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cmasivo-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;align-items:center;justify-content:center;padding:10px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:960px;max-height:92vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #eee">
+        <b style="flex:1">📋 Editor masivo del catálogo</b>
+        <input id="cmasivo-buscar" oninput="cm_render()" placeholder="🔍 Buscar…" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:0.85rem;width:150px">
+        <button id="cmasivo-guardar" onclick="cm_guardar()" disabled style="padding:8px 14px;border:none;background:#2e8b57;color:#fff;border-radius:8px;font-weight:700;cursor:pointer;opacity:0.5">💾 Guardar (<span id="cmasivo-n">0</span>)</button>
+        <button onclick="cm_cerrar()" style="padding:8px 12px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button>
+      </div>
+      <div style="font-size:0.68rem;color:#888;padding:4px 14px">Tocá y corregí lo que quieras; se guarda todo junto. El stock ajusta el depósito por diferencia (no pisa ventas). Los 🛍️ de Shuk se editan desde el Shuk.</div>
+      <div id="cmasivo-body" style="overflow:auto;flex:1;padding:0 8px 8px"></div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'cmasivo-overlay') cm_cerrar(); };
+  }
+  ov.style.display = 'flex';
+  document.getElementById('cmasivo-body').innerHTML = '<div class="spinner">Cargando…</div>';
+  _cmCambios = {}; _cmOrig = {};
+  catalogoCache = await api('getCatalogoHijos') || [];
+  _cmData = catalogoCache.filter(p => !(p.codigo || '').startsWith('shuk:'));
+  _cmData.forEach(p => {
+    _cmOrig[p.codigo] = { nombre: p.nombre || '', categoria: p.categoria || 'Varios', precioVenta: String(p.precioVenta || 0),
+      costo: String(p.costo || 0), precioOferta: String(p.precioOferta || 0), fechaOferta: p.fechaOferta || '',
+      cantPack: String(p.cantPack || 0), precioPack: String(p.precioPack || 0), siempreDisp: p.siempreDisp ? '1' : '0', stock: String(p.stock || 0) };
+  });
+  cm_render(); cm_counter();
+}
+function cm_cerrar() {
+  if (Object.keys(_cmCambios).some(c => Object.keys(_cmCambios[c]).length) && !confirm('Tenés cambios sin guardar. ¿Cerrar igual?')) return;
+  document.getElementById('cmasivo-overlay').style.display = 'none';
+}
+function cm_val(cod, campo) {
+  if (_cmCambios[cod] && _cmCambios[cod][campo] !== undefined) return _cmCambios[cod][campo];
+  return _cmOrig[cod] ? _cmOrig[cod][campo] : '';
+}
+function cm_set(cod, campo, val) {
+  _cmCambios[cod] = _cmCambios[cod] || {};
+  if (String(val) === String(_cmOrig[cod][campo])) delete _cmCambios[cod][campo];
+  else _cmCambios[cod][campo] = String(val);
+  cm_counter();
+}
+function cm_counter() {
+  const nCh = Object.keys(_cmCambios).filter(c => Object.keys(_cmCambios[c]).length).length;
+  const el = document.getElementById('cmasivo-n'); if (el) el.textContent = nCh;
+  const btn = document.getElementById('cmasivo-guardar');
+  if (btn) { btn.disabled = nCh === 0; btn.style.opacity = nCh === 0 ? '0.5' : '1'; }
+}
+function cm_render() {
+  const q = (document.getElementById('cmasivo-buscar').value || '').toLowerCase().trim();
+  const list = _cmData.filter(p => !q || (p.nombre || '').toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
+  const cats = [...new Set(_cmData.map(p => p.categoria || 'Varios'))].sort();
+  const td = 'padding:4px;border-bottom:1px solid #f0ebe3;';
+  const inp = (cod, campo, extra) => `<input value="${escCM(cm_val(cod, campo))}" ${extra || ''} oninput="cm_set('${cod}','${campo}',this.value)" style="width:100%;padding:5px 4px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.78rem;box-sizing:border-box;text-align:center">`;
+  const th = 'padding:6px 4px;font-size:0.64rem;color:#8a6d4a;text-transform:uppercase;text-align:left;white-space:nowrap;';
+  const filas = list.map(p => `<tr>
+    <td style="${td}font-size:0.68rem;color:#999;white-space:nowrap">${escCM(p.codigo)}</td>
+    <td style="${td}min-width:150px">${inp(p.codigo, 'nombre', 'type="text" style="width:100%;padding:5px 4px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.78rem;box-sizing:border-box"')}</td>
+    <td style="${td}"><select onchange="cm_set('${p.codigo}','categoria',this.value)" style="padding:5px 2px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.74rem;max-width:110px">${cats.map(c => `<option ${cm_val(p.codigo, 'categoria') === c ? 'selected' : ''}>${escCM(c)}</option>`).join('')}</select></td>
+    <td style="${td}width:70px">${inp(p.codigo, 'precioVenta', 'type="text" inputmode="decimal"')}</td>
+    <td style="${td}width:64px">${inp(p.codigo, 'costo', 'type="text" inputmode="decimal"')}</td>
+    <td style="${td}width:64px">${inp(p.codigo, 'precioOferta', 'type="text" inputmode="decimal" title="0 = sin oferta"')}</td>
+    <td style="${td}width:84px">${inp(p.codigo, 'fechaOferta', 'type="text" placeholder="dd/mm/aaaa"')}</td>
+    <td style="${td}width:46px">${inp(p.codigo, 'cantPack', 'type="number" min="0"')}</td>
+    <td style="${td}width:64px">${inp(p.codigo, 'precioPack', 'type="text" inputmode="decimal"')}</td>
+    <td style="${td}text-align:center"><input type="checkbox" ${cm_val(p.codigo, 'siempreDisp') === '1' ? 'checked' : ''} onchange="cm_set('${p.codigo}','siempreDisp',this.checked?'1':'0')" title="Siempre disponible (vender aunque no haya stock)"></td>
+    <td style="${td}width:54px">${inp(p.codigo, 'stock', 'type="number" min="0"')}</td>
+  </tr>`).join('');
+  document.getElementById('cmasivo-body').innerHTML = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#faf6f0;z-index:1">
+    <th style="${th}">Cód</th><th style="${th}">Producto</th><th style="${th}">Categoría</th><th style="${th}">$ Venta</th><th style="${th}">Costo</th><th style="${th}">Oferta $</th><th style="${th}">Vence</th><th style="${th}">Pack</th><th style="${th}">Pack $</th><th style="${th}">♾️</th><th style="${th}">Stock</th>
+  </tr></thead><tbody>${filas || '<tr><td colspan="11" style="padding:20px;text-align:center;color:#bbb">Sin resultados</td></tr>'}</tbody></table>`;
+}
+function escCM(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+async function cm_guardar() {
+  const cods = Object.keys(_cmCambios).filter(c => Object.keys(_cmCambios[c]).length);
+  if (!cods.length) return;
+  const cambios = cods.map(c => Object.assign({ codigo: c }, _cmCambios[c]));
+  const btn = document.getElementById('cmasivo-guardar');
+  btn.disabled = true; btn.textContent = '⏳ Guardando…';
+  const r = await api('editarProductosLoteHijos', { cambios: JSON.stringify(cambios) });
+  btn.textContent = '💾 Guardar (0)';
+  if (r && r.ok) {
+    toast(`✓ ${r.n} producto(s) guardado(s)`);
+    _cmCambios = {};
+    await abrirCandyMasivo();   // recarga con lo fresco
+    if (typeof cargarCatalogoPanel === 'function') try { cargarCatalogoPanel(); } catch (e) {}
+  } else {
+    toast('⚠️ ' + ((r && r.error) || 'No se pudo guardar'));
+    btn.disabled = false; cm_counter();
+  }
+}
+
 async function api(accion, extra = {}) {
   const call = async () => {
     const p = new URLSearchParams({ accion, ...extra });

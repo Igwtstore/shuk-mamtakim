@@ -1751,6 +1751,37 @@ Deno.serve(async (req) => {
       await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp) });
       return json({ ok: true });
     }
+    if (accion === 'editarProductosLoteHijos') {
+      // Editor masivo del catálogo Candy (paridad con el masivo del Shuk): varios productos de una.
+      let cambios: any[]; try { cambios = JSON.parse(P(body, 'cambios') || '[]'); } catch { return json({ error: 'json inválido' }); }
+      if (!cambios.length) return json({ ok: true, n: 0 });
+      let nOk = 0;
+      for (const c of cambios) {
+        const codigo = (c.codigo || '').toString(); if (!codigo) continue;
+        const ex = await sbGet('candy_productos', 'select=codigo,nombre&codigo=eq.' + encodeURIComponent(codigo));
+        if (!ex.length) continue;
+        const patch: any = {};
+        if (c.nombre !== undefined && (c.nombre || '').toString().trim()) patch.nombre = c.nombre.toString().trim();
+        if (c.categoria !== undefined) patch.categoria = (c.categoria || 'Varios').toString();
+        if (c.precioVenta !== undefined) patch.precio_venta = parseFloat(String(c.precioVenta).replace(',', '.')) || 0;
+        if (c.costo !== undefined) patch.costo = parseFloat(String(c.costo).replace(',', '.')) || 0;
+        if (c.precioOferta !== undefined) patch.precio_oferta = parseFloat(String(c.precioOferta).replace(',', '.')) || 0;
+        if (c.fechaOferta !== undefined) patch.fecha_oferta = (c.fechaOferta || '').toString();
+        if (c.cantPack !== undefined) patch.cant_pack = parseInt(c.cantPack) || 0;
+        if (c.precioPack !== undefined) patch.precio_pack = parseFloat(String(c.precioPack).replace(',', '.')) || 0;
+        if (c.siempreDisp !== undefined) patch.siempre_disp = boolHijo(c.siempreDisp);
+        if (Object.keys(patch).length) await sbPatch('candy_productos', 'codigo=eq.' + encodeURIComponent(codigo), patch);
+        // Stock del depósito: se ajusta por DELTA contra lo actual (no pisa ventas del medio).
+        if (c.stock !== undefined) {
+          const dep = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(codigo));
+          const actual = dep.length ? (parseFloat(dep[0].cantidad) || 0) : 0;
+          const nuevo = parseInt(c.stock) || 0;
+          if (nuevo !== actual) await ajustarDeposito(codigo, (patch.nombre || ex[0].nombre || '').toString(), nuevo - actual);
+        }
+        nOk++;
+      }
+      return json({ ok: true, n: nOk });
+    }
     if (accion === 'editarProductoHijo') {
       const codigo = P(body, 'codigo'), nuevoCodigo = P(body, 'nuevoCodigo') || codigo;
       const ex = await sbGet('candy_productos', 'select=codigo&codigo=eq.' + encodeURIComponent(codigo));
