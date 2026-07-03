@@ -1863,11 +1863,11 @@
     <div id="pago-split-wrap" style="display:none">
       <div style="margin-bottom:0.75rem">
         <label style="font-size:0.82rem;font-weight:600;color:var(--verde);display:block;margin-bottom:0.3rem">A JONY $</label>
-        <input type="number" id="pago-pitz" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+        <input type="number" id="pago-pitz" placeholder="0" min="0" oninput="pago_actualizarTotal()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
       <div style="margin-bottom:0.75rem">
         <label style="font-size:0.82rem;font-weight:600;color:#c050a0;display:block;margin-bottom:0.3rem">A golosinas (Myri) $</label>
-        <input type="number" id="pago-gol" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+        <input type="number" id="pago-gol" placeholder="0" min="0" oninput="pago_actualizarTotal()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
     </div>
     <!-- Elegir a qué pedido imputar (deuda total, si el cliente tiene varios con saldo) -->
@@ -1880,7 +1880,7 @@
     <!-- Monto único (pago a deuda total del cliente) -->
     <div id="pago-single-wrap" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto $ (pesos)</label>
-      <input type="number" id="pago-ars" placeholder="0" min="0" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+      <input type="number" id="pago-ars" placeholder="0" min="0" oninput="pago_actualizarTotal()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
     </div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto U$S (opcional)</label>
@@ -1910,6 +1910,7 @@
       <input type="number" id="pago-tc" placeholder="ej: 1510" min="1" oninput="pago_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
       <div id="pago-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
     </div>
+    <div id="pago-total-recibido" style="display:none;background:#e8f5ee;border:1.5px solid var(--verde);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.9rem;font-weight:800;color:var(--verde);margin-bottom:0.75rem"></div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante(s) (opcional)</label>
       <input type="file" id="pago-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('pago-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
@@ -9762,6 +9763,8 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
     if (remGolUSD > 0) partes.push('U$S ' + parseFloat(remGolUSD).toFixed(2));
     document.getElementById('pago-sub').textContent = 'Deuda total de ' + cliente + (partes.length ? ' · Debe ' + partes.join(' + ') : '');
   }
+  const _ptr = document.getElementById('pago-total-recibido'); if (_ptr) _ptr.style.display = 'none';
+  pago_actualizarTotal();
   document.getElementById('pago-modal').style.display = 'flex';
 }
 function cerrarPagoModal() {
@@ -9777,6 +9780,7 @@ function pago_evalTC() {
   const w = document.getElementById('pago-tc-wrap');
   if (w) w.style.display = (usd > 0 && cajaPesos) ? 'block' : 'none';
   pago_calcularTC();
+  pago_actualizarTotal();
 }
 function pago_calcularTC() {
   const usd = parseFloat(document.getElementById('pago-usd')?.value) || 0;
@@ -9785,6 +9789,33 @@ function pago_calcularTC() {
   res.textContent = (usd > 0 && tc > 0)
     ? ('≈ $ ' + Math.round(usd * tc).toLocaleString('es-AR') + ' entran a la caja · bajan U$S ' + usd + ' de la deuda')
     : '';
+  pago_actualizarTotal();
+}
+// 💵 TOTAL que se está recibiendo (pedido del usuario): suma pesos + los U$S (convertidos si
+// entran a una caja de pesos con TC). Es el número contra el que se cuenta la plata en mano.
+function pago_actualizarTotal() {
+  const el = document.getElementById('pago-total-recibido'); if (!el) return;
+  const esPedido = document.getElementById('pago-split-wrap').style.display !== 'none';
+  const ars = esPedido
+    ? (parseFloat(document.getElementById('pago-pitz').value) || 0) + (parseFloat(document.getElementById('pago-gol').value) || 0)
+    : (parseFloat(document.getElementById('pago-ars').value) || 0);
+  const usd = parseFloat(document.getElementById('pago-usd')?.value) || 0;
+  const caja = document.getElementById('pago-caja')?.value || '';
+  const tc = parseFloat(document.getElementById('pago-tc')?.value) || 0;
+  if (ars <= 0 && usd <= 0) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  if (caja === 'PERDON') { el.textContent = '🎁 No entra plata a ninguna caja (perdón / redondeo)'; return; }
+  const cajaPesos = caja && _CAJAS_USD.indexOf(caja) === -1;
+  if (usd > 0 && cajaPesos && tc > 0) {
+    const total = Math.round(ars + usd * tc);
+    el.textContent = '💵 Recibís en total: $ ' + total.toLocaleString('es-AR') +
+      (ars > 0 ? '  (= $ ' + Math.round(ars).toLocaleString('es-AR') + ' + $ ' + Math.round(usd * tc).toLocaleString('es-AR') + ' de los U$S)' : '');
+  } else {
+    const parts = [];
+    if (ars > 0) parts.push('$ ' + Math.round(ars).toLocaleString('es-AR'));
+    if (usd > 0) parts.push('U$S ' + usd.toFixed(2));
+    el.textContent = '💵 Recibís en total: ' + parts.join(' + ');
+  }
 }
 async function confirmarPagoCuenta() {
   const esPedido = !!_pagoPedidoId;
