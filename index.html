@@ -1280,6 +1280,17 @@
     <button class="guardar-stock-btn" onclick="abrirStockDrawer()" style="margin-top:0">Abrir actualizador de stock</button>
   </div>
   <div class="admin-card" data-seccion="stock">
+    <div class="admin-titulo">📥 Recibir mercadería <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· suma stock y calcula el costo promedio ponderado</span></div>
+    <input type="text" id="recep-buscar" placeholder="🔍 Buscá el producto que llegó..." oninput="filtrarRecep()" onfocus="filtrarRecep()" autocomplete="off"
+      style="padding:0.6rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;width:100%;outline:none;box-sizing:border-box;margin-bottom:0.4rem" />
+    <div id="recep-resultados" style="display:none;max-height:220px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-bottom:0.6rem"></div>
+    <div id="recep-lineas"></div>
+    <div id="recep-pie" style="display:none">
+      <div id="recep-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul);margin:0.5rem 0"></div>
+      <button class="guardar-stock-btn" onclick="registrarRecepcion(this)" style="margin-top:0">📥 Registrar recepción</button>
+    </div>
+  </div>
+  <div class="admin-card" data-seccion="stock">
     <div class="admin-titulo">📦 Stock disponible</div>
     <input id="stock-buscar" oninput="renderStockTotal()" placeholder="🔍 Buscar producto para editar…" style="width:100%;margin-bottom:0.6rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none">
     <div id="stock-total-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
@@ -7984,6 +7995,106 @@ function _claveProducto(p) {
   return (p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 45) : '')).trim();
 }
 function _llenarTrazarSelect() { /* reemplazado por el buscador filtrarTrazar() */ }
+
+// ─── 📥 RECIBIR MERCADERÍA (PPP: precio promedio ponderado de costo) ─────────
+// Reglas (acordadas con el usuario): producto sin stock o sin costo → costo = el de la compra;
+// producto con stock → PPP = (stock×costoActual + cant×costoNuevo) / (stock+cant).
+let _recepSel = {};   // id → { cantidad, costo }
+function filtrarRecep() {
+  const q = (document.getElementById('recep-buscar')?.value || '').toLowerCase().trim();
+  const cont = document.getElementById('recep-resultados');
+  if (!cont) return;
+  if (!q) { cont.style.display = 'none'; return; }
+  const lista = productosVisibles().filter(p =>
+    p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q)).slice(0, 12);
+  cont.style.display = 'block';
+  if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.7rem">Sin resultados</div>'; return; }
+  cont.innerHTML = lista.map(p => `
+    <div onclick="agregarRecep(${p.id})" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div>
+        <div style="font-size:0.7rem;color:var(--texto-suave)">${esc((p.desc || '').substring(0, 45))} · stock ${p.stock}${p.costo > 0 ? ' · costo ' + (p.moneda === 'U$S' ? 'U$S ' + p.costo.toFixed(2) : '$ ' + Math.round(p.costo).toLocaleString('es-AR')) : ' · sin costo'}</div>
+      </div>
+      <span style="color:var(--verde);font-weight:800">＋</span>
+    </div>`).join('');
+}
+function agregarRecep(id) {
+  if (!_recepSel[id]) _recepSel[id] = { cantidad: '', costo: '' };
+  document.getElementById('recep-buscar').value = '';
+  document.getElementById('recep-resultados').style.display = 'none';
+  renderRecepSel();
+}
+function setRecep(id, campo, val) { if (_recepSel[id]) { _recepSel[id][campo] = val; renderRecepSel(true); } }
+function quitarRecep(id) { delete _recepSel[id]; renderRecepSel(); }
+// PPP en vivo por línea (misma cuenta que hace el motor al registrar).
+function _pppPreview(p, cant, costoU) {
+  if (!(costoU > 0)) return null;
+  const antes = parseFloat(p.stock) || 0, costoAnt = parseFloat(p.costo) || 0;
+  if (antes > 0 && costoAnt > 0) return Math.round(((antes * costoAnt + cant * costoU) / (antes + cant)) * 100) / 100;
+  return costoU;
+}
+function renderRecepSel(soloTotales) {
+  const cont = document.getElementById('recep-lineas'), pie = document.getElementById('recep-pie');
+  if (!cont) return;
+  const ids = Object.keys(_recepSel);
+  pie.style.display = ids.length ? '' : 'none';
+  if (!ids.length) { cont.innerHTML = ''; return; }
+  let totARS = 0, totUSD = 0, totU = 0;
+  const html = ids.map(id => {
+    const p = productos.find(x => String(x.id) === String(id));
+    if (!p) return '';
+    const sel = _recepSel[id];
+    const cant = parseFloat(sel.cantidad) || 0, costoU = parseFloat(sel.costo) || 0;
+    const sym = p.moneda === 'U$S' ? 'U$S' : '$';
+    if (cant > 0 && costoU > 0) { if (p.moneda === 'U$S') totUSD += cant * costoU; else totARS += cant * costoU; }
+    totU += cant;
+    const ppp = cant > 0 ? _pppPreview(p, cant, costoU) : null;
+    const costoActualStr = p.costo > 0 ? (sym + ' ' + (p.moneda === 'U$S' ? p.costo.toFixed(2) : Math.round(p.costo).toLocaleString('es-AR'))) : 'sin costo';
+    const pppStr = ppp != null ? `<span style="color:var(--verde);font-weight:800">→ nuevo costo ${sym} ${p.moneda === 'U$S' ? ppp.toFixed(2) : Math.round(ppp).toLocaleString('es-AR')}${(p.stock > 0 && p.costo > 0) ? ' (PPP)' : ''}</span>` : '';
+    return `<div style="border:1px solid #d8ecdf;border-radius:10px;padding:0.5rem 0.7rem;margin-bottom:0.45rem;background:#f6fbf7">
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.83rem;font-weight:700;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div>
+          <div style="font-size:0.68rem;color:var(--texto-suave)">stock actual: ${p.stock} · costo actual: ${costoActualStr}</div>
+        </div>
+        <button onclick="quitarRecep(${p.id})" style="background:#fde8e8;border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;color:#e05c2a;flex-shrink:0">×</button>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
+        <label style="font-size:0.72rem;color:var(--texto-suave)">Cantidad <input type="number" min="0" step="1" value="${sel.cantidad}" onchange="setRecep(${p.id},'cantidad',this.value)" style="width:70px;padding:0.35rem;border:1.5px solid #d8ecdf;border-radius:6px;font-weight:700;text-align:right"></label>
+        <label style="font-size:0.72rem;color:var(--texto-suave)">Costo unit. ${sym} <input type="number" min="0" step="any" value="${sel.costo}" onchange="setRecep(${p.id},'costo',this.value)" style="width:90px;padding:0.35rem;border:1.5px solid #d8ecdf;border-radius:6px;font-weight:700;text-align:right"></label>
+        <span style="font-size:0.74rem">${pppStr}</span>
+      </div>
+    </div>`;
+  }).join('');
+  cont.innerHTML = html;
+  const parts = [];
+  if (totARS > 0) parts.push('$ ' + Math.round(totARS).toLocaleString('es-AR'));
+  if (totUSD > 0) parts.push('U$S ' + totUSD.toFixed(2));
+  document.getElementById('recep-total').textContent = 'Total de la compra: ' + (parts.join(' + ') || '—') + (totU > 0 ? ' · ' + totU + ' u.' : '');
+}
+let _enviandoRecep = false;
+async function registrarRecepcion(btn) {
+  if (_enviandoRecep) return;
+  const items = Object.keys(_recepSel)
+    .map(id => ({ id, cantidad: parseFloat(_recepSel[id].cantidad) || 0, costoUnit: parseFloat(_recepSel[id].costo) || 0 }))
+    .filter(it => it.cantidad > 0);
+  if (!items.length) { showToast('Cargá la cantidad de al menos un producto'); return; }
+  const sinCosto = items.filter(it => !(it.costoUnit > 0));
+  if (sinCosto.length && !confirm('Hay ' + sinCosto.length + ' producto(s) sin costo cargado: se suma el stock pero NO se toca su costo. ¿Seguir?')) return;
+  _enviandoRecep = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Registrando…'; }
+  const r = await _postSesion({ accion: 'recibirMercaderia', items: JSON.stringify(items), compraId: 'RC' + Date.now() });
+  _enviandoRecep = false;
+  if (btn) { btn.disabled = false; btn.textContent = '📥 Registrar recepción'; }
+  if (r && r.ok) {
+    showToast('📥 Recepción registrada ✓ stock y costos actualizados');
+    _recepSel = {};
+    renderRecepSel();
+    await cargarProductos();
+  } else {
+    showToast('⚠️ ' + ((r && r.error) || 'No se pudo registrar — reintentá'));
+  }
+}
 
 let _trazarDueno = '';   // '' = todos · 'Miri' · 'Jony' (el filtro solo existe en vista Jony)
 function setTrazarDueno(d, btn) {
