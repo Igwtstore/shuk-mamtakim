@@ -141,7 +141,8 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
   return porId;   // ventaId → { v, cub:{jA,mA,jU,mU}, ... }
 }
 function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCorte: number) {
-  const out = { comisionARS: 0, comisionUSD: 0, pitzARS: 0, pitzUSD: 0, faltaCosto: [] as string[], faltaTC: false };
+  const out = { comisionARS: 0, comisionUSD: 0, pitzARS: 0, pitzUSD: 0, faltaCosto: [] as string[], faltaTC: false, faltaTCVentas: [] as string[] };
+  const marcarTC = (v: any) => { out.faltaTC = true; const et = '#' + (v.n_venta || '?') + ' ' + (v.cliente || '').toString().trim(); if (out.faltaTCVentas.indexOf(et) === -1) out.faltaTCVentas.push(et); };
   const real = (c: string) => !!c && !String(c).startsWith('CTA_CTE');
   const mapa = mapaProdJony(productos);
   const cober = coberturaPagos(ventas, pagos, msCorte);
@@ -159,7 +160,7 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
       const cajaM = (v.caja_myri || '').toString();
       const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
       gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
-      if (gp.faltaTC) out.faltaTC = true;
+      if (gp.faltaTC) marcarTC(v);
       const tieneTramos = (v.tramos || '').toString().trim() !== '';
       const { cARS, cUSD } = comiPeriodo(arsM, usdM, comiARS, comiUSD, cajaM, tc, sinComi, tieneTramos);
       out.comisionARS += cARS; out.comisionUSD += cUSD; out.pitzARS += gp.ars; out.pitzUSD += gp.usd;
@@ -178,7 +179,7 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
     if (fJ > 0) {
       const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
       gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
-      if (gp.faltaTC) out.faltaTC = true;
+      if (gp.faltaTC) marcarTC(v);
       out.pitzARS += Math.round(gp.ars * fJ); out.pitzUSD += Math.round(gp.usd * fJ * 100) / 100;
     }
   });
@@ -1977,7 +1978,7 @@ Deno.serve(async (req) => {
       const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
       const p = calcularGanancias(ventas, productos, pagos, msC);
       const balance = p.comisionARS + p.pitzARS;
-      return json({ balance, balanceUSD: Math.round((p.comisionUSD + p.pitzUSD) * 100) / 100, comisionARS: p.comisionARS, comisionUSD: p.comisionUSD, pitz: p.pitzARS, pitzUSD: p.pitzUSD, movimientos: [], faltaCosto: p.faltaCosto, faltaTC: p.faltaTC });
+      return json({ balance, balanceUSD: Math.round((p.comisionUSD + p.pitzUSD) * 100) / 100, comisionARS: p.comisionARS, comisionUSD: p.comisionUSD, pitz: p.pitzARS, pitzUSD: p.pitzUSD, movimientos: [], faltaCosto: p.faltaCosto, faltaTC: p.faltaTC, faltaTCVentas: p.faltaTCVentas || [] });
     }
     // ── CANDY lecturas ──
     if (accion === 'consultarDeudores') {

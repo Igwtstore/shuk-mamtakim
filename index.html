@@ -9014,7 +9014,10 @@ async function renderGanancias() {
   if (_fcBox) {
     let _h = '';
     if (_fc.length) _h += `⚠️ <b>${_fc.length} producto(s) de Jony sin costo</b> → su ganancia todavía NO está contada. Cargales el costo en el editor masivo (filtro <b>Jony</b> → columna <b>Costo</b>):<br><span style="color:#7a5a1a">${_fc.map(esc).join(' · ')}</span>`;
-    if (ganData && ganData.faltaTC) _h += (_h ? '<br><br>' : '') + '⚠️ Hay una venta minorista con golosina (costo U$S) <b>sin tipo de cambio</b> → esa ganancia no se contó. Reabrí esa venta y cobrala poniendo el TC del día.';
+    if (ganData && ganData.faltaTC) {
+      const _tcv = (ganData.faltaTCVentas || []).map(esc).join(' · ');
+      _h += (_h ? '<br><br>' : '') + `⚠️ <b>Venta(s) sin tipo de cambio</b> (tienen golosina con costo U$S) → esa ganancia no se contó${_tcv ? `:<br><span style="color:#7a5a1a"><b>${_tcv}</b></span><br>` : '. '}Abrí el pedido con ✏️, poné el <b>TC del día</b> en el campo "Tipo de cambio" y guardá.`;
+    }
     _fcBox.style.display = _h ? 'block' : 'none';
     _fcBox.innerHTML = _h;
   }
