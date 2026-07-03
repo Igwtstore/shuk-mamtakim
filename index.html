@@ -3420,6 +3420,16 @@ function _deudaPedido(v, soloMiri) {
   return r;
 }
 function _tieneDeuda(v, soloMiri) { const d = _deudaPedido(v, soloMiri); return d.ars > 0.005 || d.usd > 0.005; }
+// Desglose "(golosinas $X − comisión $Y)" para los renglones donde el que cobró se quedó la
+// comisión y debe el neto: muestra de dónde sale el número (pedido del usuario: caso Yimbo #15).
+function _desgloseComi(d, quien) {
+  const cA = d.comi || 0, cU = d.comiU || 0;
+  if (cA <= 0.5 && cU <= 0.004) return '';
+  const fmt = n => '$ ' + Math.abs(Math.round(n)).toLocaleString('es-AR');
+  const bruto = [cA > 0.5 ? fmt((d.ars||0) + cA) : '', cU > 0.004 ? 'U$S ' + ((d.usd||0) + cU).toFixed(2) : ''].filter(Boolean).join(' + ');
+  const comi = [cA > 0.5 ? fmt(cA) : '', cU > 0.004 ? 'U$S ' + cU.toFixed(2) : ''].filter(Boolean).join(' + ');
+  return ` <span style="color:#9a8c66">(golosinas ${bruto} − ${quien} ${comi})</span>`;
+}
 // Cobrado parcial: se cobró algo a caja real PERO todavía queda deuda (parte a Cta Cte).
 function esCobradoParcial(v) { return esCobradoReal(v) && _tieneDeuda(v, false); }
 
@@ -7035,6 +7045,7 @@ async function renderCuentaSocios() {
   const _vPorId = {}; ventas.forEach(v => { _vPorId[String(v.id)] = v; });
   ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
     const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    let _cdesc = 0, _cdescU = 0;   // comisión ya descontada del neto (para mostrar el desglose)
     (() => {
     if (v.corte) return;   // ya liquidado en un corte → no cuenta en el período actual
     if (pedidosConPago.has(String(v.id))) return;   // los pedidos con pagos se cuentan abajo (sin duplicar)
@@ -7069,11 +7080,11 @@ async function renderCuentaSocios() {
         } else if (mon === 'ARS') {
           const comi = _sinComiS ? 0 : Math.round(val * 0.15);
           if (enMyri) comiDebe += comi;                 // Myri cobró golosinas → debe comisión
-          else if (enJony) jonyTiene += (val - comi);   // Jony cobró golosinas de Myri → le debe el neto
+          else if (enJony) { jonyTiene += (val - comi); _cdesc += comi; }   // Jony cobró golosinas de Myri → le debe el neto
         } else {
           const comiU = _sinComiS ? 0 : parseFloat((val * 0.15).toFixed(2));
           if (t.caja === 'ETF_USD_MYRI') comiDebeU += comiU;
-          else if (enJony) jonyTieneU += (val - comiU);
+          else if (enJony) { jonyTieneU += (val - comiU); _cdescU += comiU; }
         }
       });
       return;   // ya derivado por tramos; saltea el modelo de "1 caja por lado"
@@ -7089,7 +7100,7 @@ async function renderCuentaSocios() {
     // Golosinas en ARS
     if (arsM > 0) {
       if (MYRI_ARS.includes(cajaM)) comiDebe += comiA;               // Myri cobró → debe comisión
-      else if (JONY_BOXES_CC.includes(cajaM)) jonyTiene += (arsM - comiA); // Jony tiene su neto
+      else if (JONY_BOXES_CC.includes(cajaM)) { jonyTiene += (arsM - comiA); _cdesc += comiA; } // Jony tiene su neto
     }
 
     // Golosinas en USD (puede haberse convertido a ARS con tipo de cambio)
@@ -7099,17 +7110,17 @@ async function renderCuentaSocios() {
       if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
         const arsEq = usdM * tc; const comiConv = _sinComiS ? 0 : Math.round(arsEq*0.15);
         if (MYRI_ARS.includes(colUSD)) comiDebe += comiConv;
-        else if (JONY_BOXES_CC.includes(colUSD)) jonyTiene += (arsEq - comiConv);
+        else if (JONY_BOXES_CC.includes(colUSD)) { jonyTiene += (arsEq - comiConv); _cdesc += comiConv; }
       } else {
         if (colUSD === 'ETF_USD_MYRI') comiDebeU += comiU;
-        else if (JONY_BOXES_CC.includes(colUSD)) jonyTieneU += (usdM - comiU);
+        else if (JONY_BOXES_CC.includes(colUSD)) { jonyTieneU += (usdM - comiU); _cdescU += comiU; }
       }
     }
     })();
     const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     const _dCd = comiDebe - _s0.cd, _dCdU = comiDebeU - _s0.cdU;
     if (_dPm > 0.004) detPitzMyri.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dPm, usd: 0 });
-    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU });
+    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, comi: _cdesc, comiU: _cdescU });
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15 });
   });
 
@@ -7141,6 +7152,7 @@ async function renderCuentaSocios() {
   (pagos || []).forEach(p => {
     if (!p.pedidoId) return;   // atados: reparto explícito (los generales van abajo, imputados)
     const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    let _cdesc = 0, _cdescU = 0;
     (() => {
     const caja = (p.caja||'').trim();
     const pitz = parseFloat(p.montoPitz)||0;
@@ -7150,24 +7162,25 @@ async function renderCuentaSocios() {
     if (golARS > 0) {
       const comi = Math.round(golARS * 0.15);
       if (MYRI_ARS.includes(caja)) comiDebe += comi;                  // Myri cobró golosinas → debe comisión
-      else if (JONY_BOXES_CC.includes(caja)) jonyTiene += (golARS - comi); // Jony tiene su neto
+      else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (golARS - comi); _cdesc += comi; } // Jony tiene su neto
     }
     if (golUSD > 0) {
       const comiU2 = parseFloat((golUSD*0.15).toFixed(2));
       if (caja === 'ETF_USD_MYRI') comiDebeU += comiU2;
-      else if (JONY_BOXES_CC.includes(caja)) jonyTieneU += (golUSD - comiU2);
+      else if (JONY_BOXES_CC.includes(caja)) { jonyTieneU += (golUSD - comiU2); _cdescU += comiU2; }
     }
     })();
     const _vp = _vPorId[String(p.pedidoId)] || {};
     const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     const _dCd = comiDebe - _s0.cd, _dCdU = comiDebeU - _s0.cdU;
     if (_dPm > 0.004) detPitzMyri.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
-    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, pago: true });
+    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, comi: _cdesc, comiU: _cdescU, pago: true });
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15, pago: true });
   });
   // 2º: GENERALES — imputación FIFO por componente (Pitzujim primero en $, golosinas primero en U$S)
   _pagosOrd.filter(p => !p.pedidoId).forEach(p => {
     const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    let _cdesc = 0, _cdescU = 0;
     (() => {
     const caja = (p.caja||'').trim();
     if (caja === 'PERDON') return;   // perdón/redondeo: no entró plata a ninguna caja
@@ -7188,25 +7201,25 @@ async function renderCuentaSocios() {
     if (usadoGolA > 0) {
       const comi = Math.round(usadoGolA * 0.15);
       if (MYRI_ARS.includes(caja)) comiDebe += comi;
-      else if (JONY_BOXES_CC.includes(caja)) jonyTiene += (usadoGolA - comi);
+      else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (usadoGolA - comi); _cdesc += comi; }
     }
     // Golosinas U$S: convertidas si entraron en pesos con TC (caso Elion), si no en U$S
     if (usadoGolU > 0) {
       if (tcP > 0 && COBRO_ARS_COLS.includes(caja)) {
         const arsEq = usadoGolU * tcP; const comi = Math.round(arsEq * 0.15);
         if (MYRI_ARS.includes(caja)) comiDebe += comi;
-        else if (JONY_BOXES_CC.includes(caja)) jonyTiene += (arsEq - comi);
+        else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (arsEq - comi); _cdesc += comi; }
       } else {
         const comiU3 = parseFloat((usadoGolU*0.15).toFixed(2));
         if (caja === 'ETF_USD_MYRI') comiDebeU += comiU3;
-        else if (JONY_BOXES_CC.includes(caja)) jonyTieneU += (usadoGolU - comiU3);
+        else if (JONY_BOXES_CC.includes(caja)) { jonyTieneU += (usadoGolU - comiU3); _cdescU += comiU3; }
       }
     }
     })();
     const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     const _dCd = comiDebe - _s0.cd, _dCdU = comiDebeU - _s0.cdU;
     if (_dPm > 0.004) detPitzMyri.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
-    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, pago: true });
+    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, comi: _cdesc, comiU: _cdescU, pago: true });
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15, pago: true });
   });
 
@@ -7252,7 +7265,8 @@ async function renderCuentaSocios() {
       if (!det || !det.length) return filaM(lbl, val, sign);
       const lineas = det.map(d => {
         const montos = [d.ars > 0.5 ? f(Math.round(d.ars)) : '', d.usd > 0.004 ? 'U$S ' + d.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
-        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''} — ${verbo} ${montos}</div>`;
+        const extra = _desgloseComi(d, 'comisión de Jony');
+        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''} — ${verbo} ${montos}${extra}</div>`;
       }).join('');
       return `<details style="padding:2px 0">
         <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
@@ -7308,7 +7322,8 @@ async function renderCuentaSocios() {
       if (!det || !det.length) return fila(lbl, val, sign);
       const lineas = det.map(d => {
         const montos = [d.ars > 0.5 ? f(Math.round(d.ars)) : '', d.usd > 0.004 ? 'U$S ' + d.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
-        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''} — ${verbo} ${montos}</div>`;
+        const extra = _desgloseComi(d, 'tu comisión');
+        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''} — ${verbo} ${montos}${extra}</div>`;
       }).join('');
       return `<details style="padding:2px 0">
         <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
