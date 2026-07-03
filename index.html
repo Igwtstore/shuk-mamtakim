@@ -1376,6 +1376,7 @@
       <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
       <button type="button" onclick="abrirCopiarFotoDe('editor')" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar foto de otro producto</button>
       <button type="button" onclick="abrirArmarPackShuk()" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#fdf3e3;color:#8a5a1e;border:1.5px solid #e8d5b5;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🎁 Armar foto de pack (combiná productos)</button>
+      <button type="button" onclick="videoPromptShuk()" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:#1a5c8a;border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🎬 Video del producto (con tu Gemini)</button>
       <div id="ep-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
       <button type="button" onclick="analizarFotoEditor()" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.82rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y sugiera nombre + descripción</button>
       <button class="guardar-stock-btn" style="margin-top:0.6rem" onclick="guardarEdicionProducto()">💾 Guardar cambios</button>
@@ -5474,6 +5475,36 @@ async function subirArchivosCloudinary() {
 // Cada item: {k:'old', v:idCloudinary} | {k:'new', v:File}. Se reordena con drag & drop o ⭐.
 let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHome = null;
 
+// ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca — Yuk: público amplio 20-100 ═══
+function videoPromptShuk() {
+  const nombre = document.getElementById('ep-nombre').value.trim() || 'el producto';
+  const desc = document.getElementById('ep-desc').value.trim();
+  const prompt = 'Video publicitario vertical (9:16) de 8 segundos del producto REAL de la foto adjunta: "' + nombre + '"'
+    + (desc ? ' (' + desc + ')' : '') + '. '
+    + 'Estética cálida, elegante y apetitosa para público amplio (de 20 a 100 años): tonos dorados y crema, luz natural de tarde, '
+    + 'movimiento suave de cámara con acercamiento lento al producto sobre una mesa de madera clara con frutos secos y especias alrededor. '
+    + 'Transmitir frescura, calidad y confianza, estilo gourmet familiar. El producto SIEMPRE nítido y protagonista, tal cual se ve en la foto '
+    + '(no inventar packaging ni textos). Cierre: el producto al centro con un cartel elegante azul oscuro y letras doradas que dice "Shuk Mamtakim".';
+  let ov = document.getElementById('vidp-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'vidp-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:460px;padding:14px">
+      <div style="display:flex;align-items:center;margin-bottom:6px"><b style="flex:1">🎬 Video del producto (con tu Gemini)</b>
+      <button onclick="document.getElementById('vidp-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button></div>
+      <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini (tu plan incluye Veo) · 3) Adjuntá la foto del producto y pegá el prompt</div>
+      <textarea id="vidp-txt" style="width:100%;height:150px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="navigator.clipboard.writeText(document.getElementById('vidp-txt').value).then(()=>showToast('📋 Prompt copiado'))" style="flex:1;padding:10px;border:none;background:var(--dorado);color:#fff;border-radius:9px;font-weight:800;cursor:pointer">📋 Copiar prompt</button>
+        <a href="https://gemini.google.com" target="_blank" style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🚀 Abrir Gemini</a>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'vidp-overlay') ov.style.display = 'none'; };
+  }
+  ov.style.display = 'flex';
+  ov.querySelector('#vidp-txt').value = prompt;
+}
 // ═══ 🔗 GEMELOS (Circuito): vincular el mismo producto con stock de los dos dueños ═══
 let _epVinculo = '';
 function _epVinculoRender() {

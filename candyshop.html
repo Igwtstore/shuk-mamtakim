@@ -740,6 +740,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="foto-btn" onclick="abrirCopiarFotoCandy()" style="background:#eef4fb;color:#2d5f8a">📋 Copiar de otro</button>
       <button class="foto-btn" onclick="abrirArmarPackFoto()" style="background:#fff3e0;color:#e07b00">🎁 Armar foto de pack</button>
       <button class="foto-btn" onclick="iaSugerirCandy()" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff">✨ IA</button>
+      <button class="foto-btn" onclick="videoPromptCandy()" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff">🎬 Video</button>
       <span class="foto-uploading" id="foto-status"></span>
       <input type="file" id="foto-file" accept="image/*" style="display:none" onchange="subirFoto(this)">
     </div>
@@ -996,6 +997,24 @@ function showTab(id, btn) {
 // Devuelve los datos, o null SOLO si falló de verdad tras varios reintentos.
 // Apps Script a veces responde un error transitorio (HTML "La secuencia se
 // completó pero no mostró ningún valor") bajo llamadas concurrentes → reintentamos.
+// ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca para pegar en la app de Gemini (Veo) ═══
+function videoPromptCandy() {
+  const nombre = document.getElementById('f-nombre').value.trim() || 'el producto';
+  const prompt = 'Video publicitario vertical (9:16) de 8 segundos del producto REAL de la foto adjunta: "' + nombre + '". '
+    + 'Estética juvenil y vibrante para público de 15 a 25 años: colores rosa, violeta y celeste eléctricos, luz de neón suave, '
+    + 'movimiento dinámico con micro zoom y giro del producto, caramelos y chispas flotando alrededor, fondo con degradé animado. '
+    + 'Ritmo alegre y energético estilo reel de Instagram. El producto SIEMPRE nítido y protagonista, tal cual se ve en la foto '
+    + '(no inventar packaging ni textos). Cierre: el producto al centro con un cartel redondeado violeta que dice "🍬 Candy Shop".';
+  const body = _modalInfo('vid-prompt-overlay', '🎬 Video del producto (con tu Gemini)');
+  body.innerHTML = `
+    <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini (tu plan incluye Veo) · 3) Adjuntá la foto del producto y pegá el prompt</div>
+    <textarea id="vid-prompt-txt" style="width:100%;height:150px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box">${escCM(prompt)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('vid-prompt-txt').value).then(()=>toast('📋 Prompt copiado'))" style="flex:1;padding:10px;border:none;background:#b14cff;color:#fff;border-radius:9px;font-weight:800;cursor:pointer">📋 Copiar prompt</button>
+      <a href="https://gemini.google.com" target="_blank" style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🚀 Abrir Gemini</a>
+    </div>
+    ${fotoUrl ? `<div style="font-size:0.7rem;color:#888;margin-top:8px">La foto para adjuntar: <a href="${fotoUrl}" target="_blank" download>descargala acá 📥</a></div>` : ''}`;
+}
 // ═══ M4 UNIFICACIÓN: analítica de visitas + visor de borrados ═══
 function _modalInfo(id, titulo) {
   let ov = document.getElementById(id);
