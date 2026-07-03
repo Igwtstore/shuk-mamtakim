@@ -120,6 +120,13 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 .btn-enviar { width: 100%; padding: 14px; background: linear-gradient(135deg, #25d366, #128c7e); color: white; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 1rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-cancelar { width: 100%; padding: 10px; background: none; border: none; color: #bbb; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; margin-top: 8px; }
 
+/* CARRUSEL DE FOTOS */
+.car-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.85); border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 1rem; font-weight: 800; color: #b14cff; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 6px rgba(0,0,0,0.18); }
+.car-prev { left: 6px; } .car-next { right: 6px; }
+.car-dots { position: absolute; bottom: 6px; left: 0; right: 0; display: flex; justify-content: center; gap: 4px; z-index: 2; }
+.car-dots .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.6); box-shadow: 0 0 3px rgba(0,0,0,0.3); }
+.car-dots .dot.activo { background: #b14cff; }
+
 /* MODO OSCURO */
 body.dark { background: #1c1526; background-image: radial-gradient(circle at 15% 12%, #2a1b33 0, transparent 45%), radial-gradient(circle at 85% 8%, #1b2233 0, transparent 40%); }
 body.dark .producto-card, body.dark .drawer, body.dark .modal-box, body.dark .qty-modal-box { background: #2a2333; }
@@ -369,10 +376,16 @@ function renderCatalogo(productos, esFiltered) {
     const cant = carrito[p.codigo]?.cantidad || 0;
     const agotado = !_comprable(p);
     const pocas = !agotado && mostrarStockTienda && !p.siempreDisp && p.stock > 0 && p.stock <= 5;
-    const fotoEl = p.foto
-      ? `<img src="${fotoTienda(p.foto, 600)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    const fotos = _fotosDe(p);
+    const multi = fotos.length > 1;
+    const fotoEl = fotos.length
+      ? `<img id="cfoto-${p.codigo}" src="${fotoTienda(fotos[0], 600)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';
-    const placeholder = `<div class="producto-foto-placeholder" style="${p.foto ? 'display:none' : ''}">${emojiKid}</div>`;
+    const carrusel = multi ? `
+      <button class="car-btn car-prev" onclick="event.stopPropagation();rotFoto('${p.codigo}',-1)">‹</button>
+      <button class="car-btn car-next" onclick="event.stopPropagation();rotFoto('${p.codigo}',1)">›</button>
+      <div class="car-dots" id="cdots-${p.codigo}">${fotos.map((_, i) => `<span class="dot${i === 0 ? ' activo' : ''}"></span>`).join('')}</div>` : '';
+    const placeholder = `<div class="producto-foto-placeholder" style="${fotos.length ? 'display:none' : ''}">${emojiKid}</div>`;
     const badge = agotado ? '<span class="badge-agotado">AGOTADO</span>'
       : (ofertaActiva(p) ? '<span class="badge-oferta">OFERTA</span>'
       : (pocas ? `<span class="badge-ultimas">¡Quedan ${p.stock}!</span>` : ''));
@@ -384,8 +397,8 @@ function renderCatalogo(productos, esFiltered) {
       boton = `<button class="btn-agregar ${cant > 0 ? 'btn-en-carrito' : ''}" onclick="event.stopPropagation(); seleccionarProducto('${p.codigo}')">${cant > 0 ? `✓ En pedido (${cant})` : '+ Agregar'}</button>`;
     }
     return `<div class="producto-card ${agotado ? 'agotada' : ''}" onclick="${agotado ? `abrirAvisame('${p.codigo}')` : `seleccionarProducto('${p.codigo}')`}">
-      <div class="producto-foto-wrap">
-        ${fotoEl}${placeholder}
+      <div class="producto-foto-wrap" ${multi ? `onmouseenter="rotAuto('${p.codigo}',1)" onmouseleave="rotAuto('${p.codigo}',0)" ontouchstart="rotAuto('${p.codigo}',1)"` : ''}>
+        ${fotoEl}${placeholder}${carrusel}
         ${badge}
         ${cant > 0 ? `<span class="badge-cant">${cant}</span>` : ''}
       </div>
@@ -445,6 +458,22 @@ function ofertaActiva(p) {
   return true;
 }
 function packActivo(p) { return p.cantPack > 0 && p.precioPack > 0; }
+// ─── CARRUSEL DE FOTOS (paridad con la tienda Shuk: flechas + puntitos + auto-rotación) ──
+function _fotosDe(p) { return (p.fotos && p.fotos.length) ? p.fotos : (p.foto ? [p.foto] : []); }
+const _carIdx = {}, _carTimers = {};
+function rotFoto(codigo, delta) {
+  const p = catalogoData.find(x => x.codigo === codigo); if (!p) return;
+  const fotos = _fotosDe(p); if (fotos.length < 2) return;
+  const idx = ((_carIdx[codigo] || 0) + delta + fotos.length) % fotos.length;
+  _carIdx[codigo] = idx;
+  const img = document.getElementById('cfoto-' + codigo); if (img) { img.style.display = ''; img.src = fotoTienda(fotos[idx], 600); }
+  const dots = document.getElementById('cdots-' + codigo);
+  if (dots) [].forEach.call(dots.children, (d, i) => d.classList.toggle('activo', i === idx));
+}
+function rotAuto(codigo, on) {
+  if (_carTimers[codigo]) { clearInterval(_carTimers[codigo]); delete _carTimers[codigo]; }
+  if (on) _carTimers[codigo] = setInterval(() => rotFoto(codigo, 1), 3000);
+}
 function _tienePromo(p) { return ofertaActiva(p) || packActivo(p); }
 function precioUnit(p) { return ofertaActiva(p) ? p.precioOferta : (p.precioVenta || 0); }
 // Subtotal con pack automático: cada grupo de cantPack se cobra a precioPack; el resto, al unitario.

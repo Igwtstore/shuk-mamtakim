@@ -462,6 +462,9 @@ function fotoShukUrl(val: string) {
 }
 // Primera foto no vacía del campo imagen (lista separada por coma).
 const primeraFoto = (imagen: any) => ((imagen || '').toString().split(',').map((x: string) => x.trim()).filter(Boolean)[0]) || '';
+// Todas las FOTOS (sin videos) del campo imagen, como URLs completas — para el carrusel de la tienda Candy.
+const fotosShukLista = (imagen: any) => ((imagen || '').toString().split(',').map((x: string) => x.trim()).filter(Boolean)
+  .filter((x: string) => !/\.(mp4|webm|mov)(\?|$)/i.test(x) && x.indexOf('/video/') === -1).slice(0, 5).map(fotoShukUrl));
 async function getConfig(clave: string, def: string) { const r = await sbGet('config', 'select=valor&clave=eq.' + encodeURIComponent(clave)); return r.length ? (r[0].valor ?? def) : def; }
 async function setConfig(clave: string, valor: string) {
   await fetch(SB_URL + '/rest/v1/config?on_conflict=clave', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ clave, valor }) });
@@ -2101,9 +2104,9 @@ Deno.serve(async (req) => {
         sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion'),
       ]);
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
-      const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
+      const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() }));
+      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() }));
       return json(propios.concat(shuk));
     }
     if (accion === 'panelHijos') {
