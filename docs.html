@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.24</title>
+<title>Shuk Mamtakim — Documentación v3.25</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 3.24 · Julio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 3.25 · Julio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.25</td><td>Jul 2026</td><td><strong>🔗 CIRCUITO CANDY↔SHUK — FASE 1 EN PRODUCCIÓN (compra automática de paquetes).</strong> Cuando un chico saca para vender o llega un pedido de la tienda con un producto del Shuk (de Miri) y no le alcanza su stock propio, el sistema SOLO: le compra a Miri los paquetes enteros que hagan falta (venta interna en el Shuk a nombre de "Candy", precio mayorista −15% en U$S, sin comisión, deuda en cuenta corriente), baja los paquetes del stock del Shuk, abre el paquete y deja las unidades sobrantes como stock propio de Candy — todo con trazabilidad completa en las dos puntas. Si el Shuk no tiene paquetes suficientes, rechaza con aviso claro (no se vende de más). Verificado con circuito completo real: compra de paquete ✓ reventa desde lo genuino sin recomprar ✓ rechazo por falta de stock ✓. ⚠️ Cargar las "unidades por paquete" reales de cada producto (hoy están en 1). La ganancia real con tipo de cambio llega en la Fase 3.</td></tr>
       <tr><td>v3.24</td><td>Jul 2026</td><td><strong>🏗️ MÓDULO 4 DE LA UNIFICACIÓN COMPLETO (infra Candy).</strong> (1) 📊 "Visitas de la tienda": cuánta gente entra a la tienda de cada chico, por día y por dispositivo (los datos se juntan desde v3.14). (2) 🗑️ "Registro de borrados": qué borró cada uno y cuándo (ventas, compras, productos — se registraba desde antes, ahora SE VE). (3) 🛡️ Anti-duplicado en compras: si la red reintenta, la compra no entra dos veces (verificado: depósito quedó en 2, no en 4). Las ventas y pedidos ya tenían su protección.</td></tr>
       <tr><td>v3.23</td><td>Jul 2026</td><td><strong>🎯 Pack: la causa REAL del producto faltante.</strong> No era una foto rota: cuando una foto ya se había mostrado como miniatura, el navegador la guardaba en caché sin permisos para el lienzo y la composición fallaba justo con las fotos más usadas (como una copiada de otro producto). Ahora se pide una copia fresca con permisos y se dibujan siempre todas. Verificado reproduciendo el caso exacto: 3 de 3. En las dos tiendas.</td></tr>
       <tr><td>v3.22</td><td>Jul 2026</td><td><strong>🔧 Pack: ningún producto desaparece de la foto.</strong> Bug cazado por el usuario: elegía 3 productos y la foto mostraba 2 — si una foto no cargaba (rota o video), el producto se salteaba en silencio. Ahora: se usa la primera foto VÁLIDA (salteando videos) y, si igual falla, el producto aparece como tarjetita con su nombre y su globito ×cantidad. En las dos tiendas.</td></tr>
@@ -761,7 +762,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.24 · Julio 2026 · Uso interno
+  Documentación v3.25 · Julio 2026 · Uso interno
 </div>
 
 </div>
