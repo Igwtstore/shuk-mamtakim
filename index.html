@@ -5476,14 +5476,24 @@ async function subirArchivosCloudinary() {
 let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHome = null;
 
 // ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca — Yuk: público amplio 20-100 ═══
-function videoPromptShuk() {
-  const nombre = document.getElementById('ep-nombre').value.trim() || 'el producto';
-  const desc = document.getElementById('ep-desc').value.trim();
-  const prompt = 'Video publicitario vertical (9:16) de 8 segundos. REGLA MÁS IMPORTANTE: el producto es EXACTAMENTE el de la imagen adjunta — misma forma, tamaño, textura y color de cada unidad; NO lo reemplaces por otro producto ni lo estilices ("' + nombre + '"' + (desc ? ', ' + desc : '') + '). '
+let _vidNombre = '', _vidDesc = '';
+function _vidPromptTexto(conPersona) {
+  const toma2 = conPersona
+    ? '(2) 3-6s: un hombre de unos 35 años, bien vestido estilo casual elegante (camisa clara arremangada, sin corbata), sonriente y natural, toma un puñado del producto y lo prueba disfrutándolo con gesto de placer genuino. '
+    : '(2) 3-6s: cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. ';
+  return 'Video publicitario vertical (9:16) de 8 segundos. REGLA MÁS IMPORTANTE: el producto es EXACTAMENTE el de la imagen adjunta — misma forma, tamaño, textura y color de cada unidad; NO lo reemplaces por otro producto ni lo estilices ("' + _vidNombre + '"' + (_vidDesc ? ', ' + _vidDesc : '') + '). '
     + 'GUION EN 3 TOMAS: (1) 0-3s: la cámara ORBITA alrededor del producto sobre una mesa de madera clara, luz cálida de tarde, tonos dorados y crema. '
-    + '(2) 3-6s: cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. '
-    + '(3) 6-8s: plano final del producto al centro y APARECE un cartel elegante azul oscuro con letras doradas que dice exactamente "Shuk Mamtakim" (respetá la ortografía). '
+    + toma2
+    + '(3) 6-8s: plano final del producto al centro' + (conPersona ? ' con el hombre desenfocado detrás' : '') + ' y APARECE un cartel elegante azul oscuro con letras doradas que dice exactamente "Shuk Mamtakim" (respetá la ortografía). '
     + 'Estilo gourmet cálido y apetitoso para público amplio. Movimiento de cámara notorio y fluido en todo el video, nunca estático.';
+}
+function vidTogglePersona() {
+  document.getElementById('vidp-txt').value = _vidPromptTexto(document.getElementById('vidp-persona').checked);
+}
+function videoPromptShuk() {
+  _vidNombre = document.getElementById('ep-nombre').value.trim() || 'el producto';
+  _vidDesc = document.getElementById('ep-desc').value.trim();
+  const prompt = _vidPromptTexto(false);
   let ov = document.getElementById('vidp-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -5493,6 +5503,7 @@ function videoPromptShuk() {
       <div style="display:flex;align-items:center;margin-bottom:6px"><b style="flex:1">🎬 Video del producto (con tu Gemini)</b>
       <button onclick="document.getElementById('vidp-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button></div>
       <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini (tu plan incluye Veo) · 3) Adjuntá la foto del producto y pegá el prompt</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="vidp-persona" onchange="vidTogglePersona()"> 👤 Con una persona (hombre bien vestido, informal, probando el producto)</label>
       <textarea id="vidp-txt" style="width:100%;height:150px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="navigator.clipboard.writeText(document.getElementById('vidp-txt').value).then(()=>showToast('📋 Prompt copiado'))" style="flex:1;padding:10px;border:none;background:var(--dorado);color:#fff;border-radius:9px;font-weight:800;cursor:pointer">📋 Copiar prompt</button>
@@ -5502,6 +5513,7 @@ function videoPromptShuk() {
     ov.onclick = e => { if (e.target.id === 'vidp-overlay') ov.style.display = 'none'; };
   }
   ov.style.display = 'flex';
+  ov.querySelector('#vidp-persona').checked = false;
   ov.querySelector('#vidp-txt').value = prompt;
 }
 // ═══ 🔗 GEMELOS (Circuito): vincular el mismo producto con stock de los dos dueños ═══
