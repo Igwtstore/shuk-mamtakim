@@ -1486,7 +1486,13 @@ Deno.serve(async (req) => {
     if (accion === 'registrarCompraHijos') {
       let items: any[]; try { items = JSON.parse(P(body, 'items') || '[]'); } catch { return json({ error: 'items inválido' }); }
       if (!items.length) return json({ error: 'sin items' });
-      const cid = 'C' + Date.now(); const fecha = has('fecha') ? P(body, 'fecha') : fechaAhora().slice(0, 10);
+      // Dedup (M4): si el front manda compraId y ya existe, es un reintento — no duplicar.
+      const cid = P(body, 'compraId') || 'C' + Date.now();
+      if (P(body, 'compraId')) {
+        const exC = await sbGet('candy_compras', 'select=id&compra_id=eq.' + encodeURIComponent(cid) + '&limit=1');
+        if (exC.length) return json({ ok: true, dup: true, id: cid });
+      }
+      const fecha = has('fecha') ? P(body, 'fecha') : fechaAhora().slice(0, 10);
       const filas: any[] = []; const codigos = new Set<string>();
       items.forEach((it) => { const cant = parseInt(it.cantidad) || 0, costo = parseFloat(it.costoUnit) || 0; if (!it.codigo || cant <= 0) return; filas.push({ compra_id: cid, fecha, proveedor_id: P(body, 'proveedorId'), proveedor: P(body, 'proveedor'), codigo: it.codigo, producto: it.nombre || '', cantidad: cant, costo_unit: costo, costo_total: cant * costo, registrado_por: P(body, 'hijo') }); codigos.add(it.codigo); });
       if (filas.length) await sbInsert('candy_compras', filas);
@@ -1753,6 +1759,25 @@ Deno.serve(async (req) => {
     if (accion === 'agregarProductoHijo') {
       await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp) });
       return json({ ok: true });
+    }
+    if (accion === 'analiticaCandy') {
+      // Visitas de las tiendas de los chicos (track pagina 'candy-<kid>', junta desde v3.14).
+      const tr = await sbGet('trafico', "select=fecha,pagina,dispositivo,evento&pagina=like.candy-*&order=id.desc&limit=20000");
+      const visitas = tr.filter((t: any) => (t.evento || 'visita') === 'visita');
+      const porKid: any = {}, porDia: any = {}, disp: any = {};
+      visitas.forEach((t: any) => {
+        const kid = (t.pagina || '').replace('candy-', '') || '?';
+        porKid[kid] = (porKid[kid] || 0) + 1;
+        const dia = (t.fecha || '').slice(0, 10);
+        if (!porDia[dia]) porDia[dia] = {};
+        porDia[dia][kid] = (porDia[dia][kid] || 0) + 1;
+        disp[t.dispositivo || '?'] = (disp[t.dispositivo || '?'] || 0) + 1;
+      });
+      return json({ total: visitas.length, porKid, dias: Object.keys(porDia).slice(0, 14).map((d) => ({ dia: d, ...porDia[d] })), dispositivos: disp });
+    }
+    if (accion === 'borradosCandy') {
+      const bs = await sbGet('borrados', "select=fecha,tipo,detalle,por&tipo=like.*CS&order=id.desc&limit=60");
+      return json(bs.map((b: any) => ({ fecha: b.fecha, tipo: b.tipo, detalle: b.detalle, por: b.por || '' })));
     }
     if (accion === 'movsDeposito') {
       // Trazabilidad del depósito Candy: últimos movimientos de un código.

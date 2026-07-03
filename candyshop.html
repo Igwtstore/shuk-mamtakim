@@ -438,6 +438,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="catalogo-list"><div class="spinner">Cargando...</div></div>
       <button class="btn-add" onclick="abrirModal()">+ Agregar producto</button>
       <button class="btn-add" id="btn-compartir-tienda" style="background:linear-gradient(135deg,#25D366,#128C7E);margin-top:8px" onclick="compartirTienda()">📤 Compartir mi tienda</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#3b6fb5,#274e82);margin-top:8px" onclick="verVisitasCandy()">📊 Visitas de la tienda</button>
+      <button class="btn-add" style="background:linear-gradient(135deg,#8a8a8a,#5a5a5a);margin-top:8px" onclick="verBorradosCandy()">🗑️ Registro de borrados</button>
       <button class="btn-add" id="btn-fotos-faltantes" style="background:linear-gradient(135deg,#c179ff,#8b3ff0);margin-top:8px;display:none" onclick="abrirFotosFaltantes()">📷 Cargar fotos faltantes</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);margin-top:8px" onclick="abrirImportarShuk()">🛍️ Importar productos de Shuk</button>
       <button class="btn-add" style="background:linear-gradient(135deg,#2e8b57,#1f6e43);margin-top:8px" onclick="abrirOrganizarCat()">🏷️ Organizar por categoría</button>
@@ -994,6 +996,53 @@ function showTab(id, btn) {
 // Devuelve los datos, o null SOLO si falló de verdad tras varios reintentos.
 // Apps Script a veces responde un error transitorio (HTML "La secuencia se
 // completó pero no mostró ningún valor") bajo llamadas concurrentes → reintentamos.
+// ═══ M4 UNIFICACIÓN: analítica de visitas + visor de borrados ═══
+function _modalInfo(id, titulo) {
+  let ov = document.getElementById(id);
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = id;
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:650;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #eee"><b style="flex:1;font-size:0.92rem">${titulo}</b>
+      <button onclick="document.getElementById('${id}').style.display='none'" style="padding:6px 11px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button></div>
+      <div id="${id}-body" style="overflow:auto;flex:1;padding:10px 14px"><div class="spinner">Cargando…</div></div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === id) ov.style.display = 'none'; };
+  }
+  ov.style.display = 'flex';
+  return document.getElementById(id + '-body');
+}
+async function verVisitasCandy() {
+  const body = _modalInfo('vis-overlay', '📊 Visitas de las tiendas');
+  body.innerHTML = '<div class="spinner">Cargando…</div>';
+  const d = await api('analiticaCandy');
+  if (!d || d.error) { body.innerHTML = '<div class="empty">No se pudo cargar</div>'; return; }
+  const kids = Object.keys(d.porKid || {});
+  body.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:12px">${kids.map(k => `
+      <div style="flex:1;background:#f6f1e9;border-radius:12px;padding:10px;text-align:center">
+        <div style="font-size:1.3rem;font-weight:800;color:#5c3d1e">${d.porKid[k]}</div>
+        <div style="font-size:0.7rem;color:#888;text-transform:capitalize">${escCM(k)}</div>
+      </div>`).join('') || '<div class="empty">Sin visitas todavía — compartí el link de la tienda 📤</div>'}</div>
+    ${(d.dias || []).length ? '<div style="font-size:0.72rem;font-weight:700;color:#888;margin-bottom:4px">Por día (últimos):</div>' + d.dias.map(x => `
+      <div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:3px 0;border-bottom:1px solid #f5f1ea">
+        <span>${escCM(x.dia)}</span><span>${kids.map(k => x[k] ? escCM(k) + ': <b>' + x[k] + '</b>' : '').filter(Boolean).join(' · ') || '—'}</span>
+      </div>`).join('') : ''}
+    <div style="font-size:0.68rem;color:#999;margin-top:8px">📱 ${(d.dispositivos || {}).celular || 0} desde celular · 💻 ${(d.dispositivos || {}).compu || 0} desde compu — se cuenta 1 visita por persona por día.</div>`;
+}
+async function verBorradosCandy() {
+  const body = _modalInfo('borr-overlay', '🗑️ Registro de borrados');
+  body.innerHTML = '<div class="spinner">Cargando…</div>';
+  const bs = await api('borradosCandy');
+  if (!Array.isArray(bs)) { body.innerHTML = '<div class="empty">No se pudo cargar</div>'; return; }
+  body.innerHTML = bs.length ? bs.map(b => `
+    <div style="padding:6px 0;border-bottom:1px solid #f5f1ea;font-size:0.78rem">
+      <div><b>${escCM(b.tipo)}</b> — ${escCM(b.detalle)}</div>
+      <div style="font-size:0.68rem;color:#999">${escCM(b.fecha)}${b.por ? ' · por ' + escCM(b.por) : ''}</div>
+    </div>`).join('') : '<div class="empty">Nada borrado todavía 👏</div>';
+}
+
 // ═══ EDITOR MASIVO (planilla) — paridad con el masivo del Shuk ═══
 function toast(msg) {
   const t = document.createElement('div');
@@ -3434,6 +3483,7 @@ async function guardarCompra() {
   btn.textContent = 'Guardando...'; btn.disabled = true;
   const res = await api('registrarCompraHijos', {
     hijo: usuario,
+    compraId: 'C' + Date.now() + Math.random().toString(36).slice(2, 6),   // dedup: el reintento no duplica
     proveedorId: provSel.value,
     proveedor: provSel.selectedOptions[0].textContent,
     items: JSON.stringify(items)
