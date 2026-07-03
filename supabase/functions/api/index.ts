@@ -1361,10 +1361,19 @@ Deno.serve(async (req) => {
       const hijo = Q('hijo'), cliente = Q('cliente');
       if (!hijo || !cliente) return json({ error: 'falta hijo o cliente' });
       const total = QN('total') || items.reduce((s, it) => s + (parseFloat(it.subtotal) || 0), 0);
+      // Anti pedidos falsos (paridad con la tienda Shuk): límite por dispositivo (vid) —
+      // 90s entre pedidos, máx 4/hora. El WhatsApp igual se abre (el chico recibe el mensaje).
+      const vidPH = Q('vid');
+      if (vidPH) {
+        const desdePH = new Date(Date.now() - 3600000).toISOString();
+        const recPH = await sbGet('candy_pedidos', 'select=creado&vid=eq.' + encodeURIComponent(vidPH) + '&creado=gte.' + encodeURIComponent(desdePH) + '&order=creado.desc');
+        if (recPH.length >= 4) return json({ error: 'rate' });
+        if (recPH.length && Date.now() - new Date(recPH[0].creado).getTime() < 90000) return json({ error: 'rate' });
+      }
       const pedidoId = Q('pedidoId') || 'PH' + Date.now();
       // Anti-duplicado (reintento por red caída): pedido_id es UNIQUE → el segundo insert rebota
       // ANTES de reservar stock (equivale al cache de 15 min del motor viejo, pero permanente).
-      const r = await fetch(SB_URL + '/rest/v1/candy_pedidos', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ hijo, cliente, telefono: Q('telefono'), items: Q('items') || '[]', total: Math.round(total), estado: 'pendiente', pedido_id: pedidoId, nota: Q('nota') }) });
+      const r = await fetch(SB_URL + '/rest/v1/candy_pedidos', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ hijo, cliente, telefono: Q('telefono'), items: Q('items') || '[]', total: Math.round(total), estado: 'pendiente', pedido_id: pedidoId, nota: Q('nota'), vid: vidPH }) });
       if (r.status === 409) return json({ ok: true, dup: true });
       if (!r.ok) return json({ error: 'insert pedido ' + r.status + ' ' + (await r.text()).slice(0, 150) });
       // Reserva: descuenta el depósito por cada item (la tienda ve menos stock → no se sobrevende).

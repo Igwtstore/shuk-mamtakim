@@ -120,6 +120,25 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 .btn-enviar { width: 100%; padding: 14px; background: linear-gradient(135deg, #25d366, #128c7e); color: white; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 1rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-cancelar { width: 100%; padding: 10px; background: none; border: none; color: #bbb; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; margin-top: 8px; }
 
+/* MODO OSCURO */
+body.dark { background: #1c1526; background-image: radial-gradient(circle at 15% 12%, #2a1b33 0, transparent 45%), radial-gradient(circle at 85% 8%, #1b2233 0, transparent 40%); }
+body.dark .producto-card, body.dark .drawer, body.dark .modal-box, body.dark .qty-modal-box { background: #2a2333; }
+body.dark .producto-nombre, body.dark .drawer-title, body.dark .modal-box h3, body.dark .qty-modal-box h3,
+body.dark .cart-item-name, body.dark .cart-total-row, body.dark .qty-num { color: #f0e8fa; }
+body.dark .producto-desc { color: #9a8fb0; }
+body.dark .buscar-input, body.dark .orden-wrap select, body.dark .modal-input { background-color: #2a2333; color: #f0e8fa; border-color: #453a5a; }
+body.dark .cat-chip { background: #2a2333; border-color: #453a5a; color: #c9bce0; }
+body.dark .cat-chip.activo { background: #b14cff; border-color: #b14cff; color: #fff; }
+body.dark .producto-foto-wrap, body.dark .cart-item-foto, body.dark .qty-modal-foto { background: #221b2e; }
+body.dark .qty-btn, body.dark .drawer-close { background: #3a3048; color: #e8ddf5; }
+body.dark .cart-item, body.dark .drawer-header, body.dark .drawer-footer { border-color: #3a3048; }
+body.dark .cart-item-total, body.dark .cart-total-monto { color: #e8ddf5; }
+.hdr-btn { position: absolute; top: 8px; background: rgba(255,255,255,0.22); color: #fff; border: none; border-radius: 20px; padding: 5px 11px; font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+
+/* AVISO COOKIES */
+.cookies-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #2d1a3e; color: #e8ddf5; font-size: 0.78rem; padding: 10px 14px; z-index: 300; display: none; align-items: center; gap: 10px; justify-content: center; }
+.cookies-bar button { background: #b14cff; color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-family: 'DM Sans', sans-serif; font-weight: 700; cursor: pointer; }
+
 /* MODAL CANTIDAD */
 .qty-modal-box { background: white; border-radius: 22px; padding: 28px 24px; width: 100%; max-width: 320px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
 .qty-modal-foto { width: 80px; height: 80px; border-radius: 14px; object-fit: contain; background: #f5f0e8; margin: 0 auto 14px; display: block; }
@@ -135,6 +154,8 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
 
 <div class="header">
   <div style="position:absolute;top:8px;right:14px;font-size:0.85rem;font-weight:600;opacity:0.85">בס״ד</div>
+  <button class="hdr-btn" id="btn-dark" style="left:12px" onclick="toggleDark()">🌙</button>
+  <button class="hdr-btn" id="btn-pwa" style="left:58px;display:none" onclick="instalarApp()">📲 Instalar</button>
   <div class="header-emoji" id="header-emoji">🍬</div>
   <div class="header-title" id="header-title">Candy Shop</div>
   <div class="header-sub" id="header-sub">Elegí tus golosinas</div>
@@ -230,7 +251,14 @@ body { font-family: 'DM Sans', -apple-system, sans-serif; background: #fff0f6; b
   </div>
 </div>
 
+<div class="cookies-bar" id="cookies-bar">
+  🍪 Usamos una cookie anónima para contar visitas y mejorar la tienda.
+  <button onclick="aceptarCookies()">OK</button>
+</div>
+
 <script>
+// Escapa HTML: los nombres/las notas no pueden inyectar etiquetas en la página (anti-XSS).
+function esc(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 function fotoTienda(url, w) {
   if (!url || url.indexOf('res.cloudinary.com') === -1) return url;
   return url.replace('/upload/', '/upload/e_trim:10/' + (w ? 'w_' + w + '/' : ''));
@@ -255,8 +283,36 @@ document.title = esJony ? 'Candy Shop 🍬' : `Candy Shop — ${nombreKid} 🍬`
 
 const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
 
+// Identificador anónimo del dispositivo (anti pedidos falsos + contador de visitas)
+const _vid = (() => { let v = localStorage.getItem('candy_vid'); if (!v) { v = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('candy_vid', v); } return v; })();
 let carrito = {};
 let catalogoData = [];
+// Modo oscuro persistente
+if (localStorage.getItem('candy_dark') === '1') document.body.classList.add('dark');
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('candy_dark', document.body.classList.contains('dark') ? '1' : '0');
+}
+// Carrito persistente: si se cierra la página sin mandar el pedido, al volver sigue ahí.
+const _CART_KEY = 'candy_carrito_' + kid;
+function guardarCarrito() {
+  const slim = Object.values(carrito).map(i => ({ codigo: i.codigo, cantidad: i.cantidad }));
+  if (slim.length) localStorage.setItem(_CART_KEY, JSON.stringify({ t: Date.now(), items: slim }));
+  else localStorage.removeItem(_CART_KEY);
+}
+function restaurarCarrito() {
+  try {
+    const g = JSON.parse(localStorage.getItem(_CART_KEY) || 'null');
+    if (!g || !g.items || !g.items.length) return;
+    if (Date.now() - (g.t || 0) > 48 * 3600000) { localStorage.removeItem(_CART_KEY); return; }   // más de 2 días → afuera
+    let n = 0;
+    g.items.forEach(it => {
+      const p = catalogoData.find(x => x.codigo === it.codigo);
+      if (p && _comprable(p)) { carrito[p.codigo] = { ...p, cantidad: it.cantidad }; n += it.cantidad; }
+    });
+    if (n > 0) { actualizarFab(); toast('🛒 Te guardamos el pedido que habías armado'); }
+  } catch (e) {}
+}
 let catActiva = 'Todos';
 let ordenTienda = 'categoria';   // por defecto agrupado por categoría
 let mostrarStockTienda = true;   // switch global (lo define el panel de Candy)
@@ -277,6 +333,7 @@ async function cargarCatalogo() {
     const data = await res.json();
     try { if (cfgRes) { const cfg = await cfgRes.json(); mostrarStockTienda = cfg.mostrarStock !== false; } } catch (e) {}
     catalogoData = data || [];
+    restaurarCarrito();
     renderCategorias();
     renderCatalogo(catalogoData);
   } catch {
@@ -298,7 +355,7 @@ function renderCategorias() {
   if (cats.length <= 1) { el.style.display = 'none'; return; }   // una sola categoría → no tiene sentido el filtro
   el.style.display = 'flex';
   const chip = (c, t) => `<button class="cat-chip ${catActiva === c ? 'activo' : ''}" onclick="setCategoria('${c.replace(/'/g, "\\'")}')">${t}</button>`;
-  el.innerHTML = chip('Todos', '🍬 Todos') + cats.map(c => chip(c, c)).join('');
+  el.innerHTML = chip('Todos', '🍬 Todos') + cats.map(c => chip(c, esc(c))).join('');
 }
 function setCategoria(c) { catActiva = c; renderCategorias(); filtrar(); }
 
@@ -333,7 +390,7 @@ function renderCatalogo(productos, esFiltered) {
         ${cant > 0 ? `<span class="badge-cant">${cant}</span>` : ''}
       </div>
       <div class="producto-info">
-        <div class="producto-nombre">${p.nombre}</div>
+        <div class="producto-nombre">${esc(p.nombre)}</div>
         <div class="producto-precio">${ofertaActiva(p)
           ? `<span class="precio-tachado">${fmt(p.precioVenta)}</span><span class="precio-oferta">${fmt(p.precioOferta)}</span>`
           : fmt(p.precioVenta)}</div>
@@ -357,7 +414,7 @@ function renderCatalogo(productos, esFiltered) {
       .sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
     cats.forEach(c => {
       const items = conStock.filter(p => (p.categoria || 'Varios') === c).sort((a, b) => precioUnit(a) - precioUnit(b) || (a.nombre || '').localeCompare(b.nombre || ''));
-      if (items.length) html += `<div class="cat-header">${c}</div>` + items.map(cardHtml).join('');
+      if (items.length) html += `<div class="cat-header">${esc(c)}</div>` + items.map(cardHtml).join('');
     });
   } else {
     // Orden plano elegido (menor/mayor precio, A→Z) — también dentro de una categoría filtrada.
@@ -438,6 +495,7 @@ function confirmarAgregar() {
   if (!productoSeleccionado) return;
   const cod = productoSeleccionado.codigo;
   carrito[cod] = { ...productoSeleccionado, cantidad: qtyTmp };
+  guardarCarrito();
   document.getElementById('qty-overlay').classList.remove('open');
   actualizarFab();
   renderCatalogo(document.getElementById('buscar').value ? catalogoData.filter(p => p.nombre.toLowerCase().includes(document.getElementById('buscar').value.toLowerCase())) : catalogoData);
@@ -494,7 +552,7 @@ function renderCarrito() {
     return `<div class="cart-item">
       ${foto}
       <div class="cart-item-info">
-        <div class="cart-item-name">${item.nombre}</div>
+        <div class="cart-item-name">${esc(item.nombre)}</div>
         <div class="cart-item-price">${precioTxt}</div>
         ${packTxt}
       </div>
@@ -514,6 +572,7 @@ function cambiarCantidad(codigo, delta) {
   if (!carrito[codigo]) return;
   carrito[codigo].cantidad += delta;
   if (carrito[codigo].cantidad <= 0) delete carrito[codigo];
+  guardarCarrito();
   actualizarFab();
   renderCarrito();
   renderCatalogo(document.getElementById('buscar').value ? catalogoData.filter(p => p.nombre.toLowerCase().includes(document.getElementById('buscar').value.toLowerCase())) : catalogoData);
@@ -525,7 +584,7 @@ function enviarPedido() {
   if (!items.length) return;
   cerrarCarrito();
   document.getElementById('checkout-kid').textContent = nombreKid;
-  document.getElementById('checkout-nombre').value = '';
+  document.getElementById('checkout-nombre').value = localStorage.getItem('candy_nombre') || '';
   document.getElementById('checkout-nota').value = '';
   document.getElementById('checkout-overlay').classList.add('open');
   setTimeout(() => document.getElementById('checkout-nombre').focus(), 300);
@@ -534,8 +593,18 @@ function enviarPedido() {
 function confirmarPedido() {
   const nombre = document.getElementById('checkout-nombre').value.trim();
   if (!nombre) { document.getElementById('checkout-nombre').focus(); return; }
+  localStorage.setItem('candy_nombre', nombre);
   const nota = document.getElementById('checkout-nota').value.trim();
   const items = Object.values(carrito);
+  // Aviso de pedido repetido: mismo contenido dentro de 2 horas → preguntar (capaz ya lo mandó).
+  const huella = items.map(i => i.codigo + ':' + i.cantidad).sort().join('|');
+  try {
+    const prev = JSON.parse(localStorage.getItem('candy_ultimo_pedido') || 'null');
+    if (prev && prev.h === huella && Date.now() - prev.t < 2 * 3600000) {
+      const min = Math.round((Date.now() - prev.t) / 60000);
+      if (!confirm(`⚠️ Mandaste un pedido IGUAL hace ${min} minuto${min === 1 ? '' : 's'}. ¿Lo querés enviar otra vez?`)) return;
+    }
+  } catch (e) {}
 
   let total = 0;
   let msg = `🍬 *Pedido Candy Shop*\n👤 *${nombre}*\n\n`;
@@ -556,9 +625,12 @@ function confirmarPedido() {
   const pedidoId = 'PH' + Date.now() + Math.random().toString(36).slice(2, 6);
   try {
     const params = new URLSearchParams({ accion: 'registrarPedidoHijo', hijo: kid, cliente: nombre,
-      items: JSON.stringify(itemsPedido), total: String(Math.round(total)), pedidoId, nota });
+      items: JSON.stringify(itemsPedido), total: String(Math.round(total)), pedidoId, nota, vid: _vid });
     fetch(APPS_URL + '?' + params.toString()).catch(() => {});
   } catch (e) {}
+  // Huella para el aviso de repetido + limpiar el carrito guardado (el pedido ya salió)
+  try { localStorage.setItem('candy_ultimo_pedido', JSON.stringify({ h: huella, t: Date.now() })); } catch (e) {}
+  localStorage.removeItem(_CART_KEY);
 
   document.getElementById('checkout-overlay').classList.remove('open');
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
@@ -608,6 +680,36 @@ function toast(msg) {
 }
 
 cargarCatalogo();
+
+// ── PWA instalable: manifest dinámico (conserva el ?kid=) + botón 📲 ──
+(function () {
+  try {
+    const mf = { name: esJony ? 'Candy Shop' : 'Candy Shop — ' + nombreKid, short_name: 'Candy Shop',
+      start_url: location.pathname + '?kid=' + kid, display: 'standalone', background_color: '#fff0f6', theme_color: '#b14cff',
+      icons: [{ src: 'https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:b14cff/website_banner_rhyfih.png', sizes: '512x512', type: 'image/png' }] };
+    const link = document.createElement('link'); link.rel = 'manifest';
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(mf)], { type: 'application/json' }));
+    document.head.appendChild(link);
+  } catch (e) {}
+})();
+let _pwaEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _pwaEvt = e; const b = document.getElementById('btn-pwa'); if (b) b.style.display = 'block'; });
+function instalarApp() { if (_pwaEvt) { _pwaEvt.prompt(); _pwaEvt = null; document.getElementById('btn-pwa').style.display = 'none'; } }
+
+// ── Analítica anónima (contador de visitas) + aviso de cookies ──
+function aceptarCookies() { localStorage.setItem('candy_cookies_ok', '1'); document.getElementById('cookies-bar').style.display = 'none'; }
+(function () {
+  if (!localStorage.getItem('candy_cookies_ok')) document.getElementById('cookies-bar').style.display = 'flex';
+  const hoy = new Date().toDateString();
+  if (sessionStorage.getItem('candy_track') === hoy) return;   // 1 visita por sesión
+  sessionStorage.setItem('candy_track', hoy);
+  try {
+    const p = new URLSearchParams({ accion: 'track', vid: _vid, pagina: 'candy-' + kid, evento: 'visita',
+      origen: document.referrer ? new URL(document.referrer).hostname : 'directo',
+      dispositivo: /Mobi|Android/i.test(navigator.userAgent) ? 'celular' : 'compu' });
+    fetch(APPS_URL + '?' + p.toString()).catch(() => {});
+  } catch (e) {}
+})();
 
 // ── Auto-actualización: la tienda se refresca sola cuando subimos algo nuevo (precios, stock) ──
 (function () {
