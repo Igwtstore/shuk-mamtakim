@@ -1000,11 +1000,11 @@ function showTab(id, btn) {
 // ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca para pegar en la app de Gemini (Veo) ═══
 function videoPromptCandy() {
   const nombre = document.getElementById('f-nombre').value.trim() || 'el producto';
-  const prompt = 'Video publicitario vertical (9:16) de 8 segundos del producto REAL de la foto adjunta: "' + nombre + '". '
-    + 'Estética juvenil y vibrante para público de 15 a 25 años: colores rosa, violeta y celeste eléctricos, luz de neón suave, '
-    + 'movimiento dinámico con micro zoom y giro del producto, caramelos y chispas flotando alrededor, fondo con degradé animado. '
-    + 'Ritmo alegre y energético estilo reel de Instagram. El producto SIEMPRE nítido y protagonista, tal cual se ve en la foto '
-    + '(no inventar packaging ni textos). Cierre: el producto al centro con un cartel redondeado violeta que dice "🍬 Candy Shop".';
+  const prompt = 'Video publicitario vertical (9:16) de 8 segundos. REGLA MÁS IMPORTANTE: el producto es EXACTAMENTE el de la imagen adjunta — misma forma, envoltorio, textura y colores; NO lo reemplaces por otra golosina ni lo estilices ("' + nombre + '"). '
+    + 'GUION EN 3 TOMAS: (1) 0-3s: la cámara ORBITA alrededor del producto con fondo degradé rosa-violeta animado y luz de neón suave. '
+    + '(2) 3-6s: el producto gira y caen caramelos y chispas de colores en CÁMARA LENTA alrededor (sin taparlo). '
+    + '(3) 6-8s: plano final del producto al centro y APARECE un cartel redondeado violeta con letras blancas que dice exactamente "Candy Shop" (respetá la ortografía). '
+    + 'Ritmo alegre y dinámico estilo reel de Instagram para público de 15 a 25 años. Movimiento de cámara notorio en todo el video, nunca estático.';
   const body = _modalInfo('vid-prompt-overlay', '🎬 Video del producto (con tu Gemini)');
   body.innerHTML = `
     <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini (tu plan incluye Veo) · 3) Adjuntá la foto del producto y pegá el prompt</div>

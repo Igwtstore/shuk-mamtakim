@@ -5479,12 +5479,11 @@ let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHom
 function videoPromptShuk() {
   const nombre = document.getElementById('ep-nombre').value.trim() || 'el producto';
   const desc = document.getElementById('ep-desc').value.trim();
-  const prompt = 'Video publicitario vertical (9:16) de 8 segundos del producto REAL de la foto adjunta: "' + nombre + '"'
-    + (desc ? ' (' + desc + ')' : '') + '. '
-    + 'Estética cálida, elegante y apetitosa para público amplio (de 20 a 100 años): tonos dorados y crema, luz natural de tarde, '
-    + 'movimiento suave de cámara con acercamiento lento al producto sobre una mesa de madera clara con frutos secos y especias alrededor. '
-    + 'Transmitir frescura, calidad y confianza, estilo gourmet familiar. El producto SIEMPRE nítido y protagonista, tal cual se ve en la foto '
-    + '(no inventar packaging ni textos). Cierre: el producto al centro con un cartel elegante azul oscuro y letras doradas que dice "Shuk Mamtakim".';
+  const prompt = 'Video publicitario vertical (9:16) de 8 segundos. REGLA MÁS IMPORTANTE: el producto es EXACTAMENTE el de la imagen adjunta — misma forma, tamaño, textura y color de cada unidad; NO lo reemplaces por otro producto ni lo estilices ("' + nombre + '"' + (desc ? ', ' + desc : '') + '). '
+    + 'GUION EN 3 TOMAS: (1) 0-3s: la cámara ORBITA alrededor del producto sobre una mesa de madera clara, luz cálida de tarde, tonos dorados y crema. '
+    + '(2) 3-6s: cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. '
+    + '(3) 6-8s: plano final del producto al centro y APARECE un cartel elegante azul oscuro con letras doradas que dice exactamente "Shuk Mamtakim" (respetá la ortografía). '
+    + 'Estilo gourmet cálido y apetitoso para público amplio. Movimiento de cámara notorio y fluido en todo el video, nunca estático.';
   let ov = document.getElementById('vidp-overlay');
   if (!ov) {
     ov = document.createElement('div');
