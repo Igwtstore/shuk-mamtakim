@@ -2985,6 +2985,7 @@ function renderDeposito(deposito) {
     return `<div class="stock-chip" style="gap:8px">
       ${fotoMini(d.codigo, 30)}
       <div class="stock-chip-nombre" style="flex:1;min-width:0;max-width:none" title="${nombre}">${nombre}</div>
+      <button onclick="verMovsDeposito('${String(d.codigo).replace(/'/g, "\\'")}', '${String(nombre).replace(/'/g, "\\'")}')" title="Ver movimientos (de dónde vino / a dónde fue)" style="border:none;background:#f0e9df;border-radius:8px;padding:4px 7px;cursor:pointer;font-size:0.8rem">🔍</button>
       <div class="stock-chip-nums">
         <div class="stock-chip-rest">${d.cantidad}</div>
         <div class="stock-chip-sub">unidades</div>
@@ -2992,6 +2993,38 @@ function renderDeposito(deposito) {
       </div>
     </div>`;
   }).join('') + '</div>';
+}
+
+// Trazabilidad del depósito: de dónde vino y a dónde fue cada unidad (M2 unificación).
+async function verMovsDeposito(codigo, nombre) {
+  let ov = document.getElementById('movdep-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'movdep-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:650;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #eee"><b id="movdep-titulo" style="flex:1;font-size:0.92rem"></b>
+      <button onclick="document.getElementById('movdep-overlay').style.display='none'" style="padding:6px 11px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button></div>
+      <div id="movdep-body" style="overflow:auto;flex:1;padding:10px 14px"></div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'movdep-overlay') ov.style.display = 'none'; };
+  }
+  ov.style.display = 'flex';
+  document.getElementById('movdep-titulo').textContent = '🔍 Movimientos — ' + nombre;
+  document.getElementById('movdep-body').innerHTML = '<div class="spinner">Cargando…</div>';
+  const movs = await api('movsDeposito', { codigo });
+  if (!Array.isArray(movs) || !movs.length) {
+    document.getElementById('movdep-body').innerHTML = '<div class="empty">Sin movimientos registrados todavía (la trazabilidad arranca desde hoy)</div>';
+    return;
+  }
+  document.getElementById('movdep-body').innerHTML = movs.map(m => `
+    <div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f5f1ea;font-size:0.8rem">
+      <span style="font-weight:800;min-width:42px;text-align:right;color:${m.cambio > 0 ? '#1a7a3c' : '#c0392b'}">${m.cambio > 0 ? '+' : ''}${m.cambio}</span>
+      <div style="flex:1;min-width:0">
+        <div>${escCM(m.origen || 'movimiento')}</div>
+        <div style="font-size:0.68rem;color:#999">${escCM(m.fecha || '')} · ${m.antes} → ${m.despues}</div>
+      </div>
+    </div>`).join('');
 }
 
 function renderCompras(compras) {

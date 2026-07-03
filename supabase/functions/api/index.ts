@@ -489,10 +489,13 @@ async function saldoClienteCandy(hijo: string, cliente: string) {
   cc.forEach((r: any) => { if (normCli(r.cliente) === obj) saldo += parseFloat(r.monto) || 0; });
   return saldo;
 }
-async function ajustarDeposito(codigo: string, nombre: string, delta: number) {
+async function ajustarDeposito(codigo: string, nombre: string, delta: number, origen = '') {
   const ex = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(codigo));
-  if (ex.length) await sbPatch('candy_deposito', 'codigo=eq.' + encodeURIComponent(codigo), { cantidad: (parseFloat(ex[0].cantidad) || 0) + delta });
+  const antes = ex.length ? (parseFloat(ex[0].cantidad) || 0) : 0;
+  if (ex.length) await sbPatch('candy_deposito', 'codigo=eq.' + encodeURIComponent(codigo), { cantidad: antes + delta });
   else await sbInsert('candy_deposito', { codigo, nombre: nombre || null, cantidad: delta });
+  // Trazabilidad (M2 unificación): misma tabla movimientos_stock del Shuk, id_prod = código Candy.
+  if (origen && delta !== 0) { try { await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: codigo, producto: nombre || '', cambio: delta, antes, despues: antes + delta, origen }); } catch { /**/ } }
 }
 async function actualizarCostoPromedio(codigo: string) {
   const compras = await sbGet('candy_compras', 'select=cantidad,costo_total&codigo=eq.' + encodeURIComponent(codigo));
@@ -510,7 +513,7 @@ async function setEstadoPedidoHijo(body: any, estado: string) {
   if ((ped.estado || '') !== 'pendiente') return { ok: true, yaProcesado: true };
   if (estado === 'cancelado') {   // devolver stock reservado al depósito
     let items: any[] = []; try { items = JSON.parse(ped.items || '[]'); } catch { items = []; }
-    for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, it.nombre || '', cant); }
+    for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, it.nombre || '', cant, 'Pedido de la tienda cancelado (stock devuelto)'); }
   }
   await sbPatch('candy_pedidos', 'pedido_id=eq.' + encodeURIComponent(pedidoId), { estado });
   return { ok: true };
@@ -545,7 +548,7 @@ async function moverStockShuk(pid: string, delta: number, motivo: string) {
   if (candyCod) {
     const dep = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(candyCod));
     const antes = dep.length ? parseInt(dep[0].cantidad) || 0 : 0;
-    await ajustarDeposito(candyCod, nombre, delta);
+    await ajustarDeposito(candyCod, nombre, delta, motivo + ' · espejo depósito Candy');
     await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: pid, producto: nombre, cambio: delta, antes, despues: antes + delta, origen: motivo + ' (depósito compartido)' });
     return { antes, despues: antes + delta, compartido: true, nombre };
   }
@@ -1380,7 +1383,7 @@ Deno.serve(async (req) => {
       if (r.status === 409) return json({ ok: true, dup: true });
       if (!r.ok) return json({ error: 'insert pedido ' + r.status + ' ' + (await r.text()).slice(0, 150) });
       // Reserva: descuenta el depósito por cada item (la tienda ve menos stock → no se sobrevende).
-      for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, (it.nombre || '').toString(), -cant); }
+      for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, (it.nombre || '').toString(), -cant, 'Reserva pedido tienda (' + hijo + ')'); }
       return json({ ok: true, pedidoId });
     }
     if (accion === 'avisarmeCandy') {
@@ -1487,7 +1490,7 @@ Deno.serve(async (req) => {
       const filas: any[] = []; const codigos = new Set<string>();
       items.forEach((it) => { const cant = parseInt(it.cantidad) || 0, costo = parseFloat(it.costoUnit) || 0; if (!it.codigo || cant <= 0) return; filas.push({ compra_id: cid, fecha, proveedor_id: P(body, 'proveedorId'), proveedor: P(body, 'proveedor'), codigo: it.codigo, producto: it.nombre || '', cantidad: cant, costo_unit: costo, costo_total: cant * costo, registrado_por: P(body, 'hijo') }); codigos.add(it.codigo); });
       if (filas.length) await sbInsert('candy_compras', filas);
-      for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, it.nombre || '', cant); }
+      for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, it.nombre || '', cant, 'Compra a proveedor' + (P(body, 'proveedor') ? ' · ' + P(body, 'proveedor') : '')); }
       for (const cod of codigos) await actualizarCostoPromedio(cod);
       return json({ ok: true, id: cid });
     }
@@ -1751,6 +1754,12 @@ Deno.serve(async (req) => {
       await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp) });
       return json({ ok: true });
     }
+    if (accion === 'movsDeposito') {
+      // Trazabilidad del depósito Candy: últimos movimientos de un código.
+      const codMv = url.searchParams.get('codigo') || P(body, 'codigo');
+      const mv = await sbGet('movimientos_stock', 'select=fecha,producto,cambio,antes,despues,origen&id_prod=eq.' + encodeURIComponent(codMv) + '&order=id.desc&limit=40');
+      return json(mv.map((m: any) => ({ fecha: m.fecha, producto: m.producto, cambio: m.cambio, antes: m.antes, despues: m.despues, origen: m.origen })));
+    }
     if (accion === 'editarProductosLoteHijos') {
       // Editor masivo del catálogo Candy (paridad con el masivo del Shuk): varios productos de una.
       let cambios: any[]; try { cambios = JSON.parse(P(body, 'cambios') || '[]'); } catch { return json({ error: 'json inválido' }); }
@@ -1776,7 +1785,7 @@ Deno.serve(async (req) => {
           const dep = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(codigo));
           const actual = dep.length ? (parseFloat(dep[0].cantidad) || 0) : 0;
           const nuevo = parseInt(c.stock) || 0;
-          if (nuevo !== actual) await ajustarDeposito(codigo, (patch.nombre || ex[0].nombre || '').toString(), nuevo - actual);
+          if (nuevo !== actual) await ajustarDeposito(codigo, (patch.nombre || ex[0].nombre || '').toString(), nuevo - actual, 'Editor masivo (Candy)');
         }
         nOk++;
       }
@@ -1816,9 +1825,9 @@ Deno.serve(async (req) => {
       if (diaAbierto && diaAbierto !== hoy && P(body, 'forzar') !== '1') return json({ error: 'dia_anterior_abierto', dia: diaAbierto });
       let items: any[]; try { items = JSON.parse(P(body, 'items') || '[]'); } catch { return json({ error: 'items inválido' }); }
       const hoyRows = await sbGet('stock_diario', 'select=*&hijo=eq.' + encodeURIComponent(hijo));
-      for (const r of hoyRows) { if ((r.fecha || '').toString().startsWith(hoy)) { const cant = parseInt(r.cantidad) || 0; if (cant) await ajustarDeposito(r.codigo, r.producto || '', cant); await sbDelete('stock_diario', 'id=eq.' + r.id); } }
+      for (const r of hoyRows) { if ((r.fecha || '').toString().startsWith(hoy)) { const cant = parseInt(r.cantidad) || 0; if (cant) await ajustarDeposito(r.codigo, r.producto || '', cant, 'Stock del día devuelto (re-carga)'); await sbDelete('stock_diario', 'id=eq.' + r.id); } }
       const fecha = fechaAhora();
-      for (const it of items) { const cant = parseInt(it.cantidad) || 0; if (it.codigo && cant > 0) { await sbInsert('stock_diario', { fecha, hijo, codigo: it.codigo, producto: it.nombre || '', cantidad: cant }); await ajustarDeposito(it.codigo, it.nombre || '', -cant); } }
+      for (const it of items) { const cant = parseInt(it.cantidad) || 0; if (it.codigo && cant > 0) { await sbInsert('stock_diario', { fecha, hijo, codigo: it.codigo, producto: it.nombre || '', cantidad: cant }); await ajustarDeposito(it.codigo, it.nombre || '', -cant, 'Sacado para vender (stock del día · ' + hijo + ')'); } }
       return json({ ok: true, n: items.length });
     }
     if (accion === 'limpiarVentasHijosDia') {
@@ -1842,7 +1851,7 @@ Deno.serve(async (req) => {
     if (accion === 'cargarStock') {
       let items: any[]; try { items = JSON.parse(P(body, 'items') || '[]'); } catch { return json({ error: 'items inválido' }); }
       const fecha = fechaAhora(), hijo = P(body, 'hijo');
-      for (const it of items) { const cant = parseInt(it.cantidad) || 0; if (it.codigo && cant > 0) { await sbInsert('stock_diario', { fecha, hijo, codigo: it.codigo, producto: it.nombre || '', cantidad: cant }); await ajustarDeposito(it.codigo, it.nombre || '', -cant); } }
+      for (const it of items) { const cant = parseInt(it.cantidad) || 0; if (it.codigo && cant > 0) { await sbInsert('stock_diario', { fecha, hijo, codigo: it.codigo, producto: it.nombre || '', cantidad: cant }); await ajustarDeposito(it.codigo, it.nombre || '', -cant, 'Sacado para vender (stock del día · ' + hijo + ')'); } }
       return json({ ok: true });
     }
     if (accion === 'reasignarVentaHijo') {
@@ -1855,7 +1864,7 @@ Deno.serve(async (req) => {
     if (accion === 'resetearStockDia') {
       const hijo = P(body, 'hijo'), hoy = fechaAhora().slice(0, 10);
       const rows = await sbGet('stock_diario', 'select=*&hijo=eq.' + encodeURIComponent(hijo));
-      for (const r of rows) { if ((r.fecha || '').toString().startsWith(hoy)) { await ajustarDeposito(r.codigo, r.producto || '', parseInt(r.cantidad) || 0); await sbDelete('stock_diario', 'id=eq.' + r.id); } }
+      for (const r of rows) { if ((r.fecha || '').toString().startsWith(hoy)) { await ajustarDeposito(r.codigo, r.producto || '', parseInt(r.cantidad) || 0, 'Stock del día devuelto al depósito'); await sbDelete('stock_diario', 'id=eq.' + r.id); } }
       return json({ ok: true });
     }
     if (accion === 'cerrarDiaHijos') {
@@ -1873,7 +1882,7 @@ Deno.serve(async (req) => {
       const nuevo = parseInt(P(body, 'cantidad')); if (isNaN(nuevo) || nuevo < 0) return json({ error: 'cantidad inválida' });
       const ex = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(codigo));
       const antes = ex.length ? parseInt(ex[0].cantidad) || 0 : 0;
-      if (nuevo !== antes) { await ajustarDeposito(codigo, P(body, 'nombre'), nuevo - antes); await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: codigo, producto: P(body, 'nombre'), cambio: nuevo - antes, antes, despues: nuevo, origen: 'Ajuste manual de depósito (Candy)' }); }
+      if (nuevo !== antes) await ajustarDeposito(codigo, P(body, 'nombre'), nuevo - antes, 'Ajuste manual de depósito (Candy)');
       return json({ ok: true, antes, nuevo });
     }
     if (accion === 'eliminarCompraHijos') {
@@ -1881,7 +1890,7 @@ Deno.serve(async (req) => {
       const rows = await sbGet('candy_compras', 'select=*&compra_id=eq.' + encodeURIComponent(id));
       if (!rows.length) return json({ error: 'no encontrado' });
       const codigos = new Set<string>(); const items: string[] = [];
-      for (const r of rows) { await ajustarDeposito(r.codigo, r.producto || '', -(parseInt(r.cantidad) || 0)); codigos.add(r.codigo); items.push(r.cantidad + 'x ' + (r.producto || r.codigo) + ' ($' + r.costo_total + ')'); }
+      for (const r of rows) { await ajustarDeposito(r.codigo, r.producto || '', -(parseInt(r.cantidad) || 0), 'Compra eliminada (stock restado)'); codigos.add(r.codigo); items.push(r.cantidad + 'x ' + (r.producto || r.codigo) + ' ($' + r.costo_total + ')'); }
       await sbDelete('candy_compras', 'compra_id=eq.' + encodeURIComponent(id));
       await sbInsert('borrados', { fecha: fechaAhora(), tipo: 'compra CS', detalle: 'Compra ' + id + ': ' + items.join(', '), por: P(body, 'hijo') });
       for (const c of codigos) await actualizarCostoPromedio(c);
