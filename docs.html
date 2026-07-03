@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.12</title>
+<title>Shuk Mamtakim — Documentación v3.13</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 3.12 · Julio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 3.13 · Julio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.13</td><td>Jul 2026</td><td><strong>🔧 Tanda nocturna: gastos arreglados + paridad de plata + Fase 0 del Circuito.</strong> (1) <b>Bug grave cazado:</b> registrar un gasto fallaba en silencio desde el switch (iba sin sesión y el motor lo rechazaba, pero el cartel decía "✓") — ahora va con sesión y avisa de verdad; si cargaste gastos después del 2/7, recargalos. (2) 📎 Comprobante también en Gastos y en "Usar plata de Myri" (con clip clickeable en el cuadro de cajas); la fecha elegida en "Usar plata de Myri" ahora se respeta. (3) 📦 Campo "Unidades por paquete" por producto (editor simple + masivo) — la base del Circuito Candy↔Shuk. (4) 🔐 El costo de los productos de Candy ya no viaja a la tienda pública (solo con sesión). (5) Limpieza automática de claves técnicas viejas.</td></tr>
       <tr><td>v3.12</td><td>Jul 2026</td><td><strong>🧾 Recuadro "Comisión para Jony" en las dos vistas.</strong> Miri ve clarito cuánta comisión le da a Jony, sumando las dos vías: la de ventas que cobró ella (va al saldo) + la de ventas que cobró él (ya descontada del neto). TOTAL en grande con detalle venta por venta (cada renglón dice "se la debés" o "ya la descontó él") + lo pendiente de pedidos sin cobrar. Jony ve el espejo exacto con el mismo total. Reemplaza el diagnóstico aproximado anterior por los números exactos de la cuenta de socios.</td></tr>
       <tr><td>v3.11</td><td>Jul 2026</td><td><strong>🧾 Desglose de comisión en las ventas cruzadas.</strong> En la Cuenta de socios, cada renglón de "Ventas de Myri que cobraste vos" (y su espejo en la vista de Miri) muestra ahora de dónde sale el neto: "(golosinas $X − comisión $Y)". Responde el caso Yimbo #15: la comisión de una venta que cobró Jony no aparece en "Comisión que Myri te debe" porque ya quedó descontada del neto que él le debe (si apareciera en los dos lados se contaría doble).</td></tr>
       <tr><td>v3.10</td><td>Jul 2026</td><td><strong>🕎 Maaser sobre pagos a cuenta (Opción A).</strong> La ganancia (y el Maaser) ahora cuenta también lo que los clientes taparon con pagos a cuenta aunque el pedido no tenga el cobro confirmado: comisión 15% de las golosinas cubiertas + ganancia Pitzujim proporcional a lo cubierto. Misma imputación FIFO que la Cuenta de socios; los perdones/redondeos NO cuentan (no entró plata). Verificado contra recálculo independiente al peso. Además, la lista "Revisar" de Cuenta socios ya no muestra ventas saldadas por pagos y en las parciales ofrece confirmar SOLO el resto (lo cubierto queda como Cta Cte, sin contar la plata dos veces). Y el aviso "falta TC" de Ganancias ahora te dice QUÉ ventas son (#venta + cliente), con el paso a paso para arreglarlo.</td></tr>
@@ -749,7 +750,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.12 · Julio 2026 · Uso interno
+  Documentación v3.13 · Julio 2026 · Uso interno
 </div>
 
 </div>

@@ -1364,6 +1364,9 @@
         <div class="nombre-campo" style="margin:0;flex:1;min-width:160px"><label>Visible para</label>
           <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option><option value="Oculto">🙈 Oculto (solo ventas internas)</option></select>
         </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Cuántas unidades sueltas trae el paquete/bolsa cerrada (lo usa Candy para vender por unidad)">📦 U. por paquete</label>
+          <input type="number" id="ep-upp" min="1" step="1" value="1" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+        </div>
       </div>
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (arrastrá para ordenar · ⭐ = portada · ✕ = quitar)</label></div>
       <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
@@ -1488,6 +1491,11 @@
           <option value="CTA_CTE_ARS">Cta Cte $</option>
           <option value="CTA_CTE_USD">Cta Cte U$S</option>
         </select>
+      </div>
+      <div class="nombre-campo" style="margin-bottom:0.6rem">
+        <label>📎 Comprobante (opcional — factura/ticket/transferencia)</label>
+        <input type="file" id="gasto-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('gasto-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' archivo(s)' : ''" />
+        <div id="gasto-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
       </div>
       <button class="guardar-stock-btn" onclick="registrarGasto()" style="margin-top:0">Registrar gasto</button>
     </div>
@@ -2076,7 +2084,7 @@ async function cargarProductos() {
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
   try {
     // Catálogo desde Supabase (columnas públicas; costo/candyCod son privados)
-    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda&order=id', { headers: SB_ANON_H });
+    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete&order=id', { headers: SB_ANON_H });
     const data = await r.json();
     productos = data.map(p => ({
       id: parseInt(p.id),
@@ -2089,6 +2097,7 @@ async function cargarProductos() {
       activo: p.activo !== false,
       categoria: (p.categoria || 'Varios').trim(),
       visible: (p.visible_cat || 'Ambos').trim(),
+      unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1),
       precioOferta: parseFloat(p.precio_oferta) || 0,
       fechaOferta: (p.fecha_oferta || '').trim(),
       cantPack: parseInt(p.cant_pack) || 0,
@@ -4819,7 +4828,8 @@ async function abrirMasivo() {
         desc: _mDispTxt(p.desc), descBot: _mDispTxt(p.descBot), categoria: _mDispTxt(p.categoria || 'Varios'),
         dueno: (p.dueno || '') === 'Jony' ? 'Jony' : 'Miri', visible: _mDispTxt(p.visible || 'Ambos'),
         moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: _mDispNum(p.precioMay), precioMin: _mDispNum(p.precioMin),
-        costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0)
+        costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0),
+        unidadesPorPaquete: _mDispTxt(p.unidadesPorPaquete || 1)
       };
     });
     renderMasivo();
@@ -4882,9 +4892,9 @@ function renderMasivo() {
       html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:240px">${inp(p.id, 'desc', 'type="text"')}</td><td style="${_mTd}min-width:240px">${inp(p.id, 'descBot', 'type="text"')}</td></tr>`;
     });
   } else {
-    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th><th style="${_mTh}">P.May</th><th style="${_mTh}">P.Min</th><th style="${_mTh}">Costo</th><th style="${_mTh}">Margen</th><th style="${_mTh}">Stock</th></tr></thead><tbody>`;
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th><th style="${_mTh}">P.May</th><th style="${_mTh}">P.Min</th><th style="${_mTh}">Costo</th><th style="${_mTh}">Margen</th><th style="${_mTh}">Stock</th><th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -5245,7 +5255,7 @@ function cargarPedidoManual() {
   renderStockAdmin();
 }
 
-function registrarGasto() {
+async function registrarGasto() {
   const desc = document.getElementById('gasto-desc').value.trim();
   const monto = parseFloat(document.getElementById('gasto-monto').value);
   const moneda = document.getElementById('gasto-moneda').value;
@@ -5253,14 +5263,19 @@ function registrarGasto() {
   const columna = document.getElementById('gasto-columna').value;
   if (!desc) { showToast('Ingresá una descripción'); return; }
   if (!monto || monto <= 0) { showToast('Ingresá un monto válido'); return; }
-  enviarGastoASheet(desc, monto, moneda, categoria, columna)
-    .then(() => {
-      showToast('Gasto registrado ✓');
-      document.getElementById('gasto-desc').value = '';
-      document.getElementById('gasto-monto').value = '';
-      refreshAdmin();
-    })
-    .catch(() => showToast('Error al registrar gasto'));
+  // Por apiWrite (manda la sesión y avisa si FALLA de verdad). Antes iba sin token y el motor
+  // nuevo lo rechazaba con 'no autorizado'… mientras el toast decía "✓" — gasto perdido en silencio.
+  const comprobante = await subirComprobantes(document.getElementById('gasto-comprobante'));
+  const params = new URLSearchParams({ accion: 'gasto', desc, monto, moneda, categoria, columna: columna || '' });
+  if (comprobante) params.set('comprobante', comprobante);
+  const r = await apiWrite(params, '💸 Gasto registrado ✓');
+  if (r && r.ok) {
+    document.getElementById('gasto-desc').value = '';
+    document.getElementById('gasto-monto').value = '';
+    const gc = document.getElementById('gasto-comprobante'); if (gc) gc.value = '';
+    const gs = document.getElementById('gasto-comprobante-st'); if (gs) gs.textContent = '';
+    refreshAdmin();
+  }
 }
 
 // NUEVO PRODUCTO
@@ -5633,6 +5648,7 @@ function cargarProductoEditor(id) {
   document.getElementById('ep-moneda').value = (p.moneda === 'U$S') ? 'U$S' : '$';
   epMonedaChange();
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
+  { const eu = document.getElementById('ep-upp'); if (eu) eu.value = p.unidadesPorPaquete || 1; }
   document.getElementById('ep-nuevas').value = '';
   document.getElementById('ep-status').textContent = '';
   renderFotosEditor();
@@ -5737,6 +5753,7 @@ async function guardarEdicionProducto() {
     dueno: document.getElementById('ep-dueno').value,
     moneda: document.getElementById('ep-moneda').value === 'U$S' ? 'U$S' : '$',
     visible: document.getElementById('ep-visible').value,
+    unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
     imagen: idsFinal.join(',') || '__VACIO__'
   }), '💾 Producto actualizado ✓');
   status.textContent = '';
@@ -6021,7 +6038,8 @@ async function abrirImportarCandy() {
   let ultErr = '';
   for (let intento = 0; intento < 3; intento++) {
     try {
-      const r = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoHijos');
+      // Con el token de sesión: el motor solo manda el COSTO a usuarios logueados (endurecido v3.13).
+      const r = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoHijos&token=' + encodeURIComponent(_authToken || ''));
       const d = await r.json();
       if (Array.isArray(d)) { _candyCat = d; break; }
       ultErr = (d && d.error) ? d.error : 'respuesta inesperada';
@@ -6763,11 +6781,12 @@ async function renderCaja() {
         if (cajaEnv) movs.push({ desc: `Envío #${n} ${f}`, col: cajaEnv, val: _envCob, mon: 'ARS', tipo: 'envio', vid: v.id });
       }
     });
+    const _clipsDe = c => !c ? '' : c.split('\n').filter(Boolean).map(u => ` <a href="${esc(u)}" target="_blank" onclick="event.stopPropagation()" title="Ver comprobante">📎</a>`).join('');
     gastos.forEach(g => {
-      if (g.columna) movs.push({ desc: `${g.desc} ${g.fecha}`, col: g.columna, val: -(parseFloat(g.monto)||0), mon: g.moneda, tipo: 'gasto' });
+      if (g.columna) movs.push({ desc: `${g.desc} ${g.fecha}${_clipsDe(g.comprobante)}`, col: g.columna, val: -(parseFloat(g.monto)||0), mon: g.moneda, tipo: 'gasto' });
     });
     if (Array.isArray(rendiciones)) rendiciones.forEach(r => {
-      if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
+      if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}${_clipsDe(r.comprobante)}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
     });
     // Pagos a cuenta: ingresan a la caja elegida y bajan la cuenta corriente
     if (Array.isArray(pagosCuenta)) pagosCuenta.forEach(p => {
@@ -7574,6 +7593,8 @@ async function confirmarUsarPlataMyri() {
   if (usarCaja > 0) {
     const p1 = new URLSearchParams({ accion: 'rendicion', desc: 'Usado de Myri: ' + desc, monto: usarCaja, moneda: mon, columna: caja });
     if (fechaParam) p1.set('fecha', fechaParam);
+    const _upmComp = await subirComprobantes(document.getElementById('upm-comprobante'));
+    if (_upmComp) p1.set('comprobante', _upmComp);
     const r1 = await apiWrite(p1, '');
     if (!r1.ok) okAll = false;
   }
@@ -11270,6 +11291,8 @@ function cerrarEditPedido() {
       <input type="text" id="upm-desc" placeholder="Ej: pago farmacia, transferencia a Juan..." style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
       <div class="edit-section-label">Fecha <span style="font-weight:400;text-transform:none;color:var(--texto-suave)">(vacío = hoy)</span></div>
       <input type="date" id="upm-fecha" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-sizing:border-box" />
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin:0.6rem 0 0.3rem">📎 Comprobante (opcional)</label>
+      <input type="file" id="upm-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" />
     </div>
     <div class="edit-modal-footer">
       <button class="edit-btn-cancel" onclick="cerrarUsarPlataMyri()">Cancelar</button>
