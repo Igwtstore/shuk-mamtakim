@@ -3004,15 +3004,39 @@ function goToSlideInternal(id, idx) {
   const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (idx >= imagenes.length) return;
   carouselIdx[id] = idx;
-  const img = document.getElementById('cimg-'+id);
+  let med = document.getElementById('cimg-'+id);
   const wrap = document.getElementById('carousel-'+id);
-  if (!img || !wrap) return;
-  const urls = imgUrl(imagenes[idx]);
-  img.style.display = 'block';
-  img.dataset.f1 = urls[1]; img.dataset.f2 = urls[2]; img.dataset.f3 = urls[3];
-  img.dataset.tried = '0';
-  img.onerror = function(){ imgFallbackNext(this); };
-  img.src = urls[0];
+  if (!med || !wrap) return;
+  const val = imagenes[idx];
+  // El carrusel solo mostraba VIDEO si era la primera posición; en cualquier otra lo cargaba
+  // como imagen y quedaba el recuadro en blanco (bug cazado por el usuario al subir su video
+  // publicitario como 2ª foto). Ahora el elemento se transforma según lo que toque mostrar.
+  if (esVideo(val)) {
+    if (med.tagName !== 'VIDEO') {
+      const v = document.createElement('video');
+      v.className = med.className; v.id = med.id;
+      v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+      v.setAttribute('playsinline', '');
+      v.style.objectFit = 'cover';
+      med.replaceWith(v); med = v;
+    }
+    med.style.display = 'block';
+    if (med.src !== val) med.src = val;
+    med.play && med.play().catch(() => {});
+  } else {
+    if (med.tagName !== 'IMG') {
+      const im = document.createElement('img');
+      im.className = 'producto-img'; im.id = med.id;
+      im.loading = 'lazy'; im.alt = p.nombre;
+      med.replaceWith(im); med = im;
+    }
+    const urls = imgUrl(val);
+    med.style.display = 'block';
+    med.dataset.f1 = urls[1]; med.dataset.f2 = urls[2]; med.dataset.f3 = urls[3];
+    med.dataset.tried = '0';
+    med.onerror = function(){ imgFallbackNext(this); };
+    med.src = urls[0];
+  }
   wrap.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('activo', i===idx));
 }
 
