@@ -7111,11 +7111,35 @@ async function renderCuentaSocios() {
     if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU });
   });
 
-  // Pagos a cuenta de un pedido (con reparto Pitzujim/golosinas): alimentan la cuenta de socios
+  // ── Pagos a cuenta → cuenta de socios ────────────────────────────────────────
+  // ATADOS a un pedido: reparto explícito (montoPitz). GENERALES ("Automático"): se imputan
+  // FIFO contra la deuda viva del cliente COMPONENTE POR COMPONENTE (Pitzujim de Jony /
+  // golosinas $ / golosinas U$S) — la plata cobrada tiene dueño aunque el pago sea general.
+  // Bug histórico (venía de Google) cazado por el usuario con el caso Dany Elion: cobró
+  // U$S de golosinas de Miri en su caja y la cuenta de socios lo ignoraba.
+  const _fpar = f => { const m = (f||'').split(' ')[0].split('/'); return m.length < 3 ? 0 : new Date(+m[2], +m[1]-1, +m[0]).getTime(); };
+  const _resPorCli = {};
+  ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && !v.corte).forEach(v => {
+    const d = _deudaPedido(v, false);
+    if (d.jonyARS <= 0 && d.miriARS <= 0 && d.jonyUSD <= 0 && d.miriUSD <= 0) return;
+    const k = normCliente(v.cliente);
+    (_resPorCli[k] = _resPorCli[k] || []).push({ v, jA: d.jonyARS, mA: d.miriARS, jU: d.jonyUSD, mU: d.miriUSD });
+  });
+  Object.values(_resPorCli).forEach(list => list.sort((a, b) => _fpar(a.v.fecha) - _fpar(b.v.fecha)));
+  const _pagosOrd = [...(pagos || [])].sort((a, b) => _fpar(a.fecha) - _fpar(b.fecha));
+  // 1º: los atados consumen la deuda de SU pedido (así el pool general imputa sobre lo que queda)
+  _pagosOrd.filter(p => p.pedidoId).forEach(p => {
+    const it = (_resPorCli[normCliente(p.cliente)] || []).find(x => String(x.v.id) === String(p.pedidoId));
+    if (!it) return;
+    const pitz = parseFloat(p.montoPitz)||0;
+    it.jA = Math.max(0, it.jA - pitz);
+    it.mA = Math.max(0, it.mA - ((parseFloat(p.montoARS)||0) - pitz));
+    it.mU = Math.max(0, it.mU - (parseFloat(p.montoUSD)||0));
+  });
   (pagos || []).forEach(p => {
+    if (!p.pedidoId) return;   // atados: reparto explícito (los generales van abajo, imputados)
     const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU };
     (() => {
-    if (!p.pedidoId) return;   // los pagos a deuda general no se reparten
     const caja = (p.caja||'').trim();
     const pitz = parseFloat(p.montoPitz)||0;
     const golARS = (parseFloat(p.montoARS)||0) - pitz;
@@ -7136,6 +7160,48 @@ async function renderCuentaSocios() {
     const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     if (_dPm > 0.004) detPitzMyri.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
     if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, pago: true });
+  });
+  // 2º: GENERALES — imputación FIFO por componente (Pitzujim primero en $, golosinas primero en U$S)
+  _pagosOrd.filter(p => !p.pedidoId).forEach(p => {
+    const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    (() => {
+    const caja = (p.caja||'').trim();
+    if (caja === 'PERDON') return;   // perdón/redondeo: no entró plata a ninguna caja
+    const list = _resPorCli[normCliente(p.cliente)] || [];
+    let poolA = parseFloat(p.montoARS)||0, poolU = parseFloat(p.montoUSD)||0;
+    let usadoPitz = 0, usadoGolA = 0, usadoGolU = 0, usadoPitzU = 0;
+    list.forEach(it => {
+      let ap = Math.min(poolA, it.jA); it.jA -= ap; poolA -= ap; usadoPitz += ap;      // $: Pitzujim primero
+      ap = Math.min(poolA, it.mA); it.mA -= ap; poolA -= ap; usadoGolA += ap;          // $: después golosinas
+      ap = Math.min(poolU, it.mU); it.mU -= ap; poolU -= ap; usadoGolU += ap;          // U$S: golosinas primero
+      ap = Math.min(poolU, it.jU); it.jU -= ap; poolU -= ap; usadoPitzU += ap;         // U$S: después Pitzujim
+    });
+    const tcP = parseFloat(p.tc)||0;
+    // Pitzujim: si lo cobró MYRI, se lo debe a Jony (si lo cobró Jony, es su propia plata)
+    if (usadoPitz > 0 && MYRI_ARS.includes(caja)) pitzMyri += usadoPitz;
+    if (usadoPitzU > 0 && MYRI_ARS.includes(caja) && tcP > 0) pitzMyri += Math.round(usadoPitzU * tcP);
+    // Golosinas $: comisión 15% para Jony; el neto es de Miri
+    if (usadoGolA > 0) {
+      const comi = Math.round(usadoGolA * 0.15);
+      if (MYRI_ARS.includes(caja)) comiDebe += comi;
+      else if (JONY_BOXES_CC.includes(caja)) jonyTiene += (usadoGolA - comi);
+    }
+    // Golosinas U$S: convertidas si entraron en pesos con TC (caso Elion), si no en U$S
+    if (usadoGolU > 0) {
+      if (tcP > 0 && COBRO_ARS_COLS.includes(caja)) {
+        const arsEq = usadoGolU * tcP; const comi = Math.round(arsEq * 0.15);
+        if (MYRI_ARS.includes(caja)) comiDebe += comi;
+        else if (JONY_BOXES_CC.includes(caja)) jonyTiene += (arsEq - comi);
+      } else {
+        const comiU3 = parseFloat((usadoGolU*0.15).toFixed(2));
+        if (caja === 'ETF_USD_MYRI') comiDebeU += comiU3;
+        else if (JONY_BOXES_CC.includes(caja)) jonyTieneU += (usadoGolU - comiU3);
+      }
+    }
+    })();
+    const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
+    if (_dPm > 0.004) detPitzMyri.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
+    if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, pago: true });
   });
 
   const saldadoARS = parseFloat(liq.totalARS)||0, saldadoUSD = parseFloat(liq.totalUSD)||0;

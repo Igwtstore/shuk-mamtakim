@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.07</title>
+<title>Shuk Mamtakim — Documentación v3.08</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 3.07 · Julio 2026 · Uso interno</div>
+    <div class="cover-meta">Versión 3.08 · Julio 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -288,6 +288,7 @@
       <div class="feature-card"><div class="title">💸 Gastos / Rendiciones</div><div class="desc">Registro de egresos asignados a cada columna de caja. Transferencias incluidas.</div></div>
       <div class="feature-card nuevo"><div class="title">🖨️ Remito PDF<span class="badge-new">nuevo</span></div><div class="desc">Comprobante profesional con banner del Shuk, foto de cada producto, columnas de precio unitario y subtotal. Imprimible o guardable como PDF.</div></div>
       <div class="feature-card nuevo"><div class="title">⬇️ Exportar CSV<span class="badge-new">nuevo</span></div><div class="desc">Exportación de ventas a CSV para análisis externo.</div></div>
+      <div class="feature-card nuevo"><div class="title">🤝⚖️ Pagos a cuenta GENERALES ahora reparten entre socios<span class="badge-new">v3.08</span></div><div class="desc">Corrección contable importante (bug histórico que venía de la época de Google, cazado por Jony con el caso Dany Elion): los pagos a cuenta "automáticos" (sin imputar a un pedido puntual) NO se repartían entre socios — la plata cobrada quedaba invisible en la Cuenta entre socios, en las dos direcciones. Ahora se imputan FIFO contra la deuda viva del cliente, componente por componente (Pitzujim de Jony / golosinas $ / golosinas U$S, con TC si se cobraron en pesos), y alimentan comisión, "cobró Myri" y "cobraste vos" según la caja donde entró la plata. El saldo histórico se recalculó solo y cada línea es auditable con "ver detalle".</div></div>
       <div class="feature-card nuevo"><div class="title">📥 Recibir mercadería con costo promedio ponderado<span class="badge-new">v3.05</span></div><div class="desc">Nueva pantalla en Stock: buscás cada producto que llegó, cargás cantidad y costo, y ANTES de confirmar ves el costo resultante. Reglas contables: producto sin stock → toma el costo de la compra; producto con stock → promedio ponderado (stock×costo actual + cantidad×costo nuevo) ÷ total, marcado "(PPP)". Al registrar: suma el stock con huella, actualiza el costo (el Maaser se alimenta solo), guarda un registro auditable de cada línea (costo antes→después, stock antes→después) y es a prueba de doble click. Las compras de Pitzujim quedan también en el log histórico de compras de Jony.</div></div>
       <div class="feature-card nuevo"><div class="title">💲 Precio editable en el pedido manual + historial con grupos claros<span class="badge-new">v3.04</span></div><div class="desc">Al armar un pedido manual, cada línea tiene su precio editable (prellenado con el de lista; si acordaste otro, lo tipeás ahí y listo — se acabó el registrar y editar después). La comisión se calcula sobre el precio real acordado. Y el historial de Pedidos ahora muestra sus dos grupos con título: "🟠 Te deben todavía" y "✓ Cobrados y cerrados" — además un pedido saldado con pagos a cuenta cuenta como cerrado (antes podía quedar en el grupo equivocado).</div></div>
       <div class="feature-card nuevo"><div class="title">↕️ Orden de pedidos a elección<span class="badge-new">v3.03</span></div><div class="desc">Botón nuevo junto a los filtros de Pedidos: "⬇️ Más nuevos primero" (como siempre: activos arriba y, en el historial, los que aún te deben antes que los cerrados) o "⬆️ Más viejos primero" (lista corrida del #1 en adelante, sin agrupar). Además, renombrar un producto desde el editor ahora guarda el nombre anterior en un historial invisible: el Maaser sigue contando las ventas viejas y no se pierde nada.</div></div>
@@ -665,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.08</td><td>Jul 2026</td><td><strong>⚖️ Corrección contable: pagos a cuenta generales reparten entre socios.</strong> Antes se salteaban por completo (bug de la era Google, detectado con el caso Elion: U$S de golosinas de Miri cobrados por Jony, invisibles). Imputación FIFO por componente contra la deuda viva + reglas por caja/TC iguales a las de los pagos atados. Verificado con recálculo independiente pago por pago: los dos caminos dan idéntico ($438.735 / U$S 93,23). El detalle "ver" muestra cada pago repartido.</td></tr>
       <tr><td>v3.07</td><td>Jul 2026</td><td><strong>🤝 Detalle venta por venta en la Cuenta entre socios.</strong> Las líneas "Ventas tuyas que cobró Myri" y "Ventas de Myri que cobraste vos" ahora tienen "▸ ver detalle" (como los envíos): se despliegan con cada venta/pago a cuenta que compone el número (#venta, cliente, fecha, monto) para conciliar contra la plata real. En las dos vistas (Jony y Miri, cada una con su fraseo).</td></tr>
       <tr><td>v3.06</td><td>Jul 2026</td><td><strong>💵 Total recibido en el pago a cuenta.</strong> El modal muestra en un recuadro verde cuánta plata estás recibiendo EN TOTAL: pesos + dólares convertidos si entran a una caja de pesos con TC (ej: $153.000 + U$S 41,40 al 1530 → "Recibís en total: $216.342"). Con caja de dólares muestra los dos montos; con perdón/redondeo avisa que no entra plata.</td></tr>
       <tr><td>v3.05</td><td>Jul 2026</td><td><strong>📥 Recibir mercadería con PPP.</strong> Pantalla en Stock: cantidad + costo por producto con vista previa del costo resultante (promedio ponderado si hay stock; costo de compra si no hay). Suma stock, actualiza costo, registro auditable en tabla recepciones, dedup por compraId, log costos_jony para productos de Jony.</td></tr>
@@ -743,7 +745,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.07 · Julio 2026 · Uso interno
+  Documentación v3.08 · Julio 2026 · Uso interno
 </div>
 
 </div>
