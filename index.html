@@ -1372,6 +1372,7 @@
       <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
       <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
       <button type="button" onclick="abrirCopiarFotoDe('editor')" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar foto de otro producto</button>
+      <button type="button" onclick="abrirArmarPackShuk()" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#fdf3e3;color:#8a5a1e;border:1.5px solid #e8d5b5;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🎁 Armar foto de pack (combiná productos)</button>
       <div id="ep-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
       <button type="button" onclick="analizarFotoEditor()" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.82rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y sugiera nombre + descripción</button>
       <button class="guardar-stock-btn" style="margin-top:0.6rem" onclick="guardarEdicionProducto()">💾 Guardar cambios</button>
@@ -5468,6 +5469,139 @@ async function subirArchivosCloudinary() {
 // Fotos del editor: UNA sola lista ordenable (existentes + nuevas mezcladas). La 1ª = portada.
 // Cada item: {k:'old', v:idCloudinary} | {k:'new', v:File}. Se reordena con drag & drop o ⭐.
 let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHome = null;
+
+// ═══ 🎁 ARMAR FOTO DE PACK (Shuk) — gemelo del de Candy con paleta/logo Yuk ═══
+let _pk2Sel = {}, _pk2Gen = 0;
+const _pk2Foto = p => { const f = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0]; return f ? imgUrl(f)[0] : ''; };
+function abrirArmarPackShuk() {
+  let ov = document.getElementById('pk2-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'pk2-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:460px;max-height:86vh;display:flex;flex-direction:column">
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
+        <b style="flex:1;font-size:0.9rem">🎁 Armar foto de pack</b>
+        <input id="pk2-buscar" oninput="pk2_render()" placeholder="🔍 Buscar…" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:0.85rem;width:120px">
+        <button onclick="document.getElementById('pk2-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button>
+      </div>
+      <div style="font-size:0.68rem;color:#888;padding:4px 12px">Elegí hasta 4 productos y cuántos van de cada uno — se compone una sola foto con el logo del Shuk.</div>
+      <div id="pk2-list" style="overflow:auto;flex:1;padding:6px 12px;min-height:120px"></div>
+      <div style="padding:8px 12px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center">
+        <canvas id="pk2-canvas" width="900" height="900" style="width:74px;height:74px;border-radius:10px;border:1px solid #eee;background:#fff"></canvas>
+        <div style="flex:1;font-size:0.72rem;color:#888" id="pk2-info">Elegí productos para ver la vista previa</div>
+        <button id="pk2-usar" onclick="pk2_usar()" disabled style="padding:9px 14px;border:none;background:#c9954a;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;opacity:0.5">✓ Usar como foto</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'pk2-overlay') ov.style.display = 'none'; };
+  }
+  _pk2Sel = {};
+  ov.style.display = 'flex';
+  pk2_render(); pk2_dibujar();
+}
+function pk2_render() {
+  const q = (document.getElementById('pk2-buscar').value || '').toLowerCase().trim();
+  // REGLA SAGRADA: productosVisibles() — la vista Miri no ve productos de Jony.
+  const items = productosVisibles().filter(p => _pk2Foto(p) && (!q || (p.nombre || '').toLowerCase().includes(q)));
+  document.getElementById('pk2-list').innerHTML = items.map(p => {
+    const c = _pk2Sel[p.id] || 0;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f1ea">
+      <img src="${_pk2Foto(p)}" style="width:34px;height:34px;object-fit:contain;background:#f7f2e8;border-radius:7px">
+      <span style="flex:1;font-size:0.8rem;${c ? 'font-weight:800' : ''}">${esc(p.nombre)}${p.desc ? ' <span style=\"color:#aaa;font-size:0.7rem\">' + esc(p.desc.slice(0, 24)) + '</span>' : ''}</span>
+      <button onclick="pk2_qty('${p.id}',-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
+      <b style="min-width:16px;text-align:center;font-size:0.85rem">${c || ''}</b>
+      <button onclick="pk2_qty('${p.id}',1)" style="width:26px;height:26px;border:none;background:#f3e2c2;border-radius:7px;font-weight:800;cursor:pointer">+</button>
+    </div>`;
+  }).join('') || '<div class="sinpedidos">Sin productos con foto</div>';
+}
+function pk2_qty(id, d) {
+  const cur = _pk2Sel[id] || 0;
+  if (d > 0 && cur === 0 && Object.keys(_pk2Sel).length >= 4) { showToast('Hasta 4 productos distintos por pack'); return; }
+  const nu = Math.max(0, Math.min(9, cur + d));
+  if (nu === 0) delete _pk2Sel[id]; else _pk2Sel[id] = nu;
+  pk2_render(); pk2_dibujar();
+}
+function pk2_dibujar() {
+  const cv = document.getElementById('pk2-canvas'), ctx = cv.getContext('2d');
+  const sel = Object.keys(_pk2Sel).map(id => ({ p: productos.find(x => String(x.id) === String(id)), qty: _pk2Sel[id] })).filter(x => x.p);
+  const totalU = sel.reduce((sm, x) => sm + x.qty, 0);
+  document.getElementById('pk2-info').textContent = sel.length ? `${sel.length} producto(s) · ${totalU} unidades en el pack` : 'Elegí productos para ver la vista previa';
+  const btn = document.getElementById('pk2-usar');
+  btn.disabled = !sel.length; btn.style.opacity = sel.length ? '1' : '0.5';
+  // Paleta Yuk: crema/dorado, sobrio (público amplio)
+  const g = ctx.createLinearGradient(0, 0, 900, 900);
+  g.addColorStop(0, '#fdf9f0'); g.addColorStop(0.5, '#f6ecd9'); g.addColorStop(1, '#eddec2');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 900, 900);
+  ctx.globalAlpha = 0.3;
+  [[130, 170, 85, '#eeda b8'.replace(' ', '')], [770, 150, 65, '#e5cfa5'], [710, 760, 105, '#f0e2c4'], [150, 750, 55, '#e8d5ae']].forEach(([x, y, r, c]) => {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = c; ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  if (!sel.length) return;
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  ctx.save(); ctx.shadowColor = 'rgba(120,85,30,0.25)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14;
+  rr(60, 150, 780, 640, 44); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(160,106,44,0.4)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  const pillG = ctx.createLinearGradient(250, 0, 650, 0);
+  pillG.addColorStop(0, '#c9954a'); pillG.addColorStop(1, '#8a5a1e');
+  rr(250, 92, 400, 96, 48); ctx.fillStyle = pillG; ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = '800 52px DM Sans, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('🎁 PACK ×' + totalU, 450, 158);
+  const gen = ++_pk2Gen;
+  const poses = sel.length === 1 ? [[450, 480, 560, 0]]
+    : sel.length === 2 ? [[275, 490, 400, -0.07], [625, 490, 400, 0.07]]
+    : sel.length === 3 ? [[245, 400, 320, -0.09], [655, 400, 320, 0.09], [450, 630, 320, 0.02]]
+    : [[262, 370, 300, -0.08], [638, 370, 300, 0.08], [262, 645, 300, 0.05], [638, 645, 300, -0.05]];
+  const cargas = sel.slice(0, poses.length).map(x => new Promise(res => {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => res(img); img.onerror = () => res(null);
+    img.src = _pk2Foto(x.p);
+  }));
+  Promise.all(cargas).then(imgs => {
+    if (gen !== _pk2Gen) return;
+    const dib = (img, i, conGlobo) => {
+      const [cx, cy, tam, rot] = poses[i];
+      const r = Math.min(tam / img.width, tam / img.height);
+      const w = img.width * r, h = img.height * r;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+      if (!conGlobo) {
+        ctx.shadowColor = 'rgba(90,60,20,0.3)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 10;
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        const bx = w / 2 - 14, by = h / 2 - 14;
+        ctx.beginPath(); ctx.arc(bx, by, 42, 0, 7); ctx.fillStyle = '#1a1a2e'; ctx.fill();
+        ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = '800 40px DM Sans, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('×' + sel[i].qty, bx, by + 14);
+      }
+      ctx.restore();
+    };
+    imgs.forEach((img, i) => { if (img) dib(img, i, false); });
+    imgs.forEach((img, i) => { if (img) dib(img, i, true); });
+    ctx.save(); ctx.shadowColor = 'rgba(26,26,46,0.3)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5;
+    rr(255, 812, 390, 66, 33); ctx.fillStyle = '#1a1a2e'; ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#c9954a'; ctx.font = '800 34px Fraunces, DM Sans, serif'; ctx.textAlign = 'center';
+    ctx.fillText('🥜 Shuk Mamtakim', 450, 856);
+  });
+}
+async function pk2_usar() {
+  const btn = document.getElementById('pk2-usar');
+  btn.disabled = true; btn.textContent = '⏳ Subiendo…';
+  try {
+    const blob = await new Promise(res => document.getElementById('pk2-canvas').toBlob(res, 'image/jpeg', 0.92));
+    const fd = new FormData();
+    fd.append('file', blob, 'pack.jpg');
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.public_id) throw new Error('upload');
+    _epMedia.unshift({ k: 'old', v: data.public_id });   // portada del producto que estás editando
+    renderFotosEditor();
+    document.getElementById('pk2-overlay').style.display = 'none';
+    showToast('🎁 Foto del pack lista — quedó como portada');
+  } catch (e) { showToast('⚠️ No se pudo subir la foto del pack'); }
+  btn.disabled = false; btn.textContent = '✓ Usar como foto';
+}
 
 function poblarEditorProductos() {
   // El buscador lee de `productos` en vivo; si está abierto, refresca resultados
