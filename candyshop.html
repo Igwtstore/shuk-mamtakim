@@ -735,6 +735,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="foto-upload-area">
       <div class="foto-preview" id="foto-preview" onclick="document.getElementById('foto-file').click()">📦</div>
       <button class="foto-btn" onclick="document.getElementById('foto-file').click()">📷 Elegir foto</button>
+      <button class="foto-btn" onclick="abrirCopiarFotoCandy()" style="background:#eef4fb;color:#2d5f8a">📋 Copiar de otro</button>
+      <button class="foto-btn" onclick="iaSugerirCandy()" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff">✨ IA</button>
       <span class="foto-uploading" id="foto-status"></span>
       <input type="file" id="foto-file" accept="image/*" style="display:none" onchange="subirFoto(this)">
     </div>
@@ -2147,6 +2149,55 @@ function cerrarModal() {
 function cerrarModalSiAfuera(e) { if (e.target.id === 'modal-overlay') cerrarModal(); }
 
 let fotoUrl = '';
+// ── Copiar la foto de otro producto (M2 unificación: paridad con el Shuk) ──
+function abrirCopiarFotoCandy() {
+  let ov = document.getElementById('cfoto-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cfoto-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
+        <b style="flex:1;font-size:0.9rem">📋 Copiar foto de…</b>
+        <input id="cfoto-buscar" oninput="renderCopiarFotoCandy()" placeholder="🔍 Buscar…" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:0.85rem;width:140px">
+        <button onclick="document.getElementById('cfoto-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button>
+      </div>
+      <div id="cfoto-list" style="overflow:auto;flex:1;padding:8px 12px"></div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'cfoto-overlay') ov.style.display = 'none'; };
+  }
+  ov.style.display = 'flex';
+  renderCopiarFotoCandy();
+}
+function renderCopiarFotoCandy() {
+  const q = (document.getElementById('cfoto-buscar').value || '').toLowerCase().trim();
+  const items = catalogoCache.filter(p => p.foto && (!q || (p.nombre || '').toLowerCase().includes(q)));
+  document.getElementById('cfoto-list').innerHTML = items.length ? items.map(p => `
+    <div onclick="elegirFotoCandy('${String(p.codigo).replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f5f1ea;cursor:pointer">
+      <img src="${p.foto}" style="width:38px;height:38px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.visibility='hidden'">
+      <span style="font-size:0.82rem">${escCM(p.nombre)}</span>
+    </div>`).join('') : '<div class="empty">Sin productos con foto</div>';
+}
+function elegirFotoCandy(codigo) {
+  const p = catalogoCache.find(x => x.codigo === codigo);
+  if (!p || !p.foto) return;
+  fotoUrl = p.foto;
+  document.getElementById('foto-preview').innerHTML = `<img src="${fotoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
+  document.getElementById('foto-status').textContent = '✓ foto copiada de ' + p.nombre;
+  document.getElementById('cfoto-overlay').style.display = 'none';
+}
+// ── ✨ La IA mira la foto y sugiere nombre + categoría (M2 unificación) ──
+async function iaSugerirCandy() {
+  if (!fotoUrl) { alert('Primero cargá o copiá una foto — la IA la mira y sugiere el nombre'); return; }
+  const st = document.getElementById('foto-status');
+  st.textContent = '✨ La IA está mirando la foto…';
+  const r = await api('analizarFotoProducto', { url: fotoUrl });
+  if (!r || r.error || !r.nombre) { st.textContent = ''; alert('⚠️ ' + ((r && (r.mensaje || r.error)) || 'La IA no pudo con esta foto')); return; }
+  const fn = document.getElementById('f-nombre');
+  if (!fn.value.trim() || confirm(`La IA sugiere: "${r.nombre}". ¿Reemplazar el nombre actual?`)) fn.value = r.nombre;
+  if (r.categoria) { const fc = document.getElementById('f-categoria'); if (!fc.value.trim()) fc.value = r.categoria; }
+  st.textContent = '✨ Sugerido: ' + r.nombre;
+}
 let _stockOriginal = 0;   // stock del depósito al abrir el modal (para detectar si lo cambió)
 
 async function subirFoto(input) {
