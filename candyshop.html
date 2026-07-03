@@ -2239,37 +2239,80 @@ function pk_qty(codigo, d) {
 }
 function pk_dibujar() {
   const cv = document.getElementById('pkfoto-canvas'), ctx = cv.getContext('2d');
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 900, 900);
   const sel = Object.keys(_pkSel).map(c => ({ p: catalogoCache.find(x => x.codigo === c), qty: _pkSel[c] })).filter(x => x.p);
   const totalU = sel.reduce((s, x) => s + x.qty, 0);
   document.getElementById('pkfoto-info').textContent = sel.length ? `${sel.length} producto(s) · ${totalU} unidades en el pack` : 'Elegí productos para ver la vista previa';
   const btn = document.getElementById('pkfoto-usar');
   btn.disabled = !sel.length; btn.style.opacity = sel.length ? '1' : '0.5';
-  if (!sel.length) return;
-  // cinta superior
-  ctx.fillStyle = '#e07b00'; ctx.fillRect(0, 0, 900, 96);
-  ctx.fillStyle = '#fff'; ctx.font = '800 56px DM Sans, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('🎁 PACK ×' + totalU, 450, 66);
-  // grilla 1/2/4 según cantidad de productos
-  const zonas = sel.length === 1 ? [[70, 140, 760, 700]]
-    : sel.length === 2 ? [[30, 240, 410, 500], [460, 240, 410, 500]]
-    : [[40, 130, 400, 370], [460, 130, 400, 370], [40, 510, 400, 370], [460, 510, 400, 370]];
-  sel.forEach((x, i) => {
-    if (i >= zonas.length) return;
-    const [zx, zy, zw, zh] = zonas[i];
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const r = Math.min(zw / img.width, zh / img.height);
-      const w = img.width * r, h = img.height * r;
-      ctx.drawImage(img, zx + (zw - w) / 2, zy + (zh - h) / 2, w, h);
-      // globito de cantidad
-      const bx = zx + zw - 44, by = zy + zh - 30;
-      ctx.beginPath(); ctx.arc(bx, by, 40, 0, 7); ctx.fillStyle = '#b14cff'; ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = '800 42px DM Sans, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('×' + x.qty, bx, by + 14);
-    };
-    img.src = x.p.foto;
+  // Fondo con onda: degradé de la marca + burbujas suaves (feedback del usuario: nada de grilla dura)
+  const g = ctx.createLinearGradient(0, 0, 900, 900);
+  g.addColorStop(0, '#fff0f6'); g.addColorStop(0.5, '#f3e8ff'); g.addColorStop(1, '#e3f0ff');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 900, 900);
+  ctx.globalAlpha = 0.35;
+  [[120, 180, 90, '#ffd6ec'], [780, 140, 70, '#d9c2ff'], [700, 760, 110, '#c2e0ff'], [160, 740, 60, '#ffe3f1']].forEach(([x, y, r, c]) => {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = c; ctx.fill();
   });
+  ctx.globalAlpha = 1;
+  if (!sel.length) return;
+  // Tarjeta blanca redondeada con sombra (el "escenario" de los productos)
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  ctx.save(); ctx.shadowColor = 'rgba(120,60,160,0.25)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14;
+  rr(60, 150, 780, 640, 44); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.restore();
+  // Cinta PACK como pill flotante arriba de la tarjeta
+  ctx.save(); ctx.shadowColor = 'rgba(224,123,0,0.4)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  const pillG = ctx.createLinearGradient(250, 0, 650, 0);
+  pillG.addColorStop(0, '#ff5fa2'); pillG.addColorStop(1, '#b14cff');
+  rr(250, 92, 400, 96, 48); ctx.fillStyle = pillG; ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = '800 52px DM Sans, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('🎁 PACK ×' + totalU, 450, 158);
+  // Productos con leve rotación, SIN pisarse (feedback: jugadas pero legibles).
+  // Anti-race: token de generación — si el usuario tocó +/− mientras cargaban las fotos,
+  // los onload viejos se descartan (antes duplicaban globitos regados por el canvas).
+  const gen = ++_pkGen;
+  const poses = sel.length === 1 ? [[450, 480, 560, 0]]
+    : sel.length === 2 ? [[275, 490, 400, -0.07], [625, 490, 400, 0.07]]
+    : sel.length === 3 ? [[245, 400, 320, -0.09], [655, 400, 320, 0.09], [450, 630, 320, 0.02]]
+    : [[262, 370, 300, -0.08], [638, 370, 300, 0.08], [262, 645, 300, 0.05], [638, 645, 300, -0.05]];
+  const cargas = sel.slice(0, poses.length).map(x => new Promise(res => {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => res(img); img.onerror = () => res(null);
+    img.src = x.p.foto;
+  }));
+  Promise.all(cargas).then(imgs => {
+    if (gen !== _pkGen) return;   // hubo otro dibujado más nuevo → este se descarta
+    imgs.forEach((img, i) => {
+      if (!img) return;
+      const [cx, cy, tam, rot] = poses[i];
+      const r = Math.min(tam / img.width, tam / img.height);
+      const w = img.width * r, h = img.height * r;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+      ctx.shadowColor = 'rgba(60,30,90,0.3)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 10;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      ctx.restore();
+    });
+    imgs.forEach((img, i) => {   // globitos en pasada aparte: siempre ARRIBA de las fotos
+      if (!img) return;
+      const [cx, cy, tam, rot] = poses[i];
+      const r = Math.min(tam / img.width, tam / img.height);
+      const w = img.width * r, h = img.height * r;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+      const bx = w / 2 - 14, by = h / 2 - 14;
+      ctx.beginPath(); ctx.arc(bx, by, 42, 0, 7); ctx.fillStyle = '#b14cff'; ctx.fill();
+      ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = '800 40px DM Sans, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('×' + sel[i].qty, bx, by + 14);
+      ctx.restore();
+    });
+    pk_logo(ctx, rr);
+  });
+}
+let _pkGen = 0;
+// Logo "🍬 Candy Shop" (pedido del usuario: logo visible, no marca de agua)
+function pk_logo(ctx, rr) {
+  ctx.save(); ctx.shadowColor = 'rgba(45,26,10,0.3)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5;
+  rr(285, 812, 330, 66, 33); ctx.fillStyle = '#2d1a3e'; ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = '800 36px Fraunces, DM Sans, serif'; ctx.textAlign = 'center';
+  ctx.fillText('🍬 Candy Shop', 450, 857);
 }
 async function pk_usar() {
   const btn = document.getElementById('pkfoto-usar');
