@@ -736,6 +736,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="foto-preview" id="foto-preview" onclick="document.getElementById('foto-file').click()">📦</div>
       <button class="foto-btn" onclick="document.getElementById('foto-file').click()">📷 Elegir foto</button>
       <button class="foto-btn" onclick="abrirCopiarFotoCandy()" style="background:#eef4fb;color:#2d5f8a">📋 Copiar de otro</button>
+      <button class="foto-btn" onclick="abrirArmarPackFoto()" style="background:#fff3e0;color:#e07b00">🎁 Armar foto de pack</button>
       <button class="foto-btn" onclick="iaSugerirCandy()" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff">✨ IA</button>
       <span class="foto-uploading" id="foto-status"></span>
       <input type="file" id="foto-file" accept="image/*" style="display:none" onchange="subirFoto(this)">
@@ -2185,6 +2186,109 @@ function elegirFotoCandy(codigo) {
   document.getElementById('foto-preview').innerHTML = `<img src="${fotoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
   document.getElementById('foto-status').textContent = '✓ foto copiada de ' + p.nombre;
   document.getElementById('cfoto-overlay').style.display = 'none';
+}
+// ── 🎁 ARMAR FOTO DE PACK: elegís productos + cantidades y se compone una foto (idea del usuario 2026-07-03) ──
+let _pkSel = {};   // codigo → cantidad
+function abrirArmarPackFoto() {
+  let ov = document.getElementById('pkfoto-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'pkfoto-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:460px;max-height:86vh;display:flex;flex-direction:column">
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
+        <b style="flex:1;font-size:0.9rem">🎁 Armar foto de pack</b>
+        <input id="pkfoto-buscar" oninput="pk_render()" placeholder="🔍 Buscar…" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:0.85rem;width:120px">
+        <button onclick="document.getElementById('pkfoto-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button>
+      </div>
+      <div style="font-size:0.68rem;color:#888;padding:4px 12px">Elegí hasta 4 productos y cuántos van de cada uno — se arma una sola foto con todo.</div>
+      <div id="pkfoto-list" style="overflow:auto;flex:1;padding:6px 12px;min-height:120px"></div>
+      <div style="padding:8px 12px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center">
+        <canvas id="pkfoto-canvas" width="900" height="900" style="width:74px;height:74px;border-radius:10px;border:1px solid #eee;background:#fff"></canvas>
+        <div style="flex:1;font-size:0.72rem;color:#888" id="pkfoto-info">Elegí productos para ver la vista previa</div>
+        <button id="pkfoto-usar" onclick="pk_usar()" disabled style="padding:9px 14px;border:none;background:#e07b00;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;opacity:0.5">✓ Usar como foto</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'pkfoto-overlay') ov.style.display = 'none'; };
+  }
+  _pkSel = {};
+  ov.style.display = 'flex';
+  pk_render(); pk_dibujar();
+}
+function pk_render() {
+  const q = (document.getElementById('pkfoto-buscar').value || '').toLowerCase().trim();
+  const items = catalogoCache.filter(p => p.foto && (!q || (p.nombre || '').toLowerCase().includes(q)));
+  document.getElementById('pkfoto-list').innerHTML = items.map(p => {
+    const c = _pkSel[p.codigo] || 0;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f1ea">
+      <img src="${p.foto}" style="width:34px;height:34px;object-fit:contain;background:#f5f0e8;border-radius:7px">
+      <span style="flex:1;font-size:0.8rem;${c ? 'font-weight:800' : ''}">${escCM(p.nombre)}</span>
+      <button onclick="pk_qty('${String(p.codigo).replace(/'/g, "\\'")}',-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
+      <b style="min-width:16px;text-align:center;font-size:0.85rem">${c || ''}</b>
+      <button onclick="pk_qty('${String(p.codigo).replace(/'/g, "\\'")}',1)" style="width:26px;height:26px;border:none;background:#ffe7c2;border-radius:7px;font-weight:800;cursor:pointer">+</button>
+    </div>`;
+  }).join('') || '<div class="empty">Sin productos con foto</div>';
+}
+function pk_qty(codigo, d) {
+  const cur = _pkSel[codigo] || 0;
+  const distintos = Object.keys(_pkSel).length;
+  if (d > 0 && cur === 0 && distintos >= 4) { alert('Hasta 4 productos distintos por pack'); return; }
+  const nu = Math.max(0, Math.min(9, cur + d));
+  if (nu === 0) delete _pkSel[codigo]; else _pkSel[codigo] = nu;
+  pk_render(); pk_dibujar();
+}
+function pk_dibujar() {
+  const cv = document.getElementById('pkfoto-canvas'), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 900, 900);
+  const sel = Object.keys(_pkSel).map(c => ({ p: catalogoCache.find(x => x.codigo === c), qty: _pkSel[c] })).filter(x => x.p);
+  const totalU = sel.reduce((s, x) => s + x.qty, 0);
+  document.getElementById('pkfoto-info').textContent = sel.length ? `${sel.length} producto(s) · ${totalU} unidades en el pack` : 'Elegí productos para ver la vista previa';
+  const btn = document.getElementById('pkfoto-usar');
+  btn.disabled = !sel.length; btn.style.opacity = sel.length ? '1' : '0.5';
+  if (!sel.length) return;
+  // cinta superior
+  ctx.fillStyle = '#e07b00'; ctx.fillRect(0, 0, 900, 96);
+  ctx.fillStyle = '#fff'; ctx.font = '800 56px DM Sans, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('🎁 PACK ×' + totalU, 450, 66);
+  // grilla 1/2/4 según cantidad de productos
+  const zonas = sel.length === 1 ? [[70, 140, 760, 700]]
+    : sel.length === 2 ? [[30, 240, 410, 500], [460, 240, 410, 500]]
+    : [[40, 130, 400, 370], [460, 130, 400, 370], [40, 510, 400, 370], [460, 510, 400, 370]];
+  sel.forEach((x, i) => {
+    if (i >= zonas.length) return;
+    const [zx, zy, zw, zh] = zonas[i];
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const r = Math.min(zw / img.width, zh / img.height);
+      const w = img.width * r, h = img.height * r;
+      ctx.drawImage(img, zx + (zw - w) / 2, zy + (zh - h) / 2, w, h);
+      // globito de cantidad
+      const bx = zx + zw - 44, by = zy + zh - 30;
+      ctx.beginPath(); ctx.arc(bx, by, 40, 0, 7); ctx.fillStyle = '#b14cff'; ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '800 42px DM Sans, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('×' + x.qty, bx, by + 14);
+    };
+    img.src = x.p.foto;
+  });
+}
+async function pk_usar() {
+  const btn = document.getElementById('pkfoto-usar');
+  btn.disabled = true; btn.textContent = '⏳ Subiendo…';
+  try {
+    const blob = await new Promise(res => document.getElementById('pkfoto-canvas').toBlob(res, 'image/jpeg', 0.92));
+    const form = new FormData();
+    form.append('file', blob, 'pack.jpg');
+    form.append('upload_preset', 'candyshop');
+    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.secure_url) throw new Error('upload');
+    fotoUrl = data.secure_url;
+    document.getElementById('foto-preview').innerHTML = `<img src="${fotoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
+    document.getElementById('foto-status').textContent = '✅ Foto de pack armada';
+    document.getElementById('pkfoto-overlay').style.display = 'none';
+    toast('🎁 Foto del pack lista');
+  } catch (e) { alert('⚠️ No se pudo subir la foto del pack. Probá de nuevo.'); }
+  btn.disabled = false; btn.textContent = '✓ Usar como foto';
 }
 // ── ✨ La IA mira la foto y sugiere nombre + categoría (M2 unificación) ──
 async function iaSugerirCandy() {
