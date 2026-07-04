@@ -3006,11 +3006,19 @@ function renderImg(p) {
   </div>`;
 }
 
+const _vidCiclo = {};   // timers del ciclo continuo de productos con video
 function goToSlideInternal(id, idx) {
   const p = productos.find(x=>x.id==id); if (!p) return;
   const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (idx >= imagenes.length) return;
   carouselIdx[id] = idx;
+  if (_vidCiclo[id]) { clearTimeout(_vidCiclo[id]); delete _vidCiclo[id]; }
+  // Producto con video: el carrusel gira SOLO (video completo → cada foto 3s → video de nuevo).
+  // Antes quedaba clavado en la foto tras el primer video (lo cazó el usuario).
+  const tieneVideo = imagenes.some(v => esVideo(v));
+  if (tieneVideo && imagenes.length > 1 && !esVideo(imagenes[idx])) {
+    _vidCiclo[id] = setTimeout(() => goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length), 3000);
+  }
   let med = document.getElementById('cimg-'+id);
   const wrap = document.getElementById('carousel-'+id);
   if (!med || !wrap) return;
@@ -3032,6 +3040,7 @@ function goToSlideInternal(id, idx) {
     }
     med.style.display = 'block';
     if (med.src !== val) med.src = val;
+    else { try { med.currentTime = 0; } catch (e) {} }   // repetición del ciclo: desde el arranque
     med.play && med.play().catch(() => {});
   } else {
     if (med.tagName !== 'IMG') {
