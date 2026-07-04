@@ -2976,12 +2976,19 @@ function esVideo(url) {
 function renderImg(p) {
   const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (!imagenes.length) return `<div class="producto-img-wrap"><div class="producto-img-placeholder">🍬</div></div>`;
-  const primera = imagenes[0];
+  // Si el producto tiene VIDEO, el carrusel ARRANCA ahí (portada en movimiento — pedido del
+  // usuario). El orden guardado no cambia: catálogos/PDF/Candy siguen usando la primera FOTO.
+  const idxIni = Math.max(0, imagenes.findIndex(v => esVideo(v)));
+  const primera = imagenes[idxIni];
   const multi = imagenes.length > 1;
+  carouselIdx[p.id] = idxIni;
   let mediaEl;
   if (esVideo(primera)) {
-    mediaEl = `<video class="producto-img" id="cimg-${p.id}" src="${primera}"
-      autoplay loop muted playsinline style="object-fit:cover"></video>`;
+    // Carga perezosa: el src recién se pone cuando la tarjeta entra en pantalla (celular: no
+    // baja todos los videos de una) — lo maneja _vidObserver. loop solo si es el único medio.
+    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}"
+      ${multi ? '' : 'loop'} muted playsinline preload="none" style="object-fit:cover"
+      ${multi ? `onended="goToSlideInternal(${p.id},(carouselIdx[${p.id}]+1)%${imagenes.length})"` : ''}></video>`;
   } else {
     const urls0 = imgUrl(primera);
     mediaEl = `<img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
@@ -2995,7 +3002,7 @@ function renderImg(p) {
     ${multi ? `
     <button class="carousel-btn carousel-prev" onclick="prevSlide(${p.id},event)">‹</button>
     <button class="carousel-btn carousel-next" onclick="nextSlide(${p.id},event)">›</button>
-    <div class="carousel-dots">${imagenes.map((_,i)=>`<span class="dot${i===0?' activo':''}" onclick="goToSlide(${p.id},${i},event)"></span>`).join('')}</div>` : ''}
+    <div class="carousel-dots">${imagenes.map((_,i)=>`<span class="dot${i===idxIni?' activo':''}" onclick="goToSlide(${p.id},${i},event)"></span>`).join('')}</div>` : ''}
   </div>`;
 }
 
@@ -3015,9 +3022,12 @@ function goToSlideInternal(id, idx) {
     if (med.tagName !== 'VIDEO') {
       const v = document.createElement('video');
       v.className = med.className; v.id = med.id;
-      v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+      v.muted = true; v.playsInline = true;
       v.setAttribute('playsinline', '');
       v.style.objectFit = 'cover';
+      // El video dura LO QUE DURA y recién ahí pasa al siguiente medio (pedido del usuario).
+      if (imagenes.length > 1) v.onended = () => goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length);
+      else v.loop = true;
       med.replaceWith(v); med = v;
     }
     med.style.display = 'block';
@@ -3046,12 +3056,37 @@ function goToSlide(id, idx, e) { if(e)e.stopPropagation(); const p=productos.fin
 
 function startTimer(id, n) {
   if (carouselTimers[id]) clearInterval(carouselTimers[id]);
-  carouselTimers[id] = setInterval(() => { goToSlideInternal(id, ((carouselIdx[id]||0)+1)%n); }, 3000);
+  carouselTimers[id] = setInterval(() => {
+    const med = document.getElementById('cimg-' + id);
+    if (med && med.tagName === 'VIDEO' && !med.paused && !med.ended) return;   // el video termina solo
+    goToSlideInternal(id, ((carouselIdx[id]||0)+1)%n);
+  }, 3000);
 }
 
 function initCarousels() {
   Object.keys(carouselTimers).forEach(k => { clearInterval(carouselTimers[k]); delete carouselTimers[k]; });
-  productos.forEach(p => { carouselIdx[p.id] = 0; });
+  productos.forEach(p => { if (carouselIdx[p.id] === undefined) carouselIdx[p.id] = 0; });
+  _vidObservar();
+}
+// Videos del catálogo con carga perezosa: recién bajan y arrancan al ENTRAR en pantalla,
+// y se pausan al salir (si todas las portadas fueran videos, el celular no sufre).
+let _vidIO = null;
+function _vidObservar() {
+  if (!('IntersectionObserver' in window)) {   // navegador viejo: cargar directo
+    document.querySelectorAll('video[data-vsrc]').forEach(v => { v.src = v.dataset.vsrc; v.removeAttribute('data-vsrc'); v.play().catch(() => {}); });
+    return;
+  }
+  if (_vidIO) _vidIO.disconnect();
+  _vidIO = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      const v = en.target;
+      if (en.isIntersecting) {
+        if (v.dataset.vsrc) { v.src = v.dataset.vsrc; v.removeAttribute('data-vsrc'); }
+        if (v.tagName === 'VIDEO') v.play && v.play().catch(() => {});
+      } else if (v.tagName === 'VIDEO') { v.pause && v.pause(); }
+    });
+  }, { rootMargin: '120px' });
+  document.querySelectorAll('.producto-img-wrap video').forEach(v => _vidIO.observe(v));
 }
 
 function hoverCarouselStart(id) {
