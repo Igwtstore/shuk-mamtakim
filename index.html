@@ -6146,7 +6146,9 @@ let _npBandejaId = '';   // si vino de la bandeja, para marcarla usada al guarda
 
 async function analizarFotoAlta() {
   const status = document.getElementById('np-upload-status');
-  let publicId = _npPreSubida;
+  // También sirve una foto COPIADA de otro producto (_npCopiadas: ya está subida) — antes
+  // solo miraba archivos elegidos y decía "Elegí primero una foto" (lo cazó el usuario).
+  let publicId = _npPreSubida || _npCopiadas[0] || '';
   if (!publicId) {
     const img = _npArchivos.find(f => f.type.startsWith('image/'));
     if (!img) { showToast('Elegí primero una foto del producto'); return; }
