@@ -3046,6 +3046,7 @@ function goToSlideInternal(id, idx) {
     med.style.display = 'block';
     if (med.src !== val) med.src = val;
     else { try { med.currentTime = 0; } catch (e) {} }   // repetición del ciclo: desde el arranque
+    med.oncanplay = () => { if (med.paused) { const p2 = med.play(); if (p2 && p2.catch) p2.catch(() => {}); } };
     med.play && med.play().catch(() => {});
   } else {
     if (med.tagName !== 'IMG') {
@@ -3072,7 +3073,9 @@ function startTimer(id, n) {
   if (carouselTimers[id]) clearInterval(carouselTimers[id]);
   carouselTimers[id] = setInterval(() => {
     const med = document.getElementById('cimg-' + id);
-    if (med && med.tagName === 'VIDEO' && !med.paused && !med.ended) return;   // el video termina solo
+    // Slide de VIDEO: no saltearlo nunca — aunque esté cargando (en celular tarda unos
+    // segundos y quedaba 'pausado' → el timer lo pisaba antes de arrancar). Avanza por 'ended'.
+    if (med && med.tagName === 'VIDEO' && !med.ended) return;
     goToSlideInternal(id, ((carouselIdx[id]||0)+1)%n);
   }, 3000);
 }
@@ -3097,6 +3100,7 @@ function _vidObservar() {
       if (en.isIntersecting) {
         if (v.dataset.vsrc) { v.src = v.dataset.vsrc; v.removeAttribute('data-vsrc'); }
         if (v.tagName === 'VIDEO' && v.play) {
+          v.oncanplay = () => { if (v.paused && !v.ended) { const p3 = v.play(); if (p3 && p3.catch) p3.catch(() => {}); } };
           const pr = v.play();
           if (pr && pr.catch) pr.catch(() => {
             // El celular bloqueó la reproducción (ahorro de energía/datos): pasar a la FOTO
