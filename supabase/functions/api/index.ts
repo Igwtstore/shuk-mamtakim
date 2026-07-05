@@ -339,7 +339,7 @@ const ventaFront = (v: any) => ({
 const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, tc: parseFloat(p.tc) || 0 });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
-const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString() });
+const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() });
 const rendFront = (r: any) => ({ fecha: r.fecha, desc: r.descripcion, monto: r.monto, moneda: r.moneda, columna: r.columna || '', comprobante: (r.comprobante || '').toString() });
 
 // _enviosData: saldo y deuda derivada de la caja de envíos (idempotente).
@@ -1575,8 +1575,12 @@ Deno.serve(async (req) => {
       const pr = await sbGet('productos', 'select=stock,nombre,nombres_prev&id=eq.' + encodeURIComponent(id));
       if (!pr.length) return json({ error: 'producto no encontrado' });
       const patch: any = {};
-      const map: any = { nombre: 'nombre', desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda', imagen: 'imagen' };
-      Object.keys(map).forEach((k) => { if (has(k)) patch[map[k]] = P(body, k); });
+      const map: any = { nombre: 'nombre', desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda', imagen: 'imagen', hashgaja: 'hashgaja', kosherTipo: 'kosher_tipo', jalav: 'jalav' };
+      // '__VACIO__' = el front quiere VACIAR el campo (has() ignora '' → hace falta el centinela).
+      // Sin esta traducción el texto literal quedaba guardado — 4 productos terminaron con
+      // vinculo='__VACIO__' y el sistema los agrupaba como gemelos falsos (reparado 2026-07-05).
+      const PV = (k: string) => { const v = P(body, k); return v === '__VACIO__' ? '' : v; };
+      Object.keys(map).forEach((k) => { if (has(k)) patch[map[k]] = PV(k); });
       // RENOMBRADO SEGURO también en el editor simple (antes solo el masivo lo tenía): el nombre
       // viejo se guarda en nombres_prev → el Maaser/ganancia Pitzujim sigue matcheando las ventas
       // viejas por texto, y nada de la historia se pierde.
@@ -1594,7 +1598,7 @@ Deno.serve(async (req) => {
       if (has('activo')) patch.activo = P(body, 'activo').toUpperCase() !== 'NO';
       if (has('visible')) { patch.visible_cat = P(body, 'visible'); patch.visible = P(body, 'visible') !== 'No'; }   // Ambos/Min/May + boolean
       if (has('unidadesPorPaquete')) patch.unidades_por_paquete = Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1);   // Circuito Candy↔Shuk: cuántas unidades trae el paquete/bolsa
-      if (body.vinculo !== undefined) patch.vinculo = P(body, 'vinculo');   // gemelos: mismo producto con stock de los dos dueños ('' = desvincular)
+      if (body.vinculo !== undefined) patch.vinculo = PV('vinculo');   // gemelos: mismo producto con stock de los dos dueños ('' / '__VACIO__' = desvincular)
       if (has('stock')) { const antes = parseInt(pr[0].stock) || 0, nsx = parseInt(P(body, 'stock')) || 0; patch.stock = nsx; if (nsx !== antes) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: id, producto: pr[0].nombre, cambio: nsx - antes, antes, despues: nsx, origen: 'Edición manual (editor de producto)' }); }
       await sbPatch('productos', 'id=eq.' + encodeURIComponent(id), patch);
       return json({ ok: true });
@@ -1626,7 +1630,7 @@ Deno.serve(async (req) => {
     if (accion === 'editarProductosLote') {
       let cambios: any[]; try { cambios = JSON.parse(P(body, 'cambios') || '[]'); } catch { return json({ error: 'json inválido' }); }
       if (!cambios.length) return json({ ok: true, n: 0 });
-      const map: any = { desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda' };
+      const map: any = { desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda', hashgaja: 'hashgaja', kosherTipo: 'kosher_tipo', jalav: 'jalav' };
       let n = 0;
       for (const c of cambios) {
         const id = (c.id || '').toString(); if (!id) continue;
@@ -1678,7 +1682,7 @@ Deno.serve(async (req) => {
       const all = await sbGet('productos', 'select=id');
       let maxId = 0; all.forEach((p: any) => { const n = parseInt(p.id) || 0; if (n > maxId) maxId = n; });
       const nid = String(maxId + 1); const stockIni = parseInt(P(body, 'stock')) || 0;
-      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1) });
+      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
       if (stockIni > 0) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: nid, producto: P(body, 'nombre'), cambio: stockIni, antes: 0, despues: stockIni, origen: 'Alta de producto' });
       return json({ ok: true, id: nid });
     }
