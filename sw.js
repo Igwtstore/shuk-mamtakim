@@ -1,4 +1,4 @@
-const CACHE = 'shuk-v4';
+const CACHE = 'shuk-v5';
 const STATIC = ['/', '/index.html', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -17,6 +17,13 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
+
+  // VIDEOS → el navegador los maneja SOLO (piden rangos parciales; si el SW los intercepta,
+  // iPhone los rechaza con ERROR 4 — bug cazado con el diagnóstico del usuario 2026-07-05).
+  if (e.request.destination === 'video' || e.request.headers.has('range') ||
+      url.pathname.includes('/video/') || /\.(mp4|webm|mov|m4v)$/i.test(url.pathname)) {
+    return;
+  }
 
   // OneSignal y APIs → siempre network, sin cache
   if (url.hostname.includes('onesignal') || url.pathname.includes('OneSignal') ||
