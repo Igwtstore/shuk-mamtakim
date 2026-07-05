@@ -3171,8 +3171,23 @@ if (new URLSearchParams(location.search).get('debug') === 'video') {
   const dbg = document.createElement('div');
   dbg.style.cssText = 'position:fixed;bottom:70px;left:8px;right:8px;background:rgba(20,20,40,0.92);color:#7fdc9a;font:11px monospace;padding:8px;border-radius:8px;z-index:9999;white-space:pre-wrap';
   document.body.appendChild(dbg);
+  // Sondeos desde ESTA página: quién controla + ¿la descarga cruda del video llega?
+  let _dbgExtra = 'sondeando…';
+  (async () => {
+    let ctrl = 'sin SW';
+    try { const c = navigator.serviceWorker.controller; if (c) ctrl = 'SW: ' + c.scriptURL.split('/').pop(); } catch (e) {}
+    let f = '';
+    try {
+      const pv = productos.find(x => (x.imagen || '').split(',').some(v => esVideo(v.trim())));
+      const uv = (pv.imagen || '').split(',').map(x => x.trim()).find(x => esVideo(x));
+      const r = await fetch(uv, { cache: 'no-store' });
+      const b = await r.blob();
+      f = 'fetch video: HTTP ' + r.status + ' · ' + Math.round(b.size / 1024) + ' KB · ' + (r.headers.get('content-type') || '?');
+    } catch (e) { f = 'fetch video FALLÓ: ' + e.message.slice(0, 60); }
+    _dbgExtra = ctrl + ' | ' + f;
+  })();
   setInterval(() => {
-    const lineas = ['v3.29-fifo3 · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']'];
+    const lineas = ['v3.29-fifo4 · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']', _dbgExtra];
     productos.filter(p => (p.imagen || '').split(',').some(x => esVideo(x.trim()))).forEach(p => {
       const el = document.getElementById('cimg-' + p.id);
       if (!el) { lineas.push(p.id + ': sin tarjeta'); return; }
