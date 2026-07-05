@@ -2991,6 +2991,7 @@ function renderImg(p) {
     const posterAttr = fotoPoster ? `poster="${imgUrl(fotoPoster)[0]}"` : '';
     mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}" ${posterAttr}
       ${multi ? '' : 'loop'} muted playsinline preload="metadata" style="object-fit:cover"
+      onclick="event.stopPropagation();_vidTap(this)"
       ${multi ? `onended="goToSlideInternal(${p.id},(carouselIdx[${p.id}]+1)%${imagenes.length})"` : ''}></video>`;
   } else {
     const urls0 = imgUrl(primera);
@@ -3037,6 +3038,7 @@ function goToSlideInternal(id, idx) {
       v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
       const fotoPst = imagenes.find(x => !esVideo(x));
       if (fotoPst) v.poster = imgUrl(fotoPst)[0];
+      v.onclick = (ev) => { ev.stopPropagation(); _vidTap(v); };
       v.style.objectFit = 'cover';
       // El video dura LO QUE DURA y recién ahí pasa al siguiente medio (pedido del usuario).
       if (imagenes.length > 1) v.onended = () => goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length);
@@ -3084,6 +3086,15 @@ function initCarousels() {
   Object.keys(carouselTimers).forEach(k => { clearInterval(carouselTimers[k]); delete carouselTimers[k]; });
   productos.forEach(p => { if (carouselIdx[p.id] === undefined) carouselIdx[p.id] = 0; });
   _vidObservar();
+}
+// Tap directo en el video (iPhone siempre lo permite): reproducir/pausar. Si hasta el gesto
+// directo es rechazado, se muestran los CONTROLES nativos como último recurso.
+function _vidTap(v) {
+  if (v.dataset.vsrc) { v.src = v.dataset.vsrc; v.removeAttribute('data-vsrc'); }
+  if (v.paused) {
+    const pr = v.play();
+    if (pr && pr.catch) pr.catch(() => { v.controls = true; });
+  } else v.pause();
 }
 // Videos del catálogo con carga perezosa: recién bajan y arrancan al ENTRAR en pantalla,
 // y se pausan al salir (si todas las portadas fueran videos, el celular no sufre).
