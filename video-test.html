@@ -36,6 +36,14 @@ button { padding: 10px 16px; border: none; background: #1a1a2e; color: #fff; bor
 <img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_400,f_auto,q_auto/shuk-mamtakim/placeholder" onload="log('l4','foto OK')" onerror="log('l4','foto FALLÓ')">
 <div class="log" id="l4">esperando…</div>
 
+<h2>5) Video de OTRO servidor (no Cloudinary)</h2>
+<video id="v5" muted playsinline autoplay loop
+  src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"></video>
+<div class="log" id="l5">esperando…</div>
+
+<h2>6) Descarga cruda del video de Cloudinary (sin reproducir)</h2>
+<div class="log" id="l6">descargando…</div>
+
 <div class="log" id="linfo"></div>
 <script>
 function log(id, msg) { document.getElementById(id).textContent = msg; }
@@ -47,7 +55,10 @@ function vigilar(vid, lid) {
     v.addEventListener(ev, () => { estados.push(ev); upd(); }));
   setInterval(upd, 1500);
 }
-vigilar('v1', 'l1'); vigilar('v2', 'l2'); vigilar('v3', 'l3');
+vigilar('v1', 'l1'); vigilar('v2', 'l2'); vigilar('v3', 'l3'); vigilar('v5', 'l5');
+fetch('https://res.cloudinary.com/dq2boloyp/video/upload/f_mp4,vc_h264,q_auto,w_720/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.mp4')
+  .then(async r => { const b = await r.blob(); log('l6', 'HTTP ' + r.status + ' · ' + r.headers.get('content-type') + ' · ' + Math.round(b.size / 1024) + ' KB descargados'); })
+  .catch(e => log('l6', 'FETCH FALLÓ: ' + e.message));
 document.getElementById('linfo').textContent = 'Navegador: ' + navigator.userAgent.slice(0, 110);
 </script>
 </body>
