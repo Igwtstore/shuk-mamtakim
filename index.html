@@ -3178,6 +3178,7 @@ if (new URLSearchParams(location.search).get('debug') === 'video') {
     try { const c = navigator.serviceWorker.controller; if (c) ctrl = 'SW: ' + c.scriptURL.split('/').pop(); } catch (e) {}
     let f = '';
     try {
+      for (let i = 0; i < 40 && (!Array.isArray(productos) || !productos.length); i++) await new Promise(r => setTimeout(r, 500));
       const pv = productos.find(x => (x.imagen || '').split(',').some(v => esVideo(v.trim())));
       const uv = (pv.imagen || '').split(',').map(x => x.trim()).find(x => esVideo(x));
       const r = await fetch(uv, { cache: 'no-store' });
@@ -3187,7 +3188,7 @@ if (new URLSearchParams(location.search).get('debug') === 'video') {
     _dbgExtra = ctrl + ' | ' + f;
   })();
   setInterval(() => {
-    const lineas = ['v3.29-fifo4 · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']', _dbgExtra];
+    const lineas = ['v3.29-sinSW · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']', _dbgExtra];
     productos.filter(p => (p.imagen || '').split(',').some(x => esVideo(x.trim()))).forEach(p => {
       const el = document.getElementById('cimg-' + p.id);
       if (!el) { lineas.push(p.id + ': sin tarjeta'); return; }
@@ -11037,34 +11038,24 @@ function installPWA() {
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // URL versionada + AUTO-RESET: el sw.js viejo (v4) interceptaba videos → ERR4 en iPhone,
-    // y aunque se publique el nuevo, el viejo sigue CONTROLANDO la página hasta una recarga.
-    // Acá: se desregistra todo sw.js sin versión, se registra el v5, y si el controlador
-    // actual es viejo → la página se recarga UNA vez sola (guardia en sessionStorage).
-    const ctrlViejo = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.indexOf('v=5') === -1 && navigator.serviceWorker.controller.scriptURL.indexOf('OneSignal') === -1;
+    // ⚰️ SERVICE WORKER RETIRADO (2026-07-05): bug de WebKit/iOS — con CUALQUIER service worker
+    // controlando la página, los <video> fallan con ERROR 4 aunque el SW los deje pasar de largo
+    // (comprobado con el debug del usuario: SW v5 'skip' activo → ERR4; sin SW → el video anduvo).
+    // Se pierde solo el caché offline; la instalación (manifest) y las notificaciones (OneSignal,
+    // worker propio) siguen intactas. Acá: desregistrar TODO sw.js, borrar sus cachés y, si esta
+    // carga todavía estaba controlada, recargar UNA vez (guardia en sessionStorage).
+    const controlado = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.indexOf('OneSignal') === -1;
     navigator.serviceWorker.getRegistrations().then(async regs => {
+      let habia = false;
       for (const r of regs) {
         const su = ((r.active || r.waiting || r.installing) || {}).scriptURL || '';
-        if (su.indexOf('/sw.js') !== -1 && su.indexOf('v=5') === -1) { try { await r.unregister(); } catch (e) {} }
+        if (su.indexOf('/sw.js') !== -1) { habia = true; try { await r.unregister(); } catch (e) {} }
       }
-      try { const keys = await caches.keys(); for (const k of keys) if (k !== 'shuk-v5') await caches.delete(k); } catch (e) {}
-      return navigator.serviceWorker.register('/sw.js?v=5');
-    }).then(reg => {
-      if (ctrlViejo && !sessionStorage.getItem('_swReset5')) {
-        sessionStorage.setItem('_swReset5', '1');
-        setTimeout(() => location.reload(), 900);
+      try { const keys = await caches.keys(); for (const k of keys) if (k.indexOf('shuk-') === 0) await caches.delete(k); } catch (e) {}
+      if (habia && controlado && !sessionStorage.getItem('_swAdios')) {
+        sessionStorage.setItem('_swAdios', '1');
+        setTimeout(() => location.reload(), 700);
       }
-      return reg;
-    }).then(reg => {
-      reg.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        newSW.addEventListener('statechange', () => {
-          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-            // Nueva versión disponible — recarga automática
-            window.location.reload(true);
-          }
-        });
-      });
     }).catch(() => {});
   });
 }
