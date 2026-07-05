@@ -739,6 +739,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="foto-btn" onclick="document.getElementById('foto-file').click()">📷 Elegir foto</button>
       <button class="foto-btn" onclick="abrirCopiarFotoCandy()" style="background:#eef4fb;color:#2d5f8a">📋 Copiar de otro</button>
       <button class="foto-btn" onclick="abrirArmarPackFoto()" style="background:#fff3e0;color:#e07b00">🎁 Armar foto de pack</button>
+      <button class="foto-btn" onclick="abrirCombo()" style="background:#ffe9f2;color:#c2185b" id="btn-combo">🧩 Combo (pack mixto)</button>
       <button class="foto-btn" onclick="iaSugerirCandy()" style="background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff">✨ IA</button>
       <button class="foto-btn" onclick="videoPromptCandy()" style="background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff">🎬 Video</button>
       <span class="foto-uploading" id="foto-status"></span>
@@ -997,6 +998,62 @@ function showTab(id, btn) {
 // Devuelve los datos, o null SOLO si falló de verdad tras varios reintentos.
 // Apps Script a veces responde un error transitorio (HTML "La secuencia se
 // completó pero no mostró ningún valor") bajo llamadas concurrentes → reintentamos.
+// ═══ 🧩 COMBO (pack mixto VENDIBLE): este producto se compone de otros; al venderse en la
+// tienda se reserva el stock de CADA componente (aprobado por el usuario 2026-07-03). ═══
+let _fCombo = [];   // [{codigo, nombre, cant}] del producto en edición
+function abrirCombo() {
+  let ov = document.getElementById('combo-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'combo-overlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:460px;max-height:84vh;display:flex;flex-direction:column">
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
+        <b style="flex:1;font-size:0.9rem">🧩 Combo — qué lleva adentro</b>
+        <input id="combo-buscar" oninput="combo_render()" placeholder="🔍 Buscar…" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:0.85rem;width:120px">
+        <button onclick="document.getElementById('combo-overlay').style.display='none';combo_resumen()" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✓ Listo</button>
+      </div>
+      <div style="font-size:0.68rem;color:#888;padding:4px 12px">Al venderse el combo en la tienda, se descuenta el stock de CADA componente (los del Shuk disparan el circuito). El stock del combo se calcula solo: hasta donde alcancen los componentes.</div>
+      <div id="combo-list" style="overflow:auto;flex:1;padding:6px 12px;min-height:120px"></div>
+      <div style="padding:8px 12px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center">
+        <div style="flex:1;font-size:0.74rem;color:#666" id="combo-info"></div>
+        <button onclick="_fCombo=[];combo_render();combo_info()" style="padding:8px 12px;border:none;background:#fdecea;color:#c0392b;border-radius:8px;font-weight:700;cursor:pointer">Quitar todo</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target.id === 'combo-overlay') { ov.style.display = 'none'; combo_resumen(); } };
+  }
+  ov.style.display = 'flex';
+  combo_render(); combo_info();
+}
+function combo_qty(codigo, d) {
+  const p = catalogoCache.find(x => x.codigo === codigo); if (!p) return;
+  const it = _fCombo.find(x => x.codigo === codigo);
+  if (it) { it.cant = Math.max(0, it.cant + d); if (!it.cant) _fCombo = _fCombo.filter(x => x.codigo !== codigo); }
+  else if (d > 0) _fCombo.push({ codigo, nombre: p.nombre, cant: 1 });
+  combo_render(); combo_info();
+}
+function combo_render() {
+  const q = (document.getElementById('combo-buscar').value || '').toLowerCase().trim();
+  const items = catalogoCache.filter(p => p.codigo !== editandoCodigo && !p.esCombo && (!q || (p.nombre || '').toLowerCase().includes(q)));
+  document.getElementById('combo-list').innerHTML = items.map(p => {
+    const it = _fCombo.find(x => x.codigo === p.codigo);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f1ea">
+      ${p.foto ? `<img src="${p.foto}" style="width:32px;height:32px;object-fit:contain;background:#f5f0e8;border-radius:7px">` : '<div style="width:32px;height:32px;background:#f5f0e8;border-radius:7px"></div>'}
+      <span style="flex:1;font-size:0.8rem;${it ? 'font-weight:800' : ''}">${escCM(p.nombre)}</span>
+      <button onclick="combo_qty('${String(p.codigo).replace(/'/g, "\\'")}',-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
+      <b style="min-width:16px;text-align:center;font-size:0.85rem">${it ? it.cant : ''}</b>
+      <button onclick="combo_qty('${String(p.codigo).replace(/'/g, "\\'")}',1)" style="width:26px;height:26px;border:none;background:#ffd6e8;border-radius:7px;font-weight:800;cursor:pointer">+</button>
+    </div>`;
+  }).join('') || '<div class="empty">Sin candidatos</div>';
+}
+function combo_info() {
+  const el = document.getElementById('combo-info'); if (!el) return;
+  el.textContent = _fCombo.length ? _fCombo.map(c => c.cant + '× ' + c.nombre).join(' · ') : 'Sin componentes (no es combo)';
+}
+function combo_resumen() {
+  const btn = document.getElementById('btn-combo'); if (!btn) return;
+  btn.textContent = _fCombo.length ? '🧩 Combo: ' + _fCombo.reduce((s, c) => s + c.cant, 0) + ' u. adentro' : '🧩 Combo (pack mixto)';
+}
 // ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca para pegar en la app de Gemini (Veo) ═══
 let _vidNombreC = '';
 function _vidPromptCandy(conPersona) {
@@ -2174,6 +2231,7 @@ function _poblarCatCandyDatalist() {
 function abrirModal() {
   editandoCodigo = null;
   fotoUrl = '';
+  _fCombo = []; combo_resumen();
   document.getElementById('modal-titulo').textContent = 'Nuevo producto';
   document.getElementById('f-codigo').value = '';
   document.getElementById('f-codigo').readOnly = false;
@@ -2196,6 +2254,8 @@ function abrirModal() {
 function editarProducto(p) {
   editandoCodigo = p.codigo;
   fotoUrl = p.foto || '';
+  try { _fCombo = JSON.parse(p.componentes || '[]') || []; } catch (e) { _fCombo = []; }
+  combo_resumen();
   document.getElementById('modal-titulo').textContent = 'Editar producto';
   document.getElementById('f-codigo').value = p.codigo;
   document.getElementById('f-codigo').readOnly = false;
@@ -2516,8 +2576,8 @@ async function guardarProducto() {
   const accion = editandoCodigo ? 'editarProductoHijo' : 'agregarProductoHijo';
   // Al editar, el código original es la llave; si lo cambiaron va aparte como nuevoCodigo
   const params = editandoCodigo
-    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto, ...oferta }
-    : { codigo, nombre, precioVenta: precio, costo, foto, ...oferta };
+    ? { codigo: editandoCodigo, nuevoCodigo: codigo, nombre, precioVenta: precio, costo, foto, componentes: _fCombo.length ? JSON.stringify(_fCombo) : '', ...oferta }
+    : { codigo, nombre, precioVenta: precio, costo, foto, componentes: _fCombo.length ? JSON.stringify(_fCombo) : '', ...oferta };
   const res = await api(accion, params);
 
   btn.textContent = 'Guardar';

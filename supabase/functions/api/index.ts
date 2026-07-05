@@ -1464,13 +1464,24 @@ Deno.serve(async (req) => {
         if (recPH.length >= 4) return json({ error: 'rate' });
         if (recPH.length && Date.now() - new Date(recPH[0].creado).getTime() < 90000) return json({ error: 'rate' });
       }
+      // 🎁 COMBO: expandir cada combo del pedido a sus COMPONENTES (la validación y la reserva
+      // corren sobre los componentes reales; el combo en sí no tiene stock propio).
+      const combosCat = await sbGet('candy_productos', 'select=codigo,componentes&componentes=neq.');
+      const compMap: any = {}; combosCat.forEach((r: any) => { try { const cs = JSON.parse(r.componentes || '[]'); if (cs.length) compMap[r.codigo] = cs; } catch { /**/ } });
+      const itemsReserva: any[] = [];
+      for (const it of items) {
+        const cs = compMap[(it.codigo || '').toString()];
+        const uds = parseInt(it.cantidad) || 0;
+        if (!cs) { itemsReserva.push(it); continue; }
+        for (const c of cs) itemsReserva.push({ codigo: c.codigo, nombre: (c.nombre || c.codigo || '').toString(), cantidad: uds * Math.max(1, parseInt(c.cant) || 1), _deCombo: it.nombre || it.codigo });
+      }
       // ── Segunda validación de stock (pedida por el usuario: como la del Shuk) ──
       // Mientras el cliente cargaba el carrito pudo venderse stock. Se chequea acá, ANTES de
       // registrar nada. "♾️ Siempre disponible" y el switch global de stock apagado quedan exentos.
       // Los shuk:<id> los valida el circuito (asegurarGenuinoShuk) más abajo con la familia real.
       const mostrarStockPH = (await getConfig('candy_mostrar_stock', '1')) !== '0';
       if (mostrarStockPH) {
-        for (const it of items) {
+        for (const it of itemsReserva) {
           const cod = (it.codigo || '').toString(), cant = parseInt(it.cantidad) || 0;
           if (!cod || cant <= 0 || cod.startsWith('shuk:')) continue;
           const cpV = await sbGet('candy_productos', 'select=siempre_disp&codigo=eq.' + encodeURIComponent(cod));
@@ -1488,12 +1499,12 @@ Deno.serve(async (req) => {
       if (!r.ok) return json({ error: 'insert pedido ' + r.status + ' ' + (await r.text()).slice(0, 150) });
       // Reserva: descuenta el depósito por cada item (la tienda ve menos stock → no se sobrevende).
       // Circuito F1: si es shuk: de Miri y falta genuino, primero se compra el paquete a Miri.
-      for (const it of items) {
+      for (const it of itemsReserva) {
         const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString();
         if (cant <= 0 || !cod) continue;
         const cir = await asegurarGenuinoShuk(cod, cant, 'pedido tienda ' + hijo);
         if (cir.error) { await sbDelete('candy_pedidos', 'pedido_id=eq.' + encodeURIComponent(pedidoId)); return json({ error: cir.error }); }
-        await ajustarDeposito(cod, (it.nombre || '').toString(), -cant, 'Reserva pedido tienda (' + hijo + ')');
+        await ajustarDeposito(cod, (it.nombre || '').toString(), -cant, (it._deCombo ? '🎁 Combo "' + it._deCombo + '" · ' : '') + 'Reserva pedido tienda (' + hijo + ')');
       }
       return json({ ok: true, pedidoId });
     }
@@ -1883,7 +1894,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, importado: false });
     }
     if (accion === 'agregarProductoHijo') {
-      await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp) });
+      await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp), componentes: P(body, 'componentes') });
       return json({ ok: true });
     }
     if (accion === 'analiticaCandy') {
@@ -1954,6 +1965,7 @@ Deno.serve(async (req) => {
       if (has('cantPack')) patch.cant_pack = parseInt(P(body, 'cantPack')) || 0;
       if (has('precioPack')) patch.precio_pack = N(body, 'precioPack');
       if (body.siempreDisp !== undefined) patch.siempre_disp = boolHijo(body.siempreDisp);
+      if (body.componentes !== undefined) patch.componentes = P(body, 'componentes');   // 🎁 combo (pack mixto): JSON [{codigo,cant}]
       await sbPatch('candy_productos', 'codigo=eq.' + encodeURIComponent(codigo), patch);
       if (nuevoCodigo !== codigo) for (const t of ['candy_ventas', 'stock_diario', 'candy_compras', 'candy_deposito']) await sbPatch(t, 'codigo=eq.' + encodeURIComponent(codigo), { codigo: nuevoCodigo });   // propagar el código a lo que lo referencia
       return json({ ok: true });
@@ -2304,7 +2316,17 @@ Deno.serve(async (req) => {
           .reduce((sm: number, f: any) => sm + (parseInt(f.stock) || 0) * Math.max(1, parseInt(f.unidades_por_paquete) || 1), 0);
         return (depMap['shuk:' + p.id] || 0) + paqUni;
       };
-      const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
+      // 🎁 COMBO (pack mixto vendible): su stock ofrecido = cuántos combos completos se pueden
+      // armar con lo disponible de CADA componente (propios: depósito; shuk: genuino + familia).
+      const stockDisponible = (cod: string) => cod.startsWith('shuk:')
+        ? (porId[cod.slice(5)] ? stockFamiliar(porId[cod.slice(5)]) : (depMap[cod] || 0))
+        : (depMap[cod] || 0);
+      const stockCombo = (r: any) => {
+        let comps: any[] = []; try { comps = JSON.parse(r.componentes || '[]'); } catch { comps = []; }
+        if (!comps.length) return null;
+        return Math.max(0, Math.min(...comps.map((c: any) => Math.floor(stockDisponible((c.codigo || '').toString()) / Math.max(1, parseInt(c.cant) || 1)))));
+      };
+      const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], esCombo: !!(r.componentes || '').trim(), componentes: (r.componentes || '').toString(), stock: stockCombo(r) !== null ? stockCombo(r) : (depMap[String(r.codigo)] || 0), categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
       const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() }));
       return json(propios.concat(shuk));
