@@ -1753,6 +1753,74 @@ Deno.serve(async (req) => {
       if (has('stockDeltas') && estadoPed !== 'cotizacion') {
         for (const u of P(body, 'stockDeltas').split(',')) { const pp = u.split(':'); const pid = pp[0], delta = parseInt(pp[1]) || 0; if (!delta) continue; await moverStockShuk(pid, delta, 'Edición pedido #' + (v.n_venta || '')); }
       }
+      // ⚖️ RECONCILIACIÓN COBRO vs TOTAL (caso #46 Mati Allami): editar un pedido YA COBRADO
+      // agregándole productos no puede "cobrarse solo" — lo cubierto real son los tramos, y el
+      // faltante queda como tramo Cta Cte → la tarjeta muestra "cobro parcial · debe X", entra
+      // a la cuenta corriente y las cajas no se inflan. Se compara POR MONEDA contra el total
+      // (no por balde: una redistribución Jony↔Miri del mismo total no genera deuda fantasma).
+      // Solo corre si la edición mandó totales (el corrector de splits viejos no los manda).
+      let deudaNueva: any = null;
+      const realCaja = (c: any) => !!c && !String(c).startsWith('CTA_CTE');
+      if ((body.totalARS !== undefined || body.totalUSD !== undefined) && (realCaja(v.caja_jony) || realCaja(v.caja_myri)) && estadoPed !== 'cancelado' && estadoPed !== 'cotizacion') {
+        let tram: any[] = [];
+        try { tram = JSON.parse((v.tramos || '').toString() || '[]') || []; } catch { tram = []; }
+        if (!Array.isArray(tram)) tram = [];
+        // Cobro viejo de un toque (sin tramos): lo cubierto fue el split ANTERIOR entero →
+        // se sintetizan tramos equivalentes (misma caja/conversión que ya usaba el cuadro de cajas).
+        if (!tram.length) {
+          const cJ = (v.caja_jony || '').toString(), cM = (v.caja_myri || '').toString();
+          const tcV = parseFloat(v.tipo_cambio) || 0;
+          const esUSDCaja = (c: string) => ['ETF_USD_MYRI', 'ETF_USD_JONY', 'CTA_CTE_USD'].indexOf(c) !== -1;
+          const cajaUSDde = (c: string, fb: string) => esUSDCaja(c) ? c : (tcV > 0 ? c : fb);
+          const vjA = parseFloat(v.ars_jony) || 0, vmA = parseFloat(v.ars_myri) || 0;
+          const vjU = parseFloat(v.usd_jony) || 0, vmU = parseFloat(v.usd_myri) || 0;
+          if (vjA > 0 && cJ) tram.push({ balde: 'arsJ', dueno: 'J', moneda: 'ARS', caja: cJ, monto: vjA });
+          if (vjU > 0 && cJ) tram.push({ balde: 'usdJ', dueno: 'J', moneda: 'USD', caja: cajaUSDde(cJ, 'ETF_USD_JONY'), monto: vjU });
+          if (vmA > 0 && cM) tram.push({ balde: 'arsM', dueno: 'M', moneda: 'ARS', caja: cM, monto: vmA });
+          if (vmU > 0 && cM) tram.push({ balde: 'usdM', dueno: 'M', moneda: 'USD', caja: cajaUSDde(cM, 'ETF_USD_MYRI'), monto: vmU });
+        }
+        const obj: any = {
+          jA: body.arsJONY !== undefined ? N(body, 'arsJONY') : (parseFloat(v.ars_jony) || 0),
+          mA: body.arsMyri !== undefined ? N(body, 'arsMyri') : (parseFloat(v.ars_myri) || 0),
+          jU: body.usdJONY !== undefined ? N(body, 'usdJONY') : (parseFloat(v.usd_jony) || 0),
+          mU: body.usdMyri !== undefined ? N(body, 'usdMyri') : (parseFloat(v.usd_myri) || 0)
+        };
+        const duenoDe = (t: any) => t.dueno === 'J' ? 'J' : 'M';
+        for (const cur of ['ARS', 'USD']) {
+          const eps = cur === 'USD' ? 0.01 : 1;
+          const rnd = (x: number) => cur === 'USD' ? Math.round(x * 100) / 100 : Math.round(x);
+          const deCur = (t: any) => (t.moneda === 'USD' ? 'USD' : 'ARS') === cur;
+          const cubJ = tram.reduce((s, t) => s + (deCur(t) && duenoDe(t) === 'J' ? (parseFloat(t.monto) || 0) : 0), 0);
+          const cubM = tram.reduce((s, t) => s + (deCur(t) && duenoDe(t) === 'M' ? (parseFloat(t.monto) || 0) : 0), 0);
+          const objJ = cur === 'USD' ? obj.jU : obj.jA, objM = cur === 'USD' ? obj.mU : obj.mA;
+          let diff = rnd(objJ + objM - (cubJ + cubM));
+          const ctaCaja = cur === 'USD' ? 'CTA_CTE_USD' : 'CTA_CTE_ARS';
+          if (diff > eps) {
+            // Faltante nuevo → deuda Cta Cte, atribuida al dueño que quedó corto
+            let asigJ = Math.min(diff, Math.max(0, rnd(objJ - cubJ)));
+            let asigM = rnd(diff - asigJ);
+            for (const [dn, monto] of [['J', asigJ], ['M', asigM]] as [string, number][]) {
+              if (monto <= eps / 2) continue;
+              const ex = tram.find((t) => deCur(t) && duenoDe(t) === dn && String(t.caja || '').startsWith('CTA_CTE'));
+              if (ex) ex.monto = rnd((parseFloat(ex.monto) || 0) + monto);
+              else tram.push({ balde: (cur === 'USD' ? 'usd' : 'ars') + dn, dueno: dn, moneda: cur, caja: ctaCaja, monto });
+            }
+            deudaNueva = deudaNueva || { ars: 0, usd: 0 };
+            if (cur === 'USD') deudaNueva.usd += diff; else deudaNueva.ars += diff;
+          } else if (diff < -eps) {
+            // El total BAJÓ: se achica primero la deuda Cta Cte; la plata real ya cobrada no se
+            // toca (un sobrecobro se resuelve a mano con el cliente).
+            for (const t of tram) {
+              if (diff >= -eps) break;
+              if (!deCur(t) || !String(t.caja || '').startsWith('CTA_CTE')) continue;
+              const m = parseFloat(t.monto) || 0;
+              const quita = Math.min(m, -diff);
+              t.monto = rnd(m - quita); diff = rnd(diff + quita);
+            }
+          }
+        }
+        patch.tramos = JSON.stringify(tram.filter((t) => (parseFloat(t.monto) || 0) > 0.005));
+      }
       await sbPatch('ventas', 'id=eq.' + encodeURIComponent(id), patch);
       if (has('envioCobrado')) {
         const _aJ = body.arsJONY !== undefined ? N(body, 'arsJONY') : (v.ars_jony || 0);
@@ -1761,7 +1829,7 @@ Deno.serve(async (req) => {
         const _uM = body.usdMyri !== undefined ? N(body, 'usdMyri') : (v.usd_myri || 0);
         await upsertEnvio(id, { nVenta: v.n_venta, cliente: (v.cliente || '').toString(), dueno: duenoVenta(_aJ, _uJ, _aM, _uM), cobrado: Math.round(N(body, 'envioCobrado')) });
       }
-      return json({ ok: true });
+      return json({ ok: true, deudaNueva });
     }
     if (accion === 'confirmarCobro') return json(await confirmarCobro(body));
     if (accion === 'cargarSaldoCC') {
@@ -1898,7 +1966,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, importado: false });
     }
     if (accion === 'agregarProductoHijo') {
-      await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp), componentes: P(body, 'componentes') });
+      await sbInsert('candy_productos', { codigo: P(body, 'codigo'), nombre: P(body, 'nombre'), precio_venta: N(body, 'precioVenta'), costo: N(body, 'costo'), foto: P(body, 'foto'), categoria: P(body, 'categoria') || 'Varios', precio_oferta: N(body, 'precioOferta'), fecha_oferta: P(body, 'fechaOferta'), cant_pack: parseInt(P(body, 'cantPack')) || 0, precio_pack: N(body, 'precioPack'), siempre_disp: boolHijo(body.siempreDisp), componentes: P(body, 'componentes'), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
       return json({ ok: true });
     }
     if (accion === 'analiticaCandy') {
@@ -1970,6 +2038,9 @@ Deno.serve(async (req) => {
       if (has('precioPack')) patch.precio_pack = N(body, 'precioPack');
       if (body.siempreDisp !== undefined) patch.siempre_disp = boolHijo(body.siempreDisp);
       if (body.componentes !== undefined) patch.componentes = P(body, 'componentes');   // 🎁 combo (pack mixto): JSON [{codigo,cant}]
+      if (body.hashgaja !== undefined) patch.hashgaja = P(body, 'hashgaja');   // kosher ('' = borrar)
+      if (body.kosherTipo !== undefined) patch.kosher_tipo = P(body, 'kosherTipo');
+      if (body.jalav !== undefined) patch.jalav = P(body, 'jalav');
       await sbPatch('candy_productos', 'codigo=eq.' + encodeURIComponent(codigo), patch);
       if (nuevoCodigo !== codigo) for (const t of ['candy_ventas', 'stock_diario', 'candy_compras', 'candy_deposito']) await sbPatch(t, 'codigo=eq.' + encodeURIComponent(codigo), { codigo: nuevoCodigo });   // propagar el código a lo que lo referencia
       return json({ ok: true });
@@ -2092,11 +2163,22 @@ Deno.serve(async (req) => {
       const newPrecio = has('precio') ? N(body, 'precio') : (parseFloat(v.precio) || 0);
       const newTotal = newCantidad * newPrecio;
       const newCliente = body.cliente !== undefined ? P(body, 'cliente') : oldCliente;
-      const newSaldo = N(body, 'saldoPendiente');
+      let newSaldo = N(body, 'saldoPendiente');
+      // ⚖️ Espejo del caso #46 del Shuk: editar una venta YA COBRADA no puede "cobrar sola"
+      // la diferencia. Lo que entró de verdad = total viejo − saldo viejo; si el total nuevo
+      // supera eso y el saldo mandado no lo cubre, el faltante queda como deuda y se avisa.
+      // (Solo cuando la edición CAMBIÓ el total: corregir el saldo a mano sigue permitido.)
+      const oldTotal = parseFloat(v.total) || 0;
+      let deudaNueva = 0;
+      if (Math.abs(newTotal - oldTotal) > 0.005) {
+        const cobradoReal = Math.max(0, oldTotal - oldSaldo);
+        const saldoMin = Math.max(0, Math.round((newTotal - cobradoReal) * 100) / 100);
+        if (newSaldo < saldoMin - 0.005) { deudaNueva = Math.round((saldoMin - newSaldo) * 100) / 100; newSaldo = saldoMin; }
+      }
       await sbPatch('candy_ventas', 'id=eq.' + encodeURIComponent(id), { producto: newNombre, codigo: newCodigo, cantidad: newCantidad, precio: newPrecio, total: newTotal, cliente: newCliente, es_debe: newSaldo > 0 ? 'SI' : 'NO', saldo_pendiente: newSaldo });
       if (oldSaldo > 0 && oldCliente) await sbInsert('candy_cc', { fecha: fechaAhora(), hijo: v.hijo, cliente: oldCliente, monto: -oldSaldo, tipo: 'correccion', detalle: v.producto });
       if (newSaldo > 0 && newCliente) await sbInsert('candy_cc', { fecha: fechaAhora(), hijo: v.hijo, cliente: newCliente, monto: newSaldo, tipo: 'correccion', detalle: newNombre });
-      return json({ ok: true });
+      return json({ ok: true, deudaNueva: deudaNueva || null });
     }
     if (accion === 'eliminarVentaHijos') {
       const id = P(body, 'id') || P(body, 'rowIndex');
@@ -2308,7 +2390,7 @@ Deno.serve(async (req) => {
       const conCosto = await sesionValida(token);
       const [cat, dep, shukEn, prods] = await Promise.all([
         sbGet('candy_productos', 'select=*'), sbGet('candy_deposito', 'select=codigo,cantidad'),
-        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo'),
+        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo,hashgaja,kosher_tipo,jalav'),
       ]);
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
       // Circuito F2: stock ofrecido de un shuk:<id> = genuino Candy + TODA la familia de gemelos
@@ -2330,9 +2412,9 @@ Deno.serve(async (req) => {
         if (!comps.length) return null;
         return Math.max(0, Math.min(...comps.map((c: any) => Math.floor(stockDisponible((c.codigo || '').toString()) / Math.max(1, parseInt(c.cant) || 1)))));
       };
-      const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], esCombo: !!(r.componentes || '').trim(), componentes: (r.componentes || '').toString(), stock: stockCombo(r) !== null ? stockCombo(r) : (depMap[String(r.codigo)] || 0), categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
+      const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], esCombo: !!(r.componentes || '').trim(), componentes: (r.componentes || '').toString(), stock: stockCombo(r) !== null ? stockCombo(r) : (depMap[String(r.codigo)] || 0), categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true, hashgaja: (r.hashgaja || '').toString(), kosherTipo: (r.kosher_tipo || '').toString(), jalav: (r.jalav || '').toString() }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() }));
+      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() }));
       return json(propios.concat(shuk));
     }
     if (accion === 'panelHijos') {

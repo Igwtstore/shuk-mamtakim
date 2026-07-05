@@ -404,6 +404,7 @@ function renderCatalogo(productos, esFiltered) {
       </div>
       <div class="producto-info">
         <div class="producto-nombre">${esc(p.nombre)}</div>
+        ${kosherBadges(p)}
         <div class="producto-precio">${ofertaActiva(p)
           ? `<span class="precio-tachado">${fmt(p.precioVenta)}</span><span class="precio-oferta">${fmt(p.precioOferta)}</span>`
           : fmt(p.precioVenta)}</div>
@@ -446,6 +447,15 @@ function _ordenTiendaFn(o) {
   return (a, b) => (a.nombre || '').localeCompare(b.nombre || '');   // az / categoria
 }
 // ─── OFERTAS Y PACKS (precio efectivo) ────────────────────────────
+// Chapitas kosher: Parve/Lácteo (con Jalav integrado) + hashgajá — solo si están cargadas
+function kosherBadges(p) {
+  const b = [];
+  if (p.kosherTipo === 'Parve') b.push(['#e8f6ec', '#1e7a3c', '🌿 Parve']);
+  else if (p.kosherTipo === 'Lácteo') b.push(['#eef4fb', '#1a5c8a', '🥛 Lácteo' + (p.jalav ? ' · ' + p.jalav : '')]);
+  else if (p.jalav) b.push(['#eef4fb', '#1a5c8a', '🥛 ' + p.jalav]);
+  if (p.hashgaja) b.push(['#fdf3e3', '#8a5a1e', '✡️ ' + esc(p.hashgaja)]);
+  return b.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin:2px 0 1px;justify-content:center">${b.map(x => `<span style="background:${x[0]};color:${x[1]};font-size:0.6rem;font-weight:700;padding:2px 7px;border-radius:4px">${x[2]}</span>`).join('')}</div>` : '';
+}
 function ofertaActiva(p) {
   if (!(p.precioOferta > 0)) return false;
   if (p.fechaOferta) {

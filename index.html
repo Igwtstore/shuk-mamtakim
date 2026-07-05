@@ -11833,6 +11833,12 @@ async function guardarEditPedido() {
   try {
     const data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString());
     if (data.ok) {
+      // Si el pedido ya estaba cobrado y la edición subió el total, el faltante quedó
+      // como deuda en Cta Cte — avisarlo fuerte para que no pase desapercibido.
+      if (data.deudaNueva && (data.deudaNueva.ars > 0 || data.deudaNueva.usd > 0)) {
+        const _dstr = [data.deudaNueva.ars > 0 ? '$ ' + Math.round(data.deudaNueva.ars).toLocaleString('es-AR') : '', data.deudaNueva.usd > 0 ? 'U$S ' + data.deudaNueva.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
+        alert('⚠️ Ojo: este pedido ya estaba COBRADO y con la edición quedó debiendo ' + _dstr + '.\n\nEsa diferencia quedó anotada como deuda del cliente (Cta Cte): la vas a ver en la tarjeta del pedido ("cobro parcial · debe"), en la cuenta corriente, y la cobrás con "Re-confirmar cobro" o un pago a cuenta.');
+      }
       showToast('Pedido actualizado ✓');
       document.getElementById('edit-pedido-overlay').classList.remove('open');
       // Refresco INMEDIATO con datos frescos: el backend ya escribió (flush), así re-renderizamos

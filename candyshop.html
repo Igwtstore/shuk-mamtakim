@@ -525,7 +525,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Cliente</label>
       <input type="text" id="ev-cliente" placeholder="Vacío si pagó todo" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:12px">
       <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Saldo pendiente (deuda)</label>
-      <input type="number" id="ev-saldo" min="0" placeholder="0" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:16px">
+      <input type="number" id="ev-saldo" min="0" placeholder="0" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:4px">
+      <div id="ev-cobrado-hint" style="font-size:0.72rem;color:#8a6d4a;margin-bottom:16px;display:none"></div>
       <button id="ev-save-btn" onclick="confirmarEditarVenta()" style="width:100%;padding:13px;background:#5c3d1e;color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer">Guardar cambios</button>
     </div>
   </div>
@@ -779,6 +780,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <input class="form-input" id="f-categoria" type="text" list="cat-candy-list" placeholder="Ej: Chocolate, Caramelo, Snacks…">
       <datalist id="cat-candy-list"></datalist>
       <div style="font-size:0.7rem;color:#aaa;margin-top:3px">Para agrupar en la tienda. Elegí una existente o escribí una nueva.</div>
+    </div>
+
+    <div style="border:1.5px solid #cfe0f3;border-radius:12px;padding:11px 12px;margin-bottom:14px;background:#f4f9ff">
+      <div style="font-weight:800;color:#1a5c8a;font-size:0.92rem;margin-bottom:8px">✡️ Kosher <span style="font-weight:500;color:#bbb;font-size:0.72rem">(opcional — se muestra en la tienda)</span></div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label" style="font-size:0.78rem">Hashgajá (supervisión)</label>
+        <input class="form-input" id="f-hashgaja" type="text" placeholder="Ej: Badatz Eda Jaredit">
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="form-group" style="flex:1;margin:0">
+          <label class="form-label" style="font-size:0.78rem">Parve / Lácteo</label>
+          <select class="form-input" id="f-kosher" onchange="fKosherChange()"><option value="">— no mostrar</option><option value="Parve">🌿 Parve</option><option value="Lácteo">🥛 Lácteo</option></select>
+        </div>
+        <div class="form-group" style="flex:1;margin:0">
+          <label class="form-label" style="font-size:0.78rem">Jalav (si es lácteo)</label>
+          <select class="form-input" id="f-jalav"><option value="">— no mostrar</option><option value="Jalav Israel">Jalav Israel</option><option value="Jalav Akum">Jalav Akum</option></select>
+        </div>
+      </div>
     </div>
 
     <div style="border:1.5px solid #ffe0b2;border-radius:12px;padding:11px 12px;margin-bottom:14px;background:#fffaf3">
@@ -2240,7 +2259,8 @@ function abrirModal() {
   document.getElementById('f-costo').value = '';
   document.getElementById('f-stock').value = '';
   document.getElementById('f-categoria').value = ''; _poblarCatCandyDatalist();
-  ['f-precio-oferta','f-fecha-oferta','f-cant-pack','f-precio-pack'].forEach(id => document.getElementById(id).value = '');
+  ['f-precio-oferta','f-fecha-oferta','f-cant-pack','f-precio-pack','f-hashgaja','f-kosher','f-jalav'].forEach(id => document.getElementById(id).value = '');
+  fKosherChange();
   document.getElementById('f-siempre-disp').checked = false;
   _stockOriginal = 0;
   document.getElementById('foto-file').value = '';
@@ -2270,6 +2290,10 @@ function editarProducto(p) {
   document.getElementById('f-cant-pack').value = p.cantPack > 0 ? p.cantPack : '';
   document.getElementById('f-precio-pack').value = p.precioPack > 0 ? p.precioPack : '';
   document.getElementById('f-siempre-disp').checked = !!p.siempreDisp;
+  document.getElementById('f-hashgaja').value = p.hashgaja || '';
+  document.getElementById('f-kosher').value = p.kosherTipo || '';
+  document.getElementById('f-jalav').value = p.jalav || '';
+  fKosherChange();
   document.getElementById('foto-file').value = '';
   document.getElementById('foto-status').textContent = '';
   previewFoto(p.foto || '');
@@ -2553,6 +2577,16 @@ function actualizarGananciaPreview() {
 document.getElementById('f-precio').addEventListener('input', actualizarGananciaPreview);
 document.getElementById('f-costo').addEventListener('input', actualizarGananciaPreview);
 
+// Jalav solo tiene sentido si el producto es Lácteo
+function fKosherChange() {
+  const k = document.getElementById('f-kosher'), j = document.getElementById('f-jalav');
+  if (!k || !j) return;
+  const esLacteo = k.value === 'Lácteo';
+  j.disabled = !esLacteo;
+  if (!esLacteo) j.value = '';
+  j.style.opacity = esLacteo ? '1' : '0.45';
+}
+
 async function guardarProducto() {
   const codigo = document.getElementById('f-codigo').value.toUpperCase().trim();
   const nombre = document.getElementById('f-nombre').value.trim();
@@ -2572,7 +2606,10 @@ async function guardarProducto() {
   const cantPack = parseInt(document.getElementById('f-cant-pack').value) || 0;
   const precioPack = parseFloat(document.getElementById('f-precio-pack').value) || 0;
   const siempreDisp = document.getElementById('f-siempre-disp').checked ? '1' : '0';
-  const oferta = { categoria, precioOferta, fechaOferta, cantPack, precioPack, siempreDisp };
+  const oferta = { categoria, precioOferta, fechaOferta, cantPack, precioPack, siempreDisp,
+    hashgaja: document.getElementById('f-hashgaja').value.trim(),
+    kosherTipo: document.getElementById('f-kosher').value,
+    jalav: document.getElementById('f-jalav').value };
   const accion = editandoCodigo ? 'editarProductoHijo' : 'agregarProductoHijo';
   // Al editar, el código original es la llave; si lo cambiaron va aparte como nuevoCodigo
   const params = editandoCodigo
@@ -4569,8 +4606,10 @@ function mostrarToast(msg, color = '#2e8b57') {
 // ── EDITAR / BORRAR VENTA ─────────────────────────────────────────────────────
 let evRowIndex = null;
 
+let evCobradoOrig = 0;   // lo que YA entró de esta venta (total original − saldo original)
 async function abrirEditarVenta(rowIndex, codigo, nombre, cantidad, precio, cliente, saldoPendiente) {
   evRowIndex = rowIndex;
+  evCobradoOrig = Math.max(0, (parseFloat(cantidad) || 0) * (parseFloat(precio) || 0) - (parseFloat(saldoPendiente) || 0));
   if (!catalogoCache.length) {
     catalogoCache = await api('getCatalogoHijos') || [];
   }
@@ -4596,7 +4635,18 @@ function evProductoChange() {
 function evActualizarTotal() {
   const cant = parseFloat(document.getElementById('ev-cantidad').value) || 0;
   const precio = parseFloat(document.getElementById('ev-precio').value) || 0;
-  document.getElementById('ev-total').textContent = '$' + (cant * precio).toLocaleString('es-AR');
+  const total = cant * precio;
+  document.getElementById('ev-total').textContent = '$' + total.toLocaleString('es-AR');
+  // La edición no "cobra sola": el saldo se acomoda al vivo para que el total nuevo menos
+  // lo YA cobrado no se pierda (el chico puede pisarlo después si de verdad le pagaron).
+  const hint = document.getElementById('ev-cobrado-hint');
+  const saldoInp = document.getElementById('ev-saldo');
+  if (hint && saldoInp) {
+    const saldoSugerido = Math.max(0, total - evCobradoOrig);
+    saldoInp.value = saldoSugerido;
+    hint.style.display = 'block';
+    hint.textContent = '💵 Ya cobrado: $' + evCobradoOrig.toLocaleString('es-AR') + (saldoSugerido > 0 ? ' → queda debiendo $' + saldoSugerido.toLocaleString('es-AR') + ' (si te paga la diferencia, después lo marcás pagado)' : ' — queda saldado');
+  }
 }
 
 async function confirmarEditarVenta() {
@@ -4618,7 +4668,10 @@ async function confirmarEditarVenta() {
   });
   btn.disabled = false; btn.textContent = 'Guardar cambios';
   cerrarEditVenta();
-  if (res?.ok) { mostrarToast('✅ Venta actualizada'); cargarDatos(); if (tabActual === 'historia') cargarHistoria(); }
+  if (res?.ok) {
+    if (res.deudaNueva > 0) alert('⚠️ Ojo: con este cambio la venta quedó debiendo $' + Math.round(res.deudaNueva).toLocaleString('es-AR') + ' más de lo que pusiste en el saldo.\n\nLo anotamos como deuda del cliente para que la plata no se pierda. Cuando te pague, marcala pagada.');
+    mostrarToast('✅ Venta actualizada'); cargarDatos(); if (tabActual === 'historia') cargarHistoria();
+  }
   else mostrarToast('❌ ' + (res?.error || 'sin respuesta'), '#c0392b');
 }
 
