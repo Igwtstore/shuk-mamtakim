@@ -5549,11 +5549,11 @@ function _vidPromptTexto(conPersona) {
   const momento2 = conPersona
     ? 'A los 3 segundos entra en cuadro POR UN COSTADO, en el MISMO plano (sin cortar a otra escena), un hombre de unos 35 años con kipá negra bien visible en la cabeza, camisa clara arremangada sin corbata, sonriente: toma un puñado del producto y lo prueba con gesto de placer genuino, SIN HABLAR. '
     : 'A los 3 segundos cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. ';
-  return 'Video publicitario vertical (9:16) de 8 segundos, UNA SOLA TOMA CONTINUA. '
-    + 'La imagen adjunta es el PRIMER FOTOGRAMA del video: arrancá exactamente desde esa foto y NO cortes a otra escena — el producto ("' + _vidNombre + '"' + (_vidDesc ? ', ' + _vidDesc : '') + ') es EXACTAMENTE ese, misma forma, textura y color; no lo reemplaces ni lo estilices. '
+  return 'Video publicitario de 8 segundos, UNA SOLA TOMA CONTINUA. Se adjuntan DOS imágenes: (1) la FOTO DEL PRODUCTO y (2) el LOGO OFICIAL de la marca. '
+    + 'La imagen 1 es el PRIMER FOTOGRAMA del video: arrancá exactamente desde esa foto y NO cortes a otra escena — el producto ("' + _vidNombre + '"' + (_vidDesc ? ', ' + _vidDesc : '') + ') es EXACTAMENTE ese, misma forma, textura y color; no lo reemplaces ni lo estilices. '
     + 'MOVIMIENTO: desde el primer segundo la cámara se mueve en órbita lenta y constante alrededor del producto, sin quedarse quieta nunca. Ambiente: mesa de madera clara, luz cálida de tarde, tonos dorados y crema. '
     + momento2
-    + 'En los últimos 2 segundos, sobre el MISMO plano, aparece un cartel elegante azul oscuro con letras doradas que dice exactamente "Shuk Mamtakim" (respetá la ortografía). '
+    + 'En los últimos 2 segundos, sobre el MISMO plano, aparece el LOGO de la imagen 2 EXACTAMENTE como es — mismos colores, misma tipografía, sin redibujarlo ni inventar otro cartel. '
     + 'AUDIO: SIN voces, SIN diálogo, SIN palabras — solamente música instrumental acústica cálida de fondo. Estilo gourmet apetitoso para público amplio.';
 }
 function vidTogglePersona() {
@@ -5571,8 +5571,8 @@ function videoPromptShuk() {
     ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:460px;padding:14px">
       <div style="display:flex;align-items:center;margin-bottom:6px"><b style="flex:1">🎬 Video del producto (con tu Gemini)</b>
       <button onclick="document.getElementById('vidp-overlay').style.display='none'" style="padding:6px 10px;border:none;background:#eee;border-radius:8px;cursor:pointer;font-weight:700">✕</button></div>
-      <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini (tu plan incluye Veo) · 3) Adjuntá la foto del producto y pegá el prompt</div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="vidp-persona" onchange="vidTogglePersona()"> 👤 Con una persona (hombre bien vestido, informal, probando el producto)</label>
+      <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini · 3) Adjuntá <b>DOS imágenes</b>: la foto del producto + <a href="/icon-512.png" download="logo-shuk.png" style="color:#1a73e8;font-weight:700">el logo oficial 📥</a> · 4) Pegá y enviá</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="vidp-persona" onchange="vidTogglePersona()"> 👤 Con una persona (hombre con kipá negra, bien vestido informal, probando el producto)</label>
       <textarea id="vidp-txt" style="width:100%;height:150px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="navigator.clipboard.writeText(document.getElementById('vidp-txt').value).then(()=>showToast('📋 Prompt copiado'))" style="flex:1;padding:10px;border:none;background:var(--dorado);color:#fff;border-radius:9px;font-weight:800;cursor:pointer">📋 Copiar prompt</button>
