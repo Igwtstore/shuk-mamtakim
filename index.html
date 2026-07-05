@@ -2984,10 +2984,13 @@ function renderImg(p) {
   carouselIdx[p.id] = idxIni;
   let mediaEl;
   if (esVideo(primera)) {
-    // Carga perezosa: el src recién se pone cuando la tarjeta entra en pantalla (celular: no
-    // baja todos los videos de una) — lo maneja _vidObserver. loop solo si es el único medio.
-    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}"
-      ${multi ? '' : 'loop'} muted playsinline preload="none" style="object-fit:cover"
+    // Carga perezosa (el src lo pone _vidObserver al entrar en pantalla) + POSTER con la primera
+    // FOTO del producto: en iPhone el video no arranca hasta cargar y sin poster quedaba el
+    // recuadro EN BLANCO (bug cazado por el usuario desde el celular).
+    const fotoPoster = imagenes.find(x => !esVideo(x));
+    const posterAttr = fotoPoster ? `poster="${imgUrl(fotoPoster)[0]}"` : '';
+    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}" ${posterAttr}
+      ${multi ? '' : 'loop'} muted playsinline preload="metadata" style="object-fit:cover"
       ${multi ? `onended="goToSlideInternal(${p.id},(carouselIdx[${p.id}]+1)%${imagenes.length})"` : ''}></video>`;
   } else {
     const urls0 = imgUrl(primera);
@@ -3031,7 +3034,9 @@ function goToSlideInternal(id, idx) {
       const v = document.createElement('video');
       v.className = med.className; v.id = med.id;
       v.muted = true; v.playsInline = true;
-      v.setAttribute('playsinline', '');
+      v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+      const fotoPst = imagenes.find(x => !esVideo(x));
+      if (fotoPst) v.poster = imgUrl(fotoPst)[0];
       v.style.objectFit = 'cover';
       // El video dura LO QUE DURA y recién ahí pasa al siguiente medio (pedido del usuario).
       if (imagenes.length > 1) v.onended = () => goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length);
@@ -3091,7 +3096,20 @@ function _vidObservar() {
       const v = en.target;
       if (en.isIntersecting) {
         if (v.dataset.vsrc) { v.src = v.dataset.vsrc; v.removeAttribute('data-vsrc'); }
-        if (v.tagName === 'VIDEO') v.play && v.play().catch(() => {});
+        if (v.tagName === 'VIDEO' && v.play) {
+          const pr = v.play();
+          if (pr && pr.catch) pr.catch(() => {
+            // El celular bloqueó la reproducción (ahorro de energía/datos): pasar a la FOTO
+            // para que la tarjeta NUNCA quede en blanco. El poster ya la muestra mientras tanto.
+            const idV = (v.id || '').replace('cimg-', '');
+            const p = productos.find(x => String(x.id) === String(idV));
+            if (p) {
+              const meds = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+              const idxFoto = meds.findIndex(x => !esVideo(x));
+              if (idxFoto !== -1 && esVideo(meds[carouselIdx[p.id] || 0])) goToSlideInternal(p.id, idxFoto);
+            }
+          });
+        }
       } else if (v.tagName === 'VIDEO') { v.pause && v.pause(); }
     });
   }, { rootMargin: '120px' });
