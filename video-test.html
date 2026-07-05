@@ -44,6 +44,15 @@ button { padding: 10px 16px; border: none; background: #1a1a2e; color: #fff; bor
 <h2>6) Descarga cruda del video de Cloudinary (sin reproducir)</h2>
 <div class="log" id="l6">descargando…</div>
 
+<h2>8) Video por STREAMING de Apple (HLS — el plan B)</h2>
+<video id="v8" muted playsinline autoplay loop
+  src="https://res.cloudinary.com/dq2boloyp/video/upload/sp_auto/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.m3u8"></video>
+<div class="log" id="l8">esperando…</div>
+
+<h2>9) Video creado por código (como lo hace la tienda)</h2>
+<div id="v9wrap"></div>
+<div class="log" id="l9">esperando…</div>
+
 <h2>7) Estado del service worker (el sospechoso)</h2>
 <div class="log" id="l7">mirando…</div>
 <button onclick="swLimpiar()" style="background:#c0392b">🧹 Desalojar service worker viejo y recargar</button>
@@ -59,7 +68,20 @@ function vigilar(vid, lid) {
     v.addEventListener(ev, () => { estados.push(ev); upd(); }));
   setInterval(upd, 1500);
 }
-vigilar('v1', 'l1'); vigilar('v2', 'l2'); vigilar('v3', 'l3'); vigilar('v5', 'l5');
+vigilar('v1', 'l1'); vigilar('v2', 'l2'); vigilar('v3', 'l3'); vigilar('v5', 'l5'); vigilar('v8', 'l8');
+// 9: elemento creado dinámicamente + src después (patrón exacto de la tienda)
+(() => {
+  const v = document.createElement('video');
+  v.id = 'v9'; v.muted = true; v.playsInline = true;
+  v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+  v.preload = 'metadata';
+  document.getElementById('v9wrap').appendChild(v);
+  vigilar('v9', 'l9');
+  setTimeout(() => {
+    v.src = 'https://res.cloudinary.com/dq2boloyp/video/upload/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.mp4';
+    v.play().catch(() => {});
+  }, 800);
+})();
 fetch('https://res.cloudinary.com/dq2boloyp/video/upload/f_mp4,vc_h264,q_auto,w_720/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.mp4')
   .then(async r => { const b = await r.blob(); log('l6', 'HTTP ' + r.status + ' · ' + r.headers.get('content-type') + ' · ' + Math.round(b.size / 1024) + ' KB descargados'); })
   .catch(e => log('l6', 'FETCH FALLÓ: ' + e.message));
