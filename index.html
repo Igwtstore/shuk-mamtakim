@@ -2989,9 +2989,9 @@ function renderImg(p) {
     // recuadro EN BLANCO (bug cazado por el usuario desde el celular).
     const fotoPoster = imagenes.find(x => !esVideo(x));
     const posterAttr = fotoPoster ? `poster="${imgUrl(fotoPoster)[0]}"` : '';
-    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}" ${posterAttr}
+    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}" data-vurl="${primera}" ${posterAttr}
       ${multi ? '' : 'loop'} muted playsinline preload="metadata" style="object-fit:cover"
-      onclick="event.stopPropagation();_vidTap(this)"
+      onclick="event.stopPropagation();_vidTap(this)" onerror="_vidRescate(this)"
       ${multi ? `onended="goToSlideInternal(${p.id},(carouselIdx[${p.id}]+1)%${imagenes.length})"` : ''}></video>`;
   } else {
     const urls0 = imgUrl(primera);
@@ -3046,6 +3046,7 @@ function goToSlideInternal(id, idx) {
       const fotoPst = imagenes.find(x => !esVideo(x));
       if (fotoPst) v.poster = imgUrl(fotoPst)[0];
       v.onclick = (ev) => { ev.stopPropagation(); _vidTap(v); };
+      v.onerror = () => _vidRescate(v);
       v.style.objectFit = 'cover';
       // El video dura LO QUE DURA y recién ahí pasa al siguiente medio (pedido del usuario).
       // Doble detección de fin: 'ended' + por tiempo (iOS a veces se traga el evento).
@@ -3057,8 +3058,9 @@ function goToSlideInternal(id, idx) {
       med.replaceWith(v); med = v;
     }
     med.style.display = 'block';
-    if (med.error) { try { med.removeAttribute('src'); med.load(); } catch (e) {} med.src = val; }   // errored (p.ej. por el SW viejo) → reintento limpio
-    else if (med.src !== val) med.src = val;
+    med.dataset.vurl = val;   // URL real para el rescate (el src puede pasar a ser un blob)
+    if (med.error) { _vidRescate(med); }   // reproductor la rechazó → descarga + blob local
+    else if (med.src !== val && !(med.src || '').startsWith('blob:')) med.src = val;
     else { try { med.currentTime = 0; } catch (e) {} }   // repetición del ciclo: desde el arranque
     med.oncanplay = () => { if (med.paused) { const p2 = med.play(); if (p2 && p2.catch) p2.catch(() => {}); } };
     med.play && med.play().catch(() => {});
@@ -3156,6 +3158,26 @@ function _vidLiberar(id) {
     }
   }
 }
+// 🚑 RESCATE iOS: en el iPhone del usuario el REPRODUCTOR rechaza el streaming de Cloudinary
+// (ERR4 al instante) pero el fetch de la misma URL baja el archivo perfecto (HTTP 200, 2,3 MB —
+// probado con su debug). Ante error: bajar el video entero y dárselo como blob local.
+const _vidBlobs = {};   // url → objectURL (se descarga una sola vez)
+async function _vidRescate(v) {
+  const url = v.dataset.vurl || v.currentSrc || v.src || '';
+  if (!url || url.startsWith('blob:') || v.dataset.rescatando) return;
+  v.dataset.rescatando = '1';
+  try {
+    if (!_vidBlobs[url]) {
+      const r = await fetch(url, { cache: 'force-cache' });
+      if (!r.ok) throw new Error('http ' + r.status);
+      _vidBlobs[url] = URL.createObjectURL(await r.blob());
+    }
+    v.src = _vidBlobs[url];
+    v.load && v.load();
+    const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
+  } catch (e) { /* sin rescate posible: el fallback a foto ya existe */ }
+  delete v.dataset.rescatando;
+}
 // Tap directo en el video (iPhone siempre lo permite): reproducir/pausar. Si hasta el gesto
 // directo es rechazado, se muestran los CONTROLES nativos como último recurso.
 function _vidTap(v) {
@@ -3188,7 +3210,7 @@ if (new URLSearchParams(location.search).get('debug') === 'video') {
     _dbgExtra = ctrl + ' | ' + f;
   })();
   setInterval(() => {
-    const lineas = ['v3.29-sinSW · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']', _dbgExtra];
+    const lineas = ['v3.29-blob · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']', _dbgExtra];
     productos.filter(p => (p.imagen || '').split(',').some(x => esVideo(x.trim()))).forEach(p => {
       const el = document.getElementById('cimg-' + p.id);
       if (!el) { lineas.push(p.id + ': sin tarjeta'); return; }
