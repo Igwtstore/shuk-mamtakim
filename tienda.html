@@ -721,11 +721,21 @@ function abrirAvisame(codigo) {
   setTimeout(() => document.getElementById('avisame-nombre').focus(), 300);
 }
 
+// ⚠️ Teléfono con pinta de trucho (mismo criterio que el Shuk): <10 dígitos reales, >13, o todos iguales
+function _telDudoso(tel) {
+  let d = String(tel || '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.indexOf('549') === 0) d = d.slice(3); else if (d.indexOf('54') === 0) d = d.slice(2);
+  if (d.length === 11 && d[0] === '9') d = d.slice(1);
+  if (d.length === 12 && d.indexOf('15') === 0) d = d.slice(2);
+  return d.length < 10 || d.length > 13 || /^(\d)\1+$/.test(d);
+}
 async function enviarAviso() {
   if (!productoAviso) return;
   const nombre = document.getElementById('avisame-nombre').value.trim();
   if (!nombre) { document.getElementById('avisame-nombre').focus(); return; }
   const tel = document.getElementById('avisame-tel').value.trim();
+  // El teléfono es opcional, pero si lo ponen tiene que ser uno de verdad
+  if (tel && _telDudoso(tel)) { toast('📱 Ese número no parece un WhatsApp válido — poné código de área + número (ej: 11 5555-4444)'); document.getElementById('avisame-overlay').classList.add('open'); document.getElementById('avisame-tel').focus(); return; }
   const cod = productoAviso.codigo;
   document.getElementById('avisame-overlay').classList.remove('open');
   const u = new URL(APPS_URL);

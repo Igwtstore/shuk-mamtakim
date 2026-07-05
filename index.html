@@ -10126,11 +10126,21 @@ function cerrarNotifModal() {
   document.getElementById('notif-modal').style.display = 'none';
   _notifProductoId = null;
 }
+// ⚠️ Teléfono con pinta de trucho: menos de 10 dígitos reales (área + número en AR),
+// más de 13, o todos los dígitos iguales. Se usa al pedir el aviso y en el panel.
+function _telDudoso(tel) {
+  let d = String(tel || '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.indexOf('549') === 0) d = d.slice(3); else if (d.indexOf('54') === 0) d = d.slice(2);
+  if (d.length === 11 && d[0] === '9') d = d.slice(1);
+  if (d.length === 12 && d.indexOf('15') === 0) d = d.slice(2);
+  return d.length < 10 || d.length > 13 || /^(\d)\1+$/.test(d);
+}
 function confirmarNotificacion() {
   const nombre = document.getElementById('notif-nombre').value.trim();
   const tel = document.getElementById('notif-tel').value.trim().replace(/\D/g,'');
   if (!nombre) { showToast('Ingresá tu nombre'); return; }
-  if (!tel || tel.length < 8) { showToast('Ingresá tu WhatsApp'); return; }
+  if (!tel) { showToast('Ingresá tu WhatsApp'); return; }
+  if (_telDudoso(tel)) { showToast('Ese número no parece un WhatsApp válido — poné código de área + número (ej: 11 5555-4444)'); return; }
   // Canal REAL en el que está el cliente (no el hash, que un minorista en /tienda no tiene → caía a mayorista).
   const modoActual = (modo === 'mayorista') ? 'mayorista' : 'minorista';
   const params = new URLSearchParams({ accion: 'notificacion', productoId: _notifProductoId, producto: _notifProductoNombre, nombre, telefono: tel, modoCliente: modoActual });
@@ -10198,7 +10208,8 @@ async function renderNotificaciones() {
       const clientesHTML = g.clientes.map(c => {
         const d = diasDesde(c.fecha);
         const hace = d > 0 ? `<span style="color:${d >= 7 ? 'var(--rojo)' : 'var(--dorado)'}">(hace ${d} día${d !== 1 ? 's' : ''})</span>` : '<span style="color:var(--verde)">(hoy)</span>';
-        return `<div style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono}) · 🕐 pidió el ${c.fecha || 's/fecha'} ${hace}</div>`;
+        const trucho = _telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px" title="Menos de 10 dígitos o formato raro: probablemente no exista ese WhatsApp">⚠️ número dudoso</span>' : '';
+        return `<div style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})${trucho} · 🕐 pidió el ${c.fecha || 's/fecha'} ${hace}</div>`;
       }).join('');
       const prodEsc = g.nombre.replace(/'/g,'').replace(/"/g,'');
       const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${prodEsc}','${nom}','${pid}','${c.modoCliente||'minorista'}')">📱 ${nom}</button><button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕</button>`; }).join(' ');
@@ -10224,7 +10235,7 @@ async function renderNotificaciones() {
         const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista'}`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
           <div>
-            <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span></div>
+            <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span>${_telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px">⚠️ número dudoso</span>' : ''}</div>
             <div style="font-size:0.72rem;color:var(--texto-suave)">${g.nombre}</div>
             <div style="font-size:0.68rem;color:${esViejo?'var(--rojo)':'var(--texto-suave)'}">🕐 pidió el ${c.fecha || 's/fecha'} · hace ${dias} día${dias!==1?'s':''}</div>
           </div>

@@ -479,6 +479,16 @@ function fechaAhora() {
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
 const P = (o: any, k: string) => (o[k] == null ? '' : o[k]).toString();
+// ⚠️ Teléfono con pinta de trucho: <10 dígitos reales (área+número en AR), >13, o todos iguales.
+// Defensa del lado del motor para 'notificacion' y 'avisarmeCandy' (la tienda ya valida, pero
+// un fetch directo la saltea). Mismo criterio que _telDudoso del front.
+const telDudoso = (tel: string) => {
+  let d = String(tel || '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.indexOf('549') === 0) d = d.slice(3); else if (d.indexOf('54') === 0) d = d.slice(2);
+  if (d.length === 11 && d[0] === '9') d = d.slice(1);
+  if (d.length === 12 && d.indexOf('15') === 0) d = d.slice(2);
+  return d.length < 10 || d.length > 13 || /^(\d)\1+$/.test(d);
+};
 const N = (o: any, k: string) => { const n = parseFloat(o[k]); return isNaN(n) ? 0 : n; };
 const normCli = (s: string) => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
 // 'jony' (nombre que usa la tienda ?kid=jony) y 'Pa' (perfil del panel) son la MISMA persona.
@@ -1510,6 +1520,7 @@ Deno.serve(async (req) => {
     }
     if (accion === 'avisarmeCandy') {
       const prodAv = Q('producto'), cliAv = Q('cliente'), telAv = Q('telefono');
+      if (telAv && telDudoso(telAv)) return json({ error: 'teléfono inválido' });   // opcional, pero si viene tiene que ser real
       await sbInsert('avisos_candy', { fecha: fechaAhora(), hijo: Q('hijo'), codigo: Q('codigo'), producto: prodAv, cliente: cliAv, telefono: telAv, estado: 'pendiente' });
       const waTo = Q('wa');
       if (waTo) await sendTwilioWA(waTo, `🔔 *Candy Shop* — te piden un producto agotado\n\n🍬 ${prodAv}\n👤 ${cliAv || 'cliente'}${telAv ? ' · ' + telAv : ''}\n\nCuando lo tengas, avisale 😉`);
@@ -2224,6 +2235,7 @@ Deno.serve(async (req) => {
     }
     if (accion === 'notificacion') {
       const pid = P(body, 'productoId'), tel = P(body, 'telefono');
+      if (telDudoso(tel)) return json({ error: 'Ese número no parece un WhatsApp válido — poné código de área + número' });
       const ex = await sbGet('notificaciones', 'select=id&producto_id=eq.' + encodeURIComponent(pid) + '&telefono=eq.' + encodeURIComponent(tel) + '&estado=eq.pendiente');
       if (ex.length) return json({ ok: true, duplicado: true });
       await sbInsert('notificaciones', { fecha: fechaAhora(), producto_id: pid, producto: P(body, 'producto'), nombre: P(body, 'nombre'), telefono: tel, estado: 'pendiente', modo: P(body, 'modoCliente') || 'mayorista' });
