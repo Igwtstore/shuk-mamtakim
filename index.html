@@ -10209,10 +10209,12 @@ async function renderNotificaciones() {
         const d = diasDesde(c.fecha);
         const hace = d > 0 ? `<span style="color:${d >= 7 ? 'var(--rojo)' : 'var(--dorado)'}">(hace ${d} día${d !== 1 ? 's' : ''})</span>` : '<span style="color:var(--verde)">(hoy)</span>';
         const trucho = _telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px" title="Menos de 10 dígitos o formato raro: probablemente no exista ese WhatsApp">⚠️ número dudoso</span>' : '';
-        return `<div style="font-size:0.75rem;color:var(--texto-suave)">${c.nombre} (${c.telefono})${trucho} · 🕐 pidió el ${c.fecha || 's/fecha'} ${hace}</div>`;
+        // La ✕ va SIEMPRE (haya stock o no): un aviso trucho o arrepentido se borra acá
+        const quitar = `<button onclick="eliminarNotificacion('${pid}','${c.telefono}')" title="Sacar de la lista de espera" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:1px 8px;font-size:0.72rem;font-weight:700;cursor:pointer;vertical-align:middle">✕</button>`;
+        return `<div style="font-size:0.75rem;color:var(--texto-suave);display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap"><span>${c.nombre} (${c.telefono})${trucho} · 🕐 pidió el ${c.fecha || 's/fecha'} ${hace}</span>${quitar}</div>`;
       }).join('');
       const prodEsc = g.nombre.replace(/'/g,'').replace(/"/g,'');
-      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${prodEsc}','${nom}','${pid}','${c.modoCliente||'minorista'}')">📱 ${nom}</button><button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕</button>`; }).join(' ');
+      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${prodEsc}','${nom}','${pid}','${c.modoCliente||'minorista'}')">📱 ${nom}</button>`; }).join(' ');
       const similarBtns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion" style="background:#fff3e6;color:#9a6b00;font-size:0.72rem" onclick="abrirOfrecerSimilar('${c.telefono}','${nom}','${prodEsc}','${pid}','${c.modoCliente||'minorista'}')">✋ ${nom}</button>`; }).join(' ');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
         <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
