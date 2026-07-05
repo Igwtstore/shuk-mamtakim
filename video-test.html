@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🩺 Test de video</title>
+<style>
+body { font-family: -apple-system, sans-serif; background: #f5f2ec; margin: 0; padding: 14px; }
+h2 { font-size: 1rem; margin: 18px 0 6px; }
+video, img { width: 100%; max-width: 340px; border-radius: 12px; background: #ddd; display: block; }
+.log { font-size: 0.72rem; background: #1a1a2e; color: #7fdc9a; padding: 8px 10px; border-radius: 8px; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+button { padding: 10px 16px; border: none; background: #1a1a2e; color: #fff; border-radius: 10px; font-weight: 700; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1 style="font-size:1.1rem">🩺 Diagnóstico de video (sacale captura a TODO y mandala)</h1>
+
+<h2>1) Video directo (autoplay silencioso)</h2>
+<video id="v1" muted playsinline autoplay loop
+  src="https://res.cloudinary.com/dq2boloyp/video/upload/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.mp4"></video>
+<div class="log" id="l1">esperando…</div>
+
+<h2>2) Video con POSTER (tocá ▶ para probar el tap)</h2>
+<video id="v2" muted playsinline preload="metadata"
+  poster="https://res.cloudinary.com/dq2boloyp/image/upload/w_400,f_auto,q_auto/shuk-mamtakim/placeholder"
+  src="https://res.cloudinary.com/dq2boloyp/video/upload/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.mp4"></video>
+<button onclick="const v=document.getElementById('v2'); v.play().then(()=>log('l2','▶ tap: REPRODUCE')).catch(e=>log('l2','tap FALLÓ: '+e.name))">▶ Tocar para reproducir</button>
+<div class="log" id="l2">esperando…</div>
+
+<h2>3) Video OPTIMIZADO para celular (transcodificado)</h2>
+<video id="v3" muted playsinline autoplay loop
+  src="https://res.cloudinary.com/dq2boloyp/video/upload/f_mp4,vc_h264,q_auto,w_720/v1783219050/shuk-mamtakim/dgdeo30arezjvhpbgsh4.mp4"></video>
+<div class="log" id="l3">esperando…</div>
+
+<h2>4) La foto de poster sola (¿se ve?)</h2>
+<img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_400,f_auto,q_auto/shuk-mamtakim/placeholder" onload="log('l4','foto OK')" onerror="log('l4','foto FALLÓ')">
+<div class="log" id="l4">esperando…</div>
+
+<div class="log" id="linfo"></div>
+<script>
+function log(id, msg) { document.getElementById(id).textContent = msg; }
+function vigilar(vid, lid) {
+  const v = document.getElementById(vid);
+  const estados = [];
+  const upd = () => log(lid, estados.join(' → ') + ' | ready:' + v.readyState + (v.error ? ' | ERROR ' + v.error.code + ' ' + (v.error.message || '') : '') + (v.paused ? ' | pausado' : ' | ▶ reproduciendo'));
+  ['loadstart', 'loadedmetadata', 'canplay', 'playing', 'pause', 'stalled', 'error', 'suspend'].forEach(ev =>
+    v.addEventListener(ev, () => { estados.push(ev); upd(); }));
+  setInterval(upd, 1500);
+}
+vigilar('v1', 'l1'); vigilar('v2', 'l2'); vigilar('v3', 'l3');
+document.getElementById('linfo').textContent = 'Navegador: ' + navigator.userAgent.slice(0, 110);
+</script>
+</body>
+</html>
