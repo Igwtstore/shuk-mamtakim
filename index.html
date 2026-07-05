@@ -3018,9 +3018,9 @@ function goToSlideInternal(id, idx) {
   carouselIdx[id] = idx;
   if (_vidCiclo[id]) { clearTimeout(_vidCiclo[id]); delete _vidCiclo[id]; }
   // Producto con video: el carrusel gira SOLO (video completo → cada foto 3s → video de nuevo).
-  // Antes quedaba clavado en la foto tras el primer video (lo cazó el usuario).
   const tieneVideo = imagenes.some(v => esVideo(v));
   if (tieneVideo && imagenes.length > 1 && !esVideo(imagenes[idx])) {
+    _vidLiberar(id);   // en foto: suelta el turno para que otro producto reproduzca su video
     _vidCiclo[id] = setTimeout(() => goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length), 3000);
   }
   let med = document.getElementById('cimg-'+id);
@@ -3031,6 +3031,13 @@ function goToSlideInternal(id, idx) {
   // como imagen y quedaba el recuadro en blanco (bug cazado por el usuario al subir su video
   // publicitario como 2ª foto). Ahora el elemento se transforma según lo que toque mostrar.
   if (esVideo(val)) {
+    // ¿Hay turno para reproducir? Si no, mostrar la FOTO — el ciclo lo reintenta solo.
+    if (!_vidPuedeArrancar(id) && imagenes.some(x => !esVideo(x))) {
+      const idxFoto = imagenes.findIndex(x => !esVideo(x));
+      carouselIdx[id] = idxFoto;
+      return goToSlideInternal(id, idxFoto);
+    }
+    _vidOcupar(id);
     if (med.tagName !== 'VIDEO') {
       const v = document.createElement('video');
       v.className = med.className; v.id = med.id;
@@ -3087,6 +3094,15 @@ function initCarousels() {
   productos.forEach(p => { if (carouselIdx[p.id] === undefined) carouselIdx[p.id] = 0; });
   _vidObservar();
 }
+// ── Límite de videos SIMULTÁNEOS (estilo Instagram): el iPhone no banca varios videos
+// cargando a la vez (el primero gana y los demás quedan en blanco — bug cazado por el
+// usuario con 3 productos con video). En celular reproduce UNO; los demás muestran su
+// foto y toman el turno cuando el activo termina o sale de pantalla. ──
+const _vidsActivos = new Set();
+const _vidLimite = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 1 : 3;
+function _vidPuedeArrancar(id) { return _vidsActivos.has(String(id)) || _vidsActivos.size < _vidLimite(); }
+function _vidOcupar(id) { _vidsActivos.add(String(id)); }
+function _vidLiberar(id) { _vidsActivos.delete(String(id)); }
 // Tap directo en el video (iPhone siempre lo permite): reproducir/pausar. Si hasta el gesto
 // directo es rechazado, se muestran los CONTROLES nativos como último recurso.
 function _vidTap(v) {
@@ -3111,6 +3127,17 @@ function _vidObservar() {
       if (en.isIntersecting) {
         if (v.dataset.vsrc) { v.src = v.dataset.vsrc; v.removeAttribute('data-vsrc'); }
         if (v.tagName === 'VIDEO' && v.play) {
+          const idIO = (v.id || '').replace('cimg-', '');
+          if (!_vidPuedeArrancar(idIO)) {   // sin turno → mostrar la foto mientras espera
+            const pIO = productos.find(x => String(x.id) === String(idIO));
+            if (pIO) {
+              const medsIO = (pIO.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+              const fIO = medsIO.findIndex(x => !esVideo(x));
+              if (fIO !== -1) goToSlideInternal(pIO.id, fIO);
+            }
+            return;
+          }
+          _vidOcupar(idIO);
           v.oncanplay = () => { if (v.paused && !v.ended) { const p3 = v.play(); if (p3 && p3.catch) p3.catch(() => {}); } };
           const pr = v.play();
           if (pr && pr.catch) pr.catch(() => {
@@ -3125,7 +3152,7 @@ function _vidObservar() {
             }
           });
         }
-      } else if (v.tagName === 'VIDEO') { v.pause && v.pause(); }
+      } else if (v.tagName === 'VIDEO') { v.pause && v.pause(); _vidLiberar((v.id || '').replace('cimg-', '')); }
     });
   }, { rootMargin: '120px' });
   document.querySelectorAll('.producto-img-wrap video').forEach(v => _vidIO.observe(v));
