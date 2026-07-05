@@ -5135,7 +5135,8 @@ async function abrirMasivo() {
         dueno: (p.dueno || '') === 'Jony' ? 'Jony' : 'Miri', visible: _mDispTxt(p.visible || 'Ambos'),
         moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: _mDispNum(p.precioMay), precioMin: _mDispNum(p.precioMin),
         costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0),
-        unidadesPorPaquete: _mDispTxt(p.unidadesPorPaquete || 1)
+        unidadesPorPaquete: _mDispTxt(p.unidadesPorPaquete || 1),
+        hashgaja: _mDispTxt(p.hashgaja || ''), kosherTipo: _mDispTxt(p.kosherTipo || ''), jalav: _mDispTxt(p.jalav || '')
       };
     });
     renderMasivo();
@@ -5197,6 +5198,12 @@ function renderMasivo() {
     list.forEach(p => {
       html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:240px">${inp(p.id, 'desc', 'type="text"')}</td><td style="${_mTd}min-width:240px">${inp(p.id, 'descBot', 'type="text"')}</td></tr>`;
     });
+  } else if (_masivoVista === 'kosher') {
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">✡️ Hashgajá (supervisión)</th><th style="${_mTh}">Parve / Lácteo</th><th style="${_mTh}">Jalav <span style="font-weight:400">(si es lácteo)</span></th></tr></thead><tbody>`;
+    list.forEach(p => {
+      const esLacteo = _mVal(p.id, 'kosherTipo') === 'Lácteo';
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" placeholder="Ej: Badatz Eda Jaredit"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
+    });
   } else {
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th><th style="${_mTh}">P.May</th><th style="${_mTh}">P.Min</th><th style="${_mTh}">Costo</th><th style="${_mTh}">Margen</th><th style="${_mTh}">Stock</th><th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th></tr></thead><tbody>`;
     list.forEach(p => {
@@ -5219,6 +5226,13 @@ function masivoRecord(id, campo, valor, el) {
 
 function masivoPill(id, campo, valor, btn) {
   masivoRecord(id, campo, valor);
+  // Jalav solo tiene sentido si es Lácteo: al cambiar Parve/Lácteo se limpia y se
+  // re-dibuja la fila (aparece/desaparece el selector de Jalav).
+  if (campo === 'kosherTipo') {
+    if (valor !== 'Lácteo') masivoRecord(id, 'jalav', '');
+    renderMasivo();
+    return;
+  }
   btn.parentElement.querySelectorAll('button').forEach(b => {
     const on = b === btn;
     b.style.background = on ? 'var(--azul)' : '#fff'; b.style.color = on ? '#fff' : 'var(--texto)';
@@ -5239,8 +5253,10 @@ function masivoUpdateCounter() {
 }
 
 function masivoToggleVista() {
-  _masivoVista = _masivoVista === 'datos' ? 'desc' : 'datos';
-  document.getElementById('masivo-vista-btn').textContent = _masivoVista === 'datos' ? '📝 Descripciones' : '📊 Datos';
+  // Ciclo de 3 vistas: 📊 Datos → 📝 Descripciones → ✡️ Kosher → 📊 Datos.
+  // El botón muestra a DÓNDE vas con el próximo toque.
+  _masivoVista = _masivoVista === 'datos' ? 'desc' : (_masivoVista === 'desc' ? 'kosher' : 'datos');
+  document.getElementById('masivo-vista-btn').textContent = _masivoVista === 'datos' ? '📝 Descripciones' : (_masivoVista === 'desc' ? '✡️ Kosher' : '📊 Datos');
   renderMasivo();
 }
 
