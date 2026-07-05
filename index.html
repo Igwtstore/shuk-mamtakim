@@ -2077,6 +2077,11 @@ function savePedidos(p) { localStorage.setItem(DB_KEY, JSON.stringify(p)); }
 let productos = [];
 let carrito = {};
 let modo = 'mayorista';
+// 🔗 Catálogo VIP: la tienda abierta con ?vip=<token> muestra SOLO los productos de ese
+// link (tildados en el armador — ocultos, de Miri, lo que sea) con el canal de precios
+// elegido al crearlo. El token del link ES el secreto: sin él, catálogo normal.
+const _vipToken = (new URLSearchParams(location.search).get('vip') || '').replace(/[^a-z0-9]/gi, '');
+let _vipIds = null, _vipInfo = null;
 let cantidades = {};
 let adminAuth = false;
 let socioActual = 'jony';   // quién entró: 'jony' (ve todo) | 'miri' (solo lo suyo)
@@ -2188,6 +2193,7 @@ async function cargarProductos() {
     }
     renderCatalogo();
     renderFiltros();
+    _vipCargar();
     poblarEditorProductos();
     renderStockAdmin();
     renderManualProductos();
@@ -2552,6 +2558,10 @@ function _acRender() {
         <input type="number" min="0" value="${_acTcRef||''}" onchange="_acTcRef=Math.max(0,Number(this.value)||0);_acRender()" placeholder="1500" style="width:66px;padding:3px 5px;border:1.5px solid #cfe0f3;border-radius:6px;text-align:center;font-weight:700">
       </div>
       <input id="ac-titulo" placeholder="Título (opcional, ej: Lista mayorista junio)" style="width:100%;margin-bottom:0.55rem;padding:0.45rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.8rem;box-sizing:border-box">
+      ${esVistaMiri() ? '' : `<div style="display:flex;gap:6px;margin-bottom:0.5rem">
+        <button onclick="crearLinkVip()" title="Genera un link secreto: el cliente ve SOLO los productos tildados, con carrito, y el pedido te entra al panel" style="flex:1;padding:0.65rem;background:linear-gradient(135deg,#1a1a2e,#3a3a5e);color:#c9954a;border:none;border-radius:10px;font-weight:800;font-size:0.82rem;cursor:pointer;font-family:inherit">🔗 Link privado con carrito</button>
+        <button onclick="verLinksVip()" title="Ver y revocar los links vivos" style="padding:0.65rem 0.9rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">🗂</button>
+      </div>`}
       <div style="display:flex;gap:6px">
         <button onclick="generarCatalogo('pdf')" style="flex:1;padding:0.7rem;background:#c0392b;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.88rem;cursor:pointer">📄 PDF</button>
         <button onclick="generarCatalogo('img')" style="flex:1;padding:0.7rem;background:#7b2ff7;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.88rem;cursor:pointer">🖼️ Imagen</button>
@@ -2822,8 +2832,12 @@ function renderCatalogo() {
   const catalogo = document.getElementById('catalogo');
   const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
   const filtrados = productosVisibles().filter(p => {   // REGLA: vista Miri no ve productos de Jony
-    const vis = (p.visible||'Ambos').trim();
-    if (vis !== 'Ambos' && vis !== tipoActual) return false;
+    if (_vipIds) {
+      if (!_vipIds.has(String(p.id))) return false;   // 🔗 link VIP: SOLO lo elegido (ocultos incluidos)
+    } else {
+      const vis = (p.visible||'Ambos').trim();
+      if (vis !== 'Ambos' && vis !== tipoActual) return false;
+    }
     return (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
       (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva);
   }).sort((a, b) => {
@@ -8533,7 +8547,8 @@ function setBusquedaPedidos(v) {
 function renderFiltros() {
   const wrap = document.getElementById('filtros-wrap');
   if (!wrap || !productos.length) return;
-  const cats = ['Todos', ...CATEGORIA_ORDEN.filter(c => productos.some(p => getCatIdx(p) === CATEGORIA_ORDEN.indexOf(c)))];
+  const baseF = _vipIds ? productos.filter(p => _vipIds.has(String(p.id))) : productos;
+  const cats = ['Todos', ...CATEGORIA_ORDEN.filter(c => baseF.some(p => getCatIdx(p) === CATEGORIA_ORDEN.indexOf(c)))];
   wrap.innerHTML = cats.map(c => `<button class="filtro-btn${c===_categoriaActiva?' activo':''}" onclick="setCategoria('${c}')">${c}</button>`).join('');
 }
 
@@ -8541,6 +8556,73 @@ function setCategoria(cat) {
   _categoriaActiva = cat;
   renderFiltros();
   renderCatalogo();
+}
+
+// ── 🔗 CATÁLOGO VIP (lado tienda): carga el link privado y acomoda la vidriera ──────────
+async function _vipCargar() {
+  if (!_vipToken) return;
+  try {
+    const d = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoVip&t=' + encodeURIComponent(_vipToken)).then(r => r.json());
+    const cs = document.getElementById('catalogo-section');
+    let b = document.getElementById('vip-banner');
+    if (!b && cs) { b = document.createElement('div'); b.id = 'vip-banner'; cs.insertBefore(b, cs.firstChild); }
+    if (d && Array.isArray(d.ids) && d.ids.length) {
+      _vipInfo = d; _vipIds = new Set(d.ids.map(String));
+      setModo(d.canal === 'mayorista' ? 'mayorista' : 'minorista');
+      const bm = document.getElementById('banner-mayorista-cta'); if (bm) bm.style.display = 'none';   // catálogo a medida: sin CTA de registro
+      if (b) b.innerHTML = `<div style="background:linear-gradient(135deg,#1a1a2e,#3a3a5e);color:#fff;border-radius:14px;padding:0.9rem 1.1rem;margin:0.4rem 0 0.8rem;display:flex;align-items:center;gap:0.7rem"><span style="font-size:1.6rem">🤝</span><div><div style="font-weight:800;color:#c9954a;font-size:1.02rem">Catálogo especial para ${esc(d.nombre)}</div><div style="font-size:0.78rem;opacity:0.85">Una selección armada para vos — agregá al carrito y mandanos el pedido 🍬</div></div></div>`;
+      renderFiltros(); renderCatalogo();
+    } else if (b) {
+      b.innerHTML = `<div style="background:#fde8e8;color:#c0392b;border-radius:12px;padding:0.8rem 1rem;margin:0.4rem 0 0.8rem;font-weight:700">⚠️ Este catálogo privado ya no está disponible — pedinos el link de nuevo.</div>`;
+    }
+  } catch (e) {}
+}
+
+// ── 🔗 CATÁLOGO VIP (lado panel): crear el link desde lo tildado en el armador ─────────
+async function crearLinkVip() {
+  const ids = Object.keys(_acSel);
+  if (!ids.length) { showToast('Tildá al menos un producto para el link'); return; }
+  const nombre = prompt('¿Para quién es este catálogo? (ej: Tomás)');
+  if (nombre === null) return;
+  const canal = (_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista';
+  const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal }), '');
+  if (!r.ok || !r.token) return;
+  _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
+}
+function _vipMostrarLink(url, nombre, canal, n) {
+  let ov = document.getElementById('viplink-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'viplink-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  const wa = `https://wa.me/?text=${encodeURIComponent(`¡Hola ${nombre}! 🍬 Te armé un catálogo especial con carrito para que pidas directo: ${url}`)}`;
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:440px;width:100%">
+    <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🔗 Link privado listo</div>
+    <div style="font-size:0.8rem;color:var(--texto-suave);margin-top:4px">Para <b>${esc(nombre)}</b> · ${n} producto${n !== 1 ? 's' : ''} · precios ${canal}. Solo lo ve quien tenga el link.</div>
+    <input readonly value="${url}" onclick="this.select()" style="width:100%;margin-top:0.7rem;padding:0.55rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.78rem;box-sizing:border-box;background:#faf8f4">
+    <div style="display:flex;gap:6px;margin-top:0.7rem">
+      <button onclick="navigator.clipboard.writeText('${url}').then(()=>showToast('Link copiado ✓'))" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">📋 Copiar</button>
+      <button onclick="window.open('${wa}','_blank')" style="flex:1;padding:0.65rem;background:#25d366;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💬 WhatsApp</button>
+      <button onclick="document.getElementById('viplink-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+    </div>
+  </div>`;
+}
+async function verLinksVip() {
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=listarCatalogosVip').catch(() => []);
+  const links = Array.isArray(r) ? r : [];
+  let ov = document.getElementById('viplink-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'viplink-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:460px;width:100%;max-height:80vh;overflow-y:auto">
+    <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🗂 Links privados vivos</div>
+    ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span></div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
+      <button onclick="navigator.clipboard.writeText('https://shuk-mamtakim.vercel.app/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
+      <button onclick="borrarLinkVip('${l.token}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+    </div>`).join('') : '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.6rem 0">No hay links creados.</div>'}
+    <button onclick="document.getElementById('viplink-overlay').remove()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>
+  </div>`;
+}
+async function borrarLinkVip(t) {
+  if (!confirm('¿Revocar este link? El cliente que lo tenga deja de ver el catálogo.')) return;
+  await apiWrite(new URLSearchParams({ accion: 'borrarCatalogoVip', t }), '🗑️ Link revocado');
+  verLinksVip();
 }
 
 function filtrar() { renderCatalogo(); }

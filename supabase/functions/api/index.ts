@@ -1414,7 +1414,7 @@ Deno.serve(async (req) => {
   }
   // ── ZONA PÚBLICA: las acciones de la TIENDA (clientes, sin login) — espejo exacto
   //    de lo que queda FUERA de PROTECTED_ACTIONS/PROTECTED_HIJOS en motor-v2.js.
-  const PUBLICAS = ['getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy'];
+  const PUBLICAS = ['getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip'];
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
@@ -2231,6 +2231,35 @@ Deno.serve(async (req) => {
     if (accion === 'registrarCompra') {
       const cant = N(body, 'cantidad'), ct = N(body, 'costoTotal');
       await sbInsert('costos_jony', { fecha: fechaAhora(), producto_id: P(body, 'productoId'), producto: P(body, 'producto'), cantidad: cant, costo_total: ct, costo_unitario: cant > 0 ? ct / cant : 0 });
+      return json({ ok: true });
+    }
+    // ── 🔗 CATÁLOGO VIP: link privado con carrito para pasarle a UN cliente ──────────────
+    // La tienda de siempre pero mostrando SOLO los productos elegidos (incluidos los 🙈
+    // ocultos). El token del link ES el secreto: sin él, nadie los ve. Se crea desde el
+    // armador de catálogo del panel y se revoca cuando quieras.
+    if (accion === 'crearCatalogoVip') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const idsVip = P(body, 'ids').split(',').map((s) => s.trim()).filter(Boolean);
+      if (!idsVip.length) return json({ error: 'elegí al menos un producto' });
+      const tokVip = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+      await setConfig('VIP_' + tokVip, JSON.stringify({ ids: idsVip, nombre: P(body, 'nombre') || 'cliente', canal: P(body, 'canal') === 'mayorista' ? 'mayorista' : 'minorista', creado: fechaAhora() }));
+      return json({ ok: true, token: tokVip });
+    }
+    if (accion === 'getCatalogoVip') {
+      const t = Q('t').replace(/[^a-z0-9]/gi, '');
+      if (!t) return json({ error: 'link inválido' });
+      const raw = await getConfig('VIP_' + t, '');
+      if (!raw) return json({ error: 'este catálogo ya no está disponible' });
+      try { const d = JSON.parse(raw); return json({ ids: d.ids || [], nombre: d.nombre || '', canal: d.canal || 'minorista' }); } catch { return json({ error: 'link inválido' }); }
+    }
+    if (accion === 'listarCatalogosVip') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const rows = await sbGet('config', 'select=clave,valor&clave=like.VIP_*');
+      return json(rows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: (r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '', n: (d.ids || []).length }; } catch { return null; } }).filter(Boolean));
+    }
+    if (accion === 'borrarCatalogoVip') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      await sbDelete('config', 'clave=eq.' + encodeURIComponent('VIP_' + P(body, 't').replace(/[^a-z0-9]/gi, '')));
       return json({ ok: true });
     }
     if (accion === 'notificacion') {
