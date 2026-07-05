@@ -44,6 +44,10 @@ button { padding: 10px 16px; border: none; background: #1a1a2e; color: #fff; bor
 <h2>6) Descarga cruda del video de Cloudinary (sin reproducir)</h2>
 <div class="log" id="l6">descargando…</div>
 
+<h2>7) Estado del service worker (el sospechoso)</h2>
+<div class="log" id="l7">mirando…</div>
+<button onclick="swLimpiar()" style="background:#c0392b">🧹 Desalojar service worker viejo y recargar</button>
+
 <div class="log" id="linfo"></div>
 <script>
 function log(id, msg) { document.getElementById(id).textContent = msg; }
@@ -60,6 +64,25 @@ fetch('https://res.cloudinary.com/dq2boloyp/video/upload/f_mp4,vc_h264,q_auto,w_
   .then(async r => { const b = await r.blob(); log('l6', 'HTTP ' + r.status + ' · ' + r.headers.get('content-type') + ' · ' + Math.round(b.size / 1024) + ' KB descargados'); })
   .catch(e => log('l6', 'FETCH FALLÓ: ' + e.message));
 document.getElementById('linfo').textContent = 'Navegador: ' + navigator.userAgent.slice(0, 110);
+// Estado del SW + versión de cache (shuk-v5 = el arreglado; shuk-v4 = el viejo que rompía videos)
+(async () => {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration('/');
+    const keys = await caches.keys();
+    const ctrl = navigator.serviceWorker.controller ? 'CONTROLANDO esta página' : 'sin control';
+    log('l7', 'SW: ' + (reg ? (reg.active ? 'activo' : 'sin activo') : 'no registrado') + ' · ' + ctrl + ' · caches: [' + keys.join(', ') + ']' + (keys.includes('shuk-v5') ? ' ✅ versión NUEVA' : ' ⚠️ versión VIEJA — tocá el botón rojo'));
+  } catch (e) { log('l7', 'error: ' + e.message); }
+})();
+async function swLimpiar() {
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) await r.unregister();
+    const keys = await caches.keys();
+    for (const k of keys) await caches.delete(k);
+    log('l7', '🧹 Desalojado. Recargando…');
+    setTimeout(() => location.reload(), 800);
+  } catch (e) { log('l7', 'error al limpiar: ' + e.message); }
+}
 </script>
 </body>
 </html>
