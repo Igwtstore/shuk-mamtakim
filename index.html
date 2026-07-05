@@ -5546,14 +5546,15 @@ let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHom
 // ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca — Yuk: público amplio 20-100 ═══
 let _vidNombre = '', _vidDesc = '';
 function _vidPromptTexto(conPersona) {
-  const toma2 = conPersona
-    ? '(2) 3-6s: un hombre de unos 35 años con kipá negra en la cabeza, bien vestido estilo casual elegante (camisa clara arremangada, sin corbata), sonriente y natural, toma un puñado del producto y lo prueba disfrutándolo con gesto de placer genuino. La kipá negra debe verse clara sobre su cabeza en todo momento. '
-    : '(2) 3-6s: cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. ';
-  return 'Video publicitario vertical (9:16) de 8 segundos. REGLA MÁS IMPORTANTE: el producto es EXACTAMENTE el de la imagen adjunta — misma forma, tamaño, textura y color de cada unidad; NO lo reemplaces por otro producto ni lo estilices ("' + _vidNombre + '"' + (_vidDesc ? ', ' + _vidDesc : '') + '). '
-    + 'GUION EN 3 TOMAS: (1) 0-3s: la cámara ORBITA alrededor del producto sobre una mesa de madera clara, luz cálida de tarde, tonos dorados y crema. '
-    + toma2
-    + '(3) 6-8s: plano final del producto al centro' + (conPersona ? ' con el hombre desenfocado detrás' : '') + ' y APARECE un cartel elegante azul oscuro con letras doradas que dice exactamente "Shuk Mamtakim" (respetá la ortografía). '
-    + 'Estilo gourmet cálido y apetitoso para público amplio. Movimiento de cámara notorio y fluido en todo el video, nunca estático.';
+  const momento2 = conPersona
+    ? 'A los 3 segundos entra en cuadro POR UN COSTADO, en el MISMO plano (sin cortar a otra escena), un hombre de unos 35 años con kipá negra bien visible en la cabeza, camisa clara arremangada sin corbata, sonriente: toma un puñado del producto y lo prueba con gesto de placer genuino, SIN HABLAR. '
+    : 'A los 3 segundos cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. ';
+  return 'Video publicitario vertical (9:16) de 8 segundos, UNA SOLA TOMA CONTINUA. '
+    + 'La imagen adjunta es el PRIMER FOTOGRAMA del video: arrancá exactamente desde esa foto y NO cortes a otra escena — el producto ("' + _vidNombre + '"' + (_vidDesc ? ', ' + _vidDesc : '') + ') es EXACTAMENTE ese, misma forma, textura y color; no lo reemplaces ni lo estilices. '
+    + 'MOVIMIENTO: desde el primer segundo la cámara se mueve en órbita lenta y constante alrededor del producto, sin quedarse quieta nunca. Ambiente: mesa de madera clara, luz cálida de tarde, tonos dorados y crema. '
+    + momento2
+    + 'En los últimos 2 segundos, sobre el MISMO plano, aparece un cartel elegante azul oscuro con letras doradas que dice exactamente "Shuk Mamtakim" (respetá la ortografía). '
+    + 'AUDIO: SIN voces, SIN diálogo, SIN palabras — solamente música instrumental acústica cálida de fondo. Estilo gourmet apetitoso para público amplio.';
 }
 function vidTogglePersona() {
   document.getElementById('vidp-txt').value = _vidPromptTexto(document.getElementById('vidp-persona').checked);
