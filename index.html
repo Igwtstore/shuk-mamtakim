@@ -3048,8 +3048,12 @@ function goToSlideInternal(id, idx) {
       v.onclick = (ev) => { ev.stopPropagation(); _vidTap(v); };
       v.style.objectFit = 'cover';
       // El video dura LO QUE DURA y recién ahí pasa al siguiente medio (pedido del usuario).
-      if (imagenes.length > 1) v.onended = () => goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length);
-      else v.loop = true;
+      // Doble detección de fin: 'ended' + por tiempo (iOS a veces se traga el evento).
+      if (imagenes.length > 1) {
+        const alFinal = () => { v.onended = null; v.ontimeupdate = null; goToSlideInternal(id, (carouselIdx[id] + 1) % imagenes.length); };
+        v.onended = alFinal;
+        v.ontimeupdate = () => { if (v.duration && v.currentTime > v.duration - 0.3) alFinal(); };
+      } else v.loop = true;
       med.replaceWith(v); med = v;
     }
     med.style.display = 'block';
@@ -3100,6 +3104,29 @@ function initCarousels() {
 // foto y toman el turno cuando el activo termina o sale de pantalla. ──
 const _vidsActivos = new Set();
 const _vidEspera = [];   // cola FIFO: sin ella, el primer video se re-agarraba el turno siempre
+// PERRO GUARDIÁN: cada 4s revisa el video activo; si está clavado (no avanza) o desapareció,
+// suelta el turno y rota igual — la rotación no puede depender de que iOS dispare eventos.
+const _vidUltimoT = {};
+setInterval(() => {
+  for (const id of [..._vidsActivos]) {
+    const el = document.getElementById('cimg-' + id);
+    if (!el || el.tagName !== 'VIDEO') { _vidLiberar(id); delete _vidUltimoT[id]; continue; }
+    if (el.ended) { _vidLiberar(id); continue; }
+    const t = el.currentTime || 0;
+    const prev = _vidUltimoT[id];
+    _vidUltimoT[id] = t;
+    // dos chequeos seguidos sin avanzar (8s clavado) → pasar a la foto y ceder el turno
+    if (prev !== undefined && Math.abs(t - prev) < 0.05) {
+      const p = productos.find(x => String(x.id) === String(id));
+      if (p) {
+        const meds = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
+        const iF = meds.findIndex(x => !esVideo(x));
+        delete _vidUltimoT[id];
+        if (iF !== -1) goToSlideInternal(p.id, iF); else _vidLiberar(id);
+      } else _vidLiberar(id);
+    }
+  }
+}, 4000);
 const _vidLimite = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 1 : 3;
 function _vidEncolar(id) { id = String(id); if (!_vidEspera.includes(id) && !_vidsActivos.has(id)) _vidEspera.push(id); }
 function _vidPuedeArrancar(id) {
@@ -3136,6 +3163,22 @@ function _vidTap(v) {
     const pr = v.play();
     if (pr && pr.catch) pr.catch(() => { v.controls = true; });
   } else v.pause();
+}
+// Modo debug visible (?debug=video): cartel flotante con el estado real de los videos,
+// para diagnosticar desde una captura de pantalla del celular.
+if (new URLSearchParams(location.search).get('debug') === 'video') {
+  const dbg = document.createElement('div');
+  dbg.style.cssText = 'position:fixed;bottom:70px;left:8px;right:8px;background:rgba(20,20,40,0.92);color:#7fdc9a;font:11px monospace;padding:8px;border-radius:8px;z-index:9999;white-space:pre-wrap';
+  document.body.appendChild(dbg);
+  setInterval(() => {
+    const lineas = ['v3.29-fifo2 · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']'];
+    productos.filter(p => (p.imagen || '').split(',').some(x => esVideo(x.trim()))).forEach(p => {
+      const el = document.getElementById('cimg-' + p.id);
+      if (!el) { lineas.push(p.id + ': sin tarjeta'); return; }
+      lineas.push(p.id + ' ' + p.nombre.slice(9, 24) + ': ' + el.tagName + (el.tagName === 'VIDEO' ? (el.paused ? ' pausa' : ' ▶') + ' t=' + (el.currentTime || 0).toFixed(1) + ' rs=' + el.readyState + (el.error ? ' ERR' + el.error.code : '') : '') + ' slide=' + carouselIdx[p.id]);
+    });
+    dbg.textContent = lineas.join('\n');
+  }, 1000);
 }
 // Videos del catálogo con carga perezosa: recién bajan y arrancan al ENTRAR en pantalla,
 // y se pausan al salir (si todas las portadas fueran videos, el celular no sufre).
