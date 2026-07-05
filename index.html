@@ -3172,7 +3172,7 @@ if (new URLSearchParams(location.search).get('debug') === 'video') {
   dbg.style.cssText = 'position:fixed;bottom:70px;left:8px;right:8px;background:rgba(20,20,40,0.92);color:#7fdc9a;font:11px monospace;padding:8px;border-radius:8px;z-index:9999;white-space:pre-wrap';
   document.body.appendChild(dbg);
   setInterval(() => {
-    const lineas = ['v3.29-fifo2 · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']'];
+    const lineas = ['v3.29-fifo3 · límite:' + _vidLimite() + ' · activos:[' + [..._vidsActivos] + '] · fila:[' + _vidEspera + ']'];
     productos.filter(p => (p.imagen || '').split(',').some(x => esVideo(x.trim()))).forEach(p => {
       const el = document.getElementById('cimg-' + p.id);
       if (!el) { lineas.push(p.id + ': sin tarjeta'); return; }
@@ -11022,11 +11022,23 @@ function installPWA() {
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // URL versionada: Chrome iOS le servía al registro la copia VIEJA de sw.js desde su caché
-    // HTTP (la v4 interceptaba videos → ERR4). Con ?v= el registro trae SIEMPRE la versión nueva.
-    navigator.serviceWorker.register('/sw.js?v=5').then(reg => {
-      // Auto-curación: si el cache viejo sigue dando vueltas, actualizar el SW y avisarle que tome control ya.
-      caches.keys().then(keys => { if (keys.some(k => k === 'shuk-v4' || k === 'shuk-v3')) reg.update(); }).catch(() => {});
+    // URL versionada + AUTO-RESET: el sw.js viejo (v4) interceptaba videos → ERR4 en iPhone,
+    // y aunque se publique el nuevo, el viejo sigue CONTROLANDO la página hasta una recarga.
+    // Acá: se desregistra todo sw.js sin versión, se registra el v5, y si el controlador
+    // actual es viejo → la página se recarga UNA vez sola (guardia en sessionStorage).
+    const ctrlViejo = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.indexOf('v=5') === -1 && navigator.serviceWorker.controller.scriptURL.indexOf('OneSignal') === -1;
+    navigator.serviceWorker.getRegistrations().then(async regs => {
+      for (const r of regs) {
+        const su = ((r.active || r.waiting || r.installing) || {}).scriptURL || '';
+        if (su.indexOf('/sw.js') !== -1 && su.indexOf('v=5') === -1) { try { await r.unregister(); } catch (e) {} }
+      }
+      try { const keys = await caches.keys(); for (const k of keys) if (k !== 'shuk-v5') await caches.delete(k); } catch (e) {}
+      return navigator.serviceWorker.register('/sw.js?v=5');
+    }).then(reg => {
+      if (ctrlViejo && !sessionStorage.getItem('_swReset5')) {
+        sessionStorage.setItem('_swReset5', '1');
+        setTimeout(() => location.reload(), 900);
+      }
       return reg;
     }).then(reg => {
       reg.addEventListener('updatefound', () => {
