@@ -5547,14 +5547,15 @@ let _epId = null, _epMedia = [], _epDragIdx = null, _epPopup = false, _epFormHom
 let _vidNombre = '', _vidDesc = '';
 function _vidPromptTexto(conPersona) {
   const momento2 = conPersona
-    ? 'A los 3 segundos entra en cuadro POR UN COSTADO, en el MISMO plano (sin cortar a otra escena), un hombre de unos 35 años con kipá negra bien visible en la cabeza, camisa clara arremangada sin corbata, sonriente: toma un puñado del producto y lo prueba con gesto de placer genuino, SIN HABLAR. '
+    ? 'A los 3 segundos la cámara se abre y revela que el producto está sobre la mesa de una cocina cálida, y SENTADO A ESA MESA hay un hombre de unos 35 años con kipá negra bien visible, camisa clara arremangada sin corbata — INTEGRADO naturalmente en la escena (comparte la misma luz y la misma mesa, NO recortado ni superpuesto): toma un puñado del producto de la mesa y lo prueba con gesto de placer genuino, SIN HABLAR, ojos abiertos y expresión natural. '
     : 'A los 3 segundos cae un puñado del producto en CÁMARA LENTA con pequeños destellos y partículas de azúcar en el aire. ';
   return 'Video publicitario de 8 segundos, UNA SOLA TOMA CONTINUA. Se adjuntan DOS imágenes: (1) la FOTO DEL PRODUCTO y (2) el LOGO OFICIAL de la marca. '
     + 'La imagen 1 es el PRIMER FOTOGRAMA del video: arrancá exactamente desde esa foto y NO cortes a otra escena — el producto ("' + _vidNombre + '"' + (_vidDesc ? ', ' + _vidDesc : '') + ') es EXACTAMENTE ese, misma forma, textura y color; no lo reemplaces ni lo estilices. '
     + 'MOVIMIENTO: desde el primer segundo la cámara se mueve en órbita lenta y constante alrededor del producto, sin quedarse quieta nunca. Ambiente: mesa de madera clara, luz cálida de tarde, tonos dorados y crema. '
     + momento2
     + 'CIERRE (últimos 2 segundos): el hombre o el plano miran a cámara con una sonrisa, la imagen funde suavemente a un fondo crema liso y el LOGO de la imagen 2 queda CENTRADO, GRANDE, FIJO y nítido esos 2 segundos completos — exactamente como es, mismos colores y tipografía, sin redibujarlo. '
-    + 'AUDIO: SIN voces, SIN diálogo, SIN palabras — solamente música instrumental acústica cálida de fondo. Estilo gourmet apetitoso para público amplio.';
+    + 'AUDIO: SIN voces, SIN diálogo, SIN palabras — solamente música instrumental acústica cálida de fondo. Estilo gourmet apetitoso para público amplio. '
+    + 'RECORDATORIO FINAL (lo más importante): el producto en TODO el video es el de la imagen 1, tal cual la foto — no lo embellezcas ni lo cambies.';
 }
 function vidTogglePersona() {
   document.getElementById('vidp-txt').value = _vidPromptTexto(document.getElementById('vidp-persona').checked);
