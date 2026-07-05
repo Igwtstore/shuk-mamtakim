@@ -1000,14 +1000,15 @@ function showTab(id, btn) {
 // ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca para pegar en la app de Gemini (Veo) ═══
 let _vidNombreC = '';
 function _vidPromptCandy(conPersona) {
-  const toma2 = conPersona
-    ? '(2) 3-6s: un joven de unos 20 años con buena onda (remera moderna, sonriente), prueba la golosina y reacciona con cara de que está buenísima. '
-    : '(2) 3-6s: el producto gira y caen caramelos y chispas de colores en CÁMARA LENTA alrededor (sin taparlo). ';
-  return 'Video publicitario vertical (9:16) de 8 segundos. REGLA MÁS IMPORTANTE: el producto es EXACTAMENTE el de la imagen adjunta — misma forma, envoltorio, textura y colores; NO lo reemplaces por otra golosina ni lo estilices ("' + _vidNombreC + '"). '
-    + 'GUION EN 3 TOMAS: (1) 0-3s: la cámara ORBITA alrededor del producto con fondo degradé rosa-violeta animado y luz de neón suave. '
-    + toma2
-    + '(3) 6-8s: plano final del producto al centro' + (conPersona ? ' con el joven desenfocado detrás' : '') + ' y APARECE un cartel redondeado violeta con letras blancas que dice exactamente "Candy Shop" (respetá la ortografía). '
-    + 'Ritmo alegre y dinámico estilo reel de Instagram para público de 15 a 25 años. Movimiento de cámara notorio en todo el video, nunca estático.';
+  const momento2 = conPersona
+    ? 'A los 3 segundos entra en cuadro por un costado, en el MISMO plano (sin cortar a otra escena), un joven de unos 20 años con buena onda (remera moderna, sonriente): prueba la golosina y reacciona con cara de que está buenísima, SIN HABLAR. '
+    : 'A los 3 segundos caen caramelos y chispas de colores en CÁMARA LENTA alrededor del producto (sin taparlo). ';
+  return 'Video publicitario vertical (9:16) de 8 segundos, UNA SOLA TOMA CONTINUA. '
+    + 'La imagen adjunta es el PRIMER FOTOGRAMA del video: arrancá exactamente desde esa foto y NO cortes a otra escena — el producto ("' + _vidNombreC + '") es EXACTAMENTE ese, misma forma, envoltorio y colores; no lo reemplaces ni lo estilices. '
+    + 'MOVIMIENTO: desde el primer segundo la cámara se mueve en órbita lenta y constante alrededor del producto, sin quedarse quieta nunca. Fondo degradé rosa-violeta animado con luz de neón suave. '
+    + momento2
+    + 'En los últimos 2 segundos, sobre el MISMO plano, aparece un cartel redondeado violeta con letras blancas que dice exactamente "Candy Shop" (respetá la ortografía). '
+    + 'AUDIO: SIN voces, SIN diálogo, SIN palabras — solamente música pop instrumental alegre de fondo. Estilo reel de Instagram para público de 15 a 25 años.';
 }
 function vidTogglePersonaC() {
   document.getElementById('vid-prompt-txt').value = _vidPromptCandy(document.getElementById('vid-persona').checked);
