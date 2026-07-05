@@ -6394,6 +6394,19 @@ async function procesarBandejaLoop() {
   status.textContent = '✅ Bandeja al día';
 }
 
+// Borrado individual y vaciado de la bandeja (los botones existían… las funciones no — cazado por el usuario).
+async function borrarFotoBandeja(id) {
+  try { await fetch(APPS_SCRIPT_URL + '?accion=bandejaEliminar&id=' + encodeURIComponent(id)); } catch (e) {}
+  bandejaCache = bandejaCache.filter(b => b.id !== id);
+  await cargarBandeja();
+}
+async function vaciarBandeja(btn) {
+  if (!confirm('¿Vaciar la bandeja completa? Se borran todas las fotos sin usar.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '🗑️ Vaciando…'; }
+  try { await fetch(APPS_SCRIPT_URL + '?accion=bandejaVaciar'); } catch (e) {}
+  await cargarBandeja();
+  showToast('🗑️ Bandeja vaciada');
+}
 async function reintentarBandeja(btn) {
   if (btn) { btn.disabled = true; btn.textContent = '🔄 Reintentando...'; }
   try { await fetch(APPS_SCRIPT_URL + '?accion=bandejaReintentar'); } catch (e) {}
