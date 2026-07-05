@@ -1595,6 +1595,7 @@ Deno.serve(async (req) => {
       }
       if (has('precioMay')) patch.precio_may = parseFloat(P(body, 'precioMay').replace(',', '.')) || 0;
       if (has('precioMin')) patch.precio_min = parseFloat(P(body, 'precioMin').replace(',', '.')) || 0;
+      if (has('costo')) patch.costo = parseFloat(P(body, 'costo').replace(',', '.')) || null;   // vacío/0 = sin costo (les avisa el "falta costo" del Maaser)
       if (has('activo')) patch.activo = P(body, 'activo').toUpperCase() !== 'NO';
       if (has('visible')) { patch.visible_cat = P(body, 'visible'); patch.visible = P(body, 'visible') !== 'No'; }   // Ambos/Min/May + boolean
       if (has('unidadesPorPaquete')) patch.unidades_por_paquete = Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1);   // Circuito Candy↔Shuk: cuántas unidades trae el paquete/bolsa
