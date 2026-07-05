@@ -3057,7 +3057,8 @@ function goToSlideInternal(id, idx) {
       med.replaceWith(v); med = v;
     }
     med.style.display = 'block';
-    if (med.src !== val) med.src = val;
+    if (med.error) { try { med.removeAttribute('src'); med.load(); } catch (e) {} med.src = val; }   // errored (p.ej. por el SW viejo) → reintento limpio
+    else if (med.src !== val) med.src = val;
     else { try { med.currentTime = 0; } catch (e) {} }   // repetición del ciclo: desde el arranque
     med.oncanplay = () => { if (med.paused) { const p2 = med.play(); if (p2 && p2.catch) p2.catch(() => {}); } };
     med.play && med.play().catch(() => {});
@@ -11021,7 +11022,13 @@ function installPWA() {
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(reg => {
+    // URL versionada: Chrome iOS le servía al registro la copia VIEJA de sw.js desde su caché
+    // HTTP (la v4 interceptaba videos → ERR4). Con ?v= el registro trae SIEMPRE la versión nueva.
+    navigator.serviceWorker.register('/sw.js?v=5').then(reg => {
+      // Auto-curación: si el cache viejo sigue dando vueltas, actualizar el SW y avisarle que tome control ya.
+      caches.keys().then(keys => { if (keys.some(k => k === 'shuk-v4' || k === 'shuk-v3')) reg.update(); }).catch(() => {});
+      return reg;
+    }).then(reg => {
       reg.addEventListener('updatefound', () => {
         const newSW = reg.installing;
         newSW.addEventListener('statechange', () => {
