@@ -4019,6 +4019,29 @@ async function renderPedidos() {
             v.totalUSD > 0 ? `U$S ${parseFloat(v.totalUSD).toFixed(2)}` : ''
           ].filter(Boolean).join(' + ');
       const _esLineaCero = l => /—\s*(?:\$|U\$S)\s*0(?:[.,]0+)?\s*c\/u/.test(l);
+      // Chip de DUEÑO por renglón (solo vista Todo): al preparar un pedido mixto se ve al toque
+      // qué es de Jony y qué de Miri. El nombre puede contener "·" (y la línea le suma la
+      // descripción con otro "·") → se prueba del nombre más largo al más corto.
+      const _duenoLinea = (l) => {
+        const m = l.match(/\d+x\s+(.+?)\s+—/);
+        if (!m) return '';
+        const full = m[1].trim();
+        const parts = full.split(' · ');
+        for (let i = parts.length; i >= 1; i--) {
+          const cand = parts.slice(0, i).join(' · ').trim();
+          const prod = productos.find(p => (p.nombre || '').trim() === cand);
+          if (prod) return prod.dueno === 'Jony' ? 'J' : 'M';
+        }
+        return /pitzujim/i.test(full) ? 'J' : '';   // red de seguridad si el producto ya no está
+      };
+      const _chipDueno = (l) => {
+        if (soloMiri) return '';
+        const d = _duenoLinea(l);
+        if (!d) return '';
+        return d === 'J'
+          ? '<span title="Producto de Jony" style="display:inline-block;background:#fdf1dc;color:#b8860b;font-size:0.6rem;font-weight:800;padding:0 5px;border-radius:5px;margin-right:4px;vertical-align:middle">JONY</span>'
+          : '<span title="Producto de Miri" style="display:inline-block;background:#e8f0fd;color:#2f5fb3;font-size:0.6rem;font-weight:800;padding:0 5px;border-radius:5px;margin-right:4px;vertical-align:middle">MIRI</span>';
+      };
       const productLines = v.productos
         ? v.productos.split(' || ').filter(l => {
             if (!soloMiri) return true;
@@ -4026,8 +4049,8 @@ async function renderPedidos() {
             const nom = m ? m[2].trim() : '';
             return !nombresJony.has(nom);   // en vista Miri oculta líneas de productos de Jony
           }).map(l => _esLineaCero(l)
-            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${l} ⚠️</div>`
-            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${l}</div>`).join('')
+            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(l)}${l} ⚠️</div>`
+            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(l)}${l}</div>`).join('')
         : '';
       const _nCeros = v.productos ? v.productos.split(' || ').filter(_esLineaCero).length : 0;
       const arsJ = parseFloat(v.arsJONY || 0);
