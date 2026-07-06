@@ -2242,14 +2242,15 @@ async function fetchTipoCambio() {
 fetchTipoCambio();
 setInterval(fetchTipoCambio, 3600000); // actualiza cada 1 hora
 
+// Moneda del canal MAYORISTA de un producto: la define p.moneda (2×2 dueño×moneda).
+// Fallback para datos viejos sin el campo (convención pre-2×2: Jony→$, Miri→U$S).
+// OJO: NUNCA decidir por dueño solo — Jony también vende en U$S (bug cazado en el link VIP).
+function _monedaMay(p) { return (p.moneda || (p.dueno === 'Jony' ? '$' : 'U$S')) === 'U$S' ? 'U$S' : '$'; }
 function formatPrecio(p) {
   const id = p.id;
   if (modo === 'mayorista') {
-    if (p.dueno === 'Jony') {
-      const v = parseFloat((p.precioMay||'0').toString().replace(',','.'));
-      return '$ ' + Math.round(v).toLocaleString('es-AR');
-    }
     const v = parseFloat((p.precioMay||'0').toString().replace(',','.'));
+    if (_monedaMay(p) !== 'U$S') return '$ ' + Math.round(v).toLocaleString('es-AR');
     if (!v) return '—';
     let str = 'U$S ' + v.toFixed(2);
     if (_tc > 0) {
@@ -2283,14 +2284,14 @@ function packActivo(p) {
 
 function esPesos(p) {
   if (modo === 'minorista') return true;
-  return p.dueno === 'Jony';
+  return _monedaMay(p) !== 'U$S';   // por MONEDA del producto, no por dueño (Jony también vende en U$S)
 }
 
 // === CATÁLOGO PDF (lista de precios) — reemplaza el window.print() roto en celular ===
 function precioTextoPDF(p) {
   if (modo === 'mayorista') {
     const v = parseFloat((p.precioMay||'0').toString().replace(',','.')) || 0;
-    if (p.dueno === 'Jony') return '$ ' + Math.round(v).toLocaleString('es-AR');
+    if (_monedaMay(p) !== 'U$S') return '$ ' + Math.round(v).toLocaleString('es-AR');
     if (!v) return '-';
     let str = 'U$S ' + v.toFixed(2);
     if (_tc > 0) str += '  ($ ' + Math.round(v * _tc).toLocaleString('es-AR') + ')';
@@ -3399,8 +3400,8 @@ function renderCarrito() {
     return;
   }
   const itemsHTML = items.map(item => {
-    const precio = modo === 'mayorista' 
-      ? (item.dueno === 'Jony' ? '$ ' + Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))).toLocaleString('es-AR') : 'U$S ' + parseFloat((item.precioMay||'0').toString().replace(',','.')).toFixed(2))
+    const precio = modo === 'mayorista'
+      ? (_monedaMay(item) !== 'U$S' ? '$ ' + Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))).toLocaleString('es-AR') : 'U$S ' + parseFloat((item.precioMay||'0').toString().replace(',','.')).toFixed(2))
       : '$ ' + Math.round(item.precioMin).toLocaleString('es-AR');
     return `
     <div class="carrito-item">
