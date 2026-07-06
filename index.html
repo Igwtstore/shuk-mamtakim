@@ -4023,16 +4023,14 @@ async function renderPedidos() {
       // qué es de Jony y qué de Miri. El nombre puede contener "·" (y la línea le suma la
       // descripción con otro "·") → se prueba del nombre más largo al más corto.
       const _duenoLinea = (l) => {
+        if (_lineaEsDeJony(l, nombresJony)) return 'J';   // mismo criterio que la privacidad (prioriza Jony ante duplicado)
         const m = l.match(/\d+x\s+(.+?)\s+—/);
         if (!m) return '';
-        const full = m[1].trim();
-        const parts = full.split(' · ');
+        const parts = m[1].trim().split(' · ');
         for (let i = parts.length; i >= 1; i--) {
-          const cand = parts.slice(0, i).join(' · ').trim();
-          const prod = productos.find(p => (p.nombre || '').trim() === cand);
-          if (prod) return prod.dueno === 'Jony' ? 'J' : 'M';
+          if (productos.find(p => (p.nombre || '').trim() === parts.slice(0, i).join(' · ').trim())) return 'M';
         }
-        return /pitzujim/i.test(full) ? 'J' : '';   // red de seguridad si el producto ya no está
+        return '';
       };
       const _chipDueno = (l) => {
         if (soloMiri) return '';
@@ -4045,9 +4043,7 @@ async function renderPedidos() {
       const productLines = v.productos
         ? v.productos.split(' || ').filter(l => {
             if (!soloMiri) return true;
-            const m = l.match(/(\d+)x\s+([^—·]+)/);   // tolera viñeta "• " inicial
-            const nom = m ? m[2].trim() : '';
-            return !nombresJony.has(nom);   // en vista Miri oculta líneas de productos de Jony
+            return !_lineaEsDeJony(l, nombresJony);   // vista Miri: oculta líneas de Jony (robusto ante '·' en el nombre)
           }).map(l => _esLineaCero(l)
             ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(l)}${l} ⚠️</div>`
             : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(l)}${l}</div>`).join('')
@@ -6857,19 +6853,34 @@ function registrarRendicion() {
     .catch(() => showToast('Error al registrar'));
 }
 
+// Set con los nombres de TODOS los productos de Jony (para la privacidad de la vista Miri).
+function _nombresJony() {
+  return new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre || '').trim()).filter(Boolean));
+}
+// ¿La línea de un pedido corresponde a un producto de Jony? → en vista Miri se OCULTA.
+// ⚠️ Robusto ante nombres que CONTIENEN '·' (ej "Klik Kukiman · Edición especial chocolate y
+// blanco"): la línea es "Nx <nombre> · <desc> — precio", así que el '·' del nombre y el que
+// separa la descripción se confunden. Se prueba el prefijo del MÁS LARGO al más corto por
+// segmentos '·' contra el catálogo de Jony. Ante nombre DUPLICADO (existe como Miri y como
+// Jony), prioriza OCULTAR — la regla sagrada es que Miri no vea NADA de Jony.
+// (Bug real cazado 2026-07-06: los duplicados Kukiman/Shoko con '·' se colaban en la vista Miri.)
+function _lineaEsDeJony(linea, setJony) {
+  const sj = setJony || _nombresJony();
+  const m = (linea || '').match(/\d+x\s+(.+?)\s+—/);
+  if (!m) return /pitzujim/i.test(linea || '');
+  const parts = m[1].trim().split(' · ');
+  for (let i = parts.length; i >= 1; i--) {
+    if (sj.has(parts.slice(0, i).join(' · ').trim())) return true;
+  }
+  return /pitzujim/i.test(m[1]);   // sin producto en catálogo: red de seguridad por nombre
+}
+
 // Líneas de productos de un pedido, filtradas según la vista (Miri solo ve sus golosinas, no Pitzujim de Jony)
 function _lineasPedidoVista(productosStr, soloMiri) {
   const lineas = (productosStr || '').split('||').map(l => l.trim()).filter(l => l.startsWith('•'));
   if (!soloMiri) return lineas;
-  return lineas.filter(l => {
-    const m = l.match(/•\s*\d+x\s+(.+?)\s+—/);
-    if (!m) return true;
-    const nombre = m[1].split(' · ')[0].trim();
-    const prod = productos.find(p => p.nombre === nombre);
-    // El campo dueño manda; el nombre ('pitzujim') solo si el producto ya no está en el catálogo.
-    if (prod) return prod.dueno !== 'Jony';      // ocultar lo de Jony en vista Miri
-    return !/pitzujim/i.test(nombre);            // sin producto: red de seguridad por nombre
-  });
+  const sj = _nombresJony();
+  return lineas.filter(l => !_lineaEsDeJony(l, sj));
 }
 
 // Popup con el detalle de un pedido al clickear su movimiento en la caja
@@ -9986,15 +9997,14 @@ async function renderDashboard() {
   });
 
   // Top productos (en vista Miri se excluyen líneas de productos de Jony)
-  const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
+  const nombresJony = _nombresJony();
   const prodCount = {};
   entregadas.forEach(v => {
     (v.productos||'').split('||').forEach(l => {
       const m = l.match(/(\d+)x\s+([^—·]+)/);
       if (m) {
-        const nomFull = m[2].trim();
-        if (soloMiri && nombresJony.has(nomFull)) return;
-        const nom = nomFull.substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]);
+        if (soloMiri && _lineaEsDeJony(l, nombresJony)) return;   // robusto ante '·' en el nombre
+        const nom = m[2].trim().substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]);
       }
     });
   });
