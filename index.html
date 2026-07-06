@@ -1863,8 +1863,13 @@
     </div>
     <div id="cobro-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
       <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">💱 Tipo de cambio del día — U$S 1 = $ <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(informalo siempre)</span></label>
-      <input type="number" id="cobro-tc" placeholder="ej: 1200" min="1" oninput="cobro_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
+      <input type="number" id="cobro-tc" placeholder="ej: 1200" min="1" oninput="document.getElementById('cobro-pesos-real').value='';cobro_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
       <div id="cobro-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
+      <div id="cobro-pesos-wrap" style="display:none;margin-top:0.55rem;padding-top:0.5rem;border-top:1px dashed #e8c97a">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">💵 ¿Con cuánto te pagó en total? <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(en pesos — si redondeó, calcula el TC solo)</span></label>
+        <input type="number" id="cobro-pesos-real" placeholder="ej: 255000" min="0" step="any" oninput="cobro_desdePesos()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
+        <div id="cobro-pesos-hint" style="font-size:0.74rem;color:var(--dorado);margin-top:0.35rem;font-weight:600"></div>
+      </div>
     </div>
     <div id="cobro-ajuste-wrap" style="display:none;margin-bottom:0.75rem;background:#eef4fb;border-radius:8px;padding:0.75rem">
       <label id="cobro-ajuste-label" style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">💵 ¿Cuánto recibiste en pesos? <span style="font-weight:400;color:var(--texto-suave)">(redondeo / sin vuelto)</span></label>
@@ -10672,6 +10677,8 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
   const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
   const cs = document.getElementById('cobro-comprobante-st'); if (cs) cs.textContent = '';
   const cr = document.getElementById('cobro-recibido'); if (cr) cr.value = '';
+  const cpr = document.getElementById('cobro-pesos-real'); if (cpr) cpr.value = '';
+  const cph = document.getElementById('cobro-pesos-hint'); if (cph) cph.textContent = '';
   const rp = document.querySelector('input[name="cobro-falta"][value="perdonar"]'); if (rp) rp.checked = true;
   // Envío: prefill con lo que se cobró en el pedido (si ya estaba) + costo/quién ya cargados.
   const env = _enviosPorVenta[id] || {};
@@ -10716,11 +10723,40 @@ function cobro_recalcAjuste() {
   if (wrap) wrap.style.display = 'none';   // el campo "cuánto recibiste" no se usa con el cobro fraccionado
   cobro_actualizarCubierto();
 }
+// ¿Hay U$S que se cobran en una caja de PESOS? (cross-moneda U$S→$: el cliente debe dólares y paga pesos)
+function _cobroHayUsdEnPesos() {
+  return _cobroTramosFlat().some(t => t.moneda === 'USD' && !(_CAJAS_USD.includes(t.caja) || t.caja === 'CTA_CTE_USD'));
+}
+// 💵 El usuario pone los PESOS reales que le pagaron (normalmente redondeados) y el sistema despeja
+// el tipo de cambio EFECTIVO. Así entran los pesos completos a la caja y la ganancia / comisión de
+// Miri / maaser se calculan con ese TC real. NO cambia la lógica de plata — solo deriva el TC del monto.
+function cobro_desdePesos() {
+  const pesos = parseFloat(document.getElementById('cobro-pesos-real')?.value) || 0;
+  const hint = document.getElementById('cobro-pesos-hint');
+  let usdEnPesos = 0, pesosDirectos = 0;
+  _cobroTramosFlat().forEach(t => {
+    const cajaUSD = _CAJAS_USD.includes(t.caja) || t.caja === 'CTA_CTE_USD';
+    if (t.moneda === 'USD' && !cajaUSD) usdEnPesos += t.monto;          // dólares que se pagan en caja de pesos
+    else if (t.moneda === 'ARS' && !cajaUSD) pesosDirectos += t.monto;  // pesos directos (no dependen del TC)
+  });
+  if (!hint) return;
+  if (pesos <= 0 || usdEnPesos <= 0) { hint.textContent = ''; return; }
+  const paraUSD = pesos - pesosDirectos;
+  if (paraUSD <= 0) { hint.textContent = '⚠️ Ese monto no cubre ni la parte que ya es en pesos ($' + Math.round(pesosDirectos).toLocaleString('es-AR') + ')'; return; }
+  const tcEf = Math.round(paraUSD / usdEnPesos * 100) / 100;
+  const tcInp = document.getElementById('cobro-tc');
+  if (tcInp) tcInp.value = tcEf;
+  cobro_calcularTC();
+  hint.innerHTML = '→ TC efectivo <b>$' + tcEf.toLocaleString('es-AR') + '</b> · entran los <b>$' + Math.round(pesos).toLocaleString('es-AR') + '</b> completos (la ganancia y el maaser cuentan lo que te pagó de verdad)';
+}
 function cobro_onSelectChange() {
   const tcw = document.getElementById('cobro-tc-wrap');
   // TC SIEMPRE visible: el usuario informa el tipo de cambio del día en CADA cobro (incluso ventas
   // 100% en pesos), para que el balance de ganancias multi-moneda de Jony pueda convertir costos U$S.
   if (tcw) tcw.style.display = 'block';
+  // El campo "con cuánto te pagó" solo tiene sentido si hay dólares cobrados en pesos.
+  const pw = document.getElementById('cobro-pesos-wrap');
+  if (pw) pw.style.display = _cobroHayUsdEnPesos() ? 'block' : 'none';
   cobro_recalcAjuste();
   cobro_calcularTC();
 }
