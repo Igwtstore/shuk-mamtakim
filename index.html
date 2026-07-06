@@ -3979,6 +3979,11 @@ async function renderPedidos() {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
     }
+    // Mapa id→nota para el botón "Editar nota": NUNCA inyectar el texto de la nota en el HTML del
+    // onclick — un salto de línea o una comilla rompen el JavaScript y el botón queda muerto.
+    // El botón pasa solo el id y abrirNotaPedido() lee la nota de acá. (Bug real: nota con \n, 2026-07-06)
+    window._notaPorId = {};
+    ventas.forEach(v => { window._notaPorId[v.id] = (v.notas && v.notas !== 'Manual') ? v.notas : ''; });
     // Deuda VIVA por pedido: imputa TODOS los pagos del cliente (atados a un pedido + generales FIFO)
     // a sus pedidos, para que cada tarjeta muestre lo que se debe HOY (no la deuda del cobro original).
     const deudaViva = {};
@@ -4148,7 +4153,7 @@ async function renderPedidos() {
             const remGolUSD = Math.max(0, (usdM - pg.golUSD));
             return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
           })() : ''}
-          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaModal('pedido','${v.id}','${(v.notas&&v.notas!=='Manual'?v.notas:'').replace(/'/g,'')}','Nota del pedido')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
+          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaPedido('${v.id}')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
           <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
           <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${JSON.stringify(v).replace(/'/g,"&#39;")})'>🧾 Remito</button>
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick='exportarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>📤 Exportar</button>
@@ -10219,6 +10224,12 @@ async function cargarNotasClientes() {
   if (res) _notasClientes = await res.json().catch(() => {});
 }
 
+// Abre el modal de nota de un pedido leyendo el texto del mapa (no del HTML) → a prueba de
+// saltos de línea / comillas en la nota.
+function abrirNotaPedido(id) {
+  const nota = (window._notaPorId && window._notaPorId[id]) || '';
+  abrirNotaModal('pedido', id, nota, 'Nota del pedido');
+}
 function abrirNotaModal(tipo, id, textoActual, tituloLabel) {
   _notaModalTipo = tipo; _notaModalId = id;
   document.getElementById('nota-modal-titulo').textContent = '📝 ' + tituloLabel;
