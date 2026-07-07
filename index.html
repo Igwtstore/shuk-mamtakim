@@ -3851,13 +3851,15 @@ async function renderCuentaCorriente() {
     // En vista Myri, de cada pago solo cuenta la parte GOLOSINAS (montoARS − montoPitz); la parte
     // Pitzujim es de Jony. El USD siempre es golosinas. En vista Jony cuenta el pago completo.
     const pagoARSvista = p => soloMiri ? ((parseFloat(p.montoARS)||0) - (parseFloat(p.montoPitz)||0)) : (parseFloat(p.montoARS)||0);
+    const pagoUSDvista = p => soloMiri ? ((parseFloat(p.montoUSD)||0) - (parseFloat(p.montoPitzUsd)||0)) : (parseFloat(p.montoUSD)||0);
     const pagadoPorCliente = {};
     (pagos || []).forEach(p => {
       const k = normCliente(p.cliente);
-      if (!pagadoPorCliente[k]) pagadoPorCliente[k] = { ars: 0, usd: 0, pitz: 0 };
+      if (!pagadoPorCliente[k]) pagadoPorCliente[k] = { ars: 0, usd: 0, pitz: 0, pitzU: 0 };
       pagadoPorCliente[k].ars += pagoARSvista(p);
-      pagadoPorCliente[k].usd += parseFloat(p.montoUSD)||0;
-      pagadoPorCliente[k].pitz += parseFloat(p.montoPitz)||0;   // parte Pitzujim del pago (es de Jony)
+      pagadoPorCliente[k].usd += pagoUSDvista(p);
+      pagadoPorCliente[k].pitz += parseFloat(p.montoPitz)||0;      // parte Pitzujim $ del pago (es de Jony)
+      pagadoPorCliente[k].pitzU += parseFloat(p.montoPitzUsd)||0;  // parte Pitzujim U$S (auto-reparto)
     });
     // Agrupar por cliente NORMALIZADO (en vista Miri usa solo los montos de Miri).
     // jonyARS/miriARS/jonyUSD/miriUSD = de quién es la deuda (para el total con desglose en vista Jony).
@@ -3880,9 +3882,10 @@ async function renderCuentaCorriente() {
     Object.entries(porCliente).forEach(([k, d]) => {
       const pg = pagadoPorCliente[k];
       if (pg) {
+        // pg.ars / pg.usd ya vienen según la vista (en Miri excluyen la parte Pitzujim; en Jony son completos)
         d.totalARS -= pg.ars; d.totalUSD -= pg.usd;
         d.jonyARS -= pg.pitz; d.miriARS -= (pg.ars - pg.pitz);   // Pitzujim → Jony; resto golosinas → Miri
-        d.miriUSD -= pg.usd;                                      // los pagos en U$S son golosinas (Miri)
+        d.jonyUSD -= pg.pitzU; d.miriUSD -= (soloMiri ? pg.usd : (pg.usd - pg.pitzU));   // U$S separado por el reparto guardado
       }
     });
     // Quitar los que quedaron saldados
@@ -6952,22 +6955,43 @@ function _mostrarOverlayDetalle(html) {
 // luego los pagos GENERALES (sin pedidoId) al pedido más VIEJO primero (FIFO). Devuelve cada
 // pedido con su saldo restante (remARS/remUSD). Así un pedido ya cubierto deja de figurar.
 function _imputarPedidos(pedidos, pagos, soloMiri) {
-  // En vista Myri, de cada pago solo cuenta la parte golosinas (montoARS − montoPitz). USD siempre golosinas.
-  const pARS = p => soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
-  // El saldo de cada pedido arranca en su DEUDA RESIDUAL (lo que fue a Cta Cte / nunca se cobró),
-  // no en el total: un pedido cobrado parcialmente solo debe la parte que quedó pendiente.
-  const items = (pedidos || []).map(v => { const _d = _deudaPedido(v, soloMiri); return { v, remARS: _d.ars, remUSD: _d.usd }; });
-  (pagos || []).filter(p => p.pedidoId).forEach(p => {
-    const it = items.find(x => String(x.v.id) === String(p.pedidoId));
-    if (it) { it.remARS -= pARS(p); it.remUSD -= parseFloat(p.montoUSD) || 0; }
+  // POR COMPONENTE (2026-07-07): la deuda de cada pedido se separa en Pitzujim (de Jony) y
+  // golosinas (de Miri), en $ y U$S, y los pagos se imputan con EXACTAMENTE el mismo orden
+  // que la cuenta entre socios y la ganancia: atados por su reparto guardado; generales FIFO
+  // ($ Pitzujim primero, U$S golosinas primero). Antes se imputaba por MONEDA sin distinguir
+  // dueño → caso Isi: el pago que cubría el Pitzujim del #31 aparecía descontando las
+  // golosinas del #48 (mostraba 78,19 en vez de 99,20). Ahora las tres pantallas coinciden.
+  const items = (pedidos || []).map(v => {
+    const _d = _deudaPedido(v, false);
+    return { v, jA: _d.jonyARS, mA: _d.miriARS, jU: _d.jonyUSD, mU: _d.miriUSD };
   });
-  let poolARS = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + pARS(p), 0);
-  let poolUSD = (pagos || []).filter(p => !p.pedidoId).reduce((s, p) => s + (parseFloat(p.montoUSD) || 0), 0);
   const parseF = f => { const m = (f || '').split(' ')[0].split('/'); return m.length < 3 ? 0 : new Date(+m[2], +m[1] - 1, +m[0]).getTime(); };
+  const ord = [...(pagos || [])].sort((a, b) => parseF(a.fecha) - parseF(b.fecha));
+  // Atados a un pedido: consumen SU pedido según el reparto guardado (montoPitz / montoPitzUsd)
+  ord.filter(p => p.pedidoId).forEach(p => {
+    const it = items.find(x => String(x.v.id) === String(p.pedidoId));
+    if (!it) return;
+    const pzA = Math.min(parseFloat(p.montoPitz) || 0, it.jA);
+    const gA = Math.min(Math.max(0, (parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)), it.mA);
+    const pzU = Math.min(parseFloat(p.montoPitzUsd) || 0, it.jU);
+    const gU = Math.min(Math.max(0, (parseFloat(p.montoUSD) || 0) - (parseFloat(p.montoPitzUsd) || 0)), it.mU);
+    it.jA -= pzA; it.mA -= gA; it.jU -= pzU; it.mU -= gU;
+  });
   items.sort((a, b) => parseF(a.v.fecha) - parseF(b.v.fecha));   // más viejo primero
+  // Generales ("Automático"): FIFO por componente, mismo orden que socios/ganancia
+  ord.filter(p => !p.pedidoId).forEach(p => {
+    let poolA = parseFloat(p.montoARS) || 0, poolU = parseFloat(p.montoUSD) || 0;
+    items.forEach(it => {
+      let a = Math.min(poolA, it.jA); it.jA -= a; poolA -= a;   // $: Pitzujim primero
+      a = Math.min(poolA, it.mA); it.mA -= a; poolA -= a;       // $: después golosinas
+      a = Math.min(poolU, it.mU); it.mU -= a; poolU -= a;       // U$S: golosinas primero
+      a = Math.min(poolU, it.jU); it.jU -= a; poolU -= a;       // U$S: después Pitzujim
+    });
+  });
+  // Salida: misma forma de siempre (remARS/remUSD según la vista) + desglose por dueño
   items.forEach(it => {
-    if (poolARS > 0 && it.remARS > 0) { const ap = Math.min(poolARS, it.remARS); it.remARS -= ap; poolARS -= ap; }
-    if (poolUSD > 0 && it.remUSD > 0) { const ap = Math.min(poolUSD, it.remUSD); it.remUSD -= ap; poolUSD -= ap; }
+    it.remARS = soloMiri ? it.mA : (it.jA + it.mA);
+    it.remUSD = soloMiri ? it.mU : (it.jU + it.mU);
   });
   return items;
 }
@@ -7498,7 +7522,11 @@ async function renderCaja() {
             movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta' });
           }
         }
-        movs.push({ desc: esPerdon ? `🎁 perdón Cta Cte` : `↳ baja Cta Cte`, col: 'CTA_CTE_USD', val: -uSD, mon: 'USD', tipo: 'venta' });
+        // La baja de la Cta Cte U$S también se parte en Pitzujim (Jony) y golosinas, como en pesos,
+        // para que Myri no vea la parte de Jony y el desglose cierre (auto-reparto 2026-07-07).
+        const pitzU = Math.min(parseFloat(p.montoPitzUsd) || 0, uSD);
+        if (pitzU > 0) movs.push({ desc: esPerdon ? `🎁 perdón Cta Cte (Pitzujim)` : `↳ baja Cta Cte (Pitzujim)`, col: 'CTA_CTE_USD', val: -pitzU, mon: 'USD', tipo: 'venta', dueno: 'J' });
+        if (uSD - pitzU > 0) movs.push({ desc: esPerdon ? `🎁 perdón Cta Cte` : `↳ baja Cta Cte`, col: 'CTA_CTE_USD', val: -(uSD - pitzU), mon: 'USD', tipo: 'venta' });
       }
     });
 
@@ -7740,6 +7768,7 @@ async function renderCuentaSocios() {
   let jonyTiene = 0;     // Jony cobró golosinas de Myri → le debe el neto (golosinas − comisión)
   // Componentes (USD)
   let comiDebeU = 0, jonyTieneU = 0;
+  let pitzMyriU = 0;     // Pitzujim en U$S que cobró Myri en SU caja de dólares (se lo debe a Jony en U$S)
 
   const MYRI_ARS = ['MP_GABY','EFT_MYRI'];   // cajas de Myri en pesos
   // Detalle por venta de las líneas cruzadas (conciliación pedida por el usuario): qué ventas
@@ -7860,8 +7889,15 @@ async function renderCuentaSocios() {
     const caja = (p.caja||'').trim();
     const pitz = parseFloat(p.montoPitz)||0;
     const golARS = (parseFloat(p.montoARS)||0) - pitz;
-    const golUSD = parseFloat(p.montoUSD)||0;
+    const pitzU = parseFloat(p.montoPitzUsd)||0;
+    const golUSD = (parseFloat(p.montoUSD)||0) - pitzU;
     if (pitz > 0 && MYRI_ARS.includes(caja)) pitzMyri += pitz;        // Pitzujim cobrado en caja de Myri
+    // Pitzujim en U$S cobrado por Myri: a caja de pesos con TC → se lo debe en pesos; a su caja U$S → en U$S
+    if (pitzU > 0) {
+      const tcAt = parseFloat(p.tc)||0;
+      if (MYRI_ARS.includes(caja) && tcAt > 0) pitzMyri += Math.round(pitzU * tcAt);
+      else if (caja === 'ETF_USD_MYRI') pitzMyriU += pitzU;
+    }
     if (golARS > 0) {
       const comi = Math.round(golARS * 0.15);
       if (MYRI_ARS.includes(caja)) comiDebe += comi;                  // Myri cobró golosinas → debe comisión
@@ -7900,6 +7936,7 @@ async function renderCuentaSocios() {
     // Pitzujim: si lo cobró MYRI, se lo debe a Jony (si lo cobró Jony, es su propia plata)
     if (usadoPitz > 0 && MYRI_ARS.includes(caja)) pitzMyri += usadoPitz;
     if (usadoPitzU > 0 && MYRI_ARS.includes(caja) && tcP > 0) pitzMyri += Math.round(usadoPitzU * tcP);
+    else if (usadoPitzU > 0 && caja === 'ETF_USD_MYRI') pitzMyriU += usadoPitzU;   // Pitzujim U$S en la caja U$S de Myri
     // Golosinas $: comisión 15% para Jony; el neto es de Miri
     if (usadoGolA > 0) {
       const comi = Math.round(usadoGolA * 0.15);
@@ -7928,7 +7965,7 @@ async function renderCuentaSocios() {
 
   const saldadoARS = parseFloat(liq.totalARS)||0, saldadoUSD = parseFloat(liq.totalUSD)||0;
   const ars = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
-  const usd = comiDebeU - jonyTieneU + movsUSD - saldadoUSD;
+  const usd = comiDebeU + pitzMyriU - jonyTieneU + movsUSD - saldadoUSD;   // + Pitzujim U$S que cobró Myri
   _socios = { ars: Math.round(ars), usd: parseFloat(usd.toFixed(2)) };
   // Desglose para el Excel de rendición de Miri (cómo se compone el saldo con Jony).
   window._sociosDesglose = {
@@ -10913,6 +10950,13 @@ async function confirmarPagoCuenta() {
   if (comprobante) params.set('comprobante', comprobante);
   cerrarPagoModal();
   const r = await apiWrite(params, '💵 Pago registrado ✓');
+  // Transparencia: el sistema separó SOLO qué parte es de Jony (Pitzujim) y qué de Miri (golosinas).
+  // Se lo mostramos para que vea a qué bolsillo fue cada peso, sin haber tenido que marcar nada.
+  if (r.ok && r.reparto && (r.reparto.pitzARS > 0 || r.reparto.pitzUSD > 0)) {
+    const pitz = [r.reparto.pitzARS > 0 ? '$ ' + Math.round(r.reparto.pitzARS).toLocaleString('es-AR') : '', r.reparto.pitzUSD > 0 ? 'U$S ' + r.reparto.pitzUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+    const gol = [r.reparto.golARS > 0 ? '$ ' + Math.round(r.reparto.golARS).toLocaleString('es-AR') : '', r.reparto.golUSD > 0 ? 'U$S ' + r.reparto.golUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
+    setTimeout(() => showToast('⚖️ Repartido solo: ' + pitz + ' → Pitzujim (Jony)' + (gol ? ' · ' + gol + ' → golosinas (Miri)' : '')), 900);
+  }
   if (r.ok) refreshAdmin();
 }
 // Sube uno o varios archivos a Cloudinary y devuelve las URLs separadas por salto de línea.

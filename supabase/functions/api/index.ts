@@ -117,15 +117,16 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
   });
   Object.values(res).forEach((l: any) => l.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha)));
   const ord = [...(pagos || [])].sort((a, b) => _fparMin(a.fecha) - _fparMin(b.fecha));
-  // Atados: consumen la deuda de SU pedido (montoPitz dice cuánto fue Pitzujim)
+  // Atados: consumen la deuda de SU pedido (monto_pitz / monto_pitz_usd dicen cuánto fue Pitzujim)
   ord.filter((p) => p.pedido_id).forEach((p) => {
     const it = porId[String(p.pedido_id)]; if (!it) return;
     const cuenta = _fparMin(p.fecha) > msCorte && (p.caja || '') !== 'PERDON';
     const pz = Math.min(parseFloat(p.monto_pitz) || 0, it.jA);
     const gA = Math.min(Math.max(0, (parseFloat(p.monto_ars) || 0) - (parseFloat(p.monto_pitz) || 0)), it.mA);
-    const gU = Math.min(parseFloat(p.monto_usd) || 0, it.mU);
-    it.jA -= pz; it.mA -= gA; it.mU -= gU;
-    if (cuenta) { it.cub.jA += pz; it.cub.mA += gA; it.cub.mU += gU; }
+    const pzU = Math.min(parseFloat(p.monto_pitz_usd) || 0, it.jU);   // Pitzujim en U$S (auto-reparto 2026-07-07)
+    const gU = Math.min(Math.max(0, (parseFloat(p.monto_usd) || 0) - (parseFloat(p.monto_pitz_usd) || 0)), it.mU);
+    it.jA -= pz; it.mA -= gA; it.mU -= gU; it.jU -= pzU;
+    if (cuenta) { it.cub.jA += pz; it.cub.mA += gA; it.cub.mU += gU; it.cub.jU += pzU; }
   });
   // Generales: FIFO por componente (Pitzujim primero en $, golosinas primero en U$S)
   ord.filter((p) => !p.pedido_id && (p.caja || '') !== 'PERDON').forEach((p) => {
@@ -336,7 +337,7 @@ const ventaFront = (v: any) => ({
   cajaJony: v.caja_jony || '', cajaMyri: v.caja_myri || '', tipoCambio: v.tipo_cambio || 0, stockUpdates: v.stock_updates || '',
   comprobante: '', ajuste: 0, corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
 });
-const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, tc: parseFloat(p.tc) || 0 });
+const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0 });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
 const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() });
@@ -1701,7 +1702,36 @@ Deno.serve(async (req) => {
     // ── ESCRITURAS (POST) ─────────────────────────────────────────────────────
     if (accion === 'registrarPagoCuenta') {
       if (N(body, 'montoARS') === 0 && N(body, 'montoUSD') === 0) return json({ error: 'monto vacío' });
-      await sbInsert('pagos', { fecha: fechaAhora(), cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: N(body, 'montoPitz'), caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante') });
+      // ⚖️ AUTO-REPARTO (2026-07-07, pedido del usuario tras el caso Isi/Dany/KI TOV/Moshe/Yair):
+      // "cuando el cliente paga, paga, ya está" — el sistema separa SOLO qué parte del pago es
+      // Pitzujim (de Jony) y qué parte golosinas (de Miri), contra la deuda viva FIFO del
+      // cliente, con EXACTAMENTE el mismo orden que usan la ganancia (coberturaPagos) y la
+      // cuenta entre socios: en $ Pitzujim primero, en U$S golosinas primero. El reparto queda
+      // GUARDADO en el pago (monto_pitz / monto_pitz_usd) → caja, cuenta corriente y vista
+      // Miri leen todos lo mismo. Si el front mandó montoPitz explícito (>0), se respeta.
+      let pitzARS = N(body, 'montoPitz'), pitzUSD = 0;
+      try {
+        const cliPago = normCli(P(body, 'cliente'));
+        const [vsCli, pgsCli] = await Promise.all([sbGet('ventas', 'select=*'), sbGet('pagos', 'select=*')]);
+        const vsDel = vsCli.filter((v: any) => normCli(v.cliente) === cliPago);
+        const pgsDel = pgsCli.filter((p: any) => normCli(p.cliente) === cliPago);
+        const resid = coberturaPagos(vsDel, pgsDel, 0);   // deja jA/mA/jU/mU RESIDUALES por pedido
+        const pidPago = P(body, 'pedidoId');
+        let items = Object.values(resid) as any[];
+        if (pidPago) items = items.filter((it: any) => String(it.v.id) === String(pidPago));
+        items.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha));
+        let poolA = N(body, 'montoARS'), poolU = N(body, 'montoUSD');
+        let autoPitzA = 0, autoPitzU = 0;
+        items.forEach((it: any) => {
+          let a = Math.min(poolA, it.jA); poolA -= a; autoPitzA += a;   // $: Pitzujim primero
+          a = Math.min(poolA, it.mA); poolA -= a;                       // $: después golosinas
+          a = Math.min(poolU, it.mU); poolU -= a;                       // U$S: golosinas primero
+          a = Math.min(poolU, it.jU); poolU -= a; autoPitzU += a;       // U$S: después Pitzujim
+        });
+        if (pitzARS <= 0) pitzARS = Math.round(autoPitzA);
+        pitzUSD = Math.round(autoPitzU * 100) / 100;
+      } catch { /* si el reparto falla, el pago se guarda igual (reparto en 0, como antes) */ }
+      await sbInsert('pagos', { fecha: fechaAhora(), cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante') });
       // Circuito F3: pago del cliente "Candy" con TC → convertir compras del circuito a pesos.
       // Atado a un pedido → solo la compra de esa venta; general → todas las pendientes en U\$S.
       if ((P(body, 'cliente') || '').trim() === 'Candy' && N(body, 'tipoCambio') > 0) {
@@ -1715,7 +1745,8 @@ Deno.serve(async (req) => {
           await convertirComprasCircuito(N(body, 'tipoCambio'), soloF3);
         } catch { /**/ }
       }
-      return json({ ok: true });
+      // El front muestra el reparto en el toast: el usuario VE a qué bolsillo fue cada peso.
+      return json({ ok: true, reparto: { pitzARS, pitzUSD, golARS: Math.max(0, N(body, 'montoARS') - pitzARS), golUSD: Math.max(0, Math.round((N(body, 'montoUSD') - pitzUSD) * 100) / 100) } });
     }
     if (accion === 'registrarMovSocio') {
       if (N(body, 'montoARS') === 0 && N(body, 'montoUSD') === 0) return json({ error: 'nada para registrar' });
