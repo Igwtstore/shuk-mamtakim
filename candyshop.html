@@ -4023,6 +4023,12 @@ function renderDeudores(deudores) {
           <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', 'd${i}', this)">Cobrar</button>
           <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', 'd${i}', this)">Todo</button>
         </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:7px;font-size:0.74rem;flex-wrap:wrap">
+          <span style="color:#999">Pagó con:</span>
+          <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input type="radio" name="metodo-d${i}" value="efectivo" checked> 💵 Efectivo</label>
+          <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input type="radio" name="metodo-d${i}" value="mp"> 📱 MP</label>
+          <label style="cursor:pointer;display:flex;align-items:center;gap:3px;margin-left:auto;color:#c0392b" title="Si pagó un poco menos y querés cerrar la cuenta"><input type="checkbox" id="perdon-d${i}"> 🎁 saldar el resto</label>
+        </div>
         <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
       </div>
     </div>`).join('');
@@ -4087,19 +4093,27 @@ function toggleDeudor(i) {
   }
 }
 
+// Método elegido (efectivo/mp) para ese deudor
+function _candyMetodo(i) { return ((document.querySelector('input[name="metodo-' + i + '"]:checked') || {}).value === 'mp') ? 'mp' : 'efectivo'; }
 async function cobrarDeuda(cliente, i, btn) {
   const monto = parseFloat(document.getElementById('cobrar-monto-' + i).value) || 0;
   if (!monto) return;
   if (btn) btn.disabled = true;   // anti doble-clic
+  const metodo = _candyMetodo(i);
+  const perdonar = (document.getElementById('perdon-' + i) || {}).checked ? '1' : '';
   const pagoId = 'pg_' + normCli(cliente) + '_' + monto + '_' + Date.now();
-  await api('registrarPagoCliente', { hijo: usuario, cliente, monto, pagoId });
+  const r = await api('registrarPagoCliente', { hijo: usuario, cliente, monto, metodo, perdonar, pagoId });
+  if (r && r.perdonado > 0) toast('🎁 Perdonado ' + fmt(r.perdonado) + ' de redondeo · cuenta saldada');
+  else toast('✅ Cobrado ' + fmt(monto) + ' (' + (metodo === 'mp' ? 'MP' : 'efectivo') + ')');
   cargarDatos();
 }
 
 async function cobrarTodo(cliente, i, btn) {
   if (btn) btn.disabled = true;   // anti doble-clic (este era el que duplicaba el pago)
+  const metodo = _candyMetodo(i);
   const pagoId = 'pgall_' + normCli(cliente) + '_' + Date.now();
-  await api('registrarPagoCliente', { hijo: usuario, cliente, monto: 'todo', pagoId });
+  await api('registrarPagoCliente', { hijo: usuario, cliente, monto: 'todo', metodo, pagoId });
+  toast('✅ Cuenta saldada (' + (metodo === 'mp' ? 'MP' : 'efectivo') + ')');
   cargarDatos();
 }
 
@@ -4440,6 +4454,7 @@ function renderHistorialCliente(movs, cliente) {
   const TIPOS = {
     deuda:      { label: 'Deuda nueva',       cls: 'mov-deuda',      signo: '+' },
     pago:       { label: 'Pagó',               cls: 'mov-pago',       signo: '−' },
+    perdon:     { label: '🎁 Perdón / redondeo', cls: 'mov-pago',    signo: '−' },
     vuelto:     { label: 'Vuelto pendiente',   cls: 'mov-vuelto',     signo: '−' },
     pago_vuelto:{ label: 'Vuelto saldado',     cls: 'mov-pago_vuelto',signo: '+' }
   };
@@ -4481,10 +4496,11 @@ function renderHistorialCliente(movs, cliente) {
     }
     const saldada = m.tipo === 'pago' && m.saldoAcum <= 0.01;
     const montoAbs = Math.abs(m.monto);
+    const metodoLine = (m.tipo === 'pago' && m.metodo) ? `<span style="font-size:0.68rem;color:#888;margin-left:5px">${m.metodo === 'mp' ? '📱 MP' : '💵 efectivo'}</span>` : '';
     const prodLine = m.producto ? `<div style="font-size:0.78rem;color:#5c3d1e;font-weight:600;margin-top:3px">🛍️ ${m.producto}</div>` : '';
     return `<div class="mov-row" ${saldada ? 'style="background:#f0faf4;border-radius:12px;padding:2px 0"' : ''}>
       <div>
-        <span class="mov-badge ${t.cls}" ${saldada ? 'style="font-weight:900;letter-spacing:0.03em"' : ''}>${t.label}</span>
+        <span class="mov-badge ${t.cls}" ${saldada ? 'style="font-weight:900;letter-spacing:0.03em"' : ''}>${t.label}</span>${metodoLine}
         ${prodLine}
         <div style="font-size:0.72rem;color:#aaa;margin-top:2px">${m.fecha}</div>
       </div>

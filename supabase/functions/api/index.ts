@@ -2243,8 +2243,17 @@ Deno.serve(async (req) => {
       const hijo = P(body, 'hijo'), cliente = P(body, 'cliente');
       const saldoActual = await saldoClienteCandy(hijo, cliente);
       const montoPago = P(body, 'monto') === 'todo' ? saldoActual : N(body, 'monto');
-      await sbInsert('candy_cc', { fecha: fechaAhora(), hijo, cliente, monto: -montoPago, tipo: 'pago', detalle: '' });
-      return json({ ok: true, saldoRestante: saldoActual - montoPago });
+      // Pago con opciones (M3, 2026-07-07): método (efectivo/mp), comprobante y perdón de redondeo.
+      const metodo = P(body, 'metodo') === 'mp' ? 'mp' : 'efectivo';
+      await sbInsert('candy_cc', { fecha: fechaAhora(), hijo, cliente, monto: -montoPago, tipo: 'pago', detalle: '', metodo, comprobante: P(body, 'comprobante') });
+      let perdonado = 0;
+      // Perdón/redondeo: si se pide cerrar la cuenta y quedó una diferencia chica, se anula el resto
+      // (baja la deuda SIN plata — no es un pago, para que la caja del chico no sume de más).
+      if (P(body, 'perdonar') === '1') {
+        const resto = Math.round((saldoActual - montoPago) * 100) / 100;
+        if (resto > 0) { perdonado = resto; await sbInsert('candy_cc', { fecha: fechaAhora(), hijo, cliente, monto: -resto, tipo: 'perdon', detalle: 'Redondeo / perdón' }); }
+      }
+      return json({ ok: true, saldoRestante: saldoActual - montoPago - perdonado, perdonado });
     }
     if (accion === 'registrarVueltoCC') {
       if (!P(body, 'cliente') || !has('monto')) return json({ ok: false });
@@ -2455,7 +2464,7 @@ Deno.serve(async (req) => {
       const obj = normCli(url.searchParams.get('cliente') || '');
       const cc = await sbGet('candy_cc', 'select=*&hijo=eq.' + encodeURIComponent(url.searchParams.get('hijo') || ''));
       const ts = (f: string) => { const m = (f || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() : 0; };
-      return json(cc.filter((r: any) => r.cliente && normCli(r.cliente) === obj).sort((a: any, b: any) => ts(b.fecha) - ts(a.fecha)).map((r: any) => ({ fecha: (r.fecha || '').toString(), monto: parseFloat(r.monto) || 0, tipo: r.tipo || '', producto: r.detalle || '' })));
+      return json(cc.filter((r: any) => r.cliente && normCli(r.cliente) === obj).sort((a: any, b: any) => ts(b.fecha) - ts(a.fecha)).map((r: any) => ({ fecha: (r.fecha || '').toString(), monto: parseFloat(r.monto) || 0, tipo: r.tipo || '', producto: r.detalle || '', metodo: (r.metodo || '').toString(), comprobante: (r.comprobante || '').toString() })));
     }
     if (accion === 'getCatalogoHijos') {
       // Endurecido: el COSTO solo viaja con sesión válida (el panel de los chicos manda token;
