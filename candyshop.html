@@ -4410,6 +4410,29 @@ async function verHistorial(cliente) {
   renderHistorialCliente(data || [], cliente);
 }
 
+// Deuda VIVA por pedido (estilo Shuk): cada compra a crédito (tipo 'deuda') con los pagos
+// imputados del más viejo al más nuevo → cuánto queda debiendo cada pedido HOY. Todo pesos.
+function _candyDeudaViva(movs) {
+  const ts = f => { const m = (f || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() : 0; };
+  const asc = [...movs].sort((a, b) => ts(a.fecha) - ts(b.fecha));
+  const deudas = asc.filter(m => (parseFloat(m.monto) || 0) > 0).map(m => ({ fecha: m.fecha, producto: m.producto, original: parseFloat(m.monto) || 0, resta: parseFloat(m.monto) || 0 }));
+  let pool = asc.filter(m => (parseFloat(m.monto) || 0) < 0).reduce((s, m) => s + Math.abs(parseFloat(m.monto) || 0), 0);   // pagos + anulaciones
+  deudas.forEach(d => { const ap = Math.min(pool, d.resta); d.resta -= ap; pool -= ap; });
+  return deudas.filter(d => d.resta > 0.01);
+}
+function _candyDeudaVivaHtml(movs) {
+  const vivas = _candyDeudaViva(movs);
+  if (!vivas.length) return '';
+  return `<div style="margin-bottom:14px">
+    <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#bbb;margin-bottom:6px">📦 Debe, pedido por pedido</div>` +
+    vivas.map(d => {
+      const parcial = d.resta < d.original - 0.01;
+      return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff7ef;border:1px solid #f0d9bf;border-radius:10px;padding:8px 11px;margin-bottom:6px">
+        <div style="min-width:0"><div style="font-size:0.84rem;font-weight:700;color:#5c3d1e">🛍️ ${esc(d.producto || 'Venta')}</div><div style="font-size:0.7rem;color:#aaa">${d.fecha}${parcial ? ' · pagó parte' : ''}</div></div>
+        <div style="text-align:right;white-space:nowrap"><div style="font-weight:800;font-size:0.95rem;color:#e05c2a">${fmt(d.resta)}</div>${parcial ? `<div style="font-size:0.66rem;color:#aaa">de ${fmt(d.original)}</div>` : ''}</div>
+      </div>`;
+    }).join('') + `</div>`;
+}
 function renderHistorialCliente(movs, cliente) {
   const el = document.getElementById('historial-list');
   if (!movs.length) { el.innerHTML = '<div class="empty">Sin movimientos aún</div>'; return; }
@@ -4447,7 +4470,7 @@ function renderHistorialCliente(movs, cliente) {
   // Guardado para exportar el estado de cuenta (PDF/imagen/WhatsApp/CSV). Orden cronológico asc.
   window._candyExtracto = { cliente, movs: ascSaldo, saldoFinal, emitido: new Date().toLocaleDateString('es-AR') };
 
-  el.innerHTML = withSaldo.map(m => {
+  el.innerHTML = _candyDeudaVivaHtml(movs) + withSaldo.map(m => {
     let t = TIPOS[m.tipo] || { label: m.tipo, cls: 'mov-pago', signo: '' };
     if (m.tipo === 'pago') {
       if (m.saldoAcum <= 0.01) {
