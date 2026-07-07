@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="/config.js"></script><!-- ficha de tienda (white-label): marca/contacto/infra/negocio -->
 <title>Shuk Mamtakim 🍬</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
@@ -36,7 +37,7 @@
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
-      appId: "0e4a5058-d7a1-405b-86c9-86ae42940ab4",
+      appId: window.TIENDA_CONFIG.infra.oneSignalAppId,
       serviceWorkerPath: '/OneSignalSDKWorker.js',
       notifyButton: { enable: false },
       promptOptions: {
@@ -1997,8 +1998,8 @@
 const SHEET_ID = '17uCcaoZ5TDZbiL4R3L881JQ8_-J94sWUP4KjUDqaV1c';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Stock`;
 const DRIVE_FOLDER = '1Mgu_gDhvO1bs-YmFsXsOyxuiBV6yEyLe';
-const WA_NUM1 = '5491131754540';
-const WA_NUM2 = '972527596202';
+const WA_NUM1 = TIENDA_CONFIG.contacto.whatsapp;
+const WA_NUM2 = TIENDA_CONFIG.contacto.whatsappAlt;
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
 
 // Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'
@@ -2057,7 +2058,7 @@ async function aceptarCotizacion(id) {
   const r = await apiWrite(new URLSearchParams({ accion: 'aceptarCotizacion', id }), '✅ Cotización aceptada — stock descontado');
   if (r.ok) refreshAdmin();
 }
-const _sb = supabase.createClient('https://soarkknjewgcewryxqac.supabase.co','sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2');
+const _sb = supabase.createClient(TIENDA_CONFIG.infra.supabase.url, TIENDA_CONFIG.infra.supabase.anonKey);
 // Token de sesión para autenticar las llamadas del admin contra el backend. Se mantiene fresco solo.
 let _authToken = '';
 _sb.auth.getSession().then(r => { _authToken = r.data.session?.access_token || ''; }).catch(() => {});
@@ -2071,9 +2072,9 @@ window.fetch = function(url, opts) {
   }
   return _origFetch(url, opts);
 };
-const APPS_SCRIPT_URL = 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';   // motor Supabase (switch 2026-07-02)
-const SB_REST = 'https://soarkknjewgcewryxqac.supabase.co/rest/v1';
-const SB_ANON_H = { apikey: 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2', Authorization: 'Bearer sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2' };
+const APPS_SCRIPT_URL = TIENDA_CONFIG.infra.backendUrl;   // motor Supabase (switch 2026-07-02) — lee de la ficha
+const SB_REST = TIENDA_CONFIG.infra.supabase.url + '/rest/v1';
+const SB_ANON_H = { apikey: TIENDA_CONFIG.infra.supabase.anonKey, Authorization: 'Bearer ' + TIENDA_CONFIG.infra.supabase.anonKey };
 
 // STORAGE
 const DB_KEY = 'shuk_pedidos_v1';
@@ -2406,7 +2407,7 @@ const _CAT_MARCAS = {
   candy: { nombre: 'Candy Shop', sub: 'Golosinas ricas y más 🍬', color: '#b14cff',
            logo: '<div style="width:92px;height:92px;border-radius:14px;background:linear-gradient(135deg,#ff5fa2,#b14cff);display:flex;align-items:center;justify-content:center;font-size:3rem">🍬</div>' }
 };
-const _CAT_TELS = { jony: { nombre: 'Jony', num: '5491131754540' }, meir: { nombre: 'Meir', num: '5491171046383' }, iosi: { nombre: 'Iosi', num: '5491150987261' } };
+const _CAT_TELS = { jony: { nombre: 'Jony', num: TIENDA_CONFIG.contacto.telefonos.jony }, meir: { nombre: 'Meir', num: TIENDA_CONFIG.contacto.telefonos.meir }, iosi: { nombre: 'Iosi', num: TIENDA_CONFIG.contacto.telefonos.iosi } };
 function _telFmt(n) { n = String(n); return n.length >= 13 ? `+${n.slice(0,2)} ${n.slice(2,3)} ${n.slice(3,5)} ${n.slice(5,9)}-${n.slice(9)}` : '+' + n; }
 // Pre-carga el QR como dataURL (local) para que html2canvas lo renderice sin líos de CORS.
 async function _cargarQR(url) {
@@ -2953,9 +2954,9 @@ function _aplicarDeepLinkProducto() {
   }, 250);
 }
 
-const BASE_IMG = 'https://raw.githubusercontent.com/Igwtstore/shuk-mamtakim/main/';
-const CLOUDINARY_CLOUD = 'dq2boloyp';
-const CLOUDINARY_PRESET = 'shuk_upload';
+const BASE_IMG = TIENDA_CONFIG.marca.baseImg;
+const CLOUDINARY_CLOUD = TIENDA_CONFIG.infra.cloudinary.cloud;
+const CLOUDINARY_PRESET = TIENDA_CONFIG.infra.cloudinary.preset;
 const CLOUDINARY_BASE = `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload`;
 const carouselTimers = {}, carouselIdx = {};
 
