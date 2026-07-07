@@ -1833,6 +1833,7 @@
     <select id="masivo-fvis" onchange="renderMasivo()" style="padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-size:0.82rem">
       <option value="">Visib: todas</option><option value="Ambos">Ambos</option><option value="Mayorista">Mayorista</option><option value="Minorista">Minorista</option><option value="Oculto">🙈 Oculto</option>
     </select>
+    <select id="masivo-fcat" onchange="renderMasivo()" style="padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-size:0.82rem"><option value="">Categoría: todas</option></select>
     <button onclick="masivoToggleVista()" id="masivo-vista-btn" style="padding:0.45rem 0.8rem;border:1.5px solid var(--azul);background:#fff;color:var(--azul);border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer">📝 Descripciones</button>
     <button onclick="guardarMasivo()" id="masivo-guardar" style="padding:0.45rem 0.9rem;border:none;background:var(--verde);color:#fff;border-radius:8px;font-weight:700;font-size:0.85rem;cursor:pointer;opacity:0.5" disabled>💾 Guardar (<span id="masivo-ncambios">0</span>)</button>
     <button onclick="cerrarMasivo()" style="background:var(--gris);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:0.9rem;flex-shrink:0">✕</button>
@@ -5131,7 +5132,7 @@ function _matchNombreProd(p, nombre) {
 }
 
 // ─── EDITOR MASIVO (planilla) ─────────────────────────────────────────────────
-let _masivoData = [], _masivoOrig = {}, _masivoCambios = {}, _masivoVista = 'datos', _masivoCats = [];
+let _masivoData = [], _masivoOrig = {}, _masivoCambios = {}, _masivoVista = 'datos', _masivoCats = [], _masivoOrden = { col: '', dir: 1 };
 const _mTh = 'padding:6px 8px;text-align:left;font-size:0.64rem;text-transform:uppercase;letter-spacing:0.03em;color:var(--texto-suave);border-bottom:1.5px solid var(--gris-medio);white-space:nowrap';
 const _mTd = 'padding:4px 8px;vertical-align:middle;';
 const _mDispNum = v => (v === '' || v === null || v === undefined || v === 0 || v === '0') ? '' : v.toString().replace('.', ',');
@@ -5161,6 +5162,10 @@ async function abrirMasivo() {
     if (esVistaMiri()) prods = prods.filter(p => p.dueno !== 'Jony');   // privacidad
     _masivoData = prods;
     _masivoCats = Array.from(new Set([...(window.CATEGORIA_ORDEN || ['Pitzujim','Chocolate','Caramelo','Chupetín','Pastilla','Yumi','Snacks','Galletita','Sopa','Varios']), ...prods.map(p => p.categoria).filter(Boolean)]));
+    // Poblar el filtro por categoría con las categorías que EXISTEN en el catálogo (ordenadas)
+    { const catsUsadas = Array.from(new Set(prods.map(p => (p.categoria || 'Varios').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es'));
+      const fc = document.getElementById('masivo-fcat'); if (fc) fc.innerHTML = '<option value="">Categoría: todas</option>' + catsUsadas.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''); }
+    _masivoOrden = { col: '', dir: 1 };
     prods.forEach(p => {
       _masivoOrig[p.id] = {
         nombre: _mDispTxt(p.nombre),
@@ -5186,12 +5191,39 @@ function cerrarMasivo() {
 function _masivoFiltrados() {
   const q = (document.getElementById('masivo-buscar').value || '').toLowerCase().trim();
   const fd = document.getElementById('masivo-fdue').value, fv = document.getElementById('masivo-fvis').value;
-  return _masivoData.filter(p => {
+  const fc = (document.getElementById('masivo-fcat') || {}).value || '';
+  const lista = _masivoData.filter(p => {
     if (q && !((p.nombre || '').toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q))) return false;
     if (fd && ((p.dueno || '') === 'Jony' ? 'Jony' : 'Miri') !== fd) return false;
     if (fv && (p.visible || 'Ambos') !== fv) return false;
+    if (fc && (p.categoria || 'Varios').trim() !== fc) return false;
     return true;
   });
+  // Orden por la columna elegida (clic en el encabezado). Sin orden = como viene (por categoría).
+  const o = _masivoOrden || {};
+  if (o.col) {
+    const num = v => parseFloat((v == null ? '' : v).toString().replace(/\./g, '').replace(',', '.')) || 0;
+    const mg = p => { const pm = num(_mVal(p.id,'precioMay')), co = num(_mVal(p.id,'costo')); return (pm > 0 && co > 0) ? (pm - co) / pm : -Infinity; };
+    const val = p => {
+      switch (o.col) {
+        case 'nombre': return _mVal(p.id, 'nombre') || '';
+        case 'precioMay': return num(_mVal(p.id, 'precioMay'));
+        case 'precioMin': return num(_mVal(p.id, 'precioMin'));
+        case 'costo': return num(_mVal(p.id, 'costo'));
+        case 'margen': return mg(p);
+        case 'stock': return num(_mVal(p.id, 'stock'));
+        default: return '';
+      }
+    };
+    lista.sort((a, b) => { const va = val(a), vb = val(b); const c = (typeof va === 'string') ? va.localeCompare(vb, 'es') : (va - vb); return c * o.dir; });
+  }
+  return lista;
+}
+// Clic en un encabezado ordenable: alterna ascendente/descendente por esa columna.
+function masivoSort(col) {
+  const o = _masivoOrden || { col: '', dir: 1 };
+  _masivoOrden = (o.col === col) ? { col, dir: -o.dir } : { col, dir: 1 };
+  renderMasivo();
 }
 
 function _mVal(id, campo) {
@@ -5238,7 +5270,9 @@ function renderMasivo() {
       html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" placeholder="Ej: Badatz Eda Jaredit"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
     });
   } else {
-    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th><th style="${_mTh}">P.May</th><th style="${_mTh}">P.Min</th><th style="${_mTh}">Costo</th><th style="${_mTh}">Margen</th><th style="${_mTh}">Stock</th><th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th></tr></thead><tbody>`;
+    const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
+    const _thSort = (c, lbl, extra) => `<th style="${_mTh}cursor:pointer;user-select:none" ${extra||''} onclick="masivoSort('${c}')" title="Ordenar por ${lbl}">${lbl}${_flecha(c)}</th>`;
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th></tr></thead><tbody>`;
     list.forEach(p => {
       html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td></tr>`;
     });
