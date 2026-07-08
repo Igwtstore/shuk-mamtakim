@@ -7087,8 +7087,8 @@ function _tsFecha(f) {
   const m = (f || '').toString().trim().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
   return m ? new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)).getTime() : 0;
 }
-function _resumenPedido(productosStr) {
-  const ls = _lineasPedidoVista(productosStr, false).map(l => {
+function _resumenPedido(productosStr, soloMiri) {
+  const ls = _lineasPedidoVista(productosStr, !!soloMiri).map(l => {
     const m = l.match(/•\s*(\d+x\s+[^—]+?)(?:\s+·|\s+—)/);
     return m ? m[1].trim() : l.replace(/^•\s*/, '').split('—')[0].trim();
   });
@@ -7099,15 +7099,18 @@ async function abrirEstadoCuenta(cliente) {
   showToast('📄 Armando estado de cuenta…');
   const [ventas, pagos] = await Promise.all([ apiGet('ventas'), apiGet('getPagos').catch(() => []) ]);
   if (!Array.isArray(ventas)) { showToast('No se pudo cargar'); return; }
+  const soloMiri = esVistaMiri();   // REGLA SAGRADA: en vista Miri el estado de cuenta lleva SOLO su parte (nada de Pitzujim de Jony)
   const k = normCliente(cliente);
   const movs = [];
   ventas.filter(v => normCliente(v.cliente) === k && v.estado !== 'cancelado' && v.estado !== 'cotizacion')
+    .filter(v => !soloMiri || pedidoEsDeMiri(v))   // vista Miri: solo pedidos con parte de ella
     .forEach(v => {
-      const ars = parseFloat(v.totalARS) || 0, usd = parseFloat(v.totalUSD) || 0;
+      const ars = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+      const usd = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
       const ts = _tsFecha(v.fecha), fch = (v.fecha || '').split(' ')[0];
-      movs.push({ ts, fecha: fch, tipo: 'pedido', concepto: `Pedido #${v.nVenta || '—'} · ${_resumenPedido(v.productos)}`, ars, usd, signo: 1 });
+      movs.push({ ts, fecha: fch, tipo: 'pedido', concepto: `Pedido #${v.nVenta || '—'} · ${_resumenPedido(v.productos, soloMiri)}`, ars, usd, signo: 1 });
       // Cobro: solo lo que REALMENTE entró a caja (total − deuda residual). Si fue parcial, deja el saldo debiendo.
-      const _dd = _deudaPedido(v, false);
+      const _dd = _deudaPedido(v, soloMiri);
       const _cobARS = ars - _dd.ars, _cobUSD = usd - _dd.usd;
       if (_cobARS > 0.005 || _cobUSD > 0.005) {
         const caja = _cajaLbl(v.cajaJony) || _cajaLbl(v.cajaMyri);
@@ -7116,7 +7119,9 @@ async function abrirEstadoCuenta(cliente) {
       }
     });
   (pagos || []).filter(p => normCliente(p.cliente) === k).forEach(p => {
-    const ars = parseFloat(p.montoARS) || 0, usd = parseFloat(p.montoUSD) || 0;
+    // Vista Miri: del pago, solo la parte de golosinas (se descuenta el Pitzujim de Jony, en $ y U$S).
+    const ars = soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
+    const usd = soloMiri ? ((parseFloat(p.montoUSD) || 0) - (parseFloat(p.montoPitzUsd) || 0)) : (parseFloat(p.montoUSD) || 0);
     if (ars <= 0 && usd <= 0) return;
     const nota = (p.nota || '').toString().trim();
     movs.push({ ts: _tsFecha(p.fecha), fecha: (p.fecha || '').split(' ')[0], tipo: 'pago',
