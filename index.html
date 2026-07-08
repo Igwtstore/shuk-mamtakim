@@ -1059,6 +1059,8 @@
   </div>
   <!-- PANEL TAB -->
   <div id="admin-tab-panel">
+  <!-- 📊 MI RESUMEN (solo vista Miri): ventas + plata + cuadre, lo primero que ve Miri -->
+  <div id="resumen-miri" style="display:none"></div>
   <div class="panel-secnav" id="panel-secnav">
     <button class="psec-btn activo" onclick="setPanelSeccion('ventas',this)">🧾 Ventas</button>
     <button class="psec-btn" onclick="setPanelSeccion('dinero',this)">💰 Dinero</button>
@@ -8244,6 +8246,115 @@ async function renderCuentaSocios() {
   cont.innerHTML = html;
 }
 // Excel (CSV) de rendición de Myri: dónde está la plata de sus ventas + cómo cierra la cuenta con Jony.
+// ═══ 📊 MI RESUMEN (vista Miri) ═══════════════════════════════════════════════════════
+// Junta en UNA pantalla lo que estaba disperso: cuánto vendió Miri, cómo se reparte esa
+// plata (ya cobrada / se la deben / la cobró Jony), el saldo actual de sus cajas, la cuenta
+// con Jony y la lista de sus ventas. Reusa los MISMOS cálculos que Caja/Socios/Cta corriente
+// (así cuadra con lo que ya se ve). REGLA SAGRADA: cero datos de Jony (todo vía arsMyri/usdMyri,
+// pedidoEsDeMiri y _lineasPedidoVista(...,true)).
+function _resumenMiriCalc(ventas, cajaMovs, ds, soc, ccData) {
+  const vivas = (ventas || []).filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion' && pedidoEsDeMiri(v));
+  let vendARS = 0, vendUSD = 0;
+  vivas.forEach(v => { vendARS += parseFloat(v.arsMyri) || 0; vendUSD += parseFloat(v.usdMyri) || 0; });
+  // Saldo físico de las cajas de Miri (idéntico a la rendición)
+  const CAJAS_M = { MP_GABY: 'MP Gaby', EFT_MYRI: 'Efectivo $', ETF_USD_MYRI: 'Efectivo U$S' };
+  const porCaja = {}; Object.keys(CAJAS_M).forEach(c => porCaja[c] = { ars: 0, usd: 0 });
+  (cajaMovs || []).forEach(m => {
+    if (!porCaja[m.col]) return;
+    const val = parseFloat(m.val) || 0;
+    if (m.mon === 'USD') porCaja[m.col].usd += val; else porCaja[m.col].ars += val;
+  });
+  // Te deben (cuenta corriente, parte de Miri) — desde _ccData ya imputado (pagos a cuenta FIFO)
+  let debenARS = 0, debenUSD = 0;
+  Object.values(ccData || {}).forEach(d => { debenARS += parseFloat(d.totalARS) || 0; debenUSD += parseFloat(d.totalUSD) || 0; });
+  // Golosinas de Miri que cobró Jony (te las debe)
+  const jonyDebeARS = parseFloat((ds || {}).jonyTiene) || 0;
+  const jonyDebeUSD = parseFloat((ds || {}).jonyTieneU) || 0;
+  // Cuadre por construcción: lo que YA cobró Miri = vendido − te deben − lo que cobró Jony
+  const cobradoARS = vendARS - debenARS - jonyDebeARS;
+  const cobradoUSD = vendUSD - debenUSD - jonyDebeUSD;
+  return { vivas, vendARS, vendUSD, CAJAS_M, porCaja, debenARS, debenUSD, jonyDebeARS, jonyDebeUSD,
+    cobradoARS, cobradoUSD, soc: soc || { ars: 0, usd: 0 } };
+}
+function _resumenMiriHTML(R) {
+  const $a = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+  const $u = n => 'U$S ' + Number(n).toFixed(2);
+  const dosMon = (ars, usd, umbA) => [Math.abs(ars) > (umbA || 0.5) ? $a(ars) : '', Math.abs(usd) > 0.005 ? $u(usd) : ''].filter(Boolean).join('  +  ') || '$ 0';
+  const fila = (lbl, valHtml, extra) => `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:3px 0${extra||''}"><span style="color:var(--texto-suave);font-size:0.85rem">${lbl}</span><span style="font-weight:700;font-size:0.9rem;white-space:nowrap">${valHtml}</span></div>`;
+  // ── Bloque 1: vendiste
+  let h = `<div class="admin-card" style="border:2px solid #e7c9e0;background:linear-gradient(180deg,#fffafd,#fff)">
+    <div style="font-family:'Fraunces',serif;font-weight:800;font-size:1.15rem;color:#b0308f;margin-bottom:0.2rem">📊 Mi resumen</div>
+    <div style="font-size:0.74rem;color:var(--texto-suave);margin-bottom:0.8rem">Todo lo tuyo, en un solo lugar.</div>
+    <div style="background:#fbeef7;border-radius:12px;padding:0.7rem 0.9rem;margin-bottom:0.7rem">
+      <div style="font-size:0.78rem;color:#8a2570;font-weight:700">🛒 Vendiste</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:2px">
+        <span style="font-size:1.35rem;font-weight:800;color:#b0308f">${dosMon(R.vendARS, R.vendUSD)}</span>
+        <span style="font-size:0.8rem;color:var(--texto-suave)">${R.vivas.length} venta${R.vivas.length !== 1 ? 's' : ''}</span>
+      </div>
+    </div>`;
+  // ── Bloque 2: dónde está esa plata (cuadra por construcción)
+  h += `<div style="border:1px solid var(--gris-medio);border-radius:12px;padding:0.6rem 0.9rem;margin-bottom:0.7rem">
+    <div style="font-size:0.78rem;font-weight:700;color:var(--azul);margin-bottom:0.3rem">💰 Esa plata, ¿dónde está?</div>
+    ${fila('✅ Ya la cobraste vos', dosMon(R.cobradoARS, R.cobradoUSD))}
+    ${fila('⏳ Te deben (cuenta corriente)', dosMon(R.debenARS, R.debenUSD))}
+    ${(R.jonyDebeARS > 0.5 || R.jonyDebeUSD > 0.005) ? fila('🤝 La cobró Jony (te la debe)', dosMon(R.jonyDebeARS, R.jonyDebeUSD)) : ''}
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0 0;margin-top:4px;border-top:2px solid var(--azul)">
+      <span style="font-weight:800;font-size:0.9rem">= Total vendido</span>
+      <span style="font-weight:800;font-size:0.95rem;color:#b0308f;white-space:nowrap">${dosMon(R.vendARS, R.vendUSD)}</span>
+    </div>
+  </div>`;
+  // ── Bloque 3: saldo actual de las cajas (físico de hoy)
+  let hayCaja = false;
+  let cajasHtml = '';
+  Object.keys(R.CAJAS_M).forEach(c => {
+    const x = R.porCaja[c];
+    if (Math.abs(x.ars) > 0.5 || Math.abs(x.usd) > 0.005) { hayCaja = true; cajasHtml += fila(R.CAJAS_M[c], dosMon(x.ars, x.usd)); }
+  });
+  if (hayCaja) h += `<div style="border:1px solid var(--gris-medio);border-radius:12px;padding:0.6rem 0.9rem;margin-bottom:0.7rem">
+    <div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin-bottom:0.3rem">🏦 Saldo de tus cajas hoy</div>${cajasHtml}
+    <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:4px">Es lo que hay físico ahora (ya restados gastos/retiros).</div>
+  </div>`;
+  // ── Bloque 4: cuenta con Jony
+  const s = R.soc; const debeJony = s.ars >= 0, debeJonyU = s.usd >= 0;
+  if (Math.abs(s.ars) > 0.5 || Math.abs(s.usd) > 0.005) {
+    h += `<div style="border:1px solid var(--gris-medio);border-radius:12px;padding:0.6rem 0.9rem;margin-bottom:0.7rem">
+      <div style="font-size:0.78rem;font-weight:700;color:#8a6d3b;margin-bottom:0.3rem">🤝 Tu cuenta con Jony</div>
+      ${Math.abs(s.ars) > 0.5 ? fila(debeJony ? 'Le debés a Jony' : 'Jony te debe', $a(Math.abs(s.ars))) : ''}
+      ${Math.abs(s.usd) > 0.005 ? fila(debeJonyU ? 'Le debés a Jony' : 'Jony te debe', $u(Math.abs(s.usd))) : ''}
+    </div>`;
+  }
+  // ── Bloque 5: lista de ventas
+  const items = R.vivas.slice().sort((a, b) => (parseInt(b.nVenta) || 0) - (parseInt(a.nVenta) || 0)).map(v => {
+    const prod = _lineasPedidoVista(v.productos, true).map(l => {
+      const m = l.match(/•\s*(\d+x\s+[^—·]+)/); return m ? m[1].trim() : l.replace(/^•\s*/, '').split('—')[0].trim();
+    }).join(', ');
+    const prodTxt = prod.length > 46 ? prod.slice(0, 44) + '…' : (prod || '—');
+    return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--gris)">
+      <div style="min-width:0"><div style="font-weight:700;font-size:0.8rem">#${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave)">· ${(v.fecha || '').split(' ')[0]} · ${esc(v.cliente || '')}</span></div>
+      <div style="font-size:0.74rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(prodTxt)}</div></div>
+      <div style="font-weight:700;font-size:0.82rem;white-space:nowrap">${dosMon(parseFloat(v.arsMyri) || 0, parseFloat(v.usdMyri) || 0)}</div>
+    </div>`;
+  }).join('');
+  h += `<details style="margin-top:0.2rem"><summary style="cursor:pointer;font-size:0.82rem;font-weight:700;color:var(--azul);padding:0.3rem 0">📋 Tus ${R.vivas.length} ventas, una por una</summary>
+    <div style="margin-top:0.3rem">${items || '<div class="sinpedidos">Todavía no hay ventas</div>'}</div></details>`;
+  h += `</div>`;
+  return h;
+}
+async function renderResumenMiri() {
+  const cont = document.getElementById('resumen-miri');
+  if (!cont) return;
+  if (!esVistaMiri()) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+  cont.style.display = '';
+  if (!cont.innerHTML.trim()) cont.innerHTML = '<div class="admin-card"><div class="sinpedidos">Cargando tu resumen…</div></div>';
+  // Asegurar que los cálculos base corrieron (pueblan _cajaMovs, _sociosDesglose, _socios, _ccData)
+  try { await renderCaja(); await renderCuentaSocios(); await renderCuentaCorriente(); } catch (e) { /**/ }
+  const ventas = await apiGet('ventas').catch(() => null);
+  if (!Array.isArray(ventas)) { cont.innerHTML = '<div class="admin-card"><div class="sinpedidos">No se pudo cargar tu resumen</div></div>'; return; }
+  const soc = (typeof _socios !== 'undefined' && _socios) ? _socios : (window._socios || { ars: 0, usd: 0 });
+  const R = _resumenMiriCalc(ventas, window._cajaMovs, window._sociosDesglose, soc, window._ccData);
+  cont.innerHTML = _resumenMiriHTML(R);
+}
+
 function exportarRendicionMiri() {
   const movs = window._cajaMovs || [];
   const ds = window._sociosDesglose || {};
@@ -9402,6 +9513,7 @@ function setVistaSocio(v) {
   if (_adminTabActual === 'dashboard') renderDashboard();
   else if (_adminTabActual === 'clientes') renderClientes();
   else if (_adminTabActual === 'ganancias' && !esVistaMiri()) renderGanancias();
+  renderResumenMiri();   // 📊 Mi resumen (solo se muestra en vista Miri; se oculta solo en vista Todo)
 }
 
 let _clientesRaw = [];
