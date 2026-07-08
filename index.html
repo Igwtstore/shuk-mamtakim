@@ -10243,23 +10243,37 @@ function exportarExtractoCaja() {
   showToast('Extracto descargado ✓');
 }
 
+// Arma el CSV de ventas respetando la privacidad. En vista Miri (soloMiri=true) NUNCA
+// sale nada de Jony: se excluyen las ventas 100% Pitzujim, las líneas de productos de
+// Jony dentro de cada pedido, y las columnas de plata de Jony (Total mezclado, ARS Jony,
+// comisión). Miri solo ve SUS golosinas y SU plata. Función pura → testeable. REGLA SAGRADA.
+function _ventasACsv(ventas, soloMiri) {
+  const esc = s => '"' + (s == null ? '' : String(s)).replace(/"/g, '""') + '"';
+  const lista = soloMiri ? (ventas || []).filter(pedidoEsDeMiri) : (ventas || []);
+  const headers = soloMiri
+    ? ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','ARS Myri','USD Myri']
+    : ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','Total ARS','Total USD','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD'];
+  const rows = lista.map(v => {
+    const prods = soloMiri ? _lineasPedidoVista(v.productos, true).join(' | ') : (v.productos || '');
+    const base = [v.nVenta, v.fecha, esc(v.cliente), esc(v.tipo), esc(prods), esc(v.formaPago), v.estado];
+    return soloMiri
+      ? base.concat([v.arsMyri, v.usdMyri])
+      : base.concat([v.totalARS, v.totalUSD, v.arsJONY, v.arsMyri, v.usdMyri, v.comiARS, v.comiUSD]);
+  });
+  return [headers, ...rows].map(r => r.join(',')).join('\n');
+}
+
 async function exportarVentasCSV() {
   showToast('Generando CSV...');
   try {
     const res = await fetch(APPS_SCRIPT_URL + '?accion=ventas');
     const ventas = await res.json();
-    const headers = ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','Total ARS','Total USD','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD'];
-    const rows = ventas.map(v => [
-      v.nVenta, v.fecha, v.cliente, v.tipo,
-      '"' + (v.productos||'').replace(/"/g,'""') + '"',
-      v.formaPago, v.estado,
-      v.totalARS, v.totalUSD, v.arsJONY, v.arsMyri, v.usdMyri, v.comiARS, v.comiUSD
-    ]);
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const soloMiri = esVistaMiri();
+    const csv = _ventasACsv(ventas, soloMiri);
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `ventas_shuk_${new Date().toLocaleDateString('es-AR').replace(/\//g,'-')}.csv`;
+    a.href = url; a.download = `ventas_${soloMiri ? 'miri' : 'shuk'}_${new Date().toLocaleDateString('es-AR').replace(/\//g,'-')}.csv`;
     a.click(); URL.revokeObjectURL(url);
     showToast('CSV descargado ✓');
   } catch(e) { showToast('Error al exportar'); }
