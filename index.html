@@ -7596,6 +7596,7 @@ async function renderCaja() {
     } else {
       movsVis = movs;
     }
+    window._cajaMovsExtracto = movsVis;   // extracto descargable: MISMA lista filtrada que la tarjeta (en vista Miri, sin Pitzujim/comisión de Jony)
     window._cajaDetalles = _det;   // para desplegar el detalle al clickear un movimiento
 
     const totalsARS = {}, totalsUSD = {};
@@ -10201,7 +10202,12 @@ function exportarExtractoCaja() {
   const desde = document.getElementById('extracto-desde').value;   // yyyy-mm-dd
   const hasta = document.getElementById('extracto-hasta').value;
   if (!caja) { showToast('Elegí una caja'); return; }
-  const movs = (window._cajaMovs || []).filter(m => m.col === caja);
+  // Privacidad (REGLA SAGRADA): en vista Miri usa la lista YA filtrada (la misma que la tarjeta)
+  // y, por las dudas, vuelve a excluir cualquier movimiento de Jony (Pitzujim / comisión) que
+  // hubiera caído en una caja compartida (Cta Cte). Cinturón y tiradores.
+  const soloMiriEx = esVistaMiri();
+  const fuenteEx = window._cajaMovsExtracto || window._cajaMovs || [];
+  const movs = fuenteEx.filter(m => m.col === caja && !(soloMiriEx && (m.dueno === 'J' || m.tipo === 'comi')));
   if (!movs.length) { showToast('Sin movimientos en esa caja'); return; }
   // Filtrar por rango (incluye los sin fecha por las dudas) y ordenar cronológicamente.
   const enRango = movs.filter(m => {
