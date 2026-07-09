@@ -1073,35 +1073,113 @@ function combo_resumen() {
   const btn = document.getElementById('btn-combo'); if (!btn) return;
   btn.textContent = _fCombo.length ? '🧩 Combo: ' + _fCombo.reduce((s, c) => s + c.cant, 0) + ' u. adentro' : '🧩 Combo (pack mixto)';
 }
-// ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1): prompt por marca para pegar en la app de Gemini (Veo) ═══
-let _vidNombreC = '';
-function _vidPromptCandy(conPersona) {
-  const momento2 = conPersona
-    ? 'A los 3 segundos entra en cuadro por un costado, en el MISMO plano (sin cortar a otra escena), un joven de unos 20 años con buena onda (remera moderna, sonriente): prueba la golosina y reacciona con cara de que está buenísima, SIN HABLAR. '
-    : 'A los 3 segundos caen caramelos y chispas de colores en CÁMARA LENTA alrededor del producto (sin taparlo). ';
+// ═══ 🎬 VIDEO DEL PRODUCTO (Etapa 1½): receta única → prompt por MODELO (Gemini / Seedance-Kling),
+// textura AUTOMÁTICA según el producto (cremoso/crujiente/gomoso/duro) y persona a elección.
+// El texto del envase (hebreo) NUNCA en primer plano: ningún modelo sabe preservarlo.
+let _vidNombreC = '', _vidCatC = '', _vidPersC = 'ninguna', _vidModC = 'gemini';
+function _vidPerfilC() {
+  const t = (' ' + _vidNombreC + ' ' + _vidCatC + ' ').toLowerCase();
+  if (/gomita|jelly|gummy|soft|yumi|masticable/.test(t)) return { tipo: 'gomoso',
+    accion: 'estira una gomita que cede elástica y la prueba masticando, gesto divertido, SIN HABLAR',
+    solo: 'las gomitas rebotan suaves en cámara lenta, elásticas y brillantes',
+    textura: 'GOMOSO y masticable, rebota suave',
+    prohibido: 'PROHIBIDO el crujido: no es crocante — es gomoso y masticable.',
+    negativo: 'crunch, crujido, quebrarse, textura dura' };
+  if (/man[ií]|nuez|almendra|caj[uú]|pec[aá]n|galletita|oblea|snack|bamba|apropo|cereal|papas|crunch/.test(t)) return { tipo: 'crujiente',
+    accion: 'muerde y CRUJE crocante, apetitoso, migas finas; cara de que está buenísima, SIN HABLAR',
+    solo: 'caen unidades en CÁMARA LENTA y algunas se parten mostrando el interior crocante',
+    textura: 'CRUJIENTE y crocante de verdad',
+    prohibido: 'La textura es crujiente real: no lo muestres blando ni cremoso.',
+    negativo: 'textura blanda, derretido, cremoso' };
+  if (/chocolate|bon o bon|bombó|pud[ií]n|crema|klick|klik/.test(t)) return { tipo: 'cremoso',
+    accion: 'parte una porción DESPACIO: el interior es CREMOSO y se funde sedoso; la prueba con cara de que está buenísima, SIN HABLAR',
+    solo: 'una porción se parte despacio y el relleno cremoso se estira sedoso',
+    textura: 'CREMOSO y suave, se funde sedoso',
+    prohibido: 'PROHIBIDO el crujido: nada de textura crocante ni sonido de mordida seca — es cremoso.',
+    negativo: 'crunch, crujido, textura crocante, mordida seca' };
+  if (/caramelo|pastilla|chupet[ií]n|paleta|pop/.test(t)) return { tipo: 'duro brillante',
+    accion: 'toma uno y lo mira al trasluz: superficie DURA y brillante, colores vivos; lo disfruta, SIN HABLAR',
+    solo: 'los caramelos giran despacio en cámara lenta, duros y brillantes, colores vivos',
+    textura: 'caramelo DURO de superficie brillante',
+    prohibido: 'No se funde ni es cremoso; no exageres crujidos.',
+    negativo: 'derretirse, cremoso, crunch exagerado' };
+  return { tipo: 'neutro',
+    accion: 'muestra el producto con naturalidad y lo disfruta, SIN HABLAR',
+    solo: 'el producto se luce girando despacio entre chispas de colores (sin taparlo)',
+    textura: 'tal cual es en la foto',
+    prohibido: 'PROHIBIDO inventarle texturas o sonidos que no correspondan.',
+    negativo: 'texturas inventadas, crunch inventado' };
+}
+function _vidPersCTxt() {
+  if (_vidPersC === 'hombre') return 'un joven de unos 20 años con buena onda (remera moderna, kipá, sonriente), integrado natural en la escena (misma luz, NO recortado)';
+  if (_vidPersC === 'mujer') return 'una mujer de unos 30-35 años de aspecto judío religioso, recatada y elegante: el pelo COMPLETAMENTE cubierto con un pañuelo prolijo (mitpajat) — nunca pelo suelto a la vista —, vestimenta modesta de manga larga y cuello cerrado, expresión cálida y alegre, integrada natural en la escena (misma luz, NO recortada)';
+  return '';
+}
+const _VID_HEB_C = 'ENVASE Y TEXTO (muy importante): si el paquete aparece, queda QUIETO, de perfil o en segundo plano — NUNCA en primer plano ni con la cámara acercándose al texto: el texto del envase NO se redibuja (sale deformado). El protagonista es la golosina. ';
+function _vidPromptCandy() {
+  const P = _vidPerfilC();
+  const persona = _vidPersCTxt();
+  if (_vidModC === 'seedance') {
+    const momento = persona ? 'A los 3 segundos entra en cuadro ' + persona + ': ' + P.accion + '.' : 'A los 3 segundos, ' + P.solo + '.';
+    return 'Video publicitario de 8 segundos, una sola toma continua. La imagen adjunta es el PRIMER FOTOGRAMA: el producto ("' + _vidNombreC + '") es EXACTAMENTE ese, no lo cambies ni lo estilices. '
+      + 'Cámara en órbita lenta constante. Fondo degradé rosa-violeta con luz de neón suave. ' + momento + ' '
+      + 'Textura real: ' + P.textura + '. ' + P.prohibido + ' ' + _VID_HEB_C
+      + 'Cierre: fundido a fondo violeta liso, 2 segundos. Sin voces; música pop instrumental alegre. Estilo reel de Instagram (15-25 años).'
+      + '\n\n— NEGATIVE PROMPT (campo "negative" si existe; si no, al final) —\n'
+      + 'texto deformado, letras inventadas, redibujar el logo, cambiar el producto, morphing del envase, manos deformes, voces, diálogo, ' + P.negativo
+      + '\n\n— TIP — Subí la FOTO REAL como imagen de inicio (primer cuadro). El logo agregalo en la edición (CapCut) como imagen fija.';
+  }
+  const momento2 = persona ? 'A los 3 segundos entra en cuadro por un costado, en el MISMO plano (sin cortar a otra escena), ' + persona + ': ' + P.accion + '. ' : 'A los 3 segundos, ' + P.solo + '. ';
   return 'Video publicitario de 8 segundos, UNA SOLA TOMA CONTINUA. Se adjuntan DOS imágenes: (1) la FOTO DEL PRODUCTO y (2) el LOGO OFICIAL de la marca. '
     + 'La imagen 1 es el PRIMER FOTOGRAMA del video: arrancá exactamente desde esa foto y NO cortes a otra escena — el producto ("' + _vidNombreC + '") es EXACTAMENTE ese, misma forma, envoltorio y colores; no lo reemplaces ni lo estilices. '
     + 'MOVIMIENTO: desde el primer segundo la cámara se mueve en órbita lenta y constante alrededor del producto, sin quedarse quieta nunca. Fondo degradé rosa-violeta animado con luz de neón suave. '
     + momento2
+    + 'TEXTURA REAL del producto (respetala siempre): ' + P.textura + '. ' + P.prohibido + ' ' + _VID_HEB_C
     + 'CIERRE (últimos 2 segundos): la imagen funde suavemente a un fondo violeta liso y el LOGO de la imagen 2 queda CENTRADO, GRANDE, FIJO y nítido esos 2 segundos completos — exactamente como es, mismos colores y tipografía, sin redibujarlo. '
     + 'AUDIO: SIN voces, SIN diálogo, SIN palabras — solamente música pop instrumental alegre de fondo. Estilo reel de Instagram para público de 15 a 25 años.';
 }
-function vidTogglePersonaC() {
-  document.getElementById('vid-prompt-txt').value = _vidPromptCandy(document.getElementById('vid-persona').checked);
+function vidRefrescarC() {
+  const txt = document.getElementById('vid-prompt-txt'); if (!txt) return;
+  const pers = document.querySelector('input[name="vidc-pers"]:checked'); _vidPersC = pers ? pers.value : 'ninguna';
+  const mod = document.querySelector('input[name="vidc-modelo"]:checked'); _vidModC = mod ? mod.value : 'gemini';
+  txt.value = _vidPromptCandy();
+  const gem = _vidModC === 'gemini';
+  const pasos = document.getElementById('vidc-pasos');
+  if (pasos) pasos.innerHTML = gem
+    ? '1) Copiá el prompt · 2) Abrí Gemini · 3) Adjuntá <b>DOS imágenes</b>: la foto del producto + <a href="https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:b14cff/website_banner_rhyfih.png" target="_blank" style="color:#1a73e8;font-weight:700">el logo de Candy 📥</a> · 4) Pegá y enviá'
+    : '1) Copiá el prompt · 2) Abrí <b>Dreamina</b> (Seedance) o Kling · 3) Subí la <b>foto real</b> como imagen de inicio · 4) Pegá el prompt (y el NEGATIVE en su campo) y generá';
+  const abrir = document.getElementById('vidc-abrir');
+  if (abrir) abrir.outerHTML = gem
+    ? '<a id="vidc-abrir" href="https://gemini.google.com" target="_blank" style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🚀 Abrir Gemini</a>'
+    : '<a id="vidc-abrir" href="https://dreamina.capcut.com" target="_blank" style="flex:1;padding:10px;border:none;background:#0e9384;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🎨 Abrir Dreamina</a>';
 }
 function videoPromptCandy() {
   _vidNombreC = document.getElementById('f-nombre').value.trim() || 'el producto';
-  const prompt = _vidPromptCandy(false);
-  const body = _modalInfo('vid-prompt-overlay', '🎬 Video del producto (con tu Gemini)');
+  _vidCatC = (document.getElementById('f-categoria') || {}).value || '';
+  _vidPersC = 'ninguna'; _vidModC = 'gemini';
+  const body = _modalInfo('vid-prompt-overlay', '🎬 Video del producto');
+  const P = _vidPerfilC();
   body.innerHTML = `
-    <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini · 3) Adjuntá <b>DOS imágenes</b>: la foto del producto + <a href="https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:b14cff/website_banner_rhyfih.png" target="_blank" style="color:#1a73e8;font-weight:700">el logo de Candy 📥</a> · 4) Pegá y enviá</div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="vid-persona" onchange="vidTogglePersonaC()"> 👤 Con una persona (joven con onda probando la golosina)</label>
-    <textarea id="vid-prompt-txt" style="width:100%;height:150px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box">${escCM(prompt)}</textarea>
+    <div id="vidc-pasos" style="font-size:0.75rem;color:#666;margin-bottom:8px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;font-size:0.78rem;align-items:center;flex-wrap:wrap">
+      <b style="font-size:0.72rem;color:#888">Modelo:</b>
+      <label style="cursor:pointer"><input type="radio" name="vidc-modelo" value="gemini" checked onchange="vidRefrescarC()"> Gemini (Veo)</label>
+      <label style="cursor:pointer"><input type="radio" name="vidc-modelo" value="seedance" onchange="vidRefrescarC()"> Seedance / Kling</label>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;font-size:0.78rem;align-items:center;flex-wrap:wrap">
+      <b style="font-size:0.72rem;color:#888">Persona:</b>
+      <label style="cursor:pointer"><input type="radio" name="vidc-pers" value="ninguna" checked onchange="vidRefrescarC()"> Sin persona</label>
+      <label style="cursor:pointer"><input type="radio" name="vidc-pers" value="hombre" onchange="vidRefrescarC()"> 👨 Joven</label>
+      <label style="cursor:pointer"><input type="radio" name="vidc-pers" value="mujer" onchange="vidRefrescarC()"> 👩 Mujer (recatada, pelo cubierto)</label>
+    </div>
+    <div style="font-size:0.7rem;color:#b14cff;font-weight:700;margin-bottom:6px">🤖 Detecté: producto ${P.tipo.toUpperCase()} → el prompt ya respeta esa textura</div>
+    <textarea id="vid-prompt-txt" style="width:100%;height:170px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box"></textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button onclick="navigator.clipboard.writeText(document.getElementById('vid-prompt-txt').value).then(()=>toast('📋 Prompt copiado'))" style="flex:1;padding:10px;border:none;background:#b14cff;color:#fff;border-radius:9px;font-weight:800;cursor:pointer">📋 Copiar prompt</button>
-      <a href="https://gemini.google.com" target="_blank" style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🚀 Abrir Gemini</a>
+      <a id="vidc-abrir" href="https://gemini.google.com" target="_blank" style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🚀 Abrir Gemini</a>
     </div>
     ${fotoUrl ? `<div style="font-size:0.7rem;color:#888;margin-top:8px">La foto para adjuntar: <a href="${fotoUrl}" target="_blank" download>descargala acá 📥</a></div>` : ''}`;
+  vidRefrescarC();
 }
 // ═══ M4 UNIFICACIÓN: analítica de visitas + visor de borrados ═══
 function _modalInfo(id, titulo) {
