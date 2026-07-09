@@ -11934,15 +11934,18 @@ function abrirEditarPedido(v) {
     l.prodId = pl.id;
     if (!l.descripcion && pl.desc) l.descripcion = pl.desc.substring(0, 45);
   });
-  // Repreciar cada línea desde el PRODUCTO real (precio + moneda). El texto del pedido puede tener
-  // la moneda/precio mal (bug gviz histórico: Jony U$S se guardaba como "$"); acá se corrige al abrir.
+  // El precio y la moneda GUARDADOS en el pedido son la fuente de verdad: es lo que se acordó con
+  // el cliente y puede ser un precio ESPECIAL editado a mano (ej. Sarah Kantor #51 — Pitzujim a
+  // minorista −10% dentro de un pedido mayorista). Se RESPETAN. Solo se repara desde el catálogo
+  // la línea que quedó SIN precio válido (0/NaN: el producto no tenía precio cargado en su momento),
+  // para no dejar un renglón roto. (Antes se repreciaba SIEMPRE desde el catálogo → borraba los
+  // precios especiales al reabrir el editor y, si se guardaba, pisaba el total del pedido.)
   _editLineas.forEach(l => {
+    if (isFinite(l.precio) && l.precio > 0) return;   // precio acordado ya guardado → no tocar
     const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
     if (!p) return;
     const { precioUnit, moneda } = _precioMoneda(p, v.tipo || 'Minorista');
     if (moneda) l.moneda = moneda;
-    // Solo piso el precio si el producto HOY tiene un precio válido (>0). Si no (precio sin cargar),
-    // dejo el del pedido original — nunca un NaN/0 que rompa la línea y el total.
     if (isFinite(precioUnit) && precioUnit > 0) l.precio = precioUnit;
   });
   // Foto de las cantidades originales por producto: el guardado ajusta stock por diferencia.
