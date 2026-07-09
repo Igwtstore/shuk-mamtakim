@@ -2559,6 +2559,7 @@ function _acRender() {
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMin?'checked':''} onchange="_acVerMin=this.checked"> Minorista</label>
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMay?'checked':''} onchange="_acVerMay=this.checked"> Mayorista</label>
       </div>
+      <div id="ac-layout-hint">${_acLayoutHint()}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:0.55rem;font-size:0.74rem;background:#eef4fb;border:1px solid #cfe0f3;border-radius:8px;padding:6px 9px">
         <input type="checkbox" id="ac-refpesos" ${_acRefPesos?'checked':''} onchange="_acRefPesos=this.checked;_acRender()" style="width:15px;height:15px;cursor:pointer">
         <label for="ac-refpesos" style="font-weight:700;color:#2c6fad;cursor:pointer">💱 Ref. en pesos</label>
@@ -2582,12 +2583,30 @@ function _acRender() {
 function _acSetFiltro(f) { _acFiltro = f; _acRender(); }
 function _acToggleSinStock(v) { _acOcultarSinStock = v; _acRender(); }
 function _acLbtn(l, txt) { return `<button onclick="_acSetLayout('${l}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acLayout===l?'#c9954a':'var(--gris-medio)'};background:${_acLayout===l?'#c9954a':'#fff'};color:${_acLayout===l?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`; }
+// Mini-vista previa del formato elegido: el layout se aplica al PDF/imagen GENERADO (la lista
+// del modal es solo para elegir productos y no cambia) — sin esto el usuario tocaba
+// Lista/Grilla, no veía nada moverse y creía que estaba roto (feedback 2026-07-09).
+function _acLayoutHint() {
+  const sq = 'width:13px;height:13px;background:#e8d9bd;border-radius:2px;flex-shrink:0';
+  const bar = w => `<div style="width:${w}px;height:3px;background:#d9cdb4;border-radius:2px"></div>`;
+  if (_acLayout === 'grilla') {
+    const cell = `<div style="display:flex;flex-direction:column;gap:2px;align-items:center"><div style="${sq}"></div>${bar(15)}</div>`;
+    return `<div style="display:flex;gap:9px;align-items:center;background:#fdf8ee;border:1px dashed #e0cfa8;border-radius:8px;padding:6px 9px;margin-bottom:0.55rem">
+      <div style="display:grid;grid-template-columns:repeat(3,auto);gap:4px;flex-shrink:0">${cell}${cell}${cell}${cell}${cell}${cell}</div>
+      <div style="font-size:0.68rem;color:#8a6d3b;line-height:1.35">Así va a salir: <b>cuadrícula de fotos</b>, 3 por fila. ⚠️ El cambio se ve <b>al tocar PDF o Imagen</b> — la lista de acá arriba es solo para elegir y no cambia.</div></div>`;
+  }
+  const row = `<div style="display:flex;gap:4px;align-items:center"><div style="${sq}"></div>${bar(32)}</div>`;
+  return `<div style="display:flex;gap:9px;align-items:center;background:#fdf8ee;border:1px dashed #e0cfa8;border-radius:8px;padding:6px 9px;margin-bottom:0.55rem">
+    <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">${row}${row}${row}</div>
+    <div style="font-size:0.68rem;color:#8a6d3b;line-height:1.35">Así va a salir: <b>lista</b>, una fila por producto con su foto. ⚠️ El cambio se ve <b>al tocar PDF o Imagen</b> — la lista de acá arriba es solo para elegir y no cambia.</div></div>`;
+}
 function _acSetLayout(l) {
   _acLayout = l;
-  // Actualiza SOLO los 2 botones (no re-renderiza todo el modal → el scroll no salta al tope
-  // y se VE el cambio de Lista/Grilla). El layout solo afecta el PDF/imagen que se genera.
+  // Actualiza SOLO los botones y la mini-vista (no re-renderiza el modal → el scroll no salta).
   const cont = document.getElementById('ac-layout-btns');
   if (cont) cont.innerHTML = _acLbtn('lista', '📃 Lista') + _acLbtn('grilla', '🔳 Grilla');
+  const hint = document.getElementById('ac-layout-hint');
+  if (hint) hint.innerHTML = _acLayoutHint();
 }
 function _acToggle(id, el) {
   if (_acSel[id]) delete _acSel[id]; else _acSel[id] = true;
