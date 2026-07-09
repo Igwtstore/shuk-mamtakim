@@ -4005,7 +4005,9 @@ async function renderPedidos() {
       ventas.forEach(v => { const k = normCliente(v.cliente); (_porCli[k] = _porCli[k] || []).push(v); });
       Object.keys(_porCli).forEach(k => {
         const _pg = (pagos || []).filter(p => normCliente(p.cliente) === k);
-        _imputarPedidos(_porCli[k], _pg, soloMiri).forEach(it => { deudaViva[it.v.id] = { ars: it.remARS, usd: it.remUSD }; });
+        // Se guarda también el desglose por dueño (jA/mA/jU/mU): el botón "Confirmar cobro"
+        // lo usa para precargar SOLO el resto cuando hubo pagos a cuenta (caso Moshe #47).
+        _imputarPedidos(_porCli[k], _pg, soloMiri).forEach(it => { deudaViva[it.v.id] = { ars: it.remARS, usd: it.remUSD, jA: it.jA, mA: it.mA, jU: it.jU, mU: it.mU }; });
       });
     }
     // Pagado por pedido, separado en Pitzujim / golosinas
@@ -4016,7 +4018,7 @@ async function renderPedidos() {
       const mp = parseFloat(p.montoPitz)||0;
       pagadoPed[p.pedidoId].pitz += mp;
       pagadoPed[p.pedidoId].golARS += (parseFloat(p.montoARS)||0) - mp;
-      pagadoPed[p.pedidoId].golUSD += parseFloat(p.montoUSD)||0;
+      pagadoPed[p.pedidoId].golUSD += (parseFloat(p.montoUSD)||0) - (parseFloat(p.montoPitzUsd)||0);   // U$S golosinas: sin la parte Pitzujim (v3.43)
     });
     const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
     // Orden EXPLÍCITO por número de venta (no confiar en el orden en que llega la lista),
@@ -4158,7 +4160,25 @@ async function renderPedidos() {
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`)}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
-          ${estado !== 'cotizacion' ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${(v.cliente||'').replace(/'/g,"\\'")}',${parseFloat(v.usdJONY||0)})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>` : ''}
+          ${estado !== 'cotizacion' ? (() => {
+            // Si hubo pagos a cuenta, el cobro precarga SOLO el resto (deuda viva por dueño),
+            // no el total del pedido (caso Moshe #47: pagó U$S 320 a cuenta y el modal ofrecía
+            // los 432,50 completos → habría cobrado dos veces). Mismo mecanismo que "Revisar".
+            const _uJ = parseFloat(v.usdJONY || 0), _cli = (v.cliente || '').replace(/'/g, "\\'");
+            const _dv = deudaViva[v.id];
+            if (!cobrado && _dv && _dv.jA !== undefined) {
+              const rJ = Math.max(0, Math.round(_dv.jA)), rM = Math.max(0, Math.round(_dv.mA));
+              const rUM = Math.max(0, Math.round(_dv.mU * 100) / 100), rUJ = Math.max(0, Math.round(_dv.jU * 100) / 100);
+              const parcial = (rJ + rM < Math.round(arsJ + arsM) - 1) || (rUM + rUJ < usdM + _uJ - 0.01);
+              if (parcial && (rJ + rM > 1 || rUM + rUJ > 0.01)) {
+                const cubJ = Math.max(0, Math.round(arsJ - rJ)), cubM = Math.max(0, Math.round(arsM - rM));
+                const cubUM = Math.max(0, Math.round((usdM - rUM) * 100) / 100), cubUJ = Math.max(0, Math.round((_uJ - rUJ) * 100) / 100);
+                return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobroResidual('${v.id}',${rJ},${rM},${rUM},'${_cli}',${rUJ},${cubJ},${cubM},${cubUM},${cubUJ})">💰 Confirmar cobro (el resto)</button>`;
+              }
+              if (parcial) return `<span style="font-size:0.7rem;color:#1a7a3a;font-weight:700;align-self:center">✓ cubierto por pagos a cuenta</span>`;
+            }
+            return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${_cli}',${_uJ})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>`;
+          })() : ''}
           ${(estado !== 'cotizacion' && !cobrado && !soloMiri) ? (() => {
             const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0 };
             const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
