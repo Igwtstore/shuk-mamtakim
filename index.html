@@ -2519,7 +2519,7 @@ function _acRender() {
   const ov = document.getElementById('ac-overlay'); if (!ov) return;
   const lista = _acFiltrados();
   const fbtn = (f, txt) => `<button onclick="_acSetFiltro('${f}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acFiltro===f?'var(--azul)':'var(--gris-medio)'};background:${_acFiltro===f?'var(--azul)':'#fff'};color:${_acFiltro===f?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
-  const lbtn = (l, txt) => `<button onclick="_acSetLayout('${l}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acLayout===l?'#c9954a':'var(--gris-medio)'};background:${_acLayout===l?'#c9954a':'#fff'};color:${_acLayout===l?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const lbtn = _acLbtn;
   const filas = _acFilasHtml();
   const nSel = Object.keys(_acSel).length;
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
@@ -2555,7 +2555,7 @@ function _acRender() {
         </select>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:0.55rem">
-        <div style="display:flex;gap:5px;flex:1;min-width:150px">${lbtn('lista','📃 Lista')}${lbtn('grilla','🔳 Grilla')}</div>
+        <div id="ac-layout-btns" style="display:flex;gap:5px;flex:1;min-width:150px">${lbtn('lista','📃 Lista')}${lbtn('grilla','🔳 Grilla')}</div>
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMin?'checked':''} onchange="_acVerMin=this.checked"> Minorista</label>
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMay?'checked':''} onchange="_acVerMay=this.checked"> Mayorista</label>
       </div>
@@ -2581,7 +2581,14 @@ function _acRender() {
 }
 function _acSetFiltro(f) { _acFiltro = f; _acRender(); }
 function _acToggleSinStock(v) { _acOcultarSinStock = v; _acRender(); }
-function _acSetLayout(l) { _acLayout = l; _acRender(); }
+function _acLbtn(l, txt) { return `<button onclick="_acSetLayout('${l}')" style="flex:1;padding:6px 4px;border:1.5px solid ${_acLayout===l?'#c9954a':'var(--gris-medio)'};background:${_acLayout===l?'#c9954a':'#fff'};color:${_acLayout===l?'#fff':'#555'};border-radius:8px;font-family:inherit;font-size:0.74rem;font-weight:700;cursor:pointer">${txt}</button>`; }
+function _acSetLayout(l) {
+  _acLayout = l;
+  // Actualiza SOLO los 2 botones (no re-renderiza todo el modal → el scroll no salta al tope
+  // y se VE el cambio de Lista/Grilla). El layout solo afecta el PDF/imagen que se genera.
+  const cont = document.getElementById('ac-layout-btns');
+  if (cont) cont.innerHTML = _acLbtn('lista', '📃 Lista') + _acLbtn('grilla', '🔳 Grilla');
+}
 function _acToggle(id, el) {
   if (_acSel[id]) delete _acSel[id]; else _acSel[id] = true;
   // Actualiza SOLO la fila + el contador (no re-renderiza toda la lista → el scroll no salta arriba).
