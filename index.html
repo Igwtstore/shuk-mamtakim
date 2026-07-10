@@ -8436,8 +8436,16 @@ function _resumenMiriCalc(ventas, cajaMovs, ds, soc, ccData) {
   // Cuadre por construcción: lo que YA cobró Miri = vendido − te deben − lo que cobró Jony
   const cobradoARS = vendARS - debenARS - jonyDebeARS;
   const cobradoUSD = vendUSD - debenUSD - jonyDebeUSD;
+  // Estado POR VENTA (pedido del usuario 2026-07-09: Sarah #51 y Meir #42 sin cobrar parecían
+  // plata en mano — "Miri va a querer un dinero que no está"). La deuda viva de cada pedido
+  // sale de _ccData (ya imputada: pagos atados + generales FIFO, en vista Miri).
+  const remPorVenta = {};
+  Object.values(ccData || {}).forEach(d => (d.items || []).forEach(it => {
+    if (it.remARS > 1 || it.remUSD > 0.01) remPorVenta[it.v.id] = { ars: it.remARS, usd: it.remUSD };
+  }));
+  const nSinCobrar = vivas.filter(v => remPorVenta[v.id]).length;
   return { vivas, vendARS, vendUSD, CAJAS_M, porCaja, debenARS, debenUSD, jonyDebeARS, jonyDebeUSD,
-    cobradoARS, cobradoUSD, soc: soc || { ars: 0, usd: 0 } };
+    cobradoARS, cobradoUSD, remPorVenta, nSinCobrar, soc: soc || { ars: 0, usd: 0 } };
 }
 function _resumenMiriHTML(R) {
   const $a = n => '$ ' + Math.round(n).toLocaleString('es-AR');
@@ -8454,6 +8462,7 @@ function _resumenMiriHTML(R) {
         <span style="font-size:1.35rem;font-weight:800;color:#b0308f">${dosMon(R.vendARS, R.vendUSD)}</span>
         <span style="font-size:0.8rem;color:var(--texto-suave)">${R.vivas.length} venta${R.vivas.length !== 1 ? 's' : ''}</span>
       </div>
+      ${(R.debenARS > 0.5 || R.debenUSD > 0.005) ? `<div style="font-size:0.72rem;color:#b8860b;font-weight:700;margin-top:3px">⚠️ Ojo: de esto, ${dosMon(R.debenARS, R.debenUSD)} todavía está en cuenta corriente (no es plata en mano).</div>` : ''}
     </div>`;
   // ── Bloque 2: dónde está esa plata (cuadra por construcción)
   h += `<div style="border:1px solid var(--gris-medio);border-radius:12px;padding:0.6rem 0.9rem;margin-bottom:0.7rem">
@@ -8486,19 +8495,29 @@ function _resumenMiriHTML(R) {
       ${Math.abs(s.usd) > 0.005 ? fila(debeJonyU ? 'Le debés a Jony' : 'Jony te debe', $u(Math.abs(s.usd))) : ''}
     </div>`;
   }
-  // ── Bloque 5: lista de ventas
+  // ── Bloque 5: lista de ventas (cada una con su ESTADO: cobrada / debe / cta cte)
   const items = R.vivas.slice().sort((a, b) => (parseInt(b.nVenta) || 0) - (parseInt(a.nVenta) || 0)).map(v => {
     const prod = _lineasPedidoVista(v.productos, true).map(l => {
       const m = l.match(/•\s*(\d+x\s+[^—·]+)/); return m ? m[1].trim() : l.replace(/^•\s*/, '').split('—')[0].trim();
     }).join(', ');
     const prodTxt = prod.length > 46 ? prod.slice(0, 44) + '…' : (prod || '—');
+    // Estado de cobro: la deuda viva del pedido ya imputada. Si debe TODO → "cta cte";
+    // si debe una parte → "debe X"; si no debe nada → cobrada. Nada de plata fantasma.
+    const rem = R.remPorVenta[v.id];
+    const vA = parseFloat(v.arsMyri) || 0, vU = parseFloat(v.usdMyri) || 0;
+    const debeTodo = rem && rem.ars >= vA - 1 && rem.usd >= vU - 0.01;
+    const chip = !rem
+      ? `<span style="font-size:0.66rem;font-weight:800;color:#1a7a3a;background:#e5f3e9;border-radius:10px;padding:1px 7px;white-space:nowrap">✓ cobrada</span>`
+      : (debeTodo
+        ? `<span style="font-size:0.66rem;font-weight:800;color:#b8860b;background:#fdf3e3;border-radius:10px;padding:1px 7px;white-space:nowrap">⏳ cta cte — sin cobrar</span>`
+        : `<span style="font-size:0.66rem;font-weight:800;color:#c0392b;background:#fdecea;border-radius:10px;padding:1px 7px;white-space:nowrap">🟠 debe ${dosMon(rem.ars, rem.usd)}</span>`);
     return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--gris)">
-      <div style="min-width:0"><div style="font-weight:700;font-size:0.8rem">#${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave)">· ${(v.fecha || '').split(' ')[0]} · ${esc(v.cliente || '')}</span></div>
+      <div style="min-width:0"><div style="font-weight:700;font-size:0.8rem">#${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave)">· ${(v.fecha || '').split(' ')[0]} · ${esc(v.cliente || '')}</span> ${chip}</div>
       <div style="font-size:0.74rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(prodTxt)}</div></div>
-      <div style="font-weight:700;font-size:0.82rem;white-space:nowrap">${dosMon(parseFloat(v.arsMyri) || 0, parseFloat(v.usdMyri) || 0)}</div>
+      <div style="font-weight:700;font-size:0.82rem;white-space:nowrap">${dosMon(vA, vU)}</div>
     </div>`;
   }).join('');
-  h += `<details style="margin-top:0.2rem"><summary style="cursor:pointer;font-size:0.82rem;font-weight:700;color:var(--azul);padding:0.3rem 0">📋 Tus ${R.vivas.length} ventas, una por una</summary>
+  h += `<details style="margin-top:0.2rem"><summary style="cursor:pointer;font-size:0.82rem;font-weight:700;color:var(--azul);padding:0.3rem 0">📋 Tus ${R.vivas.length} ventas, una por una${R.nSinCobrar ? ` <span style="font-weight:800;color:#b8860b">(${R.nSinCobrar} sin cobrar del todo)</span>` : ''}</summary>
     <div style="margin-top:0.3rem">${items || '<div class="sinpedidos">Todavía no hay ventas</div>'}</div></details>`;
   h += `</div>`;
   return h;
