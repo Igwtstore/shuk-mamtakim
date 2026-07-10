@@ -9536,7 +9536,17 @@ async function trazarProducto() {
       el.innerHTML = 'Sin movimientos registrados todavía. El registro arranca hoy: cada venta, edición manual, cancelación y alta queda anotada con antes → después.';
       return;
     }
-    el.innerHTML = movs.map(m => `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);${(m.origen||'').indexOf('SOBREVENTA') !== -1 ? 'color:#c0392b;font-weight:700' : 'color:var(--texto)'}">
+    // Reconciliación compras ↔ movimientos: las ventas ANTERIORES al primer movimiento registrado
+    // (el registro nació el 11/06/2026 14:37) aparecen arriba en "quién lo compró" pero NO tienen
+    // movimiento — sin este aviso los totales no cierran y parece un bug (caso Bon O Bon Mini Eggs:
+    // 10 u. compradas vs +6/−6 en movimientos; las 4 que faltan son las ventas #11 y #12 de esa mañana).
+    const _primerMov = Math.min(...movs.map(m => _tsFecha(m.fecha) || Infinity));
+    const _prehist = filas.filter(f => { const t = _tsFecha(f.fecha); return t && t < _primerMov; });
+    const _prehistU = _prehist.reduce((s, f) => s + (f.qty || 0), 0);
+    const _avisoPrehist = _prehistU > 0
+      ? `<div style="background:#fdf3e3;border:1px solid #e0cfa8;border-radius:8px;padding:0.4rem 0.6rem;margin-bottom:0.4rem;font-size:0.72rem;color:#8a6d3b">⚠️ <b>${_prehist.length} compra${_prehist.length !== 1 ? 's' : ''} (${_prehistU} u.)</b> ${_prehist.length !== 1 ? 'son' : 'es'} de ANTES de que existiera este registro (nació el 11/06/2026 14:37): ${_prehist.map(f => esc(f.cliente) + ' ' + f.qty + ' u.').join(' · ')}. Se ven arriba en "quién lo compró" pero no acá — por eso los totales difieren. No falta stock.</div>`
+      : '';
+    el.innerHTML = _avisoPrehist + movs.map(m => `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);${(m.origen||'').indexOf('SOBREVENTA') !== -1 ? 'color:#c0392b;font-weight:700' : 'color:var(--texto)'}">
       <span style="font-size:0.78rem">${esc(m.fecha)} · ${esc(m.origen)}</span>
       <span style="white-space:nowrap;font-weight:700;color:${m.cambio < 0 ? '#c0392b' : 'var(--verde)'}">${m.cambio > 0 ? '+' : ''}${m.cambio} <span style="font-weight:400;color:var(--texto-suave)">(${m.antes}→${m.despues})</span></span></div>`).join('') +
       `<div style="font-size:0.68rem;color:var(--texto-suave);padding:0.35rem 0">${movs.length >= 200 ? 'Mostrando los últimos 200 movimientos.' : '✓ Historial completo: ' + movs.length + ' movimiento' + (movs.length !== 1 ? 's' : '') + ' (el registro existe desde el 11/06/2026 — para antes, usá los backups de abajo).'}</div>`;
