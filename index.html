@@ -12087,6 +12087,11 @@ let _editQtysOrig = {};   // cantidades por producto al abrir la edición (para 
 function abrirEditarPedido(v) {
   _editPedidoActual = v;
   _editLineas = parsearLineasPedido(v.productos);
+  // IDs EXACTOS que esta venta descontó (stock_updates "id:cant"): es la verdad de qué productos
+  // se vendieron. Ante GEMELOS de distinto dueño con nombre Y descripción idénticos (Kukiman
+  // #68 Miri / #153 Jony), el match por nombre+desc empataba y podía elegir el del dueño
+  // EQUIVOCADO → stock y reparto Jony/Miri corruptos al guardar. El ID manda (blindaje 2026-07-10).
+  const _suIds = new Set((v.stockUpdates || '').toString().split(',').map(u => u.split(':')[0].trim()).filter(x => /^\d+$/.test(x)));
   // Identificar el producto de cada línea (por nombre, desempatando por descripción o precio):
   // hace falta para ajustar stock al guardar y para reparar descripciones perdidas.
   _editLineas.forEach(l => {
@@ -12096,6 +12101,14 @@ function abrirEditarPedido(v) {
     const _descOk = c => { const pd = (c.desc || '').trim().toLowerCase(); return pd && ld && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim())); };
     let cands = productos.filter(p => p.nombre === l.nombre);
     if (!cands.length) cands = productos.filter(p => _matchNombreProd(p, l.nombre));
+    // Candado por ID: si hay varios candidatos y la venta registró EXACTAMENTE uno de ellos,
+    // ese es (sin adivinar por desc/precio). Si registró varios gemelos a la vez, siguen los
+    // desempates de siempre (caso rarísimo: el mismo pedido con el gemelo de Miri Y el de Jony).
+    if (cands.length > 1 && _suIds.size) {
+      const enSu = cands.filter(c => _suIds.has(String(c.id)));
+      if (enSu.length === 1) cands = enSu;
+      else if (enSu.length > 1) cands = enSu;   // al menos acota a los que la venta tocó de verdad
+    }
     let pl = null;
     if (cands.length === 1) {
       // Un solo candidato: confiar solo si su descripción coincide (o no hay desc para comparar).
