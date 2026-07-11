@@ -4066,8 +4066,9 @@ async function renderPedidos() {
       // Chip de DUEÑO por renglón (solo vista Todo): al preparar un pedido mixto se ve al toque
       // qué es de Jony y qué de Miri. El nombre puede contener "·" (y la línea le suma la
       // descripción con otro "·") → se prueba del nombre más largo al más corto.
+      const _suV = _suIdsDe(v.stockUpdates);   // IDs exactos de esta venta → desambigua gemelos
       const _duenoLinea = (l) => {
-        if (_lineaEsDeJony(l, nombresJony)) return 'J';   // mismo criterio que la privacidad (prioriza Jony ante duplicado)
+        if (_lineaEsDeJony(l, nombresJony, _suV)) return 'J';   // mismo criterio que la privacidad (gemelos: el ID decide)
         const m = l.match(/\d+x\s+(.+?)\s+—/);
         if (!m) return '';
         const parts = m[1].trim().split(' · ');
@@ -4087,7 +4088,7 @@ async function renderPedidos() {
       const productLines = v.productos
         ? v.productos.split(' || ').filter(l => {
             if (!soloMiri) return true;
-            return !_lineaEsDeJony(l, nombresJony);   // vista Miri: oculta líneas de Jony (robusto ante '·' en el nombre)
+            return !_lineaEsDeJony(l, nombresJony, _suV);   // vista Miri: oculta lo de Jony (gemelos: el ID decide → Miri VE los suyos)
           }).map(l => _esLineaCero(l)
             ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(l)}${l} ⚠️</div>`
             : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(l)}${l}</div>`).join('')
@@ -7076,23 +7077,42 @@ function _nombresJony() {
 // segmentos '·' contra el catálogo de Jony. Ante nombre DUPLICADO (existe como Miri y como
 // Jony), prioriza OCULTAR — la regla sagrada es que Miri no vea NADA de Jony.
 // (Bug real cazado 2026-07-06: los duplicados Kukiman/Shoko con '·' se colaban en la vista Miri.)
-function _lineaEsDeJony(linea, setJony) {
+// IDs exactos que descontó una venta (stock_updates "id:cant") → Set para desambiguar gemelos.
+function _suIdsDe(stockUpdates) {
+  return new Set((stockUpdates || '').toString().split(',').map(u => u.split(':')[0].trim()).filter(x => /^\d+$/.test(x)));
+}
+function _lineaEsDeJony(linea, setJony, suIds) {
   const sj = setJony || _nombresJony();
   const m = (linea || '').match(/\d+x\s+(.+?)\s+—/);
   if (!m) return /pitzujim/i.test(linea || '');
   const parts = m[1].trim().split(' · ');
   for (let i = parts.length; i >= 1; i--) {
-    if (sj.has(parts.slice(0, i).join(' · ').trim())) return true;
+    const nom = parts.slice(0, i).join(' · ').trim();
+    if (sj.has(nom)) {
+      // GEMELOS (mismo nombre, distinto dueño): el nombre por sí solo no alcanza. La venta sabe
+      // POR ID cuál descontó (stock_updates) → si descontó SOLO el gemelo de Miri, la línea es
+      // de MIRI y ella la VE (2026-07-10: "Miri tiene que ver todos sus productos"). Solo si la
+      // venta no tiene registro (prehistoria) o descontó el de Jony/ambos, se mantiene el criterio
+      // conservador (ocultar) — la regla sagrada sigue intacta: Jony jamás se filtra.
+      if (suIds && suIds.size) {
+        const gemelos = productos.filter(p => (p.nombre || '').trim() === nom && suIds.has(String(p.id)));
+        if (gemelos.length && gemelos.every(p => (p.dueno || '') !== 'Jony')) return false;
+      }
+      return true;
+    }
   }
   return /pitzujim/i.test(m[1]);   // sin producto en catálogo: red de seguridad por nombre
 }
 
-// Líneas de productos de un pedido, filtradas según la vista (Miri solo ve sus golosinas, no Pitzujim de Jony)
-function _lineasPedidoVista(productosStr, soloMiri) {
+// Líneas de productos de un pedido, filtradas según la vista (Miri solo ve sus golosinas, no
+// Pitzujim de Jony). `stockUpdates` (opcional) desambigua gemelos por ID — pasarlo SIEMPRE que
+// se tenga la venta a mano.
+function _lineasPedidoVista(productosStr, soloMiri, stockUpdates) {
   const lineas = (productosStr || '').split('||').map(l => l.trim()).filter(l => l.startsWith('•'));
   if (!soloMiri) return lineas;
   const sj = _nombresJony();
-  return lineas.filter(l => !_lineaEsDeJony(l, sj));
+  const su = _suIdsDe(stockUpdates);
+  return lineas.filter(l => !_lineaEsDeJony(l, sj, su));
 }
 
 // Popup con el detalle de un pedido al clickear su movimiento en la caja
@@ -7210,7 +7230,7 @@ function verDetalleDeudor(i) {
     const fullU = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
     const parcial = (it.remARS < fullA - 1) || (it.remUSD < fullU - 0.01);
     const totTxt = [it.remARS > 1 ? money(it.remARS) : '', it.remUSD > 0.01 ? 'U$S ' + it.remUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
-    const lineas = _lineasPedidoVista(v.productos, soloMiri).map(l => {
+    const lineas = _lineasPedidoVista(v.productos, soloMiri, v.stockUpdates).map(l => {
       const m = l.match(/^•\s*(.+?)\s+—\s+.+?\s+c\/u\s+=\s+(.+)$/);
       const nombre = m ? m[1] : l.replace(/^•\s*/, '');
       const subT = m ? m[2].trim() : '';
@@ -7252,8 +7272,8 @@ function _tsFecha(f) {
   const m = (f || '').toString().trim().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
   return m ? new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)).getTime() : 0;
 }
-function _resumenPedido(productosStr, soloMiri) {
-  const ls = _lineasPedidoVista(productosStr, !!soloMiri).map(l => {
+function _resumenPedido(productosStr, soloMiri, stockUpdates) {
+  const ls = _lineasPedidoVista(productosStr, !!soloMiri, stockUpdates).map(l => {
     const m = l.match(/•\s*(\d+x\s+[^—]+?)(?:\s+·|\s+—)/);
     return m ? m[1].trim() : l.replace(/^•\s*/, '').split('—')[0].trim();
   });
@@ -7273,7 +7293,7 @@ async function abrirEstadoCuenta(cliente) {
       const ars = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
       const usd = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
       const ts = _tsFecha(v.fecha), fch = (v.fecha || '').split(' ')[0];
-      movs.push({ ts, fecha: fch, tipo: 'pedido', concepto: `Pedido #${v.nVenta || '—'} · ${_resumenPedido(v.productos, soloMiri)}`, ars, usd, signo: 1 });
+      movs.push({ ts, fecha: fch, tipo: 'pedido', concepto: `Pedido #${v.nVenta || '—'} · ${_resumenPedido(v.productos, soloMiri, v.stockUpdates)}`, ars, usd, signo: 1 });
       // Cobro: solo lo que REALMENTE entró a caja (total − deuda residual). Si fue parcial, deja el saldo debiendo.
       const _dd = _deudaPedido(v, soloMiri);
       const _cobARS = ars - _dd.ars, _cobUSD = usd - _dd.usd;
@@ -7566,7 +7586,7 @@ async function renderCaja() {
       const comiU = _sinComi ? 0 : (parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2)));
       // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
       _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
-                     lineas: _lineasPedidoVista(v.productos, soloMiri), comprobante: v.comprobante || '',
+                     lineas: _lineasPedidoVista(v.productos, soloMiri, v.stockUpdates), comprobante: v.comprobante || '',
                      descPct: (() => { const mm = (v.productos || '').match(/Descuento global:\s*([\d.]+)\s*%/i); return mm ? parseFloat(mm[1]) || 0 : 0; })() };
       // 🔑 REGLA DE ORO: un pedido NO cobrado nunca entra a la caja física.
       // Va a "cuenta corriente / pendiente" hasta que confirmes el cobro. La forma de pago
@@ -8497,7 +8517,7 @@ function _resumenMiriHTML(R) {
   }
   // ── Bloque 5: lista de ventas (cada una con su ESTADO: cobrada / debe / cta cte)
   const items = R.vivas.slice().sort((a, b) => (parseInt(b.nVenta) || 0) - (parseInt(a.nVenta) || 0)).map(v => {
-    const prod = _lineasPedidoVista(v.productos, true).map(l => {
+    const prod = _lineasPedidoVista(v.productos, true, v.stockUpdates).map(l => {
       const m = l.match(/•\s*(\d+x\s+[^—·]+)/); return m ? m[1].trim() : l.replace(/^•\s*/, '').split('—')[0].trim();
     }).join(', ');
     const prodTxt = prod.length > 46 ? prod.slice(0, 44) + '…' : (prod || '—');
@@ -10394,7 +10414,7 @@ async function renderDashboard() {
     (v.productos||'').split('||').forEach(l => {
       const m = l.match(/(\d+)x\s+([^—·]+)/);
       if (m) {
-        if (soloMiri && _lineaEsDeJony(l, nombresJony)) return;   // robusto ante '·' en el nombre
+        if (soloMiri && _lineaEsDeJony(l, nombresJony, _suIdsDe(v.stockUpdates))) return;   // gemelos: el ID decide
         const nom = m[2].trim().substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]);
       }
     });
@@ -10569,7 +10589,7 @@ function _ventasACsv(ventas, soloMiri) {
     ? ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','ARS Myri','USD Myri']
     : ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','Total ARS','Total USD','ARS Jony','ARS Myri','USD Myri','Comi ARS','Comi USD'];
   const rows = lista.map(v => {
-    const prods = soloMiri ? _lineasPedidoVista(v.productos, true).join(' | ') : (v.productos || '');
+    const prods = soloMiri ? _lineasPedidoVista(v.productos, true, v.stockUpdates).join(' | ') : (v.productos || '');
     const base = [v.nVenta, v.fecha, esc(v.cliente), esc(v.tipo), esc(prods), esc(v.formaPago), v.estado];
     return soloMiri
       ? base.concat([v.arsMyri, v.usdMyri])
@@ -11844,7 +11864,7 @@ function _buildRemitoTexto(v, tc) {
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`📦 *DETALLE:*`);
   // En vista Miri se filtran los productos de Jony; en vista Todo, el detalle completo.
-  (soloMiri ? _lineasPedidoVista(v.productos, true) : v.productos.split(' || ')).forEach(l => lines.push(l));
+  (soloMiri ? _lineasPedidoVista(v.productos, true, v.stockUpdates) : v.productos.split(' || ')).forEach(l => lines.push(l));
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   // Totales: en vista Miri, solo lo de Miri (arsMyri/usdMyri); en Todo, el total del pedido.
   const usd = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
@@ -11936,7 +11956,7 @@ function abrirRemitoPDF(v) {
     return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
   };
   // Parsear líneas en columnas con foto (en vista Miri, sin las de Jony)
-  const filas = (soloMiri ? _lineasPedidoVista(v.productos, true) : (v.productos||'').split(' || ')).map(linea => {
+  const filas = (soloMiri ? _lineasPedidoVista(v.productos, true, v.stockUpdates) : (v.productos||'').split(' || ')).map(linea => {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u = (\$|U\$S) ([\d.,]+)/);
     if (!m) return `<tr><td colspan="5" style="padding:8px 16px;font-size:0.8rem;color:#666;border-bottom:1px solid #f0ebe3">${linea}</td></tr>`;
     const [, qty, nombreCompleto, moneda, precioUnit, , subtotal] = m;
