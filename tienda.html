@@ -7,6 +7,7 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Candy Shop 🍬 — Pedí tus golosinas">
 <meta property="og:description" content="Elegí tus golosinas y mandá el pedido por WhatsApp. ¡Fácil y rápido!">
+<!-- WL:OG los crawlers no ejecutan JS: estos og: los reescribe el asistente de alta por tienda -->
 <meta property="og:image" content="https://res.cloudinary.com/dq2boloyp/image/upload/w_1200,h_630,c_pad,b_rgb:2d1a0a/website_banner_rhyfih.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -263,6 +264,7 @@ body.dark .cart-item-total, body.dark .cart-total-monto { color: #e8ddf5; }
   <button onclick="aceptarCookies()">OK</button>
 </div>
 
+<script src="/config.js"></script><!-- ficha de tienda (white-label): infra/contacto/candy -->
 <script>
 // Escapa HTML: los nombres/las notas no pueden inyectar etiquetas en la página (anti-XSS).
 function esc(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -270,8 +272,8 @@ function fotoTienda(url, w) {
   if (!url || url.indexOf('res.cloudinary.com') === -1) return url;
   return url.replace('/upload/', '/upload/e_trim:10/' + (w ? 'w_' + w + '/' : ''));
 }
-const APPS_URL = 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';   // motor Supabase
-const PHONES = { meir: '5491171046383', iosi: '5491150987261', jony: '5491131754540' };
+const APPS_URL = TIENDA_CONFIG.infra.backendUrl;   // motor Supabase — lee de la ficha
+const PHONES = { meir: TIENDA_CONFIG.contacto.telefonos.meir, iosi: TIENDA_CONFIG.contacto.telefonos.iosi, jony: TIENDA_CONFIG.contacto.telefonos.jony };
 const NOMBRES = { meir: 'Meir', iosi: 'Iosi', jony: 'Jony' };
 const EMOJIS = { meir: '🍫', iosi: '🍭' };
 
@@ -284,9 +286,9 @@ const emojiKid = EMOJIS[kid] || '🍬';
 // Jony (adulto): el header dice solo "Candy Shop" y sin "pedí tus golosinas a…".
 const esJony = kid === 'jony';
 document.getElementById('header-emoji').textContent = emojiKid;
-document.getElementById('header-title').textContent = esJony ? 'Candy Shop' : `Candy Shop — ${nombreKid}`;
+document.getElementById('header-title').textContent = esJony ? TIENDA_CONFIG.candy.nombre : `${TIENDA_CONFIG.candy.nombre} — ${nombreKid}`;
 document.getElementById('header-sub').textContent = esJony ? 'Elegí lo que quieras y hacé tu pedido 🛒' : `Pedí tus golosinas a ${nombreKid} 🍬`;
-document.title = esJony ? 'Candy Shop 🍬' : `Candy Shop — ${nombreKid} 🍬`;
+document.title = esJony ? `${TIENDA_CONFIG.candy.nombre} ${TIENDA_CONFIG.candy.emoji}` : `${TIENDA_CONFIG.candy.nombre} — ${nombreKid} ${TIENDA_CONFIG.candy.emoji}`;
 
 const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('es-AR');
 
@@ -766,9 +768,10 @@ cargarCatalogo();
 // ── PWA instalable: manifest dinámico (conserva el ?kid=) + botón 📲 ──
 (function () {
   try {
-    const mf = { name: esJony ? 'Candy Shop' : 'Candy Shop — ' + nombreKid, short_name: 'Candy Shop',
+    const _cdyNom = TIENDA_CONFIG.candy.nombre;
+    const mf = { name: esJony ? _cdyNom : _cdyNom + ' — ' + nombreKid, short_name: _cdyNom,
       start_url: location.pathname + '?kid=' + kid, display: 'standalone', background_color: '#fff0f6', theme_color: '#b14cff',
-      icons: [{ src: 'https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:b14cff/website_banner_rhyfih.png', sizes: '512x512', type: 'image/png' }] };
+      icons: [{ src: TIENDA_CONFIG.candy.logo, sizes: '512x512', type: 'image/png' }] };
     const link = document.createElement('link'); link.rel = 'manifest';
     link.href = URL.createObjectURL(new Blob([JSON.stringify(mf)], { type: 'application/json' }));
     document.head.appendChild(link);

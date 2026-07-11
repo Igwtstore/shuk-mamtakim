@@ -284,7 +284,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <!-- PANTALLA CLAVE -->
 <div id="pantalla-clave" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:32px 24px; gap:20px;">
   <div style="font-size:3rem">🍬</div>
-  <h1 style="font-size:1.8rem; font-weight:800; color:#2d1a0a;">Candy Shop</h1>
+  <h1 class="candy-marca" style="font-size:1.8rem; font-weight:800; color:#2d1a0a;">Candy Shop</h1>
   <p style="color:#999; font-size:0.95rem;">Ingresá la clave para continuar</p>
   <div style="width:100%; max-width:280px; display:flex; flex-direction:column; gap:10px;">
     <input id="input-clave" type="password" placeholder="Clave" maxlength="20"
@@ -301,7 +301,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <!-- LOGIN -->
 <div id="login" style="display:none;">
   <div class="logo">🍬</div>
-  <h1>Candy Shop</h1>
+  <h1 class="candy-marca">Candy Shop</h1>
   <p>¿Quién sos?</p>
   <div class="user-btns">
     <button class="user-btn btn-meir" onclick="login('Meir')">
@@ -933,8 +933,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 </div>
 
+<script src="/config.js"></script><!-- ficha de tienda (white-label): infra/contacto/candy -->
 <script>
-const APPS_URL = 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';   // motor Supabase
+const APPS_URL = TIENDA_CONFIG.infra.backendUrl;   // motor Supabase — lee de la ficha
+// Marca del módulo Candy desde la ficha (título de pestaña + headers de login)
+document.title = TIENDA_CONFIG.candy.nombre;
+document.querySelectorAll('.candy-marca').forEach(el => { el.textContent = TIENDA_CONFIG.candy.nombre; });
 let _kidsToken = '';   // token de sesión Supabase del panel, se manda al backend
 let usuario = null;
 let catalogoCache = [];
@@ -1094,7 +1098,7 @@ function videoPromptCandy() {
   const prompt = _vidPromptCandy(false);
   const body = _modalInfo('vid-prompt-overlay', '🎬 Video del producto (con tu Gemini)');
   body.innerHTML = `
-    <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini · 3) Adjuntá <b>DOS imágenes</b>: la foto del producto + <a href="https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:b14cff/website_banner_rhyfih.png" target="_blank" style="color:#1a73e8;font-weight:700">el logo de Candy 📥</a> · 4) Pegá y enviá</div>
+    <div style="font-size:0.75rem;color:#666;margin-bottom:8px">1) Copiá el prompt · 2) Abrí Gemini · 3) Adjuntá <b>DOS imágenes</b>: la foto del producto + <a href="${TIENDA_CONFIG.candy.logo}" target="_blank" style="color:#1a73e8;font-weight:700">el logo de Candy 📥</a> · 4) Pegá y enviá</div>
     <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="vid-persona" onchange="vidTogglePersonaC()"> 👤 Con una persona (joven con onda probando la golosina)</label>
     <textarea id="vid-prompt-txt" style="width:100%;height:150px;padding:9px;border:1.5px solid #ddd;border-radius:9px;font-size:0.78rem;box-sizing:border-box">${escCM(prompt)}</textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
@@ -1677,8 +1681,8 @@ async function _subirFotoFaltante(cod, input) {
   if (row) row.style.opacity = '0.5';
   mostrarToast('⏳ Subiendo foto…');
   try {
-    const form = new FormData(); form.append('file', file); form.append('upload_preset', 'candyshop');
-    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    const form = new FormData(); form.append('file', file); form.append('upload_preset', TIENDA_CONFIG.candy.cloudinaryPreset);
+    const res = await fetch('https://api.cloudinary.com/v1_1/' + TIENDA_CONFIG.infra.cloudinary.cloud + '/image/upload', { method: 'POST', body: form });
     const data = await res.json();
     if (!data.secure_url) throw new Error('sin url');
     const r = await api('setFotoHijo', { codigo: cod, foto: data.secure_url });
@@ -1803,7 +1807,7 @@ const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
 function fotoShuk(val) {
   if (!val) return '';
   if (/^https?:\/\//i.test(val)) return val;
-  const base = 'https://res.cloudinary.com/dq2boloyp/image/upload';
+  const base = 'https://res.cloudinary.com/' + TIENDA_CONFIG.infra.cloudinary.cloud + '/image/upload';
   if (val.indexOf('/') !== -1 && !/\.(jpg|jpeg|png|gif|webp)$/i.test(val)) return base + '/' + val;
   return base + '/shuk-mamtakim/' + val;
 }
@@ -1991,7 +1995,7 @@ const _CCAT_MARCAS = {
   candy: { nombre: 'Candy Shop', sub: 'Golosinas ricas 🍬', color: '#7b2ff7',
            logo: '<div style="width:92px;height:92px;border-radius:14px;background:linear-gradient(135deg,#ff5fa2,#7b2ff7);display:flex;align-items:center;justify-content:center;font-size:3rem">🍬</div>' }
 };
-const _CCAT_TELS = { jony: { nombre: 'Jony', num: '5491131754540' }, meir: { nombre: 'Meir', num: '5491171046383' }, iosi: { nombre: 'Iosi', num: '5491150987261' } };
+const _CCAT_TELS = { jony: { nombre: 'Jony', num: TIENDA_CONFIG.contacto.telefonos.jony }, meir: { nombre: 'Meir', num: TIENDA_CONFIG.contacto.telefonos.meir }, iosi: { nombre: 'Iosi', num: TIENDA_CONFIG.contacto.telefonos.iosi } };
 function _ccatTelFmt(n) { n = String(n); return n.length >= 13 ? `+${n.slice(0,2)} ${n.slice(2,3)} ${n.slice(3,5)} ${n.slice(5,9)}-${n.slice(9)}` : '+' + n; }
 async function _ccatCargarQR(url) {
   try { const r = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=170x170&margin=0&data=${encodeURIComponent(url)}`); const b = await r.blob();
@@ -2511,8 +2515,8 @@ async function pk_usar() {
     const blob = await new Promise(res => document.getElementById('pkfoto-canvas').toBlob(res, 'image/jpeg', 0.92));
     const form = new FormData();
     form.append('file', blob, 'pack.jpg');
-    form.append('upload_preset', 'candyshop');
-    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    form.append('upload_preset', TIENDA_CONFIG.candy.cloudinaryPreset);
+    const res = await fetch('https://api.cloudinary.com/v1_1/' + TIENDA_CONFIG.infra.cloudinary.cloud + '/image/upload', { method: 'POST', body: form });
     const data = await res.json();
     if (!data.secure_url) throw new Error('upload');
     fotoUrl = data.secure_url;
@@ -2545,8 +2549,8 @@ async function subirFoto(input) {
   try {
     const form = new FormData();
     form.append('file', file);
-    form.append('upload_preset', 'candyshop');
-    const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+    form.append('upload_preset', TIENDA_CONFIG.candy.cloudinaryPreset);
+    const res = await fetch('https://api.cloudinary.com/v1_1/' + TIENDA_CONFIG.infra.cloudinary.cloud + '/image/upload', { method: 'POST', body: form });
     const data = await res.json();
     if (data.secure_url) {
       fotoUrl = data.secure_url;
@@ -2900,8 +2904,8 @@ function guardarFlyerHistorial(t, conFondo) {
       if (!blob) return;
       const form = new FormData();
       form.append('file', blob);
-      form.append('upload_preset', 'candyshop');
-      const res = await fetch('https://api.cloudinary.com/v1_1/dq2boloyp/image/upload', { method: 'POST', body: form });
+      form.append('upload_preset', TIENDA_CONFIG.candy.cloudinaryPreset);
+      const res = await fetch('https://api.cloudinary.com/v1_1/' + TIENDA_CONFIG.infra.cloudinary.cloud + '/image/upload', { method: 'POST', body: form });
       const data = await res.json();
       if (!data.secure_url) return;
       fUltimaURL = data.secure_url;
@@ -5350,10 +5354,7 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
 
 // ─── SUPABASE AUTH ───────────────────────────────────────────────
 const { createClient } = supabase;
-const sb = createClient(
-  'https://soarkknjewgcewryxqac.supabase.co',
-  'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2'
-);
+const sb = createClient(TIENDA_CONFIG.infra.supabase.url, TIENDA_CONFIG.infra.supabase.anonKey);
 sb.auth.getSession().then(r => { _kidsToken = r.data.session?.access_token || ''; }).catch(() => {});
 sb.auth.onAuthStateChange((_e, session) => { _kidsToken = session?.access_token || ''; });
 

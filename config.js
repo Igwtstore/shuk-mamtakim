@@ -47,6 +47,15 @@
       oneSignalAppId: '0e4a5058-d7a1-405b-86c9-86ae42940ab4',
     },
 
+    // — Módulo Candy (la tienda de los chicos): marca propia dentro del mismo tenant —
+    candy: {
+      nombre: 'Candy Shop',
+      emoji:  '🍬',
+      // logo/banner (se usa en manifest PWA, prompt de Gemini y og de la tienda de los chicos)
+      logo:   'https://res.cloudinary.com/dq2boloyp/image/upload/w_512,h_512,c_pad,b_rgb:b14cff/website_banner_rhyfih.png',
+      cloudinaryPreset: 'candyshop',   // preset propio de subida (mismo cloud que infra.cloudinary)
+    },
+
     // — Reglas de negocio (los % siguen hardcodeados en los cálculos de plata;
     //    se conectan en un hito posterior, con tests, por ser sensibles) —
     negocio: {
