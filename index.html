@@ -4066,9 +4066,10 @@ async function renderPedidos() {
       // Chip de DUEÑO por renglón (solo vista Todo): al preparar un pedido mixto se ve al toque
       // qué es de Jony y qué de Miri. El nombre puede contener "·" (y la línea le suma la
       // descripción con otro "·") → se prueba del nombre más largo al más corto.
-      const _suV = _suIdsDe(v.stockUpdates);   // IDs exactos de esta venta → desambigua gemelos
-      const _duenoLinea = (l) => {
-        if (_lineaEsDeJony(l, nombresJony, _suV)) return 'J';   // mismo criterio que la privacidad (gemelos: el ID decide)
+      const _suV = _suIdsDe(v.stockUpdates);   // cantidades por ID de esta venta → desambigua gemelos
+      const _lineasV = v.productos ? v.productos.split(' || ') : [];
+      const _duenoLinea = (l, li) => {
+        if (_lineaEsDeJony(l, nombresJony, _suV, _lineasV, li)) return 'J';   // mismo criterio que la privacidad (gemelos: el ID decide)
         const m = l.match(/\d+x\s+(.+?)\s+—/);
         if (!m) return '';
         const parts = m[1].trim().split(' · ');
@@ -4077,22 +4078,24 @@ async function renderPedidos() {
         }
         return '';
       };
-      const _chipDueno = (l) => {
+      const _chipDueno = (l, li) => {
         if (soloMiri) return '';
-        const d = _duenoLinea(l);
+        const d = _duenoLinea(l, li);
         if (!d) return '';
         return d === 'J'
           ? '<span title="Producto de Jony" style="display:inline-block;background:#fdf1dc;color:#b8860b;font-size:0.6rem;font-weight:800;padding:0 5px;border-radius:5px;margin-right:4px;vertical-align:middle">JONY</span>'
           : '<span title="Producto de Miri" style="display:inline-block;background:#e8f0fd;color:#2f5fb3;font-size:0.6rem;font-weight:800;padding:0 5px;border-radius:5px;margin-right:4px;vertical-align:middle">MIRI</span>';
       };
-      const productLines = v.productos
-        ? v.productos.split(' || ').filter(l => {
+      // Se guarda el índice ORIGINAL de cada renglón: el apareo de gemelos mixtos es por posición
+      // dentro de la venta completa, no de la lista ya filtrada.
+      const productLines = _lineasV
+        .map((l, li) => ({ l, li }))
+        .filter(x => {
             if (!soloMiri) return true;
-            return !_lineaEsDeJony(l, nombresJony, _suV);   // vista Miri: oculta lo de Jony (gemelos: el ID decide → Miri VE los suyos)
-          }).map(l => _esLineaCero(l)
-            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(l)}${l} ⚠️</div>`
-            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(l)}${l}</div>`).join('')
-        : '';
+            return !_lineaEsDeJony(x.l, nombresJony, _suV, _lineasV, x.li);   // vista Miri: oculta lo de Jony (gemelos: el ID decide → Miri VE los suyos)
+          }).map(x => _esLineaCero(x.l)
+            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(x.l, x.li)}${x.l} ⚠️</div>`
+            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(x.l, x.li)}${x.l}</div>`).join('');
       const _nCeros = v.productos ? v.productos.split(' || ').filter(_esLineaCero).length : 0;
       const arsJ = parseFloat(v.arsJONY || 0);
       const arsM = parseFloat(v.arsMyri || 0);
@@ -7074,29 +7077,130 @@ function _nombresJony() {
 // ⚠️ Robusto ante nombres que CONTIENEN '·' (ej "Klik Kukiman · Edición especial chocolate y
 // blanco"): la línea es "Nx <nombre> · <desc> — precio", así que el '·' del nombre y el que
 // separa la descripción se confunden. Se prueba el prefijo del MÁS LARGO al más corto por
-// segmentos '·' contra el catálogo de Jony. Ante nombre DUPLICADO (existe como Miri y como
-// Jony), prioriza OCULTAR — la regla sagrada es que Miri no vea NADA de Jony.
-// (Bug real cazado 2026-07-06: los duplicados Kukiman/Shoko con '·' se colaban en la vista Miri.)
-// IDs exactos que descontó una venta (stock_updates "id:cant") → Set para desambiguar gemelos.
+// segmentos '·' contra el catálogo de Jony.
+// GEMELOS (mismo nombre exacto, un producto de cada dueño): el nombre solo no alcanza — decide
+// el ID que la venta descontó (stock_updates) y, si la venta descontó gemelos de AMBOS dueños,
+// el apareo renglón↔ID por cantidad/precio (_resolverGemelosMixtos). Miri VE todo lo suyo;
+// lo de Jony jamás se filtra.
+// Cantidades que descontó una venta, POR ID (stock_updates "id:cant") → Map id→cant.
+// (.has/.size funcionan igual que el Set que devolvía antes; ahora además viaja la cantidad.)
 function _suIdsDe(stockUpdates) {
-  return new Set((stockUpdates || '').toString().split(',').map(u => u.split(':')[0].trim()).filter(x => /^\d+$/.test(x)));
+  const m = new Map();
+  (stockUpdates || '').toString().split(',').forEach(u => {
+    const pp = u.split(':');
+    const id = (pp[0] || '').trim();
+    if (/^\d+$/.test(id)) m.set(id, (m.get(id) || 0) + (parseInt(pp[1]) || 0));
+  });
+  return m;
 }
-function _lineaEsDeJony(linea, setJony, suIds) {
+// Nombre de catálogo al que resuelve una línea (mismo criterio '·' del más largo al más corto,
+// ignorando la etiqueta de descuento "[-N%]" que agrega el editor). null si no matchea ninguno.
+function _nombreLineaCat(linea) {
+  const m = (linea || '').match(/\d+x\s+(.+?)\s+—/);
+  if (!m) return null;
+  const parts = m[1].replace(/\s*\[-\d+%\]/g, '').trim().split(' · ');
+  for (let i = parts.length; i >= 1; i--) {
+    const nom = parts.slice(0, i).join(' · ').trim();
+    if (productos.some(p => (p.nombre || '').trim() === nom)) return nom;
+  }
+  return null;
+}
+// El gemelo MÁS VIEJO (menor ID) de un nombre: si una venta no registró ningún ID de ese nombre
+// (hoy no existe ninguna así — TODA venta guarda stock_updates), solo pudo ser anterior a la
+// creación del gemelo nuevo → el renglón es del gemelo que ya existía.
+function _gemeloMasViejo(gemelos) {
+  return gemelos.slice().sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0))[0];
+}
+// Venta que descontó gemelos de AMBOS dueños (legal, ej: 5 de Miri + 3 de Jony para completar 8).
+// El ID solo no dice qué RENGLÓN es de quién, pero cada renglón guarda cantidad y precio, y
+// stock_updates la cantidad por ID → se aparean por lógica:
+//   1) solo valen los repartos cuyas cantidades CIERRAN exactas contra el registro por ID;
+//   2) si más de un reparto cierra, desempata el precio unitario contra el catálogo;
+//   3) si aún empatan, los renglones son indistinguibles entre sí (mismo nombre y cantidad):
+//      mostrar uno u otro es idéntico — se garantiza que cada dueño vea EXACTAMENTE la cantidad
+//      de renglones suyos. Jamás se oculta de más ni de menos.
+// Devuelve Map(índice de línea → esDeJony) para las líneas de ese nombre, o null si no aplica.
+function _resolverGemelosMixtos(nom, todas, suMap) {
+  if (!todas || !suMap || !suMap.get) return null;
+  const twins = productos.filter(p => (p.nombre || '').trim() === nom && suMap.has(String(p.id)))
+    .sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0));
+  const grupo = [];
+  todas.forEach((l, i) => { if (_nombreLineaCat(l) === nom) grupo.push(i); });
+  if (!twins.length || !grupo.length) return null;
+  const lineas = grupo.map(i => {
+    const l = todas[i];
+    const q = (l.match(/(\d+)x\s+/) || [])[1];
+    const mp = l.match(/—\s*(U\$S|\$)\s*([\d.,]+)\s*c\/u/);
+    const precio = mp ? (mp[1] === 'U$S' ? parseFloat(mp[2].replace(',', '.')) : parseFloat(mp[2].replace(/\./g, '').replace(',', '.'))) : null;
+    return { idx: i, qty: parseInt(q) || 0, precio };
+  });
+  const _preciosProd = p => [p.precioMay, p.precioMin, p.precio]
+    .map(x => parseFloat((x == null ? '' : x).toString().replace(',', '.')))
+    .filter(n => isFinite(n) && n > 0);
+  const _matchPrecio = (li, tw) => li.precio != null && _preciosProd(tw).some(pp => Math.abs(pp - li.precio) < 0.015);
+  const out = new Map();
+  const nT = twins.length;
+  const total = Math.pow(nT, lineas.length);
+  let mejores = [];
+  if (total <= 20000) {
+    const validas = [];
+    for (let a = 0; a < total; a++) {
+      const asig = []; let x = a;
+      for (let j = 0; j < lineas.length; j++) { asig.push(x % nT); x = Math.floor(x / nT); }
+      const suma = new Array(nT).fill(0);
+      asig.forEach((t, j) => { suma[t] += lineas[j].qty; });
+      if (twins.every((tw, t) => suma[t] === (parseInt(suMap.get(String(tw.id))) || 0))) validas.push(asig);
+    }
+    mejores = validas;
+    if (validas.length > 1) {
+      const score = asig => asig.reduce((s, t, j) => s + (_matchPrecio(lineas[j], twins[t]) ? 1 : 0), 0);
+      const max = Math.max(...validas.map(score));
+      mejores = validas.filter(asig => score(asig) === max);
+    }
+  }
+  if (!mejores.length) {
+    // Registro inconsistente (ninguna combinación cierra) o grupo enorme: mejor esfuerzo renglón
+    // por renglón — cantidad exacta → precio → el gemelo más viejo. Nunca "ocultar todo".
+    lineas.forEach(li => {
+      let cand = twins.filter(t => (parseInt(suMap.get(String(t.id))) || 0) === li.qty);
+      if (cand.length !== 1) cand = twins.filter(t => _matchPrecio(li, t));
+      const eleg = cand.length === 1 ? cand[0] : twins[0];
+      out.set(li.idx, (eleg.dueno || '') === 'Jony');
+    });
+    return out;
+  }
+  // mejores[0] es un reparto VÁLIDO (las cantidades cierran) y canónico: donde todos los repartos
+  // válidos coinciden es certeza; donde no, los renglones son indistinguibles y el conteo por
+  // dueño queda exacto igual.
+  lineas.forEach((li, j) => out.set(li.idx, (twins[mejores[0][j]].dueno || '') === 'Jony'));
+  return out;
+}
+function _lineaEsDeJony(linea, setJony, suIds, todasLineas, idxLinea) {
   const sj = setJony || _nombresJony();
   const m = (linea || '').match(/\d+x\s+(.+?)\s+—/);
   if (!m) return /pitzujim/i.test(linea || '');
-  const parts = m[1].trim().split(' · ');
+  const parts = m[1].replace(/\s*\[-\d+%\]/g, '').trim().split(' · ');
   for (let i = parts.length; i >= 1; i--) {
     const nom = parts.slice(0, i).join(' · ').trim();
     if (sj.has(nom)) {
-      // GEMELOS (mismo nombre, distinto dueño): el nombre por sí solo no alcanza. La venta sabe
-      // POR ID cuál descontó (stock_updates) → si descontó SOLO el gemelo de Miri, la línea es
-      // de MIRI y ella la VE (2026-07-10: "Miri tiene que ver todos sus productos"). Solo si la
-      // venta no tiene registro (prehistoria) o descontó el de Jony/ambos, se mantiene el criterio
-      // conservador (ocultar) — la regla sagrada sigue intacta: Jony jamás se filtra.
-      if (suIds && suIds.size) {
-        const gemelos = productos.filter(p => (p.nombre || '').trim() === nom && suIds.has(String(p.id)));
-        if (gemelos.length && gemelos.every(p => (p.dueno || '') !== 'Jony')) return false;
+      const gem = productos.filter(p => (p.nombre || '').trim() === nom);
+      if (gem.some(p => (p.dueno || '') !== 'Jony')) {
+        // Nombre GEMELO (existe de Miri y de Jony) → decide el registro por ID de la venta:
+        const enSu = (suIds && suIds.size) ? gem.filter(p => suIds.has(String(p.id))) : [];
+        if (enSu.length) {
+          if (enSu.every(p => (p.dueno || '') !== 'Jony')) return false;   // descontó SOLO el de Miri → suyo, lo VE
+          if (enSu.some(p => (p.dueno || '') !== 'Jony')) {
+            // Descontó gemelos de AMBOS: aparear renglón↔ID por cantidad/precio (certeza lógica)
+            const asig = _resolverGemelosMixtos(nom, todasLineas, suIds);
+            if (asig && asig.has(idxLinea)) return asig.get(idxLinea);
+            return (_gemeloMasViejo(gem).dueno || '') === 'Jony';   // sin contexto de renglones (no debería pasar)
+          }
+          // descontó SOLO el de Jony → cae al return true (ocultar)
+        } else {
+          // La venta no registró ningún gemelo de este nombre → es anterior al gemelo nuevo:
+          // el renglón es del gemelo que ya existía (menor ID).
+          return (_gemeloMasViejo(gem).dueno || '') === 'Jony';
+        }
       }
       return true;
     }
@@ -7112,7 +7216,7 @@ function _lineasPedidoVista(productosStr, soloMiri, stockUpdates) {
   if (!soloMiri) return lineas;
   const sj = _nombresJony();
   const su = _suIdsDe(stockUpdates);
-  return lineas.filter(l => !_lineaEsDeJony(l, sj, su));
+  return lineas.filter((l, i) => !_lineaEsDeJony(l, sj, su, lineas, i));
 }
 
 // Popup con el detalle de un pedido al clickear su movimiento en la caja
@@ -10411,10 +10515,12 @@ async function renderDashboard() {
   const nombresJony = _nombresJony();
   const prodCount = {};
   entregadas.forEach(v => {
-    (v.productos||'').split('||').forEach(l => {
+    const _suD = _suIdsDe(v.stockUpdates);
+    const _lsD = (v.productos||'').split('||');
+    _lsD.forEach((l, li) => {
       const m = l.match(/(\d+)x\s+([^—·]+)/);
       if (m) {
-        if (soloMiri && _lineaEsDeJony(l, nombresJony, _suIdsDe(v.stockUpdates))) return;   // gemelos: el ID decide
+        if (soloMiri && _lineaEsDeJony(l, nombresJony, _suD, _lsD, li)) return;   // gemelos: el ID decide
         const nom = m[2].trim().substring(0,25); prodCount[nom] = (prodCount[nom]||0) + parseInt(m[1]);
       }
     });
