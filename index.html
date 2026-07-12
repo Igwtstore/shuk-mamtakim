@@ -967,8 +967,8 @@
       <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">💰 Balance acumulado</div>
       <div id="gan-balance-box" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem">
         <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Ganancia acumulada</div><div class="dash-num" id="gan-total" style="color:var(--verde)">—</div></div>
-        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">Maaser (10%)</div><div class="dash-num" id="gan-diezmo" style="color:#c0392b">—</div></div>
-        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label">A retirar (90%)</div><div class="dash-num" id="gan-retiro" style="color:var(--azul)">—</div></div>
+        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label" id="lbl-maaser">Maaser (10%)</div><div class="dash-num" id="gan-diezmo" style="color:#c0392b">—</div></div>
+        <div class="dash-card" style="flex:1;min-width:140px"><div class="dash-label" id="lbl-retiro">A retirar (90%)</div><div class="dash-num" id="gan-retiro" style="color:var(--azul)">—</div></div>
       </div>
       <div id="gan-faltacosto" style="display:none;margin-bottom:1rem;background:#fff3e6;border:1px solid #f0d9a8;border-radius:8px;padding:0.6rem 0.8rem;font-size:0.8rem;color:#9a6b00;line-height:1.5"></div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -2008,6 +2008,12 @@ document.title = MARCA_E;
 const _mApple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
 if (_mApple) _mApple.content = MARCA;
 document.querySelectorAll('.wl-marca').forEach(el => { el.textContent = MARCA; });
+// % de negocio desde la ficha (white-label): comisión del socio y maaser (diezmo)
+const COMISION = TIENDA_CONFIG.negocio.comisionSocio;   // Shuk: 0.15 (sobre lo que Miri vende)
+const MAASER = TIENDA_CONFIG.negocio.maaser;            // Shuk: 0.10
+const _lblMa = document.getElementById('lbl-maaser'), _lblRe = document.getElementById('lbl-retiro');
+if (_lblMa) _lblMa.textContent = `Maaser (${Math.round(MAASER * 100)}%)`;
+if (_lblRe) _lblRe.textContent = `A retirar (${100 - Math.round(MAASER * 100)}%)`;
 const WA_NUM1 = TIENDA_CONFIG.contacto.whatsapp;
 const WA_NUM2 = TIENDA_CONFIG.contacto.whatsappAlt;
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
@@ -3587,8 +3593,8 @@ function enviarPedido(_stockVerificado) {
     return `• ${item.qty}x ${item.nombre}${descCorta} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`;
   });
 
-  const comiARS = Math.round(arsMyri * 0.15);
-  const comiUSD = parseFloat((usdMyri * 0.15).toFixed(2));
+  const comiARS = Math.round(arsMyri * COMISION);
+  const comiUSD = parseFloat((usdMyri * COMISION).toFixed(2));
   const totalARS = arsJONY + arsMyri;
   const totalUSD = usdMyri + usdJONY;
 
@@ -5601,8 +5607,8 @@ function cargarPedidoManual() {
 
   if (!lineas.length) { showToast('Seleccioná al menos un producto'); return; }
 
-  const comiARS = Math.round(arsM * 0.15);
-  const comiUSD = parseFloat((usdM * 0.15).toFixed(2));
+  const comiARS = Math.round(arsM * COMISION);
+  const comiUSD = parseFloat((usdM * COMISION).toFixed(2));
   const totalARS = arsJ + arsM;
   const totalUSD = usdM + usdJ;
 
@@ -7403,8 +7409,8 @@ async function renderCaja() {
       const usdJ = parseFloat(v.usdJONY || 0);   // dólares de Jony (sus propios productos, sin comisión)
       // Saldo cargado SIN comisión (col 27): no se descuenta comisión nueva.
       const _sinComi = (v.sinComision || '').toString().toUpperCase() === 'SI';
-      const comiA = _sinComi ? 0 : (parseFloat(v.comiARS || 0) || Math.round(arsM * 0.15));
-      const comiU = _sinComi ? 0 : (parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2)));
+      const comiA = _sinComi ? 0 : (parseFloat(v.comiARS || 0) || Math.round(arsM * COMISION));
+      const comiU = _sinComi ? 0 : (parseFloat(v.comiUSD || 0) || parseFloat((usdM * COMISION).toFixed(2)));
       // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
       _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
                      lineas: _lineasPedidoVista(v.productos, soloMiri), comprobante: v.comprobante || '',
@@ -7440,13 +7446,13 @@ async function renderCaja() {
           } else {
             const esCajaJony = ['MP_JONY', 'EFT_JONY'].includes(t.caja);
             if (mon === 'ARS') {
-              const comi = _sinComi ? 0 : Math.round(val * 0.15);
+              const comi = _sinComi ? 0 : Math.round(val * COMISION);
               const sub = [exTxt, (esCajaJony && comi > 0) ? `incluye tu comisión $ ${comi.toLocaleString('es-AR')}` : ''].filter(Boolean).join(' · ');
               movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: t.caja, val, mon: 'ARS', tipo: 'venta', vid: v.id, corte: v.corte, sub, myriNet: esCajaJony ? (val - comi) : undefined });
               if (comi > 0 && !esCajaJony) movs.push({ desc: `Comi #${n} ${f}`, col: 'COMI_ARS_JONY', val: comi, mon: 'ARS', tipo: 'comi', srcCol: t.caja });
               else if (comi > 0 && !v.corte) comiYaEnJonyARS += comi;
             } else {
-              const comiU2 = _sinComi ? 0 : parseFloat((val * 0.15).toFixed(2));
+              const comiU2 = _sinComi ? 0 : parseFloat((val * COMISION).toFixed(2));
               movs.push({ desc: `Vta Golosinas #${n} ${f}`, col: t.caja, val, mon: 'USD', tipo: 'venta', vid: v.id, corte: v.corte, myriNetUSD: esCajaJony ? (val - comiU2) : undefined });
               if (comiU2 > 0 && !esCajaJony) movs.push({ desc: `Comi USD #${n} ${f}`, col: 'COMI_USD_JONY', val: comiU2, mon: 'USD', tipo: 'comi', srcCol: t.caja });
               else if (comiU2 > 0 && !v.corte) comiYaEnJonyUSD += comiU2;
@@ -7508,7 +7514,7 @@ async function renderCaja() {
           const esCajaJony = ['MP_JONY', 'EFT_JONY'].includes(colUSD);
           if (tc > 0 && COBRO_ARS_COLS.includes(colUSD)) {
             const arsEquiv = Math.round(usdM * tc);
-            const comiARS_conv = _sinComi ? 0 : Math.round(arsEquiv * 0.15);
+            const comiARS_conv = _sinComi ? 0 : Math.round(arsEquiv * COMISION);
             const subU = (esCajaJony && comiARS_conv > 0)
               ? `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')} · incluye tu comisión $ ${comiARS_conv.toLocaleString('es-AR')}`
               : `ex U$S ${usdM.toFixed(2)} @ $${tc.toLocaleString('es-AR')}`;
@@ -7703,8 +7709,8 @@ async function renderCaja() {
     const comiPendMyriUSD = totalsUSD['COMI_USD_JONY'] || 0;
     const jonyARS = comiPendMyriARS + comiYaEnJonyARS;   // TOTAL ganado en pesos
     const jonyUSD = comiPendMyriUSD + comiYaEnJonyUSD;   // TOTAL ganado en U$S
-    const diezmoARS = Math.round(jonyARS * 0.10);
-    const diezmoUSD = parseFloat((jonyUSD * 0.10).toFixed(2));
+    const diezmoARS = Math.round(jonyARS * MAASER);
+    const diezmoUSD = parseFloat((jonyUSD * MAASER).toFixed(2));
     const _fmtARS = n => '$ ' + Math.round(n).toLocaleString('es-AR');
     const desgloseComi = (comiYaEnJonyARS > 0 || comiYaEnJonyUSD > 0) ? `
       <div style="font-size:0.72rem;color:var(--texto-suave);background:var(--gris);border-radius:8px;padding:0.5rem 0.7rem;margin-bottom:0.6rem;line-height:1.6">
@@ -7719,12 +7725,12 @@ async function renderCaja() {
         <div>
           <div style="font-size:0.75rem;color:var(--texto-suave)">Comisión total ganada $</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">$ ${Math.round(jonyARS).toLocaleString('es-AR')}</div>
-          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Maaser 10%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
+          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Maaser ${Math.round(MAASER * 100)}%: $ ${diezmoARS.toLocaleString('es-AR')}</div>
         </div>
         <div>
           <div style="font-size:0.75rem;color:var(--texto-suave)">Comisión total ganada U$S</div>
           <div style="font-size:1.15rem;font-weight:700;color:var(--azul)">U$S ${jonyUSD.toFixed(2)}</div>
-          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Maaser 10%: U$S ${diezmoUSD.toFixed(2)}</div>
+          <div style="font-size:0.75rem;color:var(--dorado);font-weight:600">Maaser ${Math.round(MAASER * 100)}%: U$S ${diezmoUSD.toFixed(2)}</div>
         </div>
       </div>
       ${desgloseComi}
@@ -7855,11 +7861,11 @@ async function renderCuentaSocios() {
           // Pitzujim de Jony cobrado en una caja de Myri → Myri le debe el total.
           if (enMyri && mon === 'ARS') pitzMyri += val;
         } else if (mon === 'ARS') {
-          const comi = _sinComiS ? 0 : Math.round(val * 0.15);
+          const comi = _sinComiS ? 0 : Math.round(val * COMISION);
           if (enMyri) comiDebe += comi;                 // Myri cobró golosinas → debe comisión
           else if (enJony) { jonyTiene += (val - comi); _cdesc += comi; }   // Jony cobró golosinas de Myri → le debe el neto
         } else {
-          const comiU = _sinComiS ? 0 : parseFloat((val * 0.15).toFixed(2));
+          const comiU = _sinComiS ? 0 : parseFloat((val * COMISION).toFixed(2));
           if (t.caja === 'ETF_USD_MYRI') comiDebeU += comiU;
           else if (enJony) { jonyTieneU += (val - comiU); _cdescU += comiU; }
         }
@@ -7944,7 +7950,7 @@ async function renderCuentaSocios() {
       else if (caja === 'ETF_USD_MYRI') pitzMyriU += pitzU;
     }
     if (golARS > 0) {
-      const comi = Math.round(golARS * 0.15);
+      const comi = Math.round(golARS * COMISION);
       if (MYRI_ARS.includes(caja)) comiDebe += comi;                  // Myri cobró golosinas → debe comisión
       else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (golARS - comi); _cdesc += comi; } // Jony tiene su neto
     }
@@ -7984,14 +7990,14 @@ async function renderCuentaSocios() {
     else if (usadoPitzU > 0 && caja === 'ETF_USD_MYRI') pitzMyriU += usadoPitzU;   // Pitzujim U$S en la caja U$S de Myri
     // Golosinas $: comisión 15% para Jony; el neto es de Miri
     if (usadoGolA > 0) {
-      const comi = Math.round(usadoGolA * 0.15);
+      const comi = Math.round(usadoGolA * COMISION);
       if (MYRI_ARS.includes(caja)) comiDebe += comi;
       else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (usadoGolA - comi); _cdesc += comi; }
     }
     // Golosinas U$S: convertidas si entraron en pesos con TC (caso Elion), si no en U$S
     if (usadoGolU > 0) {
       if (tcP > 0 && COBRO_ARS_COLS.includes(caja)) {
-        const arsEq = usadoGolU * tcP; const comi = Math.round(arsEq * 0.15);
+        const arsEq = usadoGolU * tcP; const comi = Math.round(arsEq * COMISION);
         if (MYRI_ARS.includes(caja)) comiDebe += comi;
         else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (arsEq - comi); _cdesc += comi; }
       } else {
@@ -8041,8 +8047,8 @@ async function renderCuentaSocios() {
     if (arsM <= 0 && usdM <= 0) return;
     if (esCobradoReal(v)) return;
     const rr = _residualDe(v);
-    _pComi += Math.round((rr ? rr.mA : arsM) * 0.15);
-    _pComiU += parseFloat(((rr ? rr.mU : usdM) * 0.15).toFixed(2));
+    _pComi += Math.round((rr ? rr.mA : arsM) * COMISION);
+    _pComiU += parseFloat(((rr ? rr.mU : usdM) * COMISION).toFixed(2));
   });
   const _fAU = (a, u) => [a > 0.5 ? f(a) : '', u > 0.004 ? 'U$S ' + u.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
   const _comiBox = (esMiri, extra) => {
@@ -8395,7 +8401,7 @@ function _recomputeSplit(v) {
     if (esJony) arsJ += sub; else arsM += sub;
   });
   if (descG > 0 && descG <= 100) { const fg = 1 - descG / 100; arsJ *= fg; arsM *= fg; usdM *= fg; usdJ *= fg; }
-  return { arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM), usdMyri: +usdM.toFixed(2), usdJONY: +usdJ.toFixed(2), comiARS: Math.round(arsM * 0.15), comiUSD: +(usdM * 0.15).toFixed(2) };
+  return { arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM), usdMyri: +usdM.toFixed(2), usdJONY: +usdJ.toFixed(2), comiARS: Math.round(arsM * COMISION), comiUSD: +(usdM * COMISION).toFixed(2) };
 }
 
 let _migracionPendiente = [];
@@ -9907,7 +9913,7 @@ async function renderGanancias() {
   ]);
   const balance = (ganData && ganData.balance) || 0;
   const balanceUSD = (ganData && ganData.balanceUSD) || 0;
-  const diezmo = Math.round(balance * 0.10);
+  const diezmo = Math.round(balance * MAASER);
   const retiro = Math.round(balance - diezmo);
   document.getElementById('gan-total').textContent = '$ ' + Math.round(balance).toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + balanceUSD.toFixed(2) : '');
   document.getElementById('gan-diezmo').textContent = '$ ' + diezmo.toLocaleString('es-AR') + (balanceUSD ? ' + U$S ' + (balanceUSD*0.1).toFixed(2) : '');
@@ -9979,11 +9985,11 @@ async function hacerCorteFlow() {
   if (!g) { showToast('No se pudo leer la ganancia'); return; }
   const gARS = Math.round(g.balance || 0), gUSD = g.balanceUSD || 0;
   if (gARS <= 0 && gUSD <= 0) { showToast('No hay ganancia cobrada para cerrar en este período'); return; }
-  const diezmoARS = Math.round(gARS * 0.10), retiroARS = gARS - diezmoARS;
+  const diezmoARS = Math.round(gARS * MAASER), retiroARS = gARS - diezmoARS;
   let msg = `✂️ CORTE DE PERÍODO\n\nGanancia cobrada: $ ${gARS.toLocaleString('es-AR')}`;
   if (gUSD) msg += ` + U$S ${gUSD.toFixed(2)}`;
   msg += `\nMaaser (10%): $ ${diezmoARS.toLocaleString('es-AR')}`;
-  if (gUSD) msg += ` + U$S ${(gUSD * 0.1).toFixed(2)}`;
+  if (gUSD) msg += ` + U$S ${(gUSD * MAASER).toFixed(2)}`;
   msg += `\nA retirar (90%): $ ${retiroARS.toLocaleString('es-AR')}`;
   if (gUSD) msg += ` + U$S ${(gUSD * 0.9).toFixed(2)}`;
   msg += `\n\nEsto LIQUIDA las ventas cobradas del período: la ganancia y lo que le debés a Myri por ellas vuelven a CERO.\nAcordate de pasar el maaser, retirar tu parte y saldar con Myri (Cuenta entre socios).\n\n¿Hacer el corte?`;
@@ -12092,8 +12098,8 @@ async function guardarEditPedido() {
     else eArsM += sub;
   });
   if (desc > 0 && desc <= 100) { const fg = 1 - desc / 100; eArsJ *= fg; eArsM *= fg; eUsdM *= fg; eUsdJ *= fg; }
-  const eComiARS = Math.round(eArsM * 0.15);
-  const eComiUSD = parseFloat((eUsdM * 0.15).toFixed(2));
+  const eComiARS = Math.round(eArsM * COMISION);
+  const eComiUSD = parseFloat((eUsdM * COMISION).toFixed(2));
 
   const params = new URLSearchParams({
     accion: 'actualizarPedido',
