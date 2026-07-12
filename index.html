@@ -9532,6 +9532,9 @@ function abrirNpDesdeRecep() {
   caja.style.cssText = 'background:var(--crema,#faf8f4);border-radius:16px;max-width:560px;width:100%;padding:0.4rem;position:relative;margin:auto 0';
   caja.innerHTML = '<button onclick="cerrarNpDesdeRecep()" style="position:absolute;top:10px;right:12px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--texto-suave);z-index:1">✕</button>';
   caja.appendChild(card);
+  // El card pertenece a la sección Catálogo: si estamos en Stock, setPanelSeccion lo dejó con
+  // display:none inline y se mudaría INVISIBLE (bug real 2026-07-11) → dentro del modal se ve siempre.
+  card.style.display = '';
   ov.appendChild(caja);
   document.body.appendChild(ov);
   window._npDesdeRecep = true;
@@ -9544,7 +9547,11 @@ function abrirNpDesdeRecep() {
 function cerrarNpDesdeRecep() {
   const ov = document.getElementById('np-modal-recep');
   const card = document.getElementById('card-nuevo-producto');
-  if (_npPlaceholder && card) { _npPlaceholder.parentNode.insertBefore(card, _npPlaceholder); _npPlaceholder.remove(); _npPlaceholder = null; }
+  if (_npPlaceholder && card) {
+    _npPlaceholder.parentNode.insertBefore(card, _npPlaceholder); _npPlaceholder.remove(); _npPlaceholder = null;
+    // De vuelta en su lugar: respetar la sección activa del panel (si no es Catálogo, oculto)
+    if (typeof _panelSeccion !== 'undefined') card.style.display = (card.dataset.seccion === _panelSeccion) ? '' : 'none';
+  }
   if (ov) ov.remove();
   window._npDesdeRecep = false;
 }
