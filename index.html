@@ -1980,11 +1980,11 @@
     <div id="pago-split-wrap" style="display:none">
       <div style="margin-bottom:0.75rem">
         <label style="font-size:0.82rem;font-weight:600;color:var(--verde);display:block;margin-bottom:0.3rem">A JONY $</label>
-        <input type="number" id="pago-pitz" placeholder="0" min="0" oninput="pago_actualizarTotal()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+        <input type="number" id="pago-pitz" placeholder="0" min="0" oninput="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
       <div style="margin-bottom:0.75rem">
         <label style="font-size:0.82rem;font-weight:600;color:#c050a0;display:block;margin-bottom:0.3rem">A golosinas (Myri) $</label>
-        <input type="number" id="pago-gol" placeholder="0" min="0" oninput="pago_actualizarTotal()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+        <input type="number" id="pago-gol" placeholder="0" min="0" oninput="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
     </div>
     <!-- Elegir a qué pedido imputar (deuda total, si el cliente tiene varios con saldo) -->
@@ -1997,7 +1997,7 @@
     <!-- Monto único (pago a deuda total del cliente) -->
     <div id="pago-single-wrap" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto $ (pesos)</label>
-      <input type="number" id="pago-ars" placeholder="0" min="0" oninput="pago_actualizarTotal()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
+      <input type="number" id="pago-ars" placeholder="0" min="0" oninput="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
     </div>
     <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">Monto U$S (opcional)</label>
@@ -2023,7 +2023,7 @@
     </div>
     <!-- TC: aparece si se paga una deuda en U$S pero con PESOS (monto U$S > 0 + caja de pesos) -->
     <div id="pago-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">💱 Pagó los U$S en pesos — Tipo de cambio U$S 1 = $</label>
+      <label id="pago-tc-label" style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">💱 Pagó los U$S en pesos — Tipo de cambio U$S 1 = $</label>
       <input type="number" id="pago-tc" placeholder="ej: 1510" min="1" oninput="pago_calcularTC()" style="width:100%;padding:0.5rem 0.75rem;border:1.5px solid #e8c97a;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;" />
       <div id="pago-tc-result" style="font-size:0.78rem;color:var(--dorado);margin-top:0.4rem;font-weight:600"></div>
     </div>
@@ -7928,7 +7928,18 @@ async function renderCaja() {
       const esPerdon = p.caja === 'PERDON';   // perdón/redondeo: baja la deuda, NO entra a ninguna caja
       const desc = esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`;
       if (aRS > 0 && p.caja) {
-        if (!esPerdon) movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
+        if (!esPerdon) {
+          // Espejo del caso U$S-en-pesos: si la deuda en PESOS la pagó con DÓLARES FÍSICOS (caja
+          // U$S + TC), a la caja entran los U$S reales (aRS÷tc) — el arqueo físico cierra; la
+          // deuda en $ baja igual por su monto completo (v3.63, caso Sarah 2026-07-12).
+          const ptcA = parseFloat(p.tc) || 0;
+          const cajaUSDa = _CAJAS_USD.includes(p.caja) || p.caja === 'CTA_CTE_USD';
+          if (ptcA > 0 && cajaUSDa && p.caja !== 'CTA_CTE_USD') {
+            movs.push({ desc: `${desc} ($ ${Math.round(aRS).toLocaleString('es-AR')} ÷ $${ptcA})`, col: p.caja, val: +(aRS / ptcA).toFixed(2), mon: 'USD', tipo: 'venta' });
+          } else {
+            movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
+          }
+        }
         // La baja de la Cta Cte se parte en Pitzujim (dueno J) y golosinas, según el pago,
         // para que el desglose cierre y Myri no vea la parte de Pitzujim.
         const pitzPay = Math.min(parseFloat(p.montoPitz) || 0, aRS);
@@ -11532,22 +11543,49 @@ function cerrarPagoModal() {
 }
 // El cliente paga una deuda en U$S pero entrega PESOS: si hay monto U$S + caja de pesos, pedir el TC.
 // Así la plata entra en pesos a la caja (transparencia Miri) y la deuda en dólares baja en U$S.
+// Montos en pesos del modal (modo pedido: Pitzujim+golosinas; modo general: campo único)
+function _pagoArsActual() {
+  const esPedido = document.getElementById('pago-split-wrap').style.display !== 'none';
+  return esPedido
+    ? (parseFloat(document.getElementById('pago-pitz').value) || 0) + (parseFloat(document.getElementById('pago-gol').value) || 0)
+    : (parseFloat(document.getElementById('pago-ars').value) || 0);
+}
+// El TC aparece en las DOS direcciones cruzadas:
+//  · deuda U$S pagada con PESOS a una caja de pesos (v3.41)
+//  · deuda en $ pagada con DÓLARES FÍSICOS a una caja U$S (v3.63, caso Sarah) — a la caja
+//    entran los U$S reales (÷TC) así el arqueo físico cierra; la deuda en $ baja igual.
 function pago_evalTC() {
   const usd = parseFloat(document.getElementById('pago-usd')?.value) || 0;
+  const ars = _pagoArsActual();
   const caja = document.getElementById('pago-caja')?.value || '';
-  const cajaPesos = !!caja && caja !== 'PERDON' && _CAJAS_USD.indexOf(caja) === -1;
+  const esCajaUSD = !!caja && (_CAJAS_USD.indexOf(caja) !== -1);
+  const cajaPesos = !!caja && caja !== 'PERDON' && !esCajaUSD;
   const w = document.getElementById('pago-tc-wrap');
-  if (w) w.style.display = (usd > 0 && cajaPesos) ? 'block' : 'none';
+  const necesita = (usd > 0 && cajaPesos) || (ars > 0 && esCajaUSD);
+  if (w) w.style.display = necesita ? 'block' : 'none';
+  const lbl = document.getElementById('pago-tc-label');
+  if (lbl) lbl.textContent = (ars > 0 && esCajaUSD)
+    ? '💵 Los pesos te los pagó con U$S físicos — Tipo de cambio U$S 1 = $'
+    : '💱 Pagó los U$S en pesos — Tipo de cambio U$S 1 = $';
   pago_calcularTC();
   pago_actualizarTotal();
 }
 function pago_calcularTC() {
   const usd = parseFloat(document.getElementById('pago-usd')?.value) || 0;
+  const ars = _pagoArsActual();
   const tc = parseFloat(document.getElementById('pago-tc')?.value) || 0;
+  const caja = document.getElementById('pago-caja')?.value || '';
+  const esCajaUSD = !!caja && (_CAJAS_USD.indexOf(caja) !== -1);
   const res = document.getElementById('pago-tc-result'); if (!res) return;
-  res.textContent = (usd > 0 && tc > 0)
-    ? ('≈ $ ' + Math.round(usd * tc).toLocaleString('es-AR') + ' entran a la caja · bajan U$S ' + usd + ' de la deuda')
-    : '';
+  if (esCajaUSD && ars > 0 && tc > 0) {
+    const partes = ['≈ U$S ' + (ars / tc).toFixed(2) + ' entran a la caja por los $ ' + Math.round(ars).toLocaleString('es-AR') + ' de deuda'];
+    if (usd > 0) partes.push('+ U$S ' + usd.toFixed(2) + ' directos');
+    res.textContent = partes.join(' ');
+  } else {
+    res.textContent = (usd > 0 && tc > 0)
+      ? ('≈ $ ' + Math.round(usd * tc).toLocaleString('es-AR') + ' entran a la caja · bajan U$S ' + usd + ' de la deuda')
+      : '';
+  }
   pago_actualizarTotal();
 }
 // 💵 TOTAL que se está recibiendo (pedido del usuario): suma pesos + los U$S (convertidos si
@@ -11565,7 +11603,12 @@ function pago_actualizarTotal() {
   el.style.display = '';
   if (caja === 'PERDON') { el.textContent = '🎁 No entra plata a ninguna caja (perdón / redondeo)'; return; }
   const cajaPesos = caja && _CAJAS_USD.indexOf(caja) === -1;
-  if (usd > 0 && cajaPesos && tc > 0) {
+  const cajaUSDt = caja && _CAJAS_USD.indexOf(caja) !== -1;
+  if (ars > 0 && cajaUSDt && tc > 0) {
+    const totalU = usd + ars / tc;
+    el.textContent = '💵 Recibís en total: U$S ' + totalU.toFixed(2) +
+      '  (= U$S ' + (ars / tc).toFixed(2) + ' por los pesos' + (usd > 0 ? ' + U$S ' + usd.toFixed(2) : '') + ') — contá esos dólares en mano';
+  } else if (usd > 0 && cajaPesos && tc > 0) {
     const total = Math.round(ars + usd * tc);
     el.textContent = '💵 Recibís en total: $ ' + total.toLocaleString('es-AR') +
       (ars > 0 ? '  (= $ ' + Math.round(ars).toLocaleString('es-AR') + ' + $ ' + Math.round(usd * tc).toLocaleString('es-AR') + ' de los U$S)' : '');
@@ -11591,7 +11634,11 @@ async function confirmarPagoCuenta() {
   const caja = document.getElementById('pago-caja').value;
   const tcVis = document.getElementById('pago-tc-wrap').style.display !== 'none';
   const tcPago = tcVis ? (parseFloat(document.getElementById('pago-tc').value) || 0) : 0;
-  if (tcVis && tcPago <= 0) { showToast('Poné el tipo de cambio (pagó los U$S en pesos)'); return; }
+  if (tcVis && tcPago <= 0) {
+    const _cajaUsdG = _CAJAS_USD.indexOf(caja) !== -1;
+    showToast(_cajaUsdG ? 'Poné el tipo de cambio (los pesos te los pagó con U$S físicos)' : 'Poné el tipo de cambio (pagó los U$S en pesos)');
+    return;
+  }
   // En deuda total, si se eligió un pedido específico en el selector, atar el pago a ese pedido (si no, FIFO).
   let _pedFinal = _pagoPedidoId;
   const _ps = document.getElementById('pago-pedido-sel');
