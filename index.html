@@ -6484,10 +6484,28 @@ function epCategoriaChange(sel) {
   sel.value = nueva; _epCatPrev = nueva;
 }
 // IA en el editor: mira la foto actual del producto y sugiere nombre/descripción/categoría.
+// Si la foto es RECIÉN agregada (todavía sin guardar), se sube primero y se analiza igual —
+// mismo criterio que el alta. (Caso real 2026-07-12: producto sin foto guardada + foto nueva
+// en el editor → decía "no tiene foto para analizar" aunque la foto estaba a la vista.)
 async function analizarFotoEditor() {
-  const ref = ((_epMedia.find(m => m.k === 'old')) || {}).v;
-  if (!ref) { showToast('Este producto no tiene foto para analizar'); return; }
   const status = document.getElementById('ep-status');
+  let ref = ((_epMedia.find(m => m.k === 'old')) || {}).v;
+  if (!ref) {
+    const idxNueva = _epMedia.findIndex(m => m.k === 'new' && m.v && m.v.type && m.v.type.startsWith('image/'));
+    if (idxNueva === -1) { showToast('Este producto no tiene foto para analizar — agregale una primero'); return; }
+    status.textContent = 'Subiendo la foto...';
+    try {
+      const formData = new FormData();
+      formData.append('file', _epMedia[idxNueva].v);
+      formData.append('upload_preset', CLOUDINARY_PRESET);
+      formData.append('folder', 'shuk-mamtakim');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      // Ya subida → pasa a "existente": el guardado la incluye sin volver a subirla
+      if (data.public_id) { _epMedia[idxNueva] = { k: 'old', v: data.public_id }; renderFotosEditor(); ref = data.public_id; }
+    } catch (e) {}
+    if (!ref) { status.textContent = '😕 No se pudo subir la foto'; return; }
+  }
   status.textContent = '✨ La IA está mirando la foto...';
   try {
     const d = await fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'analizarFotoProducto', url: ref })).then(r => r.json());
