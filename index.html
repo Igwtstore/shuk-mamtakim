@@ -3586,7 +3586,7 @@ function eliminarDelCarrito(id) {
 
 let _enviando = false, _enviandoManual = false;
 let _registroCallback = null;
-function enviarPedido(_stockVerificado) {
+async function enviarPedido(_stockVerificado) {
   if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
   if (!nombre) { showToast('Ingresá tu nombre'); document.getElementById('nombre-cliente').focus(); return; }
@@ -3639,8 +3639,9 @@ function enviarPedido(_stockVerificado) {
         return;
       }
       _enviando = false;
+      if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }   // restaurar ANTES de la 2ª pasada (si no, captura "Enviando…" como texto original)
       enviarPedido(true);
-    }).catch(() => { _enviando = false; enviarPedido(true); });   // si falla la verificación, no trabar la venta
+    }).catch(() => { _enviando = false; if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; } enviarPedido(true); });   // si falla la verificación, no trabar la venta
     return;
   }
 
@@ -3699,11 +3700,28 @@ function enviarPedido(_stockVerificado) {
   const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
   const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
 
+  // ── El servidor decide PRIMERO (12/07/2026, caso isi #57/#58): si no hay stock el pedido
+  //    NO existe y el carrito queda intacto para corregirlo; si es duplicado, no se re-registra.
+  const _respVenta = await enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY);
+  if (_respVenta && _respVenta.error === 'stock') {
+    _enviando = false;
+    if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
+    alert('😕 Justo nos quedamos sin stock de algo de tu pedido:\n\n' + (_respVenta.detalle || '') + '\n\nAjustá las cantidades y volvé a intentar — te actualizamos el catálogo.');
+    cargarProductos();   // catálogo fresco: era la causa (página vieja abierta)
+    return;              // carrito INTACTO para que corrija
+  }
+  if (_respVenta && _respVenta.error === 'rate') {
+    _enviando = false;
+    if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
+    alert('🕐 Recibimos varios pedidos seguidos desde este dispositivo. Esperá un minutito y volvé a intentar.');
+    return;
+  }
+  const _esDup = !!(_respVenta && _respVenta.dup);
+  if (_esDup) showToast('Este pedido ya lo teníamos registrado ✓ (no se duplicó)');
   localStorage.setItem('shuk_pedido_ts', String(_ahora));
   try { _hist.push(_ahora); localStorage.setItem('shuk_pedido_hist', JSON.stringify(_hist)); } catch {}
   track('pedido', { nombre, ..._cartParaTrack() });
-  registrarPedido(nombre, items, tipoCliente);
-  enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY);
+  if (!_esDup) registrarPedido(nombre, items, tipoCliente);
   try { localStorage.setItem('shuk_ultimo_pedido', JSON.stringify({ hash: _hashPed, ts: Date.now() })); } catch (e) {}   // huella para avisar si reenvía el mismo pedido
 
   items.forEach(item => {
@@ -3770,7 +3788,10 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     vid: _vid()
   });
   if (_estadoTienda === 'cotizacion') params.set('cotizacion', '1');   // no descuenta stock hasta aceptar
-  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
+  // Se ESPERA la respuesta del servidor (antes iba a ciegas con no-cors): así el cliente se entera
+  // si el pedido rebotó por stock o si era un duplicado. null = problema de red (se tolera: el
+  // WhatsApp queda como canal de respaldo, igual que siempre).
+  return fetch(APPS_SCRIPT_URL + '?' + params.toString()).then(r => r.json()).catch(() => null);
 }
 
 function enviarGastoASheet(desc, monto, moneda, categoria, columna) {
@@ -5759,6 +5780,13 @@ function cargarPedidoManual() {
         renderCatalogo();
         renderStockAdmin();
         setTimeout(refreshAdmin, 3000);
+      } else if (data.dup) {
+        showToast('⚠️ Este pedido ya estaba registrado hace un rato (no se duplicó)');
+        _enviandoManual = false;
+      } else if (data.error === 'stock') {
+        alert('🛑 Sin stock suficiente:\n\n' + (data.detalle || '') + '\n\nSi la mercadería está en el estante, cargala primero en 📥 Recibir mercadería.');
+        cargarProductos();
+        _enviandoManual = false;
       } else {
         showToast('Error al guardar: ' + (data.error || 'intentá de nuevo'));
         _enviandoManual = false;

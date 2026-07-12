@@ -1438,6 +1438,35 @@ Deno.serve(async (req) => {
       const esCotizacion = Q('cotizacion') === '1';
       const stockUpdates = Q('stockUpdates');
       const cliente = Q('cliente');
+      // 🛡️ Anti-DUPLICADO servidor (caso real #57/#58 isi michan 12/07/2026: mismo carrito
+      // reenviado 16 min después con el catálogo viejo en el navegador → sobreventa). Mismo
+      // cliente + mismo stock_updates dentro de 30 min y no cancelado = reintento → se devuelve
+      // el pedido EXISTENTE como éxito y NO se crea ni descuenta nada.
+      if (stockUpdates && !esCotizacion) {
+        const desdeDup = new Date(Date.now() - 1800000).toISOString();
+        const prevDup = await sbGet('ventas', 'select=n_venta,estado,cliente&stock_updates=eq.' + encodeURIComponent(stockUpdates) + '&creado=gte.' + encodeURIComponent(desdeDup));
+        const norm = (x: string) => (x || '').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const ya = prevDup.find((x: any) => (x.estado || '') !== 'cancelado' && norm(x.cliente) === norm(cliente));
+        if (ya) return json({ ok: true, dup: true, nVenta: ya.n_venta });
+      }
+      // 🛡️ STOCK NUNCA NEGATIVO (regla del negocio, 12/07/2026: "stock negativo no existe").
+      // Se valida ANTES de registrar: si algo no alcanza, el pedido NO entra y el que compra ve
+      // exactamente qué falta (la alerta de SOBREVENTA queda como red para carreras extremas).
+      if (stockUpdates && !esCotizacion) {
+        const idsChk = stockUpdates.split(',').map((u: string) => (u.split(':')[0] || '').trim()).filter((x: string) => /^\d+$/.test(x));
+        if (idsChk.length) {
+          const stRows = await sbGet('productos', 'select=id,nombre,stock&id=in.(' + idsChk.join(',') + ')');
+          const stMap: any = {}; stRows.forEach((r: any) => { stMap[String(r.id)] = r; });
+          const faltan: string[] = [];
+          for (const u of stockUpdates.split(',')) {
+            const pp = u.split(':'); const pid = (pp[0] || '').trim(), qty = parseInt(pp[1]) || 0;
+            if (!pid || qty <= 0) continue;
+            const st = stMap[pid]; const disp = st ? (parseInt(st.stock) || 0) : 0;
+            if (disp < qty) faltan.push('De "' + (st ? st.nombre : '#' + pid) + '" queda' + (disp === 1 ? '' : 'n') + ' ' + Math.max(0, disp) + ' y pediste ' + qty);
+          }
+          if (faltan.length) return json({ error: 'stock', detalle: faltan.join(' · ') });
+        }
+      }
       const fila: any = { fecha: fechaAhora(), cliente, tipo: Q('tipo'), productos: Q('productos'), forma_pago: Q('formaPago'), notas: Q('notas'), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: QN('totalARS'), total_usd: QN('totalUSD'), ars_jony: QN('arsJONY'), ars_myri: QN('arsMyri'), usd_myri: QN('usdMyri'), comi_ars: QN('comiARS'), comi_usd: QN('comiUSD'), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: QN('usdJONY'), vid: vidVenta };
       // Numeración atómica: índice ÚNICO en n_venta + reintento (la versión SQL del LockService del
       // motor viejo — dos pedidos simultáneos NUNCA toman el mismo número).
