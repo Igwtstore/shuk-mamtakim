@@ -9516,28 +9516,43 @@ function filtrarRecep() {
     </div>`).join('') + _btnCrear;
 }
 // ── Alta de producto SIN salir de "Recibir mercadería" ──
-// No duplica nada: MUDA el card real de "➕ Agregar nuevo producto" (con todos sus campos,
-// fotos, IA, etc.) a un modal, y al cerrar lo devuelve a su lugar en la sección Stock.
-let _npPlaceholder = null;
+// No duplica nada: MUDA los cards reales de "➕ Agregar nuevo producto" y "📥 Bandeja de fotos"
+// (con todos sus campos, fotos, IA, "Usar en alta", etc.) a un modal, y al cerrar los devuelve
+// a su lugar. Mismo ancho que en el panel (se mide el contenedor real, no un ancho fijo).
+let _npMudados = [];   // [{ card, ph }] para devolver cada card a su lugar exacto
 function abrirNpDesdeRecep() {
   const card = document.getElementById('card-nuevo-producto');
   if (!card || document.getElementById('np-modal-recep')) return;
   const q = (document.getElementById('recep-buscar')?.value || '').trim();
-  _npPlaceholder = document.createComment('np-card-lugar');
-  card.parentNode.insertBefore(_npPlaceholder, card);
+  // Ancho REAL del panel: se mide el card de Recibir mercadería (visible al tocar el botón,
+  // mismo ancho que todos los cards del panel) → el modal queda idéntico al form original
+  const _refAncho = document.getElementById('recep-buscar')?.closest('.admin-card');
+  const wPanel = Math.round((_refAncho?.getBoundingClientRect().width) || (card.parentNode.getBoundingClientRect().width) || 0) || 560;
   const ov = document.createElement('div');
   ov.id = 'np-modal-recep';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:700;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:1.2rem 0.8rem';
   const caja = document.createElement('div');
-  caja.style.cssText = 'background:var(--crema,#faf8f4);border-radius:16px;max-width:560px;width:100%;padding:0.4rem;position:relative;margin:auto 0';
+  caja.style.cssText = 'background:var(--crema,#faf8f4);border-radius:16px;max-width:' + Math.min(wPanel, window.innerWidth - 24) + 'px;width:100%;padding:0.4rem;position:relative;margin:auto 0;display:flex;flex-direction:column;gap:0.75rem';
   caja.innerHTML = '<button onclick="cerrarNpDesdeRecep()" style="position:absolute;top:10px;right:12px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--texto-suave);z-index:1">✕</button>';
-  caja.appendChild(card);
-  // El card pertenece a la sección Catálogo: si estamos en Stock, setPanelSeccion lo dejó con
-  // display:none inline y se mudaría INVISIBLE (bug real 2026-07-11) → dentro del modal se ve siempre.
-  card.style.display = '';
+  // Cards que se mudan: el form de alta siempre; la bandeja de la IA solo si no es vista Miri
+  // (misma privacidad que el panel: aplicarPrivacidadPanel la oculta para ella).
+  const aMudar = [card];
+  const bandeja = document.getElementById('card-bandeja');
+  if (bandeja && !(typeof esVistaMiri === 'function' && esVistaMiri())) aMudar.push(bandeja);
+  _npMudados = aMudar.map(c => {
+    const ph = document.createComment('np-card-lugar');
+    c.parentNode.insertBefore(ph, c);
+    caja.appendChild(c);
+    // Los cards pertenecen a la sección Catálogo: parado en Stock, setPanelSeccion los dejó con
+    // display:none inline y se mudarían INVISIBLES (bug real 2026-07-11) → en el modal se ven siempre.
+    c.style.display = '';
+    return { card: c, ph };
+  });
   ov.appendChild(caja);
   document.body.appendChild(ov);
   window._npDesdeRecep = true;
+  // La bandeja solo se carga al entrar a Catálogo → acá se refresca sola al abrir el modal
+  if (bandeja && aMudar.includes(bandeja) && typeof cargarBandeja === 'function') cargarBandeja();
   const nom = document.getElementById('np-nombre');
   if (nom && !nom.value.trim() && q) nom.value = q;   // precarga lo que estaba buscando
   if (nom) nom.focus();
@@ -9546,12 +9561,13 @@ function abrirNpDesdeRecep() {
 }
 function cerrarNpDesdeRecep() {
   const ov = document.getElementById('np-modal-recep');
-  const card = document.getElementById('card-nuevo-producto');
-  if (_npPlaceholder && card) {
-    _npPlaceholder.parentNode.insertBefore(card, _npPlaceholder); _npPlaceholder.remove(); _npPlaceholder = null;
+  _npMudados.forEach(({ card, ph }) => {
+    ph.parentNode.insertBefore(card, ph); ph.remove();
     // De vuelta en su lugar: respetar la sección activa del panel (si no es Catálogo, oculto)
     if (typeof _panelSeccion !== 'undefined') card.style.display = (card.dataset.seccion === _panelSeccion) ? '' : 'none';
-  }
+  });
+  _npMudados = [];
+  if (typeof aplicarPrivacidadPanel === 'function') aplicarPrivacidadPanel();   // re-oculta la bandeja en vista Miri
   if (ov) ov.remove();
   window._npDesdeRecep = false;
 }
