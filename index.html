@@ -4104,11 +4104,12 @@ async function renderPedidos() {
     const pagadoPed = {};
     (pagos || []).forEach(p => {
       if (!p.pedidoId) return;
-      if (!pagadoPed[p.pedidoId]) pagadoPed[p.pedidoId] = { pitz: 0, golARS: 0, golUSD: 0 };
+      if (!pagadoPed[p.pedidoId]) pagadoPed[p.pedidoId] = { pitz: 0, golARS: 0, golUSD: 0, pitzUSD: 0 };
       const mp = parseFloat(p.montoPitz)||0;
       pagadoPed[p.pedidoId].pitz += mp;
       pagadoPed[p.pedidoId].golARS += (parseFloat(p.montoARS)||0) - mp;
       pagadoPed[p.pedidoId].golUSD += (parseFloat(p.montoUSD)||0) - (parseFloat(p.montoPitzUsd)||0);   // U$S golosinas: sin la parte Pitzujim (v3.43)
+      pagadoPed[p.pedidoId].pitzUSD += parseFloat(p.montoPitzUsd)||0;
     });
     const nombresJony = new Set(productos.filter(p => p.dueno === 'Jony').map(p => (p.nombre||'').trim()));
     // Orden EXPLÍCITO por número de venta (no confiar en el orden en que llega la lista),
@@ -4274,11 +4275,12 @@ async function renderPedidos() {
             return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${_cli}',${_uJ})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>`;
           })() : ''}
           ${(estado !== 'cotizacion' && !cobrado && !soloMiri) ? (() => {
-            const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0 };
+            const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0, pitzUSD:0 };
             const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
             const remGolARS = Math.max(0, Math.round(arsM - pg.golARS));
             const remGolUSD = Math.max(0, (usdM - pg.golUSD));
-            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
+            const remPitzUSD = Math.max(0, (_uJ - (pg.pitzUSD||0)));
+            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)},null,${remPitzUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
           })() : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaPedido('${v.id}')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
           <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
@@ -11491,7 +11493,7 @@ function cerrarModalCobro() {
 let _pagoCliente = '', _pagoPedidoId = '';
 // Per-pedido: (cliente, pedidoId, remPitz, remGolARS, remGolUSD) — muestra reparto Pitz/golosinas, default Pitzujim-primero.
 // Per-cliente (deuda total): (cliente, '', 0, netARS, netUSD) — monto único, sin reparto.
-function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx) {
+function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx, remPitzUSD) {
   _pagoCliente = cliente; _pagoPedidoId = pedidoId || '';
   const esPedido = !!_pagoPedidoId;
   // Selector "¿a qué pedido imputar?": solo en deuda total, si el cliente tiene varios pedidos con saldo.
@@ -11518,15 +11520,22 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   document.getElementById('pago-gol').value = '';
   const pci = document.getElementById('pago-comprobante'); if (pci) pci.value = '';
   const pcs = document.getElementById('pago-comprobante-st'); if (pcs) pcs.textContent = '';
-  remPitz = Math.round(remPitz||0); remGolARS = Math.round(remGolARS||0); remGolUSD = parseFloat(remGolUSD||0);
+  remPitz = Math.round(remPitz||0); remGolARS = Math.round(remGolARS||0); remGolUSD = parseFloat(remGolUSD||0); remPitzUSD = parseFloat(remPitzUSD||0);
   if (esPedido) {
-    // Default Pitzujim-primero: prellena Pitzujim con lo que falta, golosinas en 0
+    // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
+    // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
+    // auto-reparto los separa solo al registrar). Golosinas $ queda editable en 0 por el default
+    // Pitzujim-primero de siempre.
     document.getElementById('pago-pitz').value = remPitz > 0 ? remPitz : '';
+    const usdTotal = remPitzUSD + remGolUSD;
+    document.getElementById('pago-usd').value = usdTotal > 0 ? usdTotal.toFixed(2) : '';
     const partes = [];
     if (remPitz > 0) partes.push('Pitzujim $ ' + remPitz.toLocaleString('es-AR'));
+    if (remPitzUSD > 0) partes.push('Pitzujim U$S ' + remPitzUSD.toFixed(2));
     if (remGolARS > 0) partes.push('Golosinas $ ' + remGolARS.toLocaleString('es-AR'));
     if (remGolUSD > 0) partes.push('Golosinas U$S ' + remGolUSD.toFixed(2));
     document.getElementById('pago-sub').textContent = cliente + ' · Debe: ' + (partes.join(' · ') || 'nada');
+    pago_evalTC();   // si ya hay caja elegida, el TC y el total en mano aparecen de una
   } else {
     const partes = [];
     if (remGolARS > 0) partes.push('$ ' + Math.round(remGolARS).toLocaleString('es-AR'));
