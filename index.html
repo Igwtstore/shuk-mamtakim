@@ -1189,6 +1189,17 @@
       <span id="cc-total-badge" style="background:#fde8e8;color:#c0392b;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;display:none"></span>
     </div>
     <div id="cc-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
+    <!-- Pago a cuenta de CUALQUIER cliente (deba o no): p.ej. dejar plata a favor (caso Sarah 2026-07-12,
+         que desapareció de la lista al saldar y no había de dónde cargarle el excedente) -->
+    <div id="cc-pago-libre" style="display:none;margin-top:0.6rem;border-top:1px dashed var(--gris-medio);padding-top:0.6rem">
+      <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+        <input type="text" id="cc-pago-cliente" list="cc-clientes-list" placeholder="Cliente (aunque no deba nada)…"
+          style="flex:1;min-width:180px;padding:0.45rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.82rem;outline:none;box-sizing:border-box" />
+        <datalist id="cc-clientes-list"></datalist>
+        <button onclick="abrirPagoLibre()" style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:8px;padding:0.45rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer">💵 Pago a cuenta / a favor</button>
+      </div>
+      <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.25rem">Para registrar plata a favor (adelantos) o pagos de clientes que no aparecen arriba.</div>
+    </div>
   </div>
 
   <div class="admin-card" data-seccion="ventas">
@@ -3988,6 +3999,11 @@ async function renderCuentaCorriente() {
         d.jonyUSD -= pg.pitzU; d.miriUSD -= (soloMiri ? pg.usd : (pg.usd - pg.pitzU));   // U$S separado por el reparto guardado
       }
     });
+    // Pago libre: lista de TODOS los clientes (aunque estén saldados) + visible solo en vista Jony
+    const _dlCC = document.getElementById('cc-clientes-list');
+    if (_dlCC) _dlCC.innerHTML = Object.values(porCliente).map(d => `<option value="${esc(d.nombre)}"></option>`).join('');
+    const _pagoLibre = document.getElementById('cc-pago-libre');
+    if (_pagoLibre) _pagoLibre.style.display = soloMiri ? 'none' : '';
     // Quitar los que quedaron saldados
     const entries = Object.values(porCliente).filter(d => d.totalARS > 1 || d.totalUSD > 0.01);
     if (!entries.length) {
@@ -11493,6 +11509,12 @@ function cerrarModalCobro() {
 let _pagoCliente = '', _pagoPedidoId = '';
 // Per-pedido: (cliente, pedidoId, remPitz, remGolARS, remGolUSD) — muestra reparto Pitz/golosinas, default Pitzujim-primero.
 // Per-cliente (deuda total): (cliente, '', 0, netARS, netUSD) — monto único, sin reparto.
+// Pago a cuenta "libre": cliente elegido a mano (sirve aunque no tenga deuda → queda a favor)
+function abrirPagoLibre() {
+  const nom = (document.getElementById('cc-pago-cliente')?.value || '').trim();
+  if (!nom) { showToast('Escribí o elegí el cliente'); return; }
+  abrirPagoCuenta(nom, '', 0, 0, 0);
+}
 function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx, remPitzUSD) {
   _pagoCliente = cliente; _pagoPedidoId = pedidoId || '';
   const esPedido = !!_pagoPedidoId;
