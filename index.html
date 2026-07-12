@@ -108,6 +108,8 @@
   }
   body.dark .header { background: #0d0d1a; }
   body.dark .admin-card, body.dark .producto-card { background: #1f2937; border: 1px solid #374151; }
+  body.dark .producto-card { border: 2px dashed #6b5a35; }
+  body.dark .producto-card:hover { border-color: #d4a017; }
   body.dark .producto-img { background: #111827; }
   body.dark .buscador, body.dark input, body.dark select, body.dark textarea { background: #1f2937; color: var(--texto); border-color: #374151; }
   body.dark table th { background: #111827; }
@@ -259,15 +261,16 @@
 
   .producto-card {
     background: var(--blanco);
-    border-radius: var(--radio);
+    border: 2px dashed #cfa96b;   /* etiqueta de feria recortada (diseño C, 2026-07-11) */
+    border-radius: 8px;
     overflow: hidden;
     box-shadow: var(--sombra);
     display: flex;
     flex-direction: column;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     position: relative;
   }
-  .producto-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(26,26,46,0.13); }
+  .producto-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(26,26,46,0.16); border-color: #d4a017; }
   .producto-card.agotado { opacity: 0.72; }
 
   .badge-agotado {
@@ -297,15 +300,16 @@
 
   .producto-img-wrap {
     position: relative;
-    width: 100%;
+    margin: 8px 8px 0;
     height: 220px;
     overflow: hidden;
+    border-radius: 6px;
   }
   .producto-img {
     width: 100%;
     height: 220px;
     object-fit: contain;
-    background: var(--blanco);
+    background: #faf6ec;
     display: block;
     padding: 0.5rem;
   }
@@ -386,6 +390,46 @@
     margin-top: 0.4rem;
   }
   .producto-precio.pesos { color: var(--dorado); }
+  /* Cartelito de precio "colgado" (diseño C): torcido apenas, con su agujerito */
+  .precio-cartel {
+    display: inline-block;
+    align-self: center;
+    background: #fff8e6;
+    border: 1.5px solid #d4a017;
+    border-radius: 4px;
+    padding: 3px 15px 5px;
+    transform: rotate(-2deg);
+    position: relative;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.10);
+    margin-top: 0.45rem;
+  }
+  .precio-cartel::before {
+    content: "";
+    position: absolute;
+    top: -5px; left: 50%;
+    width: 8px; height: 8px;
+    background: var(--blanco);
+    border: 1.5px solid #d4a017;
+    border-radius: 50%;
+    transform: translateX(-50%);
+  }
+  .precio-cartel .producto-precio { margin-top: 0; font-size: 1.22rem; font-weight: 800; letter-spacing: -0.01em; }
+  body.dark .precio-cartel { background: #3d3416; }
+  .sello-oferta {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: var(--verde);
+    color: #fff;
+    border-radius: 50%;
+    width: 54px; height: 54px;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    font-size: 0.55rem; font-weight: 800; line-height: 1.2;
+    transform: rotate(-8deg);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    border: 2px dashed rgba(255,255,255,0.55);
+    z-index: 3;
+  }
 
   .producto-controles {
     padding: 0.7rem 1rem 1rem;
@@ -406,7 +450,7 @@
     transition: background 0.15s, border-color 0.15s;
     font-weight: 500;
   }
-  .qty-btn:hover:not(:disabled) { background: var(--azul); color: white; border-color: var(--azul); }
+  .qty-btn:hover:not(:disabled) { background: #b85c38; color: white; border-color: #b85c38; }
   .qty-btn:disabled { opacity: 0.3; cursor: not-allowed; }
   .qty-num {
     min-width: 28px;
@@ -417,7 +461,7 @@
   .agregar-btn {
     flex: 1;
     padding: 0.5rem;
-    background: var(--azul);
+    background: #b85c38;   /* terracota de feria (diseño C) */
     color: white;
     border: none;
     border-radius: 8px;
@@ -427,7 +471,7 @@
     cursor: pointer;
     transition: background 0.15s, transform 0.1s;
   }
-  .agregar-btn:hover:not(:disabled) { background: #2d2d50; }
+  .agregar-btn:hover:not(:disabled) { background: #9d4c2d; }
   .agregar-btn:active:not(:disabled) { transform: scale(0.97); }
   .agregar-btn:disabled { background: var(--gris-medio); color: var(--texto-suave); cursor: not-allowed; }
   .agregar-btn.en-carrito { background: var(--verde); }
@@ -886,6 +930,11 @@
 <div style="max-width:1000px;margin:0 auto;text-align:right;padding:8px 22px 0;font-size:0.85rem;color:#9a9a9a;font-weight:700">בס״ד</div>
 
 <!-- CATÁLOGO -->
+<style>
+  /* Fondo de feria (diseño C): rayas finas al bies, solo en la tienda (el panel queda sobrio) */
+  #catalogo-section { background: repeating-linear-gradient(45deg, #f4efe3 0, #f4efe3 12px, #efe8d9 12px, #efe8d9 24px); padding-bottom: 1.5rem; }
+  body.dark #catalogo-section { background: repeating-linear-gradient(45deg, #14131c 0, #14131c 12px, #17161f 12px, #17161f 24px); }
+</style>
 <div id="catalogo-section">
   <div class="recato-banner" id="recato-banner">
     <span id="recato-banner-txt">📵 <strong>Parece que tu teléfono no está mostrando las fotos.</strong> Podemos mostrarte la tienda en <strong>modo solo texto</strong>, con todos los precios.</span>
@@ -2904,6 +2953,7 @@ function renderCatalogo() {
     return `
     <div class="producto-card ${agotado ? 'agotado' : ''}" id="card-${p.id}">
       ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
+      ${!agotado && ofertaActiva(p) ? '<div class="sello-oferta">¡OFERTA<br>DEL DÍA!</div>' : ''}
       <button class="share-btn" onclick="compartirProducto(${p.id})" title="Compartir">📤</button>
       ${renderImg(p)}
       <div class="producto-info">
@@ -2911,11 +2961,9 @@ function renderCatalogo() {
         <div class="producto-desc">${p.desc}</div>
         ${kosherHtml}
         ${ofertaActiva(p) ? `
-        <div style="display:flex;align-items:baseline;gap:0.4rem;flex-wrap:wrap">
-          <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.82rem">${precio}</span>
-          <span class="producto-precio ${esPeso ? 'pesos' : ''}" style="color:#c0392b">${esPeso ? '$ '+Math.round(p.precioOferta).toLocaleString('es-AR') : 'U$S '+p.precioOferta.toFixed(2)}</span>
-          <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase">Oferta</span>
-        </div>` : `<div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div>`}
+        <div class="precio-cartel" style="border-color:#c0392b">
+          <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.8rem;margin-right:0.4rem">${precio}</span><span class="producto-precio" style="color:#c0392b">${esPeso ? '$ '+Math.round(p.precioOferta).toLocaleString('es-AR') : 'U$S '+p.precioOferta.toFixed(2)}</span>
+        </div>` : `<div class="precio-cartel"><div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div></div>`}
         ${packActivo(p) ? `<div style="background:#fdf3e3;border-radius:6px;padding:3px 8px;font-size:0.75rem;color:var(--dorado);font-weight:600;margin-top:3px">🎁 x${p.cantPack} → ${esPeso ? '$ '+Math.round(p.precioPack).toLocaleString('es-AR') : 'U$S '+p.precioPack.toFixed(2)} c/u</div>` : ''}
       </div>
       ${agotado ? `
