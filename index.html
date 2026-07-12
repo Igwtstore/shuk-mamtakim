@@ -110,7 +110,7 @@
   body.dark .admin-card, body.dark .producto-card { background: #1f2937; border: 1px solid #374151; }
   body.dark .producto-card { border: 2px dashed #6b5a35; }
   body.dark .producto-card:hover { border-color: #d4a017; }
-  body.dark .producto-img { background: #111827; }
+  body.dark .producto-img-wrap { background: #ece5d3; }   /* vidriera clara: el multiply sigue fundiendo el blanco */
   body.dark .buscador, body.dark input, body.dark select, body.dark textarea { background: #1f2937; color: var(--texto); border-color: #374151; }
   body.dark table th { background: #111827; }
 
@@ -304,12 +304,15 @@
     height: 220px;
     overflow: hidden;
     border-radius: 6px;
+    background: #faf6ec;
   }
   .producto-img {
     width: 100%;
     height: 220px;
     object-fit: contain;
-    background: #faf6ec;
+    background: transparent;
+    /* el blanco de la foto se FUNDE con el crema del marco → packshots como recortes sin fondo */
+    mix-blend-mode: multiply;
     display: block;
     padding: 0.5rem;
   }
@@ -3050,13 +3053,13 @@ function imgUrl(filename) {
     return [u, filename, filename, filename];
   }
   if (isCloudinaryId(filename)) {
-    const url = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/${filename}`;
+    const url = `${CLOUDINARY_BASE}/e_trim:10/w_400,f_auto,q_auto/${filename}`;
     return [url, url, url, url];
   }
   // Fallbacks via Cloudinary (auto-upload mapping → GitHub)
   const ext = filename.split('.').pop().toLowerCase();
   const sinExt = filename.replace(/\.[^.]+$/, '');
-  const cl = `${CLOUDINARY_BASE}/w_400,f_auto,q_auto/shuk-mamtakim/`;
+  const cl = `${CLOUDINARY_BASE}/e_trim:10/w_400,f_auto,q_auto/shuk-mamtakim/`;
   return [
     cl + filename,
     cl + sinExt + '.' + ext.toUpperCase() + '.' + ext,
