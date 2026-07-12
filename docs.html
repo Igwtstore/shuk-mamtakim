@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.60</title>
+<title>Shuk Mamtakim — Documentación v3.61</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.61</td><td>Jul 2026</td><td><strong>📐 Tarjetas parejas en el catálogo.</strong> Detalle estético cazado por el usuario: la tarjeta del Blondi Shamenet (y toda su fila) quedaba más alta porque los chips kosher largos ("Lácteo · Jalav Israel" + supervisión) saltaban a dos renglones y el nombre a dos líneas. Ahora: chip lácteo compacto (el 🥛 ya dice lácteo → "🥛 Jalav Israel"), zona de chips SIEMPRE presente, centrada y de una línea (con o sin chips), y altura reservada para nombre (2 líneas, centrado si ocupa una) y descripción (2 líneas). Las filas quedan iguales y cartelitos/botones alineados. Verificado con las fotos y productos reales + screenshot revisado (chips del Blondi en una línea, filas parejas).</td></tr>
       <tr><td>v3.60</td><td>Jul 2026</td><td><strong>✡️ Hashgajá con desplegable inteligente.</strong> El campo de supervisión (alta de producto, editor y vista Kosher del masivo) ahora sugiere las supervisiones YA usadas en el catálogo — tocás y elegís (Badatz Ierushalaim, Igur Harabanim…) o escribís una nueva. No hay nada que administrar: al guardar un producto con una supervisión nueva, entra sola a la lista; sin repetidos (aunque se escriba con mayúsculas distintas) y en orden alfabético. Verificado 6/6 contra el catálogo real.</td></tr>
       <tr><td>v3.59</td><td>Jul 2026</td><td><strong>🖼️ Las fotos con fondo blanco se funden con el marco crema (quedan "sin fondo").</strong> Feedback del usuario sobre v3.58: los packshots de paquetes (Chocolate Elite, Blondi, Mix…) mostraban su rectángulo blanco flotando sobre el marco crema de la tarjeta. Ahora: (1) la foto se funde con el fondo del marco (mix-blend-mode multiply) — el blanco desaparece y el paquete queda como recorte, sin editar ninguna foto; (2) e_trim de Cloudinary en TODAS las variantes de URL (recorta los bordes blancos sobrantes para que el producto llene el marco; en fotos de escena real no hace nada); (3) en modo oscuro el marco de la foto queda claro tipo vidriera para que el fundido siga funcionando. Verificado con las 97 fotos reales del catálogo (todas cargan, screenshot revisado de los chocolates problema).</td></tr>
       <tr><td>v3.58</td><td>Jul 2026</td><td><strong>🎨 La tienda con onda de feria (diseño "C", elegido por el usuario entre 5 maquetas).</strong> El catálogo dejó el look sobrio: tarjetas tipo etiqueta de mercado recortada (borde punteado dorado que se enciende al pasar por arriba, con levantada), foto sobre fondo crema enmarcada, el precio en un cartelito "colgado" (torcido apenas, con su agujerito) 20% más grande, botón Agregar terracota, sello redondo verde "¡OFERTA DEL DÍA!" sobre la foto de los productos en oferta (el precio viejo tachado + el nuevo en rojo dentro del cartel), y fondo con textura de rayas finas al bies solo en la zona de la tienda (el panel admin sigue sobrio). Los chips kosher (Parve/Lácteo + supervisión) quedan como estaban. Modo oscuro y modo recato adaptados; el PDF de impresión no cambia. Verificado headless 8/8 + screenshot revisado.</td></tr>
@@ -797,7 +798,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.60 · Julio 2026 · Uso interno
+  Documentación v3.61 · Julio 2026 · Uso interno
 </div>
 
 </div>

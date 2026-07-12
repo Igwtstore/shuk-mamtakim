@@ -379,12 +379,18 @@
     font-weight: 600;
     color: var(--azul);
     line-height: 1.25;
+    /* altura reservada de 2 líneas (centrado si ocupa 1) → filas parejas */
+    min-height: 2.5em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .producto-desc {
     font-size: 0.78rem;
     color: var(--texto-suave);
     line-height: 1.4;
     flex: 1;
+    min-height: 2.8em;   /* 2 líneas reservadas → filas parejas */
   }
   .producto-precio {
     font-size: 1.05rem;
@@ -2961,12 +2967,12 @@ function renderCatalogo() {
     // Chapitas kosher: Parve/Lácteo (con Jalav integrado) + hashgajá — solo si están cargadas
     const kBadges = [];
     if (p.kosherTipo === 'Parve') kBadges.push(['#e8f6ec', '#1e7a3c', '🌿 Parve']);
-    else if (p.kosherTipo === 'Lácteo') kBadges.push(['#eef4fb', '#1a5c8a', '🥛 Lácteo' + (p.jalav ? ' · ' + p.jalav : '')]);
+    else if (p.kosherTipo === 'Lácteo') kBadges.push(['#eef4fb', '#1a5c8a', p.jalav ? '🥛 ' + p.jalav : '🥛 Lácteo']);
     else if (p.jalav) kBadges.push(['#eef4fb', '#1a5c8a', '🥛 ' + p.jalav]);
     if (p.hashgaja) kBadges.push(['#fdf3e3', '#8a5a1e', '✡️ ' + p.hashgaja]);
-    const kosherHtml = kBadges.length
-      ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin:2px 0 1px">${kBadges.map(b => `<span style="background:${b[0]};color:${b[1]};font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:4px">${b[2]}</span>`).join('')}</div>`
-      : '';
+    // Zona kosher SIEMPRE renderizada (con o sin chips) y de UNA línea: las tarjetas quedan
+    // parejas entre filas (antes "Lácteo · Jalav Israel" + supervisión saltaban a 2 renglones).
+    const kosherHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:2px 0 1px;min-height:19px">${kBadges.map(b => `<span style="background:${b[0]};color:${b[1]};font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">${b[2]}</span>`).join('')}</div>`;
     return `
     <div class="producto-card ${agotado ? 'agotado' : ''}" id="card-${p.id}">
       ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
