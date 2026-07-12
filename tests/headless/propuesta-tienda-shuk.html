@@ -1,0 +1,303 @@
+<title>Tienda Shuk — 3 estilos de tarjeta</title>
+<style>
+  :root {
+    --fondo: #f3f0e9;
+    --tinta: #1a1a2e;
+    --suave: #6b6b7a;
+    --card: #ffffff;
+    --borde: #e6e2d8;
+    --dorado: #b8860b;
+    --dorado-vivo: #d4a017;
+    --crema-foto: #faf6ec;
+    --verde: #1a7a3c;
+    --rojo: #c0392b;
+    --sombra: 0 2px 10px rgba(26,26,46,0.07);
+    --sombra-fuerte: 0 6px 22px rgba(26,26,46,0.13);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fondo:#16151d; --tinta:#f0ede4; --suave:#a8a5b3; --card:#232230; --borde:#3a384a;
+            --crema-foto:#2c2a3a; --sombra:0 2px 10px rgba(0,0,0,0.35); --sombra-fuerte:0 6px 22px rgba(0,0,0,0.5); }
+  }
+  :root[data-theme="dark"] { --fondo:#16151d; --tinta:#f0ede4; --suave:#a8a5b3; --card:#232230; --borde:#3a384a;
+            --crema-foto:#2c2a3a; --sombra:0 2px 10px rgba(0,0,0,0.35); --sombra-fuerte:0 6px 22px rgba(0,0,0,0.5); }
+  :root[data-theme="light"] { --fondo:#f3f0e9; --tinta:#1a1a2e; --suave:#6b6b7a; --card:#ffffff; --borde:#e6e2d8;
+            --crema-foto:#faf6ec; --sombra:0 2px 10px rgba(26,26,46,0.07); --sombra-fuerte:0 6px 22px rgba(26,26,46,0.13); }
+
+  body { background: var(--fondo); color: var(--tinta); font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         margin: 0; padding: 1.5rem 1rem 4rem; line-height: 1.5; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 1.7rem; margin: 0 0 0.3rem; text-wrap: balance; }
+  .sub { color: var(--suave); font-size: 0.92rem; max-width: 62ch; margin-bottom: 2.2rem; }
+  .sub b { color: var(--dorado); }
+
+  section { margin-bottom: 3rem; }
+  .sec-tag { display: inline-block; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+             padding: 3px 10px; border-radius: 20px; margin-bottom: 0.5rem; }
+  .tag-hoy { background: #d8d5cc; color: #55524a; }
+  .tag-a { background: #e8f0fd; color: #2f5fb3; }
+  .tag-b { background: linear-gradient(90deg, #b8860b, #d4a017); color: #fff; }
+  section h2 { font-family: Georgia, serif; font-size: 1.25rem; margin: 0 0 0.25rem; }
+  .nota { color: var(--suave); font-size: 0.85rem; max-width: 68ch; margin: 0 0 1.1rem; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; }
+
+  /* imagen simulada (emoji): en la tienda real van las fotos de siempre */
+  .foto { height: 130px; display: flex; align-items: center; justify-content: center; font-size: 3.2rem; }
+
+  /* ── HOY ── */
+  .c0 { background: var(--card); border: 1px solid var(--borde); border-radius: 10px; overflow: hidden; }
+  .c0 .foto { background: var(--card); }
+  .c0 .cuerpo { padding: 10px 12px 12px; text-align: center; }
+  .c0 .nom { font-family: Georgia, serif; font-weight: 700; font-size: 0.92rem; }
+  .c0 .desc { font-size: 0.72rem; color: var(--suave); margin: 2px 0 6px; }
+  .c0 .precio { color: var(--dorado); font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; }
+  .c0 .btn { background: var(--tinta); color: var(--fondo); border: none; border-radius: 8px; padding: 7px 0;
+             width: 100%; font-weight: 700; font-size: 0.8rem; }
+  @media (prefers-color-scheme: dark) { .c0 .btn { background:#f0ede4; color:#1a1a2e; } }
+
+  /* ── OPCIÓN A: marco presente ── */
+  .cA { background: var(--card); border: 2px solid var(--borde); border-radius: 14px; overflow: hidden;
+        box-shadow: var(--sombra); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+  .cA:hover { transform: translateY(-3px); box-shadow: var(--sombra-fuerte); border-color: var(--dorado-vivo); }
+  .cA .foto { background: var(--crema-foto); border-bottom: 1px solid var(--borde); }
+  .cA .cuerpo { padding: 11px 13px 13px; text-align: center; }
+  .cA .nom { font-family: Georgia, serif; font-weight: 700; font-size: 0.94rem; }
+  .cA .desc { font-size: 0.72rem; color: var(--suave); margin: 2px 0 8px; }
+  .cA .precio { color: var(--dorado); font-weight: 800; font-size: 1.18rem; margin-bottom: 9px; letter-spacing: -0.01em; }
+  .cA .btn { background: var(--tinta); color: #fff; border: none; border-radius: 9px; padding: 8px 0; width: 100%;
+             font-weight: 700; font-size: 0.82rem; }
+  :root[data-theme="dark"] .cA .btn, .cA .btn { }
+  @media (prefers-color-scheme: dark) { .cA .btn { background:#f0ede4; color:#1a1a2e; } }
+
+  /* ── OPCIÓN B: con onda ── */
+  .cB { background: var(--card); border: 1.5px solid var(--borde); border-top: 4px solid var(--dorado-vivo);
+        border-radius: 16px; overflow: hidden; box-shadow: var(--sombra); position: relative;
+        transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .cB:hover { transform: translateY(-4px) rotate(-0.3deg); box-shadow: var(--sombra-fuerte); }
+  .cB .foto { background: radial-gradient(circle at 30% 20%, var(--crema-foto), var(--card)); }
+  .cB .cuerpo { padding: 11px 13px 14px; text-align: center; }
+  .cB .nom { font-family: Georgia, serif; font-weight: 700; font-size: 0.95rem; }
+  .cB .desc { font-size: 0.72rem; color: var(--suave); margin: 2px 0 8px; }
+  .cB .kosher { display: flex; gap: 5px; justify-content: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .chip { font-size: 0.62rem; font-weight: 800; padding: 2px 8px; border-radius: 12px; }
+  .chip-parve { background: #e6f4ea; color: var(--verde); }
+  .chip-badatz { background: #fdf3dc; color: var(--dorado); }
+  .cB .precio-pill { display: inline-block; background: linear-gradient(90deg, #fdf3dc, #faeac2); color: #8a6508;
+                     font-weight: 800; font-size: 1.15rem; padding: 4px 16px; border-radius: 22px; margin-bottom: 10px; }
+  @media (prefers-color-scheme: dark) { .cB .precio-pill { background: linear-gradient(90deg,#4a3d18,#5c4c1e); color:#f4d47c; } }
+  .cB .btn { background: linear-gradient(120deg, #b8860b, #d4a017); color: #fff; border: none; border-radius: 22px;
+             padding: 9px 0; width: 100%; font-weight: 800; font-size: 0.84rem; box-shadow: 0 2px 8px rgba(184,134,11,0.35); }
+  .cinta { position: absolute; top: 12px; left: -34px; transform: rotate(-40deg); background: var(--rojo); color: #fff;
+           font-size: 0.62rem; font-weight: 800; padding: 3px 38px; letter-spacing: 0.06em; }
+
+  .chips-demo { display: flex; gap: 8px; flex-wrap: wrap; margin: 0.4rem 0 1.1rem; }
+  .catchip { border: 1.5px solid var(--borde); background: var(--card); border-radius: 20px; padding: 6px 14px;
+             font-size: 0.8rem; font-weight: 700; color: var(--suave); }
+  .catchip.on { background: var(--tinta); color: var(--fondo); border-color: var(--tinta); }
+  @media (prefers-color-scheme: dark) { .catchip.on { background:#f0ede4; color:#1a1a2e; border-color:#f0ede4; } }
+
+  /* ── OPCIÓN C: mercado / feria ── */
+  .tag-c { background: #f3d9b8; color: #8a5a1e; }
+  .zonaC { background: repeating-linear-gradient(45deg, #efe7d8 0, #efe7d8 12px, #ece2d0 12px, #ece2d0 24px);
+           border-radius: 18px; padding: 16px; }
+  @media (prefers-color-scheme: dark) { .zonaC { background: repeating-linear-gradient(45deg,#242130 0,#242130 12px,#282436 12px,#282436 24px); } }
+  .cC { background: var(--card); border: 2px dashed #c9a86a; border-radius: 6px; overflow: visible; position: relative;
+        box-shadow: var(--sombra); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+  .cC:hover { transform: translateY(-4px); box-shadow: var(--sombra-fuerte); border-color: #d4a017; }
+  .cC .kosher { display: flex; gap: 5px; justify-content: center; margin-bottom: 9px; flex-wrap: wrap; }
+  .chip-lacteo { background: #e4eefb; color: #2f5fb3; }
+  @media (prefers-color-scheme: dark) { .chip-lacteo { background:#243550; color:#9dbdf2; } }
+  .cC .foto { background: var(--crema-foto); margin: 8px 8px 0; border-radius: 4px; }
+  .cC .cuerpo { padding: 10px 12px 14px; text-align: center; }
+  .cC .nom { font-family: Georgia, serif; font-weight: 700; font-size: 0.95rem; }
+  .cC .desc { font-size: 0.72rem; color: var(--suave); margin: 2px 0 10px; }
+  .cC .cartel { display: inline-block; background: #fff8e6; border: 1.5px solid #d4a017; border-radius: 4px;
+                padding: 3px 14px 4px; transform: rotate(-2deg); margin-bottom: 10px; position: relative;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.12); }
+  @media (prefers-color-scheme: dark) { .cC .cartel { background:#3d3416; } }
+  .cC .cartel::before { content: ""; position: absolute; top: -5px; left: 50%; width: 8px; height: 8px;
+                        background: var(--fondo); border: 1.5px solid #d4a017; border-radius: 50%; transform: translateX(-50%); }
+  .cC .cartel .num { font-size: 1.3rem; font-weight: 900; color: #a06a00; letter-spacing: -0.02em; }
+  @media (prefers-color-scheme: dark) { .cC .cartel .num { color:#f4d47c; } }
+  .cC .cartel .por { font-size: 0.6rem; font-weight: 700; color: var(--suave); text-transform: uppercase; letter-spacing: 0.08em; }
+  .cC .btn { background: #b85c38; color: #fff; border: none; border-radius: 6px; padding: 9px 0; width: 100%;
+             font-weight: 800; font-size: 0.84rem; }
+  .sello { position: absolute; top: -10px; right: -8px; background: #1a7a3c; color: #fff; border-radius: 50%;
+           width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; text-align: center;
+           font-size: 0.5rem; font-weight: 800; line-height: 1.15; transform: rotate(8deg); box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+           border: 2px dashed rgba(255,255,255,0.55); }
+
+  /* ── OPCIÓN D: vidriera oscura premium ── */
+  .tag-d { background: #1a1a2e; color: #d4a017; }
+  .cD { background: #201f30; border: 1px solid #35334a; border-radius: 16px; overflow: hidden;
+        box-shadow: 0 8px 26px rgba(10,10,25,0.35); transition: transform 0.15s ease, border-color 0.15s ease; }
+  .cD:hover { transform: translateY(-3px); border-color: #d4a017; }
+  .cD .foto { background: #f6f1e4; margin: 10px; border-radius: 10px; height: 122px; }
+  .cD .cuerpo { padding: 4px 14px 15px; text-align: center; }
+  .cD .nom { font-family: Georgia, serif; font-weight: 700; font-size: 0.95rem; color: #f4f0e6; }
+  .cD .desc { font-size: 0.72rem; color: #9a97ab; margin: 2px 0 9px; }
+  .cD .precio { color: #e8b93c; font-weight: 800; font-size: 1.22rem; margin-bottom: 10px;
+                text-shadow: 0 0 18px rgba(232,185,60,0.35); }
+  .cD .btn { background: transparent; color: #e8b93c; border: 1.5px solid #e8b93c; border-radius: 22px;
+             padding: 8px 0; width: 100%; font-weight: 800; font-size: 0.82rem; transition: background 0.15s, color 0.15s; }
+  .cD .btn:hover { background: #e8b93c; color: #1a1a2e; }
+
+  /* ── OPCIÓN E: color por categoría ── */
+  .tag-e { background: linear-gradient(90deg, #b85c38, #7b4a2d 40%, #d4547a); color: #fff; }
+  .cE { background: var(--card); border: 1.5px solid var(--borde); border-radius: 16px; overflow: hidden;
+        box-shadow: var(--sombra); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .cE:hover { transform: translateY(-3px); box-shadow: var(--sombra-fuerte); }
+  .cE .banda { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+               color: #fff; padding: 4px 12px; display: flex; justify-content: space-between; }
+  .cE .foto { background: var(--crema-foto); }
+  .cE .cuerpo { padding: 10px 13px 14px; text-align: center; }
+  .cE .nom { font-family: Georgia, serif; font-weight: 700; font-size: 0.94rem; }
+  .cE .desc { font-size: 0.72rem; color: var(--suave); margin: 2px 0 8px; }
+  .cE .precio { font-weight: 800; font-size: 1.15rem; margin-bottom: 9px; }
+  .cE .btn { color: #fff; border: none; border-radius: 10px; padding: 9px 0; width: 100%; font-weight: 800; font-size: 0.83rem; }
+  .e-pitz .banda, .e-pitz .btn { background: #b85c38; } .e-pitz .precio { color: #b85c38; }
+  .e-choc .banda, .e-choc .btn { background: #7b4a2d; } .e-choc .precio { color: #7b4a2d; }
+  .e-cara .banda, .e-cara .btn { background: #d4547a; } .e-cara .precio { color: #d4547a; }
+  @media (prefers-color-scheme: dark) {
+    .e-pitz .precio { color:#e08b62; } .e-choc .precio { color:#c48a62; } .e-cara .precio { color:#f087ab; }
+  }
+  .chips-e { display: flex; gap: 8px; flex-wrap: wrap; margin: 0.4rem 0 1.1rem; }
+  .chips-e .catchip.p { background: #b85c38; color: #fff; border-color: #b85c38; }
+  .chips-e .catchip.ch { background: #7b4a2d; color: #fff; border-color: #7b4a2d; }
+  .chips-e .catchip.ca { background: #d4547a; color: #fff; border-color: #d4547a; }
+
+  ul.cambios { font-size: 0.85rem; color: var(--suave); max-width: 68ch; padding-left: 1.2rem; margin-top: 1rem; }
+  ul.cambios li { margin-bottom: 3px; }
+  ul.cambios b { color: var(--tinta); }
+  .veredicto { background: var(--card); border: 1.5px solid var(--dorado-vivo); border-radius: 14px;
+               padding: 1rem 1.2rem; font-size: 0.9rem; max-width: 72ch; box-shadow: var(--sombra); }
+  .veredicto b { color: var(--dorado); }
+  @media (prefers-reduced-motion: reduce) { .cA, .cB, .cC, .cA:hover, .cB:hover, .cC:hover { transition: none; transform: none; } }
+</style>
+<div class="wrap">
+  <h1>🍬 La tienda con más onda — 3 niveles, mismos productos</h1>
+  <div class="sub">Maqueta para comparar, <b>sin tocar la tienda real</b>. Las fotos acá son emojis de mentira;
+  en la tienda van las tuyas de siempre. Pasá el mouse (o el dedo) por las tarjetas de A y B.</div>
+
+  <section>
+    <span class="sec-tag tag-hoy">Hoy</span>
+    <h2>Como está ahora</h2>
+    <p class="nota">Prolija, pero todo blanco sobre gris: las tarjetas casi no se despegan del fondo, el precio queda chico y el botón es igual de serio que el resto.</p>
+    <div class="grid">
+      <div class="c0"><div class="foto">🥜</div><div class="cuerpo"><div class="nom">Pitzujim-Almendras Caramelizadas</div><div class="desc">Almendras Caramelizadas Israelies (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="c0"><div class="foto">🌰</div><div class="cuerpo"><div class="nom">Pitzujim-Nueces Pecán Dubai</div><div class="desc">Cubiertas con pistacho y Kadaifi (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="c0"><div class="foto">🍫</div><div class="cuerpo"><div class="nom">Chocolate Elite</div><div class="desc">Blanco con galletitas – Ugiot (100g)</div><div class="precio">$ 10.000</div><button class="btn">Agregar</button></div></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="sec-tag tag-a">Opción A</span>
+    <h2>Marco presente — lo que vos sugeriste</h2>
+    <p class="nota">Cambio quirúrgico: las tarjetas toman cuerpo y el precio manda. Nadie nota "el rediseño", pero la tienda se siente más premium.</p>
+    <div class="grid">
+      <div class="cA"><div class="foto">🥜</div><div class="cuerpo"><div class="nom">Pitzujim-Almendras Caramelizadas</div><div class="desc">Almendras Caramelizadas Israelies (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="cA"><div class="foto">🌰</div><div class="cuerpo"><div class="nom">Pitzujim-Nueces Pecán Dubai</div><div class="desc">Cubiertas con pistacho y Kadaifi (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="cA"><div class="foto">🍫</div><div class="cuerpo"><div class="nom">Chocolate Elite</div><div class="desc">Blanco con galletitas – Ugiot (100g)</div><div class="precio">$ 10.000</div><button class="btn">Agregar</button></div></div>
+    </div>
+    <ul class="cambios">
+      <li><b>Marco de 2px + sombra suave</b> — la tarjeta se despega del fondo (tu idea).</li>
+      <li><b>Al pasar por arriba se levanta</b> y el borde se pinta de dorado.</li>
+      <li><b>Foto sobre fondo crema</b>, separada del texto por una línea fina.</li>
+      <li><b>Precio 25% más grande</b> — es lo que vende.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="sec-tag tag-b">Opción B</span>
+    <h2>Con onda — acento dorado de la marca</h2>
+    <p class="nota">Todo lo de A, más identidad: techo dorado en cada tarjeta, precio en etiqueta, botón dorado, chips kosher a la vista y cinta de OFERTA cuando corresponde. Los filtros de arriba ganan emoji:</p>
+    <div class="chips-demo">
+      <span class="catchip on">Todos</span><span class="catchip">🥜 Pitzujim</span><span class="catchip">🍫 Chocolate</span><span class="catchip">🍬 Caramelo</span><span class="catchip">🍭 Chupetín</span><span class="catchip">🫧 Yumi</span><span class="catchip">🥨 Snacks</span>
+    </div>
+    <div class="grid">
+      <div class="cB"><div class="cinta">OFERTA</div><div class="foto">🥜</div><div class="cuerpo"><div class="nom">Pitzujim-Almendras Caramelizadas</div><div class="desc">Almendras Caramelizadas Israelies (100g)</div><div class="kosher"><span class="chip chip-parve">🌿 Parve</span><span class="chip chip-badatz">✡️ Badatz Ierushalaim</span></div><span class="precio-pill">$ 12.000</span><button class="btn">🛒 Agregar</button></div></div>
+      <div class="cB"><div class="foto">🌰</div><div class="cuerpo"><div class="nom">Pitzujim-Nueces Pecán Dubai</div><div class="desc">Cubiertas con pistacho y Kadaifi (100g)</div><div class="kosher"><span class="chip chip-parve">🌿 Parve</span><span class="chip chip-badatz">✡️ Badatz Ierushalaim</span></div><span class="precio-pill">$ 12.000</span><button class="btn">🛒 Agregar</button></div></div>
+      <div class="cB"><div class="foto">🍫</div><div class="cuerpo"><div class="nom">Chocolate Elite</div><div class="desc">Blanco con galletitas – Ugiot (100g)</div><div class="kosher"><span class="chip chip-badatz">✡️ Igur Harabanim</span></div><span class="precio-pill">$ 10.000</span><button class="btn">🛒 Agregar</button></div></div>
+    </div>
+    <ul class="cambios">
+      <li><b>Techo dorado</b> en cada tarjeta — el color de la marca en todo el catálogo.</li>
+      <li><b>Precio en etiqueta dorada</b> — se lee de una, hasta de reojo en el celular.</li>
+      <li><b>Botón dorado redondeado con 🛒</b> — invita a tocar (hoy es azul serio).</li>
+      <li><b>Cinta OFERTA</b> roja en diagonal para los productos en oferta.</li>
+      <li><b>Filtros con emoji</b> — se escanean más rápido y dan calidez.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="sec-tag tag-c">Opción C</span>
+    <h2>Mercado / feria — el "shuk" de verdad</h2>
+    <p class="nota">La tienda como puesto de mercado israelí: fondo con textura, tarjetas tipo etiqueta recortada
+    (borde punteado), el precio en un <b>cartelito colgado</b> como en la feria, y sello redondo de oferta.
+    La más divertida y "casera" — transmite kiosco de barrio con historia.</p>
+    <div class="zonaC">
+      <div class="grid">
+        <div class="cC"><div class="sello">¡OFERTA<br>DEL DÍA!</div><div class="foto">🥜</div><div class="cuerpo"><div class="nom">Pitzujim-Almendras Caramelizadas</div><div class="desc">Almendras Caramelizadas Israelies (100g)</div><div class="kosher"><span class="chip chip-parve">🌿 Parve</span><span class="chip chip-badatz">✡️ Badatz Ierushalaim</span></div><div class="cartel"><span class="num">$ 12.000</span><br><span class="por">los 100g</span></div><button class="btn">Agregar al canasto</button></div></div>
+        <div class="cC"><div class="foto">🌰</div><div class="cuerpo"><div class="nom">Pitzujim-Nueces Pecán Dubai</div><div class="desc">Cubiertas con pistacho y Kadaifi (100g)</div><div class="kosher"><span class="chip chip-parve">🌿 Parve</span><span class="chip chip-badatz">✡️ Badatz Ierushalaim</span></div><div class="cartel"><span class="num">$ 12.000</span><br><span class="por">los 100g</span></div><button class="btn">Agregar al canasto</button></div></div>
+        <div class="cC"><div class="foto">🍫</div><div class="cuerpo"><div class="nom">Chocolate Elite</div><div class="desc">Blanco con galletitas – Ugiot (100g)</div><div class="kosher"><span class="chip chip-lacteo">🥛 Lácteo · Jalav Israel</span><span class="chip chip-badatz">✡️ Igur Harabanim</span></div><div class="cartel"><span class="num">$ 10.000</span><br><span class="por">la unidad</span></div><button class="btn">Agregar al canasto</button></div></div>
+      </div>
+    </div>
+    <ul class="cambios">
+      <li><b>Etiqueta recortada</b>: borde punteado dorado, como cupón/etiqueta de feria.</li>
+      <li><b>Precio en cartelito colgado</b> (torcido apenas, con su agujerito) — el gesto del mercado.</li>
+      <li><b>Sello redondo verde</b> "¡Oferta del día!" en lugar de cinta.</li>
+      <li><b>Fondo con textura</b> de rayas finas — deja de ser gris plano.</li>
+      <li><b>Al pasar por arriba se levanta</b> y el punteado se enciende en dorado.</li>
+      <li><b>Kosher siempre a la vista</b>: 🌿 Parve / 🥛 Lácteo · Jalav Israel + la supervisión (✡️ Badatz, Igur Harabanim) — igual que en la tienda de hoy.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="sec-tag tag-d">Opción D</span>
+    <h2>Vidriera oscura — bombonería premium</h2>
+    <p class="nota">Se invierte el juego: tarjetas en el <b>azul noche de tu marca</b> y la foto en un marco crema
+    que la hace brillar como vidriera iluminada. Precio dorado con resplandor. La más elegante —
+    pinta de bombonería cara, ideal si querés subir el percibido de precio.</p>
+    <div class="grid">
+      <div class="cD"><div class="foto">🥜</div><div class="cuerpo"><div class="nom">Pitzujim-Almendras Caramelizadas</div><div class="desc">Almendras Caramelizadas Israelies (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="cD"><div class="foto">🌰</div><div class="cuerpo"><div class="nom">Pitzujim-Nueces Pecán Dubai</div><div class="desc">Cubiertas con pistacho y Kadaifi (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="cD"><div class="foto">🍫</div><div class="cuerpo"><div class="nom">Chocolate Elite</div><div class="desc">Blanco con galletitas – Ugiot (100g)</div><div class="precio">$ 10.000</div><button class="btn">Agregar</button></div></div>
+    </div>
+    <ul class="cambios">
+      <li><b>Tarjeta azul noche</b> (el color del header) — la marca envuelve todo el catálogo.</li>
+      <li><b>La foto en marco crema iluminado</b> — el producto resalta como en vidriera.</li>
+      <li><b>Precio dorado con brillo</b> y botón dorado de contorno que se llena al tocar.</li>
+      <li>Ojo honesto: hay que probarla con TUS fotos — las de fondo blanco quedan de diez, las oscuras menos.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="sec-tag tag-e">Opción E</span>
+    <h2>Color por categoría — el catálogo se ordena solo</h2>
+    <p class="nota">Cada categoría tiene su color: Pitzujim terracota, Chocolate cacao, Caramelos rosa…
+    La banda de arriba, el precio y el botón de cada tarjeta toman el color de su familia, y los filtros
+    de arriba también. El catálogo queda alegre pero ordenado: <b>de un vistazo sabés qué es cada cosa</b>.</p>
+    <div class="chips-e">
+      <span class="catchip">Todos</span><span class="catchip p">🥜 Pitzujim</span><span class="catchip ch">🍫 Chocolate</span><span class="catchip ca">🍬 Caramelo</span><span class="catchip">🍭 Chupetín</span><span class="catchip">🥨 Snacks</span>
+    </div>
+    <div class="grid">
+      <div class="cE e-pitz"><div class="banda"><span>🥜 Pitzujim</span><span>🌿 Parve</span></div><div class="foto">🥜</div><div class="cuerpo"><div class="nom">Pitzujim-Almendras Caramelizadas</div><div class="desc">Almendras Caramelizadas Israelies (100g)</div><div class="precio">$ 12.000</div><button class="btn">Agregar</button></div></div>
+      <div class="cE e-choc"><div class="banda"><span>🍫 Chocolate</span><span>✡️ Badatz</span></div><div class="foto">🍫</div><div class="cuerpo"><div class="nom">Chocolate Elite</div><div class="desc">Blanco con galletitas – Ugiot (100g)</div><div class="precio">$ 10.000</div><button class="btn">Agregar</button></div></div>
+      <div class="cE e-cara"><div class="banda"><span>🍬 Caramelo</span><span>🌿 Parve</span></div><div class="foto">🍬</div><div class="cuerpo"><div class="nom">Elite Etzbaot</div><div class="desc">Dedos de chocolate tipo KINDER (x21)</div><div class="precio">$ 32.499</div><button class="btn">Agregar</button></div></div>
+    </div>
+    <ul class="cambios">
+      <li><b>Banda superior con la categoría y su color</b> (+ el chip kosher a la derecha, siempre visible).</li>
+      <li><b>Precio y botón del color de la familia</b> — alegre sin ser un arcoíris: 3-4 tonos tierra/cálidos.</li>
+      <li><b>Filtros pintados del mismo color</b> — tocás 🍫 y todo el catálogo respira ese tono.</li>
+      <li>Los colores los definimos juntos (van bien con lo kosher: tonos especiados, nada flúo).</li>
+    </ul>
+  </section>
+
+  <div class="veredicto">
+    <b>Mi lectura, ahora con las cinco sobre la mesa:</b> si buscás <b>elegancia que suba el percibido de
+    precio</b>, la <b>D</b> es la más fuerte (y en el celular impacta muchísimo). Si buscás <b>onda y calidez de
+    "shuk"</b>, mi voto es la <b>E</b> — ordena el catálogo solo y es la que más personalidad propia tiene.
+    La C es la más simpática pero también la más arriesgada (puede verse "chusca" si no se cuida cada detalle).
+    Y todo es combinable: por ejemplo <b>E + el cartelito de precio de C</b>, o <b>D solo para el catálogo
+    mayorista</b> (revendedores = percibido premium) y <b>E para el minorista</b> (familias = calidez).
+  </div>
+</div>

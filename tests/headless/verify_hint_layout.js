@@ -1,0 +1,34 @@
+const { chromium } = require('playwright');
+let ok = 0, fail = 0;
+const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail++; console.log('  ✗ FALLO:', n, x || ''); } };
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.goto('http://localhost:8917/index.html', { waitUntil: 'load', timeout: 30000 });
+  await page.waitForTimeout(1200);
+  const r = await page.evaluate(() => {
+    _acProductos = []; _acSel = {}; _acLayout = 'lista';
+    const ov = document.createElement('div'); ov.id = 'ac-overlay'; document.body.appendChild(ov);
+    _acRender();
+    const out = {};
+    const hint = () => (document.getElementById('ac-layout-hint') || {}).innerHTML || '';
+    out.hintListaInicial = /una fila por producto/.test(hint());
+    const lista = document.getElementById('ac-lista'); if (lista) lista.setAttribute('data-marca', 'X');
+    _acSetLayout('grilla');
+    out.hintGrilla = /cuadrícula de fotos/.test(hint());
+    out.avisaDondeSeVe = /al tocar PDF o Imagen/.test(hint());
+    out.layoutGlobal = _acLayout;
+    out.sinSaltoScroll = document.getElementById('ac-lista').getAttribute('data-marca') === 'X';
+    _acSetLayout('lista');
+    out.vuelveALista = /una fila por producto/.test(hint()) && _acLayout === 'lista';
+    return out;
+  });
+  chk('al abrir: vista previa de LISTA (una fila por producto)', r.hintListaInicial);
+  chk('tocar Grilla → la vista previa cambia a CUADRÍCULA al instante', r.hintGrilla && r.layoutGlobal === 'grilla');
+  chk('explica dónde se ve el cambio (al tocar PDF o Imagen)', r.avisaDondeSeVe);
+  chk('sin regenerar el modal (el scroll no salta)', r.sinSaltoScroll);
+  chk('vuelve a Lista y la vista previa acompaña', r.vuelveALista);
+  await browser.close();
+  console.log(fail ? '\n❌ ' + fail + ' FALLO(S)' : '\n✅ VISTA PREVIA OK — ' + ok + '/' + ok);
+  process.exit(fail ? 1 : 0);
+})().catch(e => { console.error('EXPLOTÓ:', e.message); process.exit(1); });

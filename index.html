@@ -4025,15 +4025,20 @@ async function renderCuentaCorriente() {
     if (_dlCC) _dlCC.innerHTML = Object.values(porCliente).map(d => `<option value="${esc(d.nombre)}"></option>`).join('');
     const _pagoLibre = document.getElementById('cc-pago-libre');
     if (_pagoLibre) _pagoLibre.style.display = soloMiri ? 'none' : '';
-    // Quitar los que quedaron saldados
-    const entries = Object.values(porCliente).filter(d => d.totalARS > 1 || d.totalUSD > 0.01);
+    // Quitar los saldados; los que tienen plata A FAVOR (pagaron de más / adelantaron) se
+    // muestran en verde — antes desaparecían y el crédito quedaba invisible (caso Sarah 12/07).
+    const deudoresL = Object.values(porCliente).filter(d => d.totalARS > 1 || d.totalUSD > 0.01);
+    const aFavorL = Object.values(porCliente)
+      .filter(d => !(d.totalARS > 1 || d.totalUSD > 0.01) && (d.totalARS < -1 || d.totalUSD < -0.01))
+      .map(d => Object.assign({}, d, { _aFavor: true }));
+    const entries = deudoresL.concat(aFavorL);
     if (!entries.length) {
       lista.innerHTML = '<div style="color:var(--verde);font-size:0.82rem;padding:0.3rem 0">✓ Sin deudas pendientes</div>';
       badge.style.display = 'none';
       return;
     }
-    badge.textContent = entries.length + ' deudor' + (entries.length !== 1 ? 'es' : '');
-    badge.style.display = '';
+    badge.textContent = deudoresL.length + ' deudor' + (deudoresL.length !== 1 ? 'es' : '');
+    badge.style.display = deudoresL.length ? '' : 'none';
     // Datos para el popup de detalle por deudor (pedidos + pagos a cuenta + saldo).
     window._ccData = {};
     entries.forEach((d, i) => {
@@ -4045,29 +4050,33 @@ async function renderCuentaCorriente() {
       const cliente = data.nombre;
       // Cantidad de pedidos que TODAVÍA tienen saldo (después de imputar pagos a cuenta).
       const nped = _itemsConSaldo(window._ccData[i].items).length || data.pedidos.length;
-      const totStr = [
-        data.totalARS > 0 ? '$ ' + Math.round(data.totalARS).toLocaleString('es-AR') : '',
-        data.totalUSD > 0 ? 'U$S ' + data.totalUSD.toFixed(2) : ''
+      const _af = !!data._aFavor;
+      const _tA = _af ? Math.abs(Math.min(0, data.totalARS)) : data.totalARS;
+      const _tU = _af ? Math.abs(Math.min(0, data.totalUSD)) : data.totalUSD;
+      const totStr = (_af ? '💚 A favor: ' : '') + [
+        _tA > 0 ? '$ ' + Math.round(_tA).toLocaleString('es-AR') : '',
+        _tU > 0.009 ? 'U$S ' + _tU.toFixed(2) : ''
       ].filter(Boolean).join(' + ');
+      const _color = _af ? '#1a7a3c' : '#c0392b';
       const cliEsc = cliente.replace(/'/g, "\\'");
       const btnPago = soloMiri ? '' :
-        `<button onclick="abrirPagoCuenta('${cliEsc}','',0,${Math.round(data.totalARS)},${data.totalUSD.toFixed(2)},${i})"
+        `<button onclick="abrirPagoCuenta('${cliEsc}','',0,${Math.max(0, Math.round(data.totalARS))},${Math.max(0, data.totalUSD).toFixed(2)},${i})"
           style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px;margin-right:4px">💵 Pago a cuenta</button>`;
-      return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">
+      return `<div style="border:1.5px solid ${_af ? '#bfe3cd' : 'var(--gris-medio)'};border-radius:10px;padding:0.75rem;margin-bottom:0.5rem${_af ? ';background:#f4faf6' : ''}">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
           <div>
-            <div style="font-weight:800;color:#c0392b;font-size:0.9rem">${esc(cliente)}</div>
-            <button onclick="verDetalleDeudor(${i})" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--azul);text-decoration:underline;cursor:pointer">${nped} pedido${nped!==1?'s':''} · ver detalle</button>
+            <div style="font-weight:800;color:${_color};font-size:0.9rem">${esc(cliente)}</div>
+            <button onclick="verDetalleDeudor(${i})" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--azul);text-decoration:underline;cursor:pointer">${_af ? 'pagó de más / adelantó · ' : nped + ' pedido' + (nped!==1?'s':'') + ' · '}ver detalle</button>
           </div>
           <div style="text-align:right">
-            <div style="font-weight:700;color:#c0392b;font-size:0.9rem">${totStr}</div>
+            <div style="font-weight:700;color:${_color};font-size:0.9rem">${totStr}</div>
             ${btnPago}
-            <button onclick="recordarDeudaWA('${cliEsc}','${totStr}','${telPorClienteNorm[normCliente(cliente)] || telPorCliente[cliente] || ''}')"
-              style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px">💬 Recordar</button>
+            ${_af ? '' : `<button onclick="recordarDeudaWA('${cliEsc}','${totStr}','${telPorClienteNorm[normCliente(cliente)] || telPorCliente[cliente] || ''}')"
+              style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px">💬 Recordar</button>`}
           </div>
         </div>
       </div>`;
-    }).join('') + _ccTotalFooter(entries, soloMiri);
+    }).join('') + _ccTotalFooter(deudoresL, soloMiri);
   } catch(e) {
     lista.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕 <a onclick="invalidarCache();renderCuentaCorriente()" style="color:var(--azul);font-weight:700;cursor:pointer;text-decoration:underline">Reintentar</a></div>';
   }
@@ -7602,8 +7611,10 @@ function _renderEstadoCta() {
       <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;vertical-align:top;font-weight:700">${_fmtSaldo(m.sA, m.sU)}</td>
     </tr>`;
   }).join('');
-  const saldoFinal = _fmtSaldoFinal(d.saldoARS, d.saldoUSD);
   const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
+  // A FAVOR: no debe nada y tiene crédito (pagó de más / adelantó) → banda verde, no "saldo" rojo
+  const aFavor = !alDia && d.saldoARS < 1 && d.saldoUSD < 0.01;
+  const saldoFinal = aFavor ? _fmtSaldoFinal(Math.abs(Math.min(0, d.saldoARS)), Math.abs(Math.min(0, d.saldoUSD))) : _fmtSaldoFinal(d.saldoARS, d.saldoUSD);
   const dosMonedas = _saldoEnDosMonedas(d.saldoARS, d.saldoUSD);
   const doc = `<div id="estadocta-doc" style="background:#fff;padding:1rem 1.1rem;font-family:'DM Sans',sans-serif;color:#222">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--azul);padding-bottom:8px;margin-bottom:10px">
@@ -7621,8 +7632,9 @@ function _renderEstadoCta() {
         </tr></thead>
         <tbody>${filas}</tbody>
       </table>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:0.6rem 0.8rem;background:${alDia ? '#e8f5ee' : '#fdecea'};border-radius:8px;font-weight:800;color:${alDia ? '#1a7a3c' : '#c0392b'}">
-        <span>${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL'}</span><span style="text-align:right">${saldoFinal}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:0.6rem 0.8rem;background:${(alDia || aFavor) ? '#e8f5ee' : '#fdecea'};border-radius:8px;font-weight:800;color:${(alDia || aFavor) ? '#1a7a3c' : '#c0392b'}">
+        <span>${alDia ? '✓ Cuenta al día' : aFavor ? '💚 SALDO A FAVOR' : 'SALDO ACTUAL'}</span><span style="text-align:right">${saldoFinal}</span></div>
+      ${aFavor ? `<div style="font-size:0.68rem;color:#1a7a3c;margin-top:6px;text-align:center;font-weight:600">Este monto queda a cuenta y se descuenta solo de la próxima compra.</div>` : ''}
       ${dosMonedas ? `<div style="font-size:0.64rem;color:#c0392b;margin-top:6px;text-align:center;font-weight:600">⚠️ Son dos saldos separados: uno en pesos <b>y</b> otro en dólares — no es una conversión, se deben ambos.</div>` : ''}
       <div style="font-size:0.62rem;color:#aaa;margin-top:6px">Detalle de pedidos y pagos. El saldo se actualiza con cada movimiento.</div>
     </div>`;
@@ -7707,10 +7719,12 @@ function estadoCtaWhatsApp() {
     const saldo = [Math.abs(m.sA) >= 1 ? '$' + Math.round(m.sA).toLocaleString('es-AR') : '', Math.abs(m.sU) >= 0.01 ? 'U$S' + m.sU.toFixed(2) : ''].filter(Boolean).join('+') || '$0';
     return `${m.fecha} · ${m.concepto}\n   ${sg}${monto}  →  saldo ${saldo}`;
   }).join('\n');
-  const saldoFinal = [Math.abs(d.saldoARS) >= 1 ? '$' + Math.round(d.saldoARS).toLocaleString('es-AR') : '', Math.abs(d.saldoUSD) >= 0.01 ? 'U$S' + d.saldoUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$0';
   const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
+  const aFavorTxt = !alDia && d.saldoARS < 1 && d.saldoUSD < 0.01;
+  const _sfA = aFavorTxt ? Math.abs(Math.min(0, d.saldoARS)) : d.saldoARS, _sfU = aFavorTxt ? Math.abs(Math.min(0, d.saldoUSD)) : d.saldoUSD;
+  const saldoFinal = [Math.abs(_sfA) >= 1 ? '$' + Math.round(_sfA).toLocaleString('es-AR') : '', Math.abs(_sfU) >= 0.01 ? 'U$S' + _sfU.toFixed(2) : ''].filter(Boolean).join(' + ') || '$0';
   const aclara = _saldoEnDosMonedas(d.saldoARS, d.saldoUSD) ? '\n⚠️ Son dos saldos separados (pesos *y* dólares) — no es una conversión, se deben ambos.' : '';
-  const txt = `*Estado de cuenta — Shuk Mamtakim*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL: ' + saldoFinal}*${aclara}`;
+  const txt = `*Estado de cuenta — Shuk Mamtakim*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : aFavorTxt ? '💚 SALDO A FAVOR: ' + saldoFinal + ' (queda para tu próxima compra)' : 'SALDO ACTUAL: ' + saldoFinal}*${aclara}`;
   const tel = (d.tel || '').toString().replace(/\D/g, '');
   const base = tel ? 'https://wa.me/549' + tel : 'https://wa.me/';
   window.open(base + '?text=' + encodeURIComponent(txt), '_blank');
@@ -9802,7 +9816,20 @@ async function registrarRecepcion(btn) {
   _enviandoRecep = false;
   if (btn) { btn.disabled = false; btn.textContent = '📥 Registrar recepción'; }
   if (r && r.ok) {
-    showToast('📥 Recepción registrada ✓ stock y costos actualizados');
+    // La CUENTA del ponderado a la vista (pedido del usuario 12/07): qué había, qué entró y
+    // cómo quedó el costo — sin ir a buscar la ficha para chequear.
+    const _conCosto = (r.items || []).filter(x => !x.error).map(x => {
+      const loc = items.find(it => String(it.id) === String(x.id)) || {};
+      const pl = productos.find(p => String(p.id) === String(x.id)) || {};
+      const mon = pl.moneda === 'U$S' ? 'U$S' : '$';
+      const fm = (v2) => mon === 'U$S' ? mon + ' ' + (+v2).toFixed(2) : '$ ' + Math.round(+v2).toLocaleString('es-AR');
+      const antes = Math.max(0, (parseFloat(x.stock) || 0) - (loc.cantidad || 0));
+      if (!(loc.costoUnit > 0)) return `• ${x.nombre}: +${loc.cantidad} unidades (sin costo cargado — el costo no se tocó)`;
+      if (antes > 0 && x.costoAnterior > 0) return `• ${x.nombre}: tenías ${antes} a ${fm(x.costoAnterior)} + entraron ${loc.cantidad} a ${fm(loc.costoUnit)} → nuevo costo ${fm(x.costoNuevo)} (promedio ponderado)`;
+      return `• ${x.nombre}: entraron ${loc.cantidad} a ${fm(loc.costoUnit)} → costo ${fm(x.costoNuevo)}${antes <= 0 ? ' (no había stock: el costo nuevo manda)' : ''}`;
+    });
+    if (_conCosto.length && items.some(it => it.costoUnit > 0)) alert('📥 Recepción registrada ✓\n\n' + _conCosto.join('\n'));
+    else showToast('📥 Recepción registrada ✓ stock y costos actualizados');
     _recepSel = {};
     renderRecepSel();
     await cargarProductos();
