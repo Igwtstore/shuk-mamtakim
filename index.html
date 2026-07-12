@@ -7952,10 +7952,16 @@ async function renderCaja() {
           // deuda en $ baja igual por su monto completo (v3.63, caso Sarah 2026-07-12).
           const ptcA = parseFloat(p.tc) || 0;
           const cajaUSDa = _CAJAS_USD.includes(p.caja) || p.caja === 'CTA_CTE_USD';
+          // Parte de MIRI (golosinas neta de comisión) en la moneda del movimiento: si la caja es
+          // de Jony, la vista Miri lo muestra como "Jony te debe" (igual que en los cobros).
+          // Solo pagos ATADOS (reparto explícito): en los generales el crédito aún no tiene dueño
+          const _golA = p.pedidoId ? (aRS - Math.min(parseFloat(p.montoPitz) || 0, aRS)) : 0;
           if (ptcA > 0 && cajaUSDa && p.caja !== 'CTA_CTE_USD') {
-            movs.push({ desc: `${desc} ($ ${Math.round(aRS).toLocaleString('es-AR')} ÷ $${ptcA})`, col: p.caja, val: +(aRS / ptcA).toFixed(2), mon: 'USD', tipo: 'venta' });
+            const _mnU = _golA > 0 ? +((_golA / ptcA) * 0.85).toFixed(2) : undefined;
+            movs.push({ desc: `${desc} ($ ${Math.round(aRS).toLocaleString('es-AR')} ÷ $${ptcA})`, col: p.caja, val: +(aRS / ptcA).toFixed(2), mon: 'USD', tipo: 'venta', myriNet: _mnU });
           } else {
-            movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta' });
+            const _mnA = _golA > 0 ? Math.round(_golA * 0.85) : undefined;
+            movs.push({ desc, col: p.caja, val: aRS, mon: 'ARS', tipo: 'venta', myriNet: _mnA });
           }
         }
         // La baja de la Cta Cte se parte en Pitzujim (dueno J) y golosinas, según el pago,
@@ -7971,10 +7977,13 @@ async function renderCaja() {
           // dólares igual baja en U$S (no es una conversión de la deuda, es cómo pagó).
           const ptc = parseFloat(p.tc) || 0;
           const cajaUSD = _CAJAS_USD.includes(p.caja) || p.caja === 'CTA_CTE_USD';
+          const _golU = p.pedidoId ? (uSD - Math.min(parseFloat(p.montoPitzUsd) || 0, uSD)) : 0;
           if (ptc > 0 && !cajaUSD) {
-            movs.push({ desc: `${desc} (U$S ${uSD} × $${ptc})`, col: p.caja, val: Math.round(uSD * ptc), mon: 'ARS', tipo: 'venta' });
+            const _mnA2 = _golU > 0 ? Math.round(_golU * ptc * 0.85) : undefined;
+            movs.push({ desc: `${desc} (U$S ${uSD} × $${ptc})`, col: p.caja, val: Math.round(uSD * ptc), mon: 'ARS', tipo: 'venta', myriNet: _mnA2 });
           } else {
-            movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta' });
+            const _mnU2 = _golU > 0 ? +(_golU * 0.85).toFixed(2) : undefined;
+            movs.push({ desc, col: p.caja, val: uSD, mon: 'USD', tipo: 'venta', myriNet: _mnU2 });
           }
         }
         // La baja de la Cta Cte U$S también se parte en Pitzujim (Jony) y golosinas, como en pesos,
@@ -8006,14 +8015,19 @@ async function renderCaja() {
         if (m.tipo === 'comi') return;        // comisión: es de Jony
         if (m.dueno === 'J') return;          // Pitzujim: es de Jony → Myri no lo ve
         // Golosinas que Jony cobró en su caja (no liquidadas): él se las debe a Myri.
-        if (m.myriNet !== undefined && ['MP_JONY', 'EFT_JONY'].includes(m.col) && !m.corte && m.myriNet > 0) {
+        // Incluye la caja U$S de Jony (agregada 2026-07-12, caso Sarah) — en su moneda.
+        if (m.myriNet !== undefined && ['MP_JONY', 'EFT_JONY', 'ETF_USD_JONY'].includes(m.col) && !m.corte && m.myriNet > 0) {
           hayJonyDebe = true;
-          movsVis.push({ desc: m.desc + ' · cobrado por Jony', col: 'JONY_DEBE', val: m.myriNet, mon: 'ARS', tipo: 'venta', vid: m.vid });
+          const _esU = m.mon === 'USD';
+          movsVis.push({ desc: m.desc + ' · cobrado por Jony', col: _esU ? 'JONY_DEBE_USD' : 'JONY_DEBE', val: m.myriNet, mon: _esU ? 'USD' : 'ARS', tipo: 'venta', vid: m.vid });
           return;
         }
         if (MIRI_COLS.includes(m.col)) movsVis.push(m);
       });
-      if (hayJonyDebe) cols = cols.concat([{ key: 'JONY_DEBE', label: '⚠️ Jony te debe', mon: 'ARS' }]);
+      if (hayJonyDebe) {
+        if (movsVis.some(m => m.col === 'JONY_DEBE')) cols = cols.concat([{ key: 'JONY_DEBE', label: '⚠️ Jony te debe', mon: 'ARS' }]);
+        if (movsVis.some(m => m.col === 'JONY_DEBE_USD')) cols = cols.concat([{ key: 'JONY_DEBE_USD', label: '⚠️ Jony te debe U$S', mon: 'USD' }]);
+      }
     } else {
       movsVis = movs;
     }
@@ -8166,7 +8180,9 @@ async function renderCaja() {
 // Convención de saldo: positivo = Myri le debe a Jony; negativo = Jony le debe a Myri.
 let _socios = { ars: 0, usd: 0 };
 const MYRI_BOXES_CC = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI'];
-const JONY_BOXES_CC = ['EFT_JONY','MP_JONY'];
+// ETF_USD_JONY agregada 2026-07-12 (caso Sarah: golosinas U$S de Miri cobradas en la caja de
+// dólares de Jony eran invisibles para la cuenta de socios; impacto histórico verificado: cero)
+const JONY_BOXES_CC = ['EFT_JONY','MP_JONY','ETF_USD_JONY'];
 
 async function renderCajaEnvios() {
   const cont = document.getElementById('caja-envios-contenido');
@@ -10804,7 +10820,7 @@ function verificarStockBajo() {
 function _poblarExtractoCajas(cols) {
   const sel = document.getElementById('extracto-caja');
   if (!sel) return;
-  const reales = (cols || []).filter(c => c.key.indexOf('CTA_CTE') === -1 && c.key !== 'JONY_DEBE');
+  const reales = (cols || []).filter(c => c.key.indexOf('CTA_CTE') === -1 && c.key.indexOf('JONY_DEBE') !== 0);
   const prev = sel.value;
   sel.innerHTML = reales.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
   if (prev && reales.some(c => c.key === prev)) sel.value = prev;
