@@ -7,6 +7,7 @@
 <title>Shuk Mamtakim 🍬</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
+<!-- WL:OG los crawlers no ejecutan JS: estos og:/title los reescribe el asistente de alta -->
 <meta property="og:title" content="Shuk Mamtakim 🍬">
 <meta property="og:description" content="¡Hacé tu pedido online! Golosinas mayoristas y minoristas. Entrá y elegí.">
 <meta property="og:image" content="https://res.cloudinary.com/dq2boloyp/image/upload/w_1200,h_630,c_pad,b_rgb:fdf3e3/website_banner_rhyfih.png">
@@ -46,7 +47,7 @@
             type: "push",
             autoPrompt: false,
             text: {
-              actionMessage: "¿Querés recibir novedades y avisos de stock de Shuk Mamtakim?",
+              actionMessage: "¿Querés recibir novedades y avisos de stock de " + window.TIENDA_CONFIG.marca.nombre + "?",
               acceptButton: "Sí, avisarme",
               cancelButton: "Ahora no"
             }
@@ -855,7 +856,7 @@
     <div class="logo" style="display:flex;align-items:center;gap:0.6rem">
       <img src="https://res.cloudinary.com/dq2boloyp/image/upload/h_44,w_44,c_fill,r_8,f_auto/app_icon_rmbyhb.png" alt="Shuk Mamtakim" style="height:40px;width:40px;border-radius:8px;object-fit:cover;flex-shrink:0" />
       <div>
-        <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:var(--dorado);letter-spacing:-0.01em;line-height:1.1">Shuk Mamtakim</div>
+        <div class="wl-marca" style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:var(--dorado);letter-spacing:-0.01em;line-height:1.1">Shuk Mamtakim</div>
         <span id="modo-label" style="font-size:0.62rem;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.05em">Mayorista</span>
       </div>
     </div>
@@ -908,7 +909,7 @@
         <div style="color:#c9954a;font-weight:700;font-size:0.9rem;margin-bottom:0.15rem">¿Comprás para revender?</div>
         <div style="color:rgba(255,255,255,0.65);font-size:0.78rem">Tenemos precios especiales para mayoristas y revendedores.</div>
       </div>
-      <button onclick="window.open('https://wa.me/5491131754540?text='+encodeURIComponent('Hola! Me interesan los precios mayoristas de Shuk Mamtakim 🍬'),'_blank')"
+      <button onclick="window.open('https://wa.me/'+TIENDA_CONFIG.contacto.whatsapp+'?text='+encodeURIComponent('Hola! Me interesan los precios mayoristas de '+TIENDA_CONFIG.marca.nombre+' '+TIENDA_CONFIG.marca.emoji),'_blank')"
         style="background:#25D366;color:white;border:none;border-radius:10px;padding:0.55rem 1.1rem;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
         💬 Consultar precios por mayor
       </button>
@@ -1984,7 +1985,7 @@
 <!-- ADMIN LOGIN -->
 <div id="admin-login" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:400;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:2rem 1.75rem;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-    <div style="font-family:'Fraunces',serif;font-size:1.3rem;font-weight:700;color:#1a1a2e;margin-bottom:0.4rem;">Shuk Mamtakim</div>
+    <div class="wl-marca" style="font-family:'Fraunces',serif;font-size:1.3rem;font-weight:700;color:#1a1a2e;margin-bottom:0.4rem;">Shuk Mamtakim</div>
     <div style="font-size:0.8rem;color:#6b6b7a;margin-bottom:1.25rem;text-transform:uppercase;letter-spacing:0.05em;">Panel de administración</div>
     <input type="password" id="admin-pass-input" placeholder="Contraseña" onkeydown="if(event.key==='Enter')verificarAdmin()"
       style="width:100%;padding:0.7rem 1rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:1rem;margin-bottom:0.75rem;outline:none;box-sizing:border-box;" />
@@ -1998,6 +1999,15 @@
 const SHEET_ID = '17uCcaoZ5TDZbiL4R3L881JQ8_-J94sWUP4KjUDqaV1c';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Stock`;
 const DRIVE_FOLDER = '1Mgu_gDhvO1bs-YmFsXsOyxuiBV6yEyLe';
+// Marca visible desde la ficha (white-label): un solo lugar para nombre/emoji/dominio
+const MARCA = TIENDA_CONFIG.marca.nombre;
+const MARCA_E = MARCA + ' ' + TIENDA_CONFIG.marca.emoji;
+const TIENDA_URL = TIENDA_CONFIG.marca.url;
+const TIENDA_DOM = TIENDA_URL.replace(/^https?:\/\//, '');
+document.title = MARCA_E;
+const _mApple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+if (_mApple) _mApple.content = MARCA;
+document.querySelectorAll('.wl-marca').forEach(el => { el.textContent = MARCA; });
 const WA_NUM1 = TIENDA_CONFIG.contacto.whatsapp;
 const WA_NUM2 = TIENDA_CONFIG.contacto.whatsappAlt;
 const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
@@ -3037,7 +3047,7 @@ function ocultarRecatoBanner(recordar) {
 }
 
 function pedirCatalogoWhatsApp() {
-  const msg = 'Hola! Mi teléfono no muestra bien la tienda 🙏 ¿Me pueden pasar el catálogo de Shuk Mamtakim con los precios? Gracias!';
+  const msg = 'Hola! Mi teléfono no muestra bien la tienda 🙏 ¿Me pueden pasar el catálogo de ' + MARCA + ' con los precios? Gracias!';
   window.open(`https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`, '_blank');
   ocultarRecatoBanner();
 }
@@ -3588,7 +3598,7 @@ function enviarPedido(_stockVerificado) {
     : totalARS > 0 ? `\n\n*Total:* $ ${Math.round(totalARS).toLocaleString('es-AR')}`
     : totalUSD > 0 ? `\n\n*Total:* U$S ${totalUSD.toFixed(2)}` : '';
   const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
-  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
+  const msg = `🛒 *Nuevo pedido - ${MARCA}*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
 
   localStorage.setItem('shuk_pedido_ts', String(_ahora));
   try { _hist.push(_ahora); localStorage.setItem('shuk_pedido_hist', JSON.stringify(_hist)); } catch {}
@@ -4100,13 +4110,13 @@ async function renderPedidos() {
         const montoTxt = totReserva ? ` de ${totReserva}` : '';
         let msg, label;
         if (vencido) {
-          msg = `Hola ${v.cliente}! Tu pedido${montoTxt} en Shuk Mamtakim superó el plazo de reserva de 7 días. Avisanos si todavía lo querés 🍬`;
+          msg = `Hola ${v.cliente}! Tu pedido${montoTxt} en ${MARCA} superó el plazo de reserva de 7 días. Avisanos si todavía lo querés 🍬`;
           label = '⛔ Venció la reserva (' + diasPed + ' días)';
         } else if (ultimo) {
-          msg = `Hola ${v.cliente}! Último recordatorio: mañana se vence la reserva de tu pedido${montoTxt} en Shuk Mamtakim, no lo dejes pasar.${moto} 🍬`;
+          msg = `Hola ${v.cliente}! Último recordatorio: mañana se vence la reserva de tu pedido${montoTxt} en ${MARCA}, no lo dejes pasar.${moto} 🍬`;
           label = '🔔 Último recordatorio · mañana vence';
         } else {
-          msg = `Hola ${v.cliente}! Te recordamos que tu pedido${montoTxt} en Shuk Mamtakim queda reservado ${restan} días más, ¡no lo dejes pasar!${moto} 🍬`;
+          msg = `Hola ${v.cliente}! Te recordamos que tu pedido${montoTxt} en ${MARCA} queda reservado ${restan} días más, ¡no lo dejes pasar!${moto} 🍬`;
           label = '⏰ Pasaron ' + diasPed + ' días · quedan ' + restan + ' para cancelar';
         }
         const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
@@ -4860,7 +4870,7 @@ async function dibujarFlyer(prods, t) {
   ctx.fillText(t.cierre, W / 2, H - 138);
   ctx.font = '700 34px ' + FT;
   ctx.fillStyle = 'rgba(255,255,255,0.94)';
-  ctx.fillText('📲 11 3175-4540 · Shuk Mamtakim 🍬', W / 2, H - 54);
+  ctx.fillText('📲 ' + TIENDA_CONFIG.contacto.whatsappHumano + ' · ' + MARCA_E, W / 2, H - 54);
 }
 
 // Precio: pill con el valor (y si hay promo, el precio viejo tachado al lado)
@@ -4916,7 +4926,7 @@ async function compartirFlyer() {
   if (!blob) { showToast('Generá el flyer primero'); return; }
   const file = new File([blob], 'flyer-shuk.jpg', { type: 'image/jpeg' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Shuk Mamtakim' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: MARCA }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   await descargarFlyer();
   showToast('Se descargó la imagen: compartila desde tu galería 📤');
@@ -5087,7 +5097,7 @@ function difundirOfertas() {
     if (ofertaActiva(p)) return `🔥 *${p.nombre}* — ahora $${Math.round(p.precioOferta).toLocaleString('es-AR')}`;
     return `🎁 *${p.nombre}* — pack x${p.cantPack} por $${Math.round(p.precioPack).toLocaleString('es-AR')}`;
   });
-  const msg = `🍬 *¡Ofertas de Shuk Mamtakim!*\n\n${lineas.join('\n')}\n\n👉 Pedí acá: https://shuk-mamtakim.vercel.app/tienda\nVálido por tiempo limitado 🏃`;
+  const msg = `${TIENDA_CONFIG.marca.emoji} *¡Ofertas de ${MARCA}!*\n\n${lineas.join('\n')}\n\n👉 Pedí acá: ${TIENDA_URL}/tienda\nVálido por tiempo limitado 🏃`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -6118,7 +6128,7 @@ function pk2_dibujar() {
     ctx.save(); ctx.shadowColor = 'rgba(26,26,46,0.3)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5;
     rr(255, 812, 390, 66, 33); ctx.fillStyle = '#1a1a2e'; ctx.fill(); ctx.restore();
     ctx.fillStyle = '#c9954a'; ctx.font = '800 34px Fraunces, DM Sans, serif'; ctx.textAlign = 'center';
-    ctx.fillText('🥜 Shuk Mamtakim', 450, 856);
+    ctx.fillText('🥜 ' + MARCA, 450, 856);
   });
 }
 async function pk2_usar() {
@@ -7170,7 +7180,7 @@ function _renderEstadoCta() {
   const dosMonedas = _saldoEnDosMonedas(d.saldoARS, d.saldoUSD);
   const doc = `<div id="estadocta-doc" style="background:#fff;padding:1rem 1.1rem;font-family:'DM Sans',sans-serif;color:#222">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--azul);padding-bottom:8px;margin-bottom:10px">
-        <div><div style="font-weight:800;font-size:1.05rem;color:var(--azul)">Shuk Mamtakim</div>
+        <div><div style="font-weight:800;font-size:1.05rem;color:var(--azul)">${MARCA}</div>
           <div style="font-size:0.72rem;color:#888">Estado de cuenta</div></div>
         <div style="text-align:right;font-size:0.7rem;color:#888">Emitido<br><b style="color:#444">${d.emitido}</b></div>
       </div>
@@ -7273,7 +7283,7 @@ function estadoCtaWhatsApp() {
   const saldoFinal = [Math.abs(d.saldoARS) >= 1 ? '$' + Math.round(d.saldoARS).toLocaleString('es-AR') : '', Math.abs(d.saldoUSD) >= 0.01 ? 'U$S' + d.saldoUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$0';
   const alDia = Math.abs(d.saldoARS) < 1 && Math.abs(d.saldoUSD) < 0.01;
   const aclara = _saldoEnDosMonedas(d.saldoARS, d.saldoUSD) ? '\n⚠️ Son dos saldos separados (pesos *y* dólares) — no es una conversión, se deben ambos.' : '';
-  const txt = `*Estado de cuenta — Shuk Mamtakim*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL: ' + saldoFinal}*${aclara}`;
+  const txt = `*Estado de cuenta — ${MARCA}*\nCliente: ${d.cliente}\nEmitido: ${d.emitido}\n\n${lineas}\n\n*${alDia ? '✓ Cuenta al día' : 'SALDO ACTUAL: ' + saldoFinal}*${aclara}`;
   const tel = (d.tel || '').toString().replace(/\D/g, '');
   const base = tel ? 'https://wa.me/549' + tel : 'https://wa.me/';
   window.open(base + '?text=' + encodeURIComponent(txt), '_blank');
@@ -8256,7 +8266,7 @@ function exportarRendicionMiri() {
   const fu = n => Number(n).toFixed(2);
   const hoy = new Date().toLocaleDateString('es-AR');
   const rows = [];
-  rows.push(['RENDICIÓN MYRI — Shuk Mamtakim']); rows.push(['Emitido', hoy]); rows.push([]);
+  rows.push(['RENDICIÓN MYRI — ' + MARCA]); rows.push(['Emitido', hoy]); rows.push([]);
   rows.push(['💰 TUS VENTAS — dónde está la plata (en tus cajas)']);
   rows.push(['Caja', 'Pesos', 'Dólares']);
   let totA = 0, totU = 0;
@@ -9598,14 +9608,14 @@ function toggleClienteHistorial(id) {
 // Recordatorio de deuda directo AL CLIENTE: si está registrado con teléfono abre
 // su chat; si no, abre WhatsApp para elegir el contacto, con el mensaje ya armado.
 function recordarDeudaWA(cliente, totStr, tel) {
-  const msg = `¡Hola ${cliente}! 👋 Te escribimos de *Shuk Mamtakim* 🍬\nTe recordamos que tenés un saldo pendiente de *${totStr}*.\n¡Muchas gracias!`;
+  const msg = `¡Hola ${cliente}! 👋 Te escribimos de *${MARCA}* ${TIENDA_CONFIG.marca.emoji}\nTe recordamos que tenés un saldo pendiente de *${totStr}*.\n¡Muchas gracias!`;
   const waBase = tel ? `https://wa.me/${tel.startsWith('549') ? tel : '549' + tel}` : 'https://wa.me/';
   window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 function contactarCliente(nombre, tipo, tel) {
   const link = tipo === 'Minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
-  const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
+  const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *${MARCA}*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
   const waBase = tel ? `https://wa.me/549${tel}` : `https://wa.me/`;
   window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -9732,7 +9742,7 @@ async function renderAnalitica() {
       ? a.items.map(it => `<b>${it.q}×</b> ${esc(it.n)}`).join(' · ')
       : (a.productos.length ? esc(a.productos.join(', ')) + ' <span style="color:#bbb">(sin cantidades)</span>' : 'productos sin detalle');
     const totalStr = a.total > 0 ? ` · 💰 <b>$ ${Math.round(a.total).toLocaleString('es-AR')}</b>` : '';
-    const msgRec = `¡Hola${a.nombre ? ' ' + a.nombre.split(' ')[0] : ''}! 👋 Vi que te quedó un pedido armado en *Shuk Mamtakim* 🍬 ¿Te lo preparo? Cualquier duda escribime.`;
+    const msgRec = `¡Hola${a.nombre ? ' ' + a.nombre.split(' ')[0] : ''}! 👋 Vi que te quedó un pedido armado en *${MARCA}* ${TIENDA_CONFIG.marca.emoji} ¿Te lo preparo? Cualquier duda escribime.`;
     const btnCargar = tieneItems ? `<button onclick="cargarComoPedido(${i})" style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">📋 Cargar como pedido</button>` : '';
     const btnWA = a.telefono ? `<button onclick="window.open('https://wa.me/549${a.telefono}?text=${encodeURIComponent(msgRec)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">💬 Contactar</button>` : '';
     return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
@@ -10144,7 +10154,7 @@ function enviarPushAcumulado() {
   lineas.push('¡Entrá al catálogo y hacé tu pedido! 🛍️');
   const params = new URLSearchParams({
     accion: 'enviarPush',
-    titulo: '🛍️ Shuk Mamtakim — Novedades',
+    titulo: '🛍️ ' + MARCA + ' — Novedades',
     mensaje: lineas.join('\n')
   });
   fetch(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => {});
@@ -10368,7 +10378,7 @@ function confirmarNotificacion() {
     .then(r => r.json())
     .then(data => {
       if (data.duplicado) { showToast('Ya estás en la lista de espera ✓'); return; }
-      const msg = `🔔 *Lista de espera - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre}\n📱 *WhatsApp:* ${tel}\n\n🛒 *Quiere que lo avises cuando llegue:*\n${_notifProductoNombre}`;
+      const msg = `🔔 *Lista de espera - ${MARCA}*\n\n👤 *Cliente:* ${nombre}\n📱 *WhatsApp:* ${tel}\n\n🛒 *Quiere que lo avises cuando llegue:*\n${_notifProductoNombre}`;
       window.open(`https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`, '_blank');
       showToast('¡Te avisamos cuando llegue! ✓');
     })
@@ -10454,7 +10464,7 @@ async function renderNotificaciones() {
         const prod = g.nombre.replace(/'/g,'').replace(/"/g,'');
         const modo = c.modoCliente||'minorista';
         const esViejo = dias >= 3;
-        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista'}`;
+        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en ${MARCA}. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? TIENDA_URL + '/#min-pL3q7' : TIENDA_URL + '/mayorista'}`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
           <div>
             <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span>${_telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px">⚠️ número dudoso</span>' : ''}</div>
@@ -10494,7 +10504,7 @@ function eliminarNotificacion(productoId, telefono) {
 
 function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
   const link = modoCliente === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/#min-pL3q7';
-  const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
+  const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en ${MARCA}. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
@@ -10561,7 +10571,7 @@ async function _similarImagen() {
   const h2c = await cargarHtml2Canvas();
   const off = document.getElementById('similar-offscreen');
   off.innerHTML = `<div id="similar-card" style="width:460px;background:#fff;font-family:'DM Sans',sans-serif">
-    <div style="background:#1a1a2e;color:#fff;padding:14px 18px;font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem">🍬 Shuk Mamtakim — te recomendamos</div>
+    <div style="background:#1a1a2e;color:#fff;padding:14px 18px;font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem">${TIENDA_CONFIG.marca.emoji} ${MARCA} — te recomendamos</div>
     <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">${sel.map(p => {
       const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean); const url = imgs.length ? imgUrl(imgs[0])[0] : '';
       return `<div style="display:flex;gap:12px;align-items:center;border:1px solid #eee;border-radius:10px;padding:8px">
@@ -11507,7 +11517,7 @@ function _remitoTCval() {
 function _buildRemitoTexto(v, tc) {
   const soloMiri = esVistaMiri();   // REGLA: en vista Miri el remito NO muestra NADA de Jony
   const lines = [];
-  lines.push(`🧾 *REMITO — Shuk Mamtakim*`);
+  lines.push(`🧾 *REMITO — ${MARCA}*`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`📋 Pedido #${v.nVenta}`);
   lines.push(`📅 ${v.fecha}`);
@@ -11532,7 +11542,7 @@ function _buildRemitoTexto(v, tc) {
   }
   if (v.notas && v.notas !== 'Manual') lines.push(`📝 Nota: ${v.notas}`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-  lines.push(`Shuk Mamtakim 🍬 — shuk-mamtakim.vercel.app`);
+  lines.push(`${MARCA_E} — ${TIENDA_DOM}`);
   return lines.join('\n');
 }
 
@@ -11721,7 +11731,7 @@ function abrirRemitoPDF(v) {
     <span style="font-size:1.05rem;font-weight:800">≈ $ ${_granARS.toLocaleString('es-AR')}</span>
   </div>` : ''}
   <div class="footer">
-    <small>Emitido el ${_selloFechaHora} hs · Shuk Mamtakim 🍬</small>
+    <small>Emitido el ${_selloFechaHora} hs · ${MARCA_E}</small>
     <button class="btn-print" onclick="window.print()">🖨️ Imprimir / PDF</button>
   </div>
 </div>

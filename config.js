@@ -26,6 +26,8 @@
       nombre:  'Shuk Mamtakim',
       emoji:   '🍬',
       tagline: 'Dulces Tradicionales · Frutos Secos',
+      url:     'https://shuk-mamtakim.vercel.app',   // dominio público de la tienda (links en mensajes/remitos)
+      // (assets de imagen — ícono/banner Cloudinary — se conectan en el hito 3d)
       // base de imágenes del repo (logos, banners servidos desde GitHub)
       baseImg: 'https://raw.githubusercontent.com/Igwtstore/shuk-mamtakim/main/',
     },
@@ -33,6 +35,7 @@
     // — Contacto —
     contacto: {
       whatsapp:      '5491131754540',        // número principal (avisos / pedidos)
+      whatsappHumano: '11 3175-4540',        // el mismo, en formato para mostrar (flyers/catálogo)
       whatsappAlt:   '972527596202',         // número secundario (Israel)
       whatsappExtra: ['5491150987261', '5491171046383'],   // otros números del aviso
       // teléfonos de los vendedores (para catálogos por dueño). Se conectan en el próximo hito.
