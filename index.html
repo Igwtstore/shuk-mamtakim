@@ -4279,7 +4279,7 @@ async function renderPedidos() {
             const remPitz = Math.max(0, Math.round(arsJ - pg.pitz));
             const remGolARS = Math.max(0, Math.round(arsM - pg.golARS));
             const remGolUSD = Math.max(0, (usdM - pg.golUSD));
-            const remPitzUSD = Math.max(0, (_uJ - (pg.pitzUSD||0)));
+            const remPitzUSD = Math.max(0, (parseFloat(v.usdJONY || 0) - (pg.pitzUSD||0)));
             return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)},null,${remPitzUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
           })() : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaPedido('${v.id}')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
