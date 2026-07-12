@@ -1190,7 +1190,7 @@
     <select id="trazar-sel" style="display:none"><option value=""></option></select>
     <div id="trazar-result"><div style="color:var(--texto-suave);font-size:0.82rem">Elegí un producto para ver quién lo compró.</div></div>
   </div>
-  <div class="admin-card">
+  <div class="admin-card" id="card-nuevo-producto">
     <div class="admin-titulo">➕ Agregar nuevo producto</div>
     <button type="button" id="btn-importar-candy" onclick="abrirImportarCandy()" style="width:100%;margin-bottom:0.75rem;padding:0.7rem;background:linear-gradient(135deg,#ff5fa2,#b14cff);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.88rem;cursor:pointer;font-family:'DM Sans',sans-serif">📥 Importar productos de Candy Shop 🍬</button>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
@@ -6878,7 +6878,16 @@ async function guardarNuevoProducto() {
       _npCopiadas = []; renderNpCopiadas();
       renderNpArchivos();
       _npCloudinaryId = '';
-      cargarProductos();
+      const _promCat = cargarProductos();
+      // Alta hecha DESDE "Recibir mercadería": cerrar el modal y dejar el producto recién
+      // creado ya buscado, listo para tocarlo y cargarle la recepción.
+      if (window._npDesdeRecep) {
+        Promise.resolve(_promCat).then(() => {
+          cerrarNpDesdeRecep();
+          const rb = document.getElementById('recep-buscar');
+          if (rb) { rb.value = nombre; filtrarRecep(); rb.scrollIntoView({ block: 'center' }); }
+        });
+      }
     } else showToast('Error al guardar');
   } catch (e) {
     showToast('Error de conexión');
@@ -9488,7 +9497,15 @@ function filtrarRecep() {
   const lista = productosVisibles().filter(p =>
     p.nombre.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q)).slice(0, 12);
   cont.style.display = 'block';
-  if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.7rem">Sin resultados</div>'; return; }
+  // Si el producto que llegó todavía no existe: crearlo AHÍ MISMO (abre el form real de
+  // "Agregar nuevo producto" en un modal, sin salir de Recibir mercadería).
+  const _qTal = (document.getElementById('recep-buscar')?.value || '').trim();   // como lo tipeó (sin minusculizar)
+  const _btnCrear = `
+    <div onclick="abrirNpDesdeRecep()" style="display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0.7rem;cursor:pointer;background:#f4f9f4">
+      <span style="color:var(--verde);font-weight:800">➕</span>
+      <div style="font-size:0.83rem;font-weight:700;color:var(--verde)">${lista.length ? 'No está en la lista — crear producto nuevo' : `Crear "${esc(_qTal)}" como producto nuevo`}</div>
+    </div>`;
+  if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.7rem">Sin resultados</div>' + _btnCrear; return; }
   cont.innerHTML = lista.map(p => `
     <div onclick="agregarRecep(${p.id})" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)">
       <div style="min-width:0;flex:1">
@@ -9496,7 +9513,40 @@ function filtrarRecep() {
         <div style="font-size:0.7rem;color:var(--texto-suave)">${esc((p.desc || '').substring(0, 45))} · stock ${p.stock}${p.costo > 0 ? ' · costo ' + (p.moneda === 'U$S' ? 'U$S ' + p.costo.toFixed(2) : '$ ' + Math.round(p.costo).toLocaleString('es-AR')) : ' · sin costo'}</div>
       </div>
       <span style="color:var(--verde);font-weight:800">＋</span>
-    </div>`).join('');
+    </div>`).join('') + _btnCrear;
+}
+// ── Alta de producto SIN salir de "Recibir mercadería" ──
+// No duplica nada: MUDA el card real de "➕ Agregar nuevo producto" (con todos sus campos,
+// fotos, IA, etc.) a un modal, y al cerrar lo devuelve a su lugar en la sección Stock.
+let _npPlaceholder = null;
+function abrirNpDesdeRecep() {
+  const card = document.getElementById('card-nuevo-producto');
+  if (!card || document.getElementById('np-modal-recep')) return;
+  const q = (document.getElementById('recep-buscar')?.value || '').trim();
+  _npPlaceholder = document.createComment('np-card-lugar');
+  card.parentNode.insertBefore(_npPlaceholder, card);
+  const ov = document.createElement('div');
+  ov.id = 'np-modal-recep';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:700;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:1.2rem 0.8rem';
+  const caja = document.createElement('div');
+  caja.style.cssText = 'background:var(--crema,#faf8f4);border-radius:16px;max-width:560px;width:100%;padding:0.4rem;position:relative;margin:auto 0';
+  caja.innerHTML = '<button onclick="cerrarNpDesdeRecep()" style="position:absolute;top:10px;right:12px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--texto-suave);z-index:1">✕</button>';
+  caja.appendChild(card);
+  ov.appendChild(caja);
+  document.body.appendChild(ov);
+  window._npDesdeRecep = true;
+  const nom = document.getElementById('np-nombre');
+  if (nom && !nom.value.trim() && q) nom.value = q;   // precarga lo que estaba buscando
+  if (nom) nom.focus();
+  const res = document.getElementById('recep-resultados');
+  if (res) res.style.display = 'none';
+}
+function cerrarNpDesdeRecep() {
+  const ov = document.getElementById('np-modal-recep');
+  const card = document.getElementById('card-nuevo-producto');
+  if (_npPlaceholder && card) { _npPlaceholder.parentNode.insertBefore(card, _npPlaceholder); _npPlaceholder.remove(); _npPlaceholder = null; }
+  if (ov) ov.remove();
+  window._npDesdeRecep = false;
 }
 function agregarRecep(id) {
   if (!_recepSel[id]) _recepSel[id] = { cantidad: '', costo: '' };
