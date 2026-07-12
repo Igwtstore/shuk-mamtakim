@@ -1311,7 +1311,7 @@
         </div>
         <div class="nombre-campo" style="margin:0;flex:1.4;min-width:140px">
           <label>✡️ Hashgajá <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(supervisión)</span></label>
-          <input type="text" id="np-hashgaja" placeholder="Ej: Badatz Eda Jaredit" />
+          <input type="text" id="np-hashgaja" list="hashgaja-list" placeholder="Elegí o escribí una nueva…" />
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Parve / Lácteo</label>
@@ -1454,7 +1454,7 @@
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
         <div class="nombre-campo" style="margin:0;flex:1.4;min-width:150px"><label>✡️ Hashgajá <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">(supervisión)</span></label>
-          <input type="text" id="ep-hashgaja" placeholder="Ej: Badatz Eda Jaredit" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+          <input type="text" id="ep-hashgaja" list="hashgaja-list" placeholder="Elegí o escribí una nueva…" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Parve / Lácteo</label>
           <select id="ep-kosher" onchange="kosherChange('ep')" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option value="">— no mostrar</option><option value="Parve">🌿 Parve</option><option value="Lácteo">🥛 Lácteo</option></select>
@@ -2187,6 +2187,19 @@ function getCatIdx(p) {
 
 
 
+// Desplegable de Hashgajá (supervisión): sugiere las YA usadas en el catálogo, sin repetir.
+// No hay que "cargar" nada: al guardar un producto con una supervisión nueva, entra sola acá.
+function _refrescarHashgajaList() {
+  let dl = document.getElementById('hashgaja-list');
+  if (!dl) { dl = document.createElement('datalist'); dl.id = 'hashgaja-list'; document.body.appendChild(dl); }
+  const vistas = new Map();   // clave normalizada → grafía original (la primera que aparece)
+  (productos || []).forEach(p => {
+    const h = (p.hashgaja || '').trim();
+    if (h && !vistas.has(h.toLowerCase())) vistas.set(h.toLowerCase(), h);
+  });
+  dl.innerHTML = [...vistas.values()].sort((a, b) => a.localeCompare(b, 'es'))
+    .map(h => `<option value="${h.replace(/"/g, '&quot;')}"></option>`).join('');
+}
 async function cargarProductos() {
   const catalogo = document.getElementById('catalogo');
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
@@ -2222,6 +2235,7 @@ async function cargarProductos() {
       costo: 0,                 // privado → se completa abajo con sesión
       nombresPrev: ''           // privado → se completa abajo con sesión
     })).filter(p => p.activo && p.id);
+    _refrescarHashgajaList();   // desplegable de supervisiones: se arma solo desde el catálogo
     // Con sesión de admin, completar los campos privados desde el backend
     try {
       let tokP = _authToken;
@@ -5370,7 +5384,7 @@ function renderMasivo() {
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">✡️ Hashgajá (supervisión)</th><th style="${_mTh}">Parve / Lácteo</th><th style="${_mTh}">Jalav <span style="font-weight:400">(si es lácteo)</span></th></tr></thead><tbody>`;
     list.forEach(p => {
       const esLacteo = _mVal(p.id, 'kosherTipo') === 'Lácteo';
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" placeholder="Ej: Badatz Eda Jaredit"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" list="hashgaja-list" placeholder="Elegí o escribí una nueva…"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
     });
   } else {
     const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
