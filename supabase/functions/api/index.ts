@@ -2501,7 +2501,7 @@ Deno.serve(async (req) => {
       const conCosto = await sesionValida(token);
       const [cat, dep, shukEn, prods] = await Promise.all([
         sbGet('candy_productos', 'select=*'), sbGet('candy_deposito', 'select=codigo,cantidad'),
-        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo,hashgaja,kosher_tipo,jalav'),
+        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,moneda,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo,hashgaja,kosher_tipo,jalav'),
       ]);
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
       // Circuito F2: stock ofrecido de un shuk:<id> = genuino Candy + TODA la familia de gemelos
@@ -2525,7 +2525,7 @@ Deno.serve(async (req) => {
       };
       const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], esCombo: !!(r.componentes || '').trim(), componentes: (r.componentes || '').toString(), stock: stockCombo(r) !== null ? stockCombo(r) : (depMap[String(r.codigo)] || 0), categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true, hashgaja: (r.hashgaja || '').toString(), kosherTipo: (r.kosher_tipo || '').toString(), jalav: (r.jalav || '').toString() }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() }));
+      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, costoMoneda: (p.moneda || '$').toString().trim() === 'U$S' ? 'U$S' : '$', foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() }));
       return json(propios.concat(shuk));
     }
     if (accion === 'panelHijos') {

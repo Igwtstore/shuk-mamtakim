@@ -1592,8 +1592,14 @@ function normCli(s) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
 function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
-  const costoMap = {};
-  catalogo.forEach(p => { costoMap[p.codigo?.toLowerCase()] = p.costo || 0; });
+  const costoMap = {}, costoUSDSet = new Set();
+  // ⚠️ Costos en U$S (productos del Shuk): NO se mezclan con pesos — su ganancia real la define
+  // el circuito al pagar con TC (F3). Acá se excluyen del cálculo y se avisa (bug real 13/07:
+  // costo U$S 4 restado como $4 → ganancia y diezmo del día inflados).
+  catalogo.forEach(p => {
+    if (p.costoMoneda === 'U$S') { costoUSDSet.add(p.codigo?.toLowerCase()); return; }
+    costoMap[p.codigo?.toLowerCase()] = p.costo || 0;
+  });
   // Lo comido/regalado descuenta su COSTO de la ganancia del día.
   const consumoCosto = arr(consumo).reduce((s, c) => s + (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0), 0);
   const conDeuda = new Set(deudores.filter(d => d.saldo > 0).map(d => normCli(d.cliente)));
@@ -1606,8 +1612,10 @@ function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
     const subtotal = (v.precio || 0) * (v.cantidad || 1);
     const pendiente = v.saldoPendiente || 0;
     const cod = (v.codigo || '').toLowerCase();
+    const esCostoUSD = costoUSDSet.has(cod);
     const costo = costoMap[cod] || 0;
-    const gan = (v.precio - costo) * (v.cantidad || 1);
+    const gan = esCostoUSD ? 0 : (v.precio - costo) * (v.cantidad || 1);   // U$S: ganancia al pagar el circuito
+    if (esCostoUSD) window._ganPendTC = (window._ganPendTC || 0) + 1;
     vendido += subtotal; cobrado += subtotal - pendiente; ganancia += gan; deuda += pendiente;
     const cli = (v.cliente || '').trim() || 'Sin nombre';
     const key = normCli(cli) + '|' + (v.hora || '');
@@ -1620,8 +1628,11 @@ function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
   const gananciaNeta = ganancia - consumoCosto;   // descontado lo comido/regalado
   document.getElementById('s-ventas').textContent = grupos.size;
   document.getElementById('s-cobrado').textContent = fmt(cobrado);
-  document.getElementById('s-ganancia').textContent = fmt(gananciaNeta);
-  document.getElementById('s-diezmo').textContent = fmt(gananciaNeta * 0.1);
+  const _ptc = window._ganPendTC || 0; window._ganPendTC = 0;
+  document.getElementById('s-ganancia').textContent = fmt(gananciaNeta) + (_ptc ? ' *' : '');
+  const _sg = document.getElementById('s-ganancia');
+  if (_sg) _sg.title = _ptc ? _ptc + ' venta(s) de productos con costo U$S: su ganancia se suma al pagar el circuito (TC real)' : '';
+  document.getElementById('s-diezmo').textContent = fmt(gananciaNeta * 0.1) + (_ptc ? ' *' : '');
 
   const el = document.getElementById('ventas-list');
   if (!ventas.length) { el.innerHTML = '<div class="empty">Sin ventas ' + (_diaVistoCandy ? 'ese día' : 'hoy todavía') + ' 😴</div>'; return; }
@@ -1859,7 +1870,9 @@ function renderCatalogo(catalogo) {
       </div>
       <div class="cat-prices">
         <div class="cat-price">${fmt(p.precioVenta)}</div>
-        ${p.costo > 0 ? `<div class="cat-costo">Costo: ${fmt(p.costo)}</div><div class="cat-ganancia">+${fmt(gan)}</div>` : ''}
+        ${p.costo > 0 ? (p.costoMoneda === 'U$S'
+          ? `<div class="cat-costo">Costo: U$S ${(+p.costo).toFixed(2)}</div><div class="cat-ganancia" style="color:#b8860b">gan. al pagar circuito (TC)</div>`
+          : `<div class="cat-costo">Costo: ${fmt(p.costo)}</div><div class="cat-ganancia">+${fmt(gan)}</div>`) : ''}
       </div>
       ${accion}
     </div>`;
