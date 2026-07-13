@@ -613,6 +613,32 @@ async function setEstadoPedidoHijo(body: any, estado: string) {
   if (estado === 'cancelado') {   // devolver stock reservado al depósito
     let items: any[] = []; try { items = JSON.parse(ped.items || '[]'); } catch { items = []; }
     for (const it of items) { const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString(); if (cant > 0 && cod) await ajustarDeposito(cod, it.nombre || '', cant, 'Pedido de la tienda cancelado (stock devuelto)'); }
+    // 🔗 REVERSA del circuito (caso truchos 13/07: la compra automática al Shuk quedaba viva y
+    // "Candy debía" mercadería de un pedido falso). Se buscan las ventas internas de ESTE pedido
+    // (el pedidoId viaja en la nota) y se deshace todo: venta cancelada + stock Shuk devuelto +
+    // genuino descontado + compra borrada. Si los chicos ya vendieron parte del paquete abierto,
+    // la reversa es parcial y avisa por WhatsApp.
+    try {
+      const compras = await sbGet('ventas', 'select=id,n_venta,stock_updates,estado,notas&cliente=eq.Candy&notas=ilike.' + encodeURIComponent('*[' + pedidoId + ']*'));
+      for (const cv of compras) {
+        if ((cv.estado || '') === 'cancelado') continue;
+        await sbPatch('ventas', 'id=eq.' + encodeURIComponent(cv.id), { estado: 'cancelado' });
+        for (const u of (cv.stock_updates || '').split(',')) {
+          const pp = u.split(':'); const pid2 = (pp[0] || '').trim(), paq = parseInt(pp[1]) || 0;
+          if (!pid2 || paq <= 0) continue;
+          await moverStockShuk(pid2, paq, 'Reversa circuito — pedido tienda cancelado (#' + cv.n_venta + ')');
+          const prU = await sbGet('productos', 'select=nombre,unidades_por_paquete&id=eq.' + encodeURIComponent(pid2));
+          const uppR = prU.length ? Math.max(1, parseInt(prU[0].unidades_por_paquete) || 1) : 1;
+          const unidades = paq * uppR;
+          const depR = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent('shuk:' + pid2));
+          const genR = depR.length ? (parseFloat(depR[0].cantidad) || 0) : 0;
+          const quitar = Math.min(unidades, Math.max(0, genR));
+          if (quitar > 0) await ajustarDeposito('shuk:' + pid2, prU.length ? prU[0].nombre : '', -quitar, 'Reversa circuito (pedido tienda cancelado)');
+          if (quitar < unidades) await sendTwilioWA('+5491131754540', '⚠️ *Reversa PARCIAL del circuito*\nPedido cancelado ' + pedidoId + ': la compra #' + cv.n_venta + ' abrió ' + unidades + ' unidades pero quedan ' + quitar + ' en el depósito (el resto ya se vendió). Revisalo.');
+        }
+        await sbDelete('candy_compras', 'compra_id=eq.' + encodeURIComponent('CS' + cv.n_venta));
+      }
+    } catch { /* la reversa jamás frena la cancelación */ }
   }
   await sbPatch('candy_pedidos', 'pedido_id=eq.' + encodeURIComponent(pedidoId), { estado });
   return { ok: true };
@@ -1518,12 +1544,17 @@ Deno.serve(async (req) => {
       // Anti pedidos falsos (paridad con la tienda Shuk): límite por dispositivo (vid) —
       // 90s entre pedidos, máx 4/hora. El WhatsApp igual se abre (el chico recibe el mensaje).
       const vidPH = Q('vid');
+      // 🚫 Dispositivo bloqueado (pedidos truchos 13/07: amigos de los chicos jugando)
+      if (vidPH && (await getConfig('VIDBLOCK_' + vidPH, '')) === '1') return json({ error: 'rate' });
       if (vidPH) {
         const desdePH = new Date(Date.now() - 3600000).toISOString();
         const recPH = await sbGet('candy_pedidos', 'select=creado&vid=eq.' + encodeURIComponent(vidPH) + '&creado=gte.' + encodeURIComponent(desdePH) + '&order=creado.desc');
         if (recPH.length >= 4) return json({ error: 'rate' });
         if (recPH.length && Date.now() - new Date(recPH[0].creado).getTime() < 90000) return json({ error: 'rate' });
       }
+      // 📱 Teléfono obligatorio (anti-truchos 13/07): sin WhatsApp válido no hay pedido
+      const telPH = Q('telefono');
+      if (telDudoso(telPH)) return json({ error: 'telefono', detalle: 'Dejanos un WhatsApp válido (código de área + número, sin 0 ni 15) para confirmarte el pedido' });
       // 🎁 COMBO: expandir cada combo del pedido a sus COMPONENTES (la validación y la reserva
       // corren sobre los componentes reales; el combo en sí no tiene stock propio).
       const combosCat = await sbGet('candy_productos', 'select=codigo,componentes&componentes=neq.');
@@ -1562,7 +1593,7 @@ Deno.serve(async (req) => {
       for (const it of itemsReserva) {
         const cant = parseInt(it.cantidad) || 0, cod = (it.codigo || '').toString();
         if (cant <= 0 || !cod) continue;
-        const cir = await asegurarGenuinoShuk(cod, cant, 'pedido tienda ' + hijo);
+        const cir = await asegurarGenuinoShuk(cod, cant, 'pedido tienda ' + hijo + ' [' + pedidoId + ']');
         if (cir.error) { await sbDelete('candy_pedidos', 'pedido_id=eq.' + encodeURIComponent(pedidoId)); return json({ error: cir.error }); }
         await ajustarDeposito(cod, (it.nombre || '').toString(), -cant, (it._deCombo ? '🎁 Combo "' + it._deCombo + '" · ' : '') + 'Reserva pedido tienda (' + hijo + ')');
       }
@@ -2350,6 +2381,20 @@ Deno.serve(async (req) => {
       const rows = await sbGet('config', 'select=clave,valor&clave=like.VIP_*');
       return json(rows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: (r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '', n: (d.ids || []).length }; } catch { return null; } }).filter(Boolean));
     }
+    if (accion === 'bloquearVidCandy') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const vB = P(body, 'vid').replace(/[^a-z0-9]/gi, '');
+      if (!vB) return json({ error: 'sin vid' });
+      await setConfig('VIDBLOCK_' + vB, P(body, 'desbloquear') === '1' ? '' : '1');
+      return json({ ok: true });
+    }
+    if (accion === 'setPrecioShukEnCandy') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const idP = P(body, 'shukId').replace(/[^0-9]/g, '');
+      const precioP = parseFloat(P(body, 'precio')) || 0;
+      await sbPatch('shuk_en_candy', 'shuk_id=eq.' + encodeURIComponent(idP), { precio_candy: precioP > 0 ? precioP : null });
+      return json({ ok: true });
+    }
     if (accion === 'actualizarCatalogoVip') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       const tU = P(body, 't').replace(/[^a-z0-9]/gi, '');
@@ -2445,7 +2490,7 @@ Deno.serve(async (req) => {
     }
     if (accion === 'getDepositoHijos') return json((await sbGet('candy_deposito', 'select=*')).map((d: any) => ({ codigo: d.codigo, producto: d.nombre || '', cantidad: parseInt(d.cantidad) || 0 })));
     if (accion === 'getProveedoresHijos') return json((await sbGet('candy_proveedores', 'select=*')).map((r: any) => ({ id: r.id, nombre: r.nombre || '', telefono: r.telefono || '', notas: r.notas || '' })));
-    if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id')).map((r: any) => (r.shuk_id || '').toString().trim()).filter(Boolean));
+    if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id,precio_candy')).map((r: any) => ({ id: (r.shuk_id || '').toString().trim(), precio: parseFloat(r.precio_candy) || 0 })).filter((r: any) => r.id));
     if (accion === 'getAnalitica') { const dias = parseInt(url.searchParams.get('dias') || '0') || 0; return json(analitica(await sbGet('trafico', 'select=*&order=id&limit=200000'), dias)); }
     if (accion === 'auditarHijos') {
       const hijo = url.searchParams.get('hijo') || '';
@@ -2538,7 +2583,7 @@ Deno.serve(async (req) => {
       const conCosto = await sesionValida(token);
       const [cat, dep, shukEn, prods] = await Promise.all([
         sbGet('candy_productos', 'select=*'), sbGet('candy_deposito', 'select=codigo,cantidad'),
-        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,moneda,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo,hashgaja,kosher_tipo,jalav'),
+        sbGet('shuk_en_candy', 'select=shuk_id,precio_candy'), sbGet('productos', 'select=id,nombre,precio_min,costo,moneda,imagen,stock,categoria,descripcion,dueno,unidades_por_paquete,vinculo,hashgaja,kosher_tipo,jalav'),
       ]);
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
       // Circuito F2: stock ofrecido de un shuk:<id> = genuino Candy + TODA la familia de gemelos
@@ -2562,7 +2607,8 @@ Deno.serve(async (req) => {
       };
       const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: conCosto ? (parseFloat(r.costo) || 0) : 0, foto: r.foto || '', fotos: r.foto ? [r.foto] : [], esCombo: !!(r.componentes || '').trim(), componentes: (r.componentes || '').toString(), stock: stockCombo(r) !== null ? stockCombo(r) : (depMap[String(r.codigo)] || 0), categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true, hashgaja: (r.hashgaja || '').toString(), kosherTipo: (r.kosher_tipo || '').toString(), jalav: (r.jalav || '').toString() }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, costoMoneda: (p.moneda || '$').toString().trim() === 'U$S' ? 'U$S' : '$', foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() }));
+      const _precioCandyMap: any = {}; shukEn.forEach((s: any) => { if (parseFloat(s.precio_candy) > 0) _precioCandyMap[String(s.shuk_id)] = parseFloat(s.precio_candy); });
+      const shuk = shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: _precioCandyMap[String(p.id)] || parseFloat(p.precio_min) || 0, costo: conCosto ? (parseFloat(p.costo) || 0) : 0, costoMoneda: (p.moneda || '$').toString().trim() === 'U$S' ? 'U$S' : '$', foto: fotoShukUrl(primeraFoto(p.imagen)), fotos: fotosShukLista(p.imagen), stock: stockFamiliar(p), origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString() }));
       return json(propios.concat(shuk));
     }
     if (accion === 'panelHijos') {
@@ -2572,7 +2618,7 @@ Deno.serve(async (req) => {
       const [vts, cc, cat, dep, shukEn, prods, cons, ped, cierres, stockD] = await Promise.all([
         sbGet('candy_ventas', 'select=*&hijo=eq.' + enc), sbGet('candy_cc', 'select=cliente,monto&hijo=eq.' + enc),
         sbGet('candy_productos', 'select=*'), sbGet('candy_deposito', 'select=codigo,cantidad'),
-        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,moneda,imagen,stock,categoria,descripcion'),
+        sbGet('shuk_en_candy', 'select=shuk_id,precio_candy'), sbGet('productos', 'select=id,nombre,precio_min,costo,moneda,imagen,stock,categoria,descripcion'),
         sbGet('candy_consumo', 'select=*&hijo=eq.' + enc), sbGet('candy_pedidos', 'select=*'),
         sbGet('cierres_hijos', 'select=fecha&hijo=eq.' + enc), sbGet('stock_diario', 'select=fecha&hijo=eq.' + enc),
       ]);
@@ -2583,12 +2629,13 @@ Deno.serve(async (req) => {
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
       const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: parseFloat(r.costo) || 0, foto: r.foto || '', stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const catalogo = propios.concat(shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: parseFloat(p.costo) || 0, costoMoneda: (p.moneda || '$').toString().trim() === 'U$S' ? 'U$S' : '$', foto: fotoShukUrl(primeraFoto(p.imagen)), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() })));
+      const _pcMap: any = {}; shukEn.forEach((s: any) => { if (parseFloat(s.precio_candy) > 0) _pcMap[String(s.shuk_id)] = parseFloat(s.precio_candy); });
+      const catalogo = propios.concat(shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: _pcMap[String(p.id)] || parseFloat(p.precio_min) || 0, costo: parseFloat(p.costo) || 0, costoMoneda: (p.moneda || '$').toString().trim() === 'U$S' ? 'U$S' : '$', foto: fotoShukUrl(primeraFoto(p.imagen)), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() })));
       const consumo = cons.filter((c: any) => (c.fecha || '').toString().startsWith(hoy)).map((c: any) => ({ producto: c.producto, codigo: c.codigo, cantidad: c.cantidad, motivo: c.motivo }));
       // El pedido de la tienda guarda el kid en minúscula ('meir', 'jony'); el panel pregunta
       // por 'Meir'/'Pa'. normHijo empareja (y jony↔Pa son la misma persona) — como _normHijo_.
       const pedidos = ped.filter((p: any) => (p.estado || 'pendiente') === 'pendiente' && normHijo(p.hijo) === normHijo(hijo))
-        .map((p: any) => ({ fecha: (p.fecha || '').toString(), hijo: (p.hijo || '').toString(), cliente: (p.cliente || '').toString(), telefono: (p.telefono || '').toString(), items: (() => { try { return JSON.parse(p.items || '[]'); } catch { return []; } })(), total: parseFloat(p.total) || 0, estado: (p.estado || '').toString(), pedidoId: (p.pedido_id || '').toString(), nota: (p.nota || '').toString() }));
+        .map((p: any) => ({ fecha: (p.fecha || '').toString(), hijo: (p.hijo || '').toString(), cliente: (p.cliente || '').toString(), telefono: (p.telefono || '').toString(), items: (() => { try { return JSON.parse(p.items || '[]'); } catch { return []; } })(), total: parseFloat(p.total) || 0, estado: (p.estado || '').toString(), pedidoId: (p.pedido_id || '').toString(), nota: (p.nota || '').toString(), vid: (p.vid || '').toString() }));
       // estado del día
       const fechaNum = (f: string) => { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0; };
       const cerr: any = {}; cierres.forEach((r: any) => cerr[(r.fecha || '').toString().slice(0, 10)] = true);

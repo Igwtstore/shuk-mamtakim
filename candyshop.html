@@ -1400,7 +1400,8 @@ function renderPedidosPendientes(peds) {
     return `<div style="border:1px solid #e8e0d5;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fbf9f6">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
         <div><div style="font-weight:800;color:#5c3d1e">👤 ${esc(p.cliente)}</div>
-        <div style="font-size:0.74rem;color:#9b8a76;margin-top:2px">${esc(p.fecha)}${p.nota ? ' · 📝 ' + esc(p.nota) : ''}</div></div>
+        <div style="font-size:0.74rem;color:#9b8a76;margin-top:2px">${esc(p.fecha)}${p.nota ? ' · 📝 ' + esc(p.nota) : ''}</div>
+        <div style="font-size:0.68rem;color:#b0a290;margin-top:2px">${p.telefono ? '📱 ' + esc(p.telefono) + ' · ' : ''}${p.vid ? '🔑 aparato ' + esc(String(p.vid).slice(0, 6)) : ''}</div></div>
         <div style="font-weight:800;color:#2c6fad;white-space:nowrap">${fmt(p.total)}</div>
       </div>
       <div style="font-size:0.82rem;color:#6b5a48;margin:6px 0">${esc(lineas)}</div>
@@ -1429,8 +1430,13 @@ function cobrarPedido(pedidoId) {
 }
 async function cancelarPedido(pedidoId) {
   const ped = _pedidosPendientes.find(p => p.pedidoId === pedidoId);
-  if (!confirm(`¿Cancelar el pedido de ${ped ? ped.cliente : 'este cliente'}?\nSe devuelve al stock lo reservado.`)) return;
+  if (!confirm(`¿Cancelar el pedido de ${ped ? ped.cliente : 'este cliente'}?\nSe devuelve al stock lo reservado (y se revierte la compra al Shuk si la hubo).`)) return;
   await api('cancelarPedidoHijo', { pedidoId });
+  // 🚫 OPCIONAL (anti-truchos): ofrecer bloquear el aparato que hizo el pedido
+  if (ped && ped.vid && confirm('¿Bloquear también este dispositivo (aparato ' + String(ped.vid).slice(0, 6) + ') para que no pueda hacer más pedidos?\n\nEs OPCIONAL — Cancelar = solo cancela el pedido.')) {
+    await api('bloquearVidCandy', { vid: ped.vid });
+    mostrarToast('🚫 Dispositivo bloqueado');
+  }
   await cargarDatos();
   mostrarToast('Pedido cancelado · stock devuelto');
 }
@@ -1907,10 +1913,22 @@ async function abrirImportarShuk() {
   ov.innerHTML = '<div style="background:#fff;border-radius:16px;padding:18px;max-width:460px;width:100%"><div class="spinner">Cargando productos de Shuk…</div></div>';
   const [prods, imp] = await Promise.all([api('getProductosShukAdmin'), api('getShukEnCandy')]);
   _impShukProds = Array.isArray(prods) ? prods : [];
-  _impShukSet = new Set(Array.isArray(imp) ? imp : []);
+  const impArr = Array.isArray(imp) ? imp : [];
+  // compat: antes venían strings; ahora {id, precio} (precio propio por unidad en Candy)
+  _impShukSet = new Set(impArr.map(x => (x && x.id) ? x.id : x));
+  _impShukPrecios = {}; impArr.forEach(x => { if (x && x.id && x.precio > 0) _impShukPrecios[x.id] = x.precio; });
   _renderImpShuk();
 }
 function cerrarImportarShuk() { const ov = document.getElementById('imp-shuk-ov'); if (ov) ov.remove(); cargarDatos(true); }
+let _impShukPrecios = {};
+// 💲 Precio POR UNIDAD propio de Candy para un producto del Shuk (vacío = hereda el del Shuk).
+// Con "U. por paquete" en la ficha Shuk, Candy vende unidades y el circuito compra cajas enteras.
+async function setPrecioImpShuk(id, valor) {
+  const precio = parseFloat(valor) || 0;
+  const r = await api('setPrecioShukEnCandy', { shukId: id, precio: String(precio) });
+  if (r && r.ok) { _impShukPrecios[id] = precio > 0 ? precio : undefined; mostrarToast(precio > 0 ? '💲 Precio por unidad guardado' : 'Precio propio quitado (usa el del Shuk)'); }
+  else mostrarToast('⚠️ No se pudo guardar el precio');
+}
 function _renderImpShuk() {
   const ov = document.getElementById('imp-shuk-ov'); if (!ov) return;
   const q = (document.getElementById('imp-shuk-q')?.value || '').trim().toLowerCase();
@@ -1935,8 +1953,11 @@ function _renderImpShuk() {
       ${src ? `<img src="${src}" style="width:38px;height:38px;object-fit:contain;background:#f5f5f5;border-radius:6px" onerror="this.outerHTML='<div style=&quot;width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center&quot;>🍬</div>'">` : '<div style="width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:0.85rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${duenoTag} ${p.nombre} ${oculto ? '<span style="color:#b8860b;font-size:0.6rem">🙈</span>' : ''}</div>
-        <div style="font-size:0.68rem;color:#999">$${p.precioMin || 0} · 📦 ${p.stock || 0}</div>
+        <div style="font-size:0.68rem;color:#999">$${p.precioMin || 0} · 📦 ${p.stock || 0}${(p.upp || 1) > 1 ? ' × ' + p.upp + ' u/paq' : ''}</div>
       </div>
+      ${on ? `<input type="number" min="0" value="${_impShukPrecios[p.id] || ''}" placeholder="$${p.precioMin || 0}" title="Precio POR UNIDAD en Candy (vacío = precio del Shuk)"
+        onclick="event.stopPropagation()" onchange="event.stopPropagation(); setPrecioImpShuk('${p.id}', this.value)"
+        style="width:74px;padding:5px 6px;border:1.5px solid #d8cbe8;border-radius:8px;font-size:0.76rem;text-align:right">` : ''}
     </div>`;
   }).join('');
   const fbtn = (f, t) => `<button onclick="_impShukFiltro='${f}';_renderImpShuk()" style="flex:1;padding:6px 3px;border:1.5px solid ${_impShukFiltro === f ? '#b14cff' : '#ddd'};background:${_impShukFiltro === f ? '#b14cff' : '#fff'};color:${_impShukFiltro === f ? '#fff' : '#666'};border-radius:8px;font-weight:700;font-size:0.72rem;cursor:pointer">${t}</button>`;

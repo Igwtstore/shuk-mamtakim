@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.72</title>
+<title>Shuk Mamtakim — Documentación v3.73</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.73</td><td>Jul 2026</td><td><strong>🛡️ Anti-truchos en la tienda Candy + reversa automática del circuito + venta POR UNIDAD de cajas del Shuk.</strong> Tras los 4 pedidos falsos del 13/07 (amigos de los chicos, identificados por la huella de dispositivo: eran solo 2 aparatos): (1) <b>WhatsApp obligatorio</b> para pedir en la tienda de los chicos (validado en el navegador Y en el servidor — sin número válido no hay pedido); (2) cada tarjeta de pedido muestra <b>teléfono y huella del aparato</b> ("aparato vmrj8k…" — se ve al toque cuando dos pedidos vienen del mismo); (3) al cancelar, botón OPCIONAL de <b>bloquear ese dispositivo</b>. (4) <b>Reversa automática del circuito</b>: cancelar un pedido que disparó compras al Shuk ahora deshace TODO (venta interna cancelada, stock Shuk devuelto, depósito ajustado, compra borrada — antes quedaba "Candy debe" colgado; si los chicos ya vendieron parte, la reversa es parcial y avisa por WhatsApp). (5) <b>Precio POR UNIDAD en el importador</b>: a un producto del Shuk importado se le carga un precio propio por unidad — con "U. por paquete" en la ficha del Shuk, Candy vende unidades, el circuito compra cajas enteras y las abre solo (caso caja de alfajores ×20). Probado contra producción real: 13 checks (caja de prueba upp=3: precio unidad, stock en unidades, teléfono, compra de 2 cajas, cancelación con reversa completa, dispositivo bloqueado).</td></tr>
       <tr><td>v3.72</td><td>Jul 2026</td><td><strong>🔔 Notificación de pedidos INFALIBLE + links privados EDITABLES.</strong> Caso KI TOV (pedido de $216.500 + U$S 1.063 que entró mudo): el aviso WhatsApp lo disparaba el navegador del cliente después de enviar — si cerraba la pestaña, moría; y el WhatsApp personal se abría con window.open, que el navegador bloquea tras la espera al servidor. Ahora: (1) la notificación la manda EL SERVIDOR al registrar el pedido (probada de punta a punta: pedido de prueba → WhatsApp recibido y leído); (2) el WhatsApp del cliente sale con el modal de botones de siempre (gesto seguro, nunca bloqueado). (3) NUEVO: los links privados vivos se pueden EDITAR (✏️ en la lista): carga la selección en el armador, agregás/sacás productos, botón "🧹 Quitar agotados", y al guardar pisa el mismo token — la URL del cliente no cambia. Del log de Twilio también: el sandbox vencido se comió los avisos de la mañana del 12/07 (Slove) y los resúmenes nocturnos del 8-9/07 (error 63015) — recordatorio: el sandbox caduca cada 72hs, la solución de fondo es el número propio aprobado. Verificado 7/7 + regresión.</td></tr>
       <tr><td>v3.71</td><td>Jul 2026</td><td><strong>🛒 Checkout a prueba de cliente real (feedback en vivo del 13/07).</strong> Tres arreglos de una compra observada: (1) si el stock cambió durante la compra, el carrito se AJUSTA SOLO y un cartel claro lo cuenta ("pediste 2 → va 1" / "se quedó sin stock, lo quitamos") con un botón "📤 Enviar pedido ajustado" que sigue directo — se acabó buscar productos a mano en la lista para corregir cantidades; (2) la dirección/nota y la forma de pago se RECUERDAN como el nombre (antes cada reintento las volvía a pedir); (3) velocidad: el descuento de stock en el servidor ahora corre en paralelo (antes un viaje por producto — carritos grandes tardaban 15-20s), y la notificación WhatsApp de pedidos largos se recorta a tiempo (el pedido mayorista de Fabio del 13/07 nunca llegó: Twilio rebota mensajes de +1.600 caracteres, error 21617 encontrado en el log). Verificado headless 9/9 con el escenario exacto + regresión.</td></tr>
       <tr><td>v3.70</td><td>Jul 2026</td><td><strong>✡️ El desplegable de Hashgajá deja cambiar sin borrar.</strong> Con una supervisión ya cargada, el navegador filtraba las sugerencias por el texto presente ("solo borrando podía cambiar" — editor masivo). Ahora al tocar el campo se selecciona todo el texto: tipear pisa directo y la flechita muestra la lista completa. En alta, editor y masivo.</td></tr>
@@ -809,7 +810,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.72 · Julio 2026 · Uso interno
+  Documentación v3.73 · Julio 2026 · Uso interno
 </div>
 
 </div>
