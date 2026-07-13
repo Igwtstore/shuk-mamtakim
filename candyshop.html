@@ -1404,13 +1404,63 @@ function renderPedidosPendientes(peds) {
         <div style="font-size:0.68rem;color:#b0a290;margin-top:2px">${p.telefono ? '📱 ' + esc(p.telefono) + ' · ' : ''}${p.vid ? '🔑 aparato ' + esc(String(p.vid).slice(0, 6)) : ''}</div></div>
         <div style="font-weight:800;color:#2c6fad;white-space:nowrap">${fmt(p.total)}</div>
       </div>
-      <div style="font-size:0.82rem;color:#6b5a48;margin:6px 0">${esc(lineas)}</div>
+      <div style="font-size:0.8rem;color:#6b5a48;margin:6px 0">${(p.items || []).map(it => `${it.cantidad}× ${esc(it.nombre)} — ${fmt(it.precio)} c/u = <b>${fmt((it.precio || 0) * (it.cantidad || 1))}</b>`).join('<br>')}</div>
       <div style="display:flex;gap:8px">
         <button onclick="cobrarPedido('${p.pedidoId}')" style="flex:1;background:#1a7a3c;color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-family:inherit;cursor:pointer">💵 Cobrar</button>
+        <button onclick="editarPedidoTienda('${p.pedidoId}')" title="Editar cantidades y precios" style="background:#eef4fb;color:#2c6fad;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✏️</button>
         <button onclick="cancelarPedido('${p.pedidoId}')" style="background:#f3e6e6;color:#c0392b;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✕</button>
       </div>
     </div>`;
   }).join('');
+}
+// ✏️ Editar un pedido pendiente de la tienda: cantidades, precios y quitar renglones.
+// Los cambios de cantidad ajustan la reserva del depósito en el servidor (y el circuito si sube).
+let _epedId = null, _epedItems = [];
+function editarPedidoTienda(pedidoId) {
+  const ped = _pedidosPendientes.find(p => p.pedidoId === pedidoId);
+  if (!ped) return;
+  _epedId = pedidoId;
+  _epedItems = (ped.items || []).map(it => ({ codigo: it.codigo, nombre: it.nombre, cantidad: parseInt(it.cantidad) || 1, precio: parseFloat(it.precio) || 0 }));
+  _renderEped(ped.cliente);
+}
+function _renderEped(cliente) {
+  let ov = document.getElementById('eped-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'eped-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  const total = _epedItems.reduce((s, it) => s + it.precio * it.cantidad, 0);
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:18px;max-width:440px;width:100%;max-height:85vh;overflow-y:auto">
+    <div style="font-weight:800;font-size:1rem;color:#5c3d1e;margin-bottom:10px">✏️ Editar pedido de ${esc(cliente || '')}</div>
+    ${_epedItems.map((it, i) => `<div style="border:1px solid #eee;border-radius:10px;padding:8px 10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <div style="font-weight:700;font-size:0.84rem;flex:1;min-width:0">${esc(it.nombre)}</div>
+        <button onclick="_epedItems.splice(${i},1);_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" style="background:none;border:none;color:#c0392b;font-size:1rem;cursor:pointer">✕</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <button onclick="_epedItems[${i}].cantidad=Math.max(1,_epedItems[${i}].cantidad-1);_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" style="width:30px;height:30px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:1rem;cursor:pointer">−</button>
+          <b style="min-width:22px;text-align:center">${it.cantidad}</b>
+          <button onclick="_epedItems[${i}].cantidad+=1;_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" style="width:30px;height:30px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:1rem;cursor:pointer">+</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:0.82rem">$ <input type="number" min="0" value="${it.precio}" onchange="_epedItems[${i}].precio=parseFloat(this.value)||0;_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" onclick="this.select()" style="width:80px;padding:6px;border:1.5px solid #ddd;border-radius:8px;text-align:right;font-size:0.84rem"> c/u</div>
+        <div style="margin-left:auto;font-weight:700;font-size:0.84rem;color:#2c6fad">${fmt(it.precio * it.cantidad)}</div>
+      </div>
+    </div>`).join('')}
+    <div style="text-align:right;font-weight:800;margin:8px 0;color:#5c3d1e">Total: ${fmt(total)}</div>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('eped-ov').remove()" style="flex:1;padding:10px;background:#f3efe9;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button onclick="guardarPedidoTienda()" style="flex:2;padding:10px;background:#1a7a3c;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar cambios</button>
+    </div>
+  </div>`;
+}
+async function guardarPedidoTienda() {
+  if (!_epedId) return;
+  const r = await api('editarPedidoHijo', { pedidoId: _epedId, items: JSON.stringify(_epedItems) });
+  if (r && r.ok) {
+    const ov = document.getElementById('eped-ov'); if (ov) ov.remove();
+    mostrarToast('💾 Pedido actualizado · nuevo total ' + fmt(r.total));
+    await cargarDatos();
+  } else mostrarToast('⚠️ ' + ((r && r.error) || 'No se pudo guardar'));
 }
 function cobrarPedido(pedidoId) {
   const ped = _pedidosPendientes.find(p => p.pedidoId === pedidoId);

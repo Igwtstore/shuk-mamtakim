@@ -2240,6 +2240,41 @@ Deno.serve(async (req) => {
       await sbInsert('cierres_hijos', { fecha: dia, hijo, cerrado_en: fechaAhora(), vendido: N(body, 'vendido'), cobrado: N(body, 'cobrado'), efectivo: N(body, 'efectivo'), mp: N(body, 'mp'), deuda: N(body, 'deuda'), ganancia: N(body, 'ganancia'), consumo_costo: N(body, 'consumoCosto'), nota: P(body, 'nota') });
       return json({ ok: true, dia });
     }
+    if (accion === 'editarPedidoHijo') {
+      // ✏️ Editar un pedido PENDIENTE de la tienda (13/07: cobraron 2×$3.000 y era 2×$2.500):
+      // cantidades y precios por línea. Los deltas de cantidad ajustan la RESERVA del depósito
+      // (subir cantidad pasa por el circuito igual que al reservar; bajar devuelve).
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const pidE = P(body, 'pedidoId');
+      let nuevos: any[] = []; try { nuevos = JSON.parse(P(body, 'items') || '[]'); } catch { return json({ error: 'items inválido' }); }
+      nuevos = nuevos.filter((it: any) => it && it.codigo && (parseInt(it.cantidad) || 0) > 0);
+      if (!nuevos.length) return json({ error: 'el pedido no puede quedar vacío — cancelalo si no va más' });
+      const rowsE = await sbGet('candy_pedidos', 'select=*&pedido_id=eq.' + encodeURIComponent(pidE));
+      if (!rowsE.length) return json({ error: 'no encontrado' });
+      if ((rowsE[0].estado || '') !== 'pendiente') return json({ error: 'solo se editan pedidos pendientes' });
+      let viejos: any[] = []; try { viejos = JSON.parse(rowsE[0].items || '[]'); } catch { viejos = []; }
+      const qtyV: any = {}; viejos.forEach((it: any) => { qtyV[it.codigo] = (qtyV[it.codigo] || 0) + (parseInt(it.cantidad) || 0); });
+      const qtyN: any = {}; nuevos.forEach((it: any) => { qtyN[it.codigo] = (qtyN[it.codigo] || 0) + (parseInt(it.cantidad) || 0); });
+      // 1º validar/comprar los AUMENTOS (todo o nada antes de escribir)
+      for (const cod of Object.keys(qtyN)) {
+        const delta = qtyN[cod] - (qtyV[cod] || 0);
+        if (delta > 0) {
+          const cirE = await asegurarGenuinoShuk(cod, delta, 'edición pedido tienda [' + pidE + ']');
+          if (cirE.error) return json({ error: cirE.error });
+        }
+      }
+      // 2º aplicar deltas a la reserva
+      for (const cod of new Set([...Object.keys(qtyV), ...Object.keys(qtyN)])) {
+        const delta = (qtyN[cod] || 0) - (qtyV[cod] || 0);
+        if (delta === 0) continue;
+        const nomE = (nuevos.find((it: any) => it.codigo === cod) || viejos.find((it: any) => it.codigo === cod) || {}).nombre || '';
+        await ajustarDeposito(cod, nomE, -delta, 'Edición pedido tienda [' + pidE + '] (' + (delta > 0 ? '+' : '') + delta + ')');
+      }
+      const totalE = nuevos.reduce((s2: number, it: any) => s2 + (parseFloat(it.precio) || 0) * (parseInt(it.cantidad) || 0), 0);
+      const itemsFinal = nuevos.map((it: any) => ({ codigo: it.codigo, nombre: (it.nombre || '').toString(), cantidad: parseInt(it.cantidad) || 0, precio: Math.round(parseFloat(it.precio) || 0), subtotal: Math.round((parseFloat(it.precio) || 0) * (parseInt(it.cantidad) || 0)) }));
+      await sbPatch('candy_pedidos', 'pedido_id=eq.' + encodeURIComponent(pidE), { items: JSON.stringify(itemsFinal), total: Math.round(totalE) });
+      return json({ ok: true, total: Math.round(totalE) });
+    }
     if (accion === 'cobrarPedidoHijo') return json(await setEstadoPedidoHijo(body, 'cobrado'));
     if (accion === 'cancelarPedidoHijo') return json(await setEstadoPedidoHijo(body, 'cancelado'));
     if (accion === 'ajustarDepositoManual') {
