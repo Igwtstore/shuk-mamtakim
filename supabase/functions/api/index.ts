@@ -1490,6 +1490,20 @@ Deno.serve(async (req) => {
         }));
       }
       await altaClienteAuto(cliente, Q('tipo'));
+      // 🔔 Notificación WhatsApp DESDE EL SERVIDOR (caso KI TOV 13/07: la disparaba el navegador
+      // del cliente después de enviar — si cerraba la pestaña, moría y el pedido entraba mudo).
+      // Truncada a 1500 (Twilio rebota >1600, error 21617 — caso Fabio 13/07).
+      if (!esCotizacion) {
+        try {
+          let resu = (Q('productos') || '').split(' || ').join('\n');
+          const totNP: string[] = [];
+          if (QN('totalARS') > 0) totNP.push('$ ' + Math.round(QN('totalARS')).toLocaleString('es-AR'));
+          if (QN('totalUSD') > 0) totNP.push('U$S ' + QN('totalUSD').toFixed(2));
+          let cuerpoV = '🛍️ *Nuevo pedido #' + nVenta + ' - Shuk Mamtakim*\n\n👤 *' + cliente + '* (' + Q('tipo') + ')\n\n' + resu + (totNP.length ? '\n\n*Total:* ' + totNP.join(' + ') : '');
+          if (cuerpoV.length > 1500) cuerpoV = cuerpoV.slice(0, 1450) + '\n…\n📋 *Pedido largo: el detalle completo está en el panel.*';
+          await sendTwilioWA('+5491131754540', cuerpoV);
+        } catch { /* la notificación jamás frena una venta */ }
+      }
       // Envío cobrado al cliente → Caja Envíos del dueño del pedido (el costo se carga al cobrar).
       const envCob = QN('envioCobrado');
       if (envCob > 0) await upsertEnvio(fila.id, { nVenta, cliente, dueno: duenoVenta(QN('arsJONY'), QN('usdJONY'), QN('arsMyri'), QN('usdMyri')), cobrado: Math.round(envCob) });
@@ -2335,6 +2349,19 @@ Deno.serve(async (req) => {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       const rows = await sbGet('config', 'select=clave,valor&clave=like.VIP_*');
       return json(rows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: (r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '', n: (d.ids || []).length }; } catch { return null; } }).filter(Boolean));
+    }
+    if (accion === 'actualizarCatalogoVip') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const tU = P(body, 't').replace(/[^a-z0-9]/gi, '');
+      const rawU = await getConfig('VIP_' + tU, '');
+      if (!rawU) return json({ error: 'ese link ya no existe' });
+      let dU: any = {}; try { dU = JSON.parse(rawU); } catch { dU = {}; }
+      dU.ids = (P(body, 'ids') || '').split(',').map((x: string) => x.trim()).filter(Boolean);
+      if (P(body, 'nombre')) dU.nombre = P(body, 'nombre');
+      if (P(body, 'canal')) dU.canal = P(body, 'canal');
+      dU.editado = fechaAhora();
+      await setConfig('VIP_' + tU, JSON.stringify(dU));
+      return json({ ok: true, n: dU.ids.length });
     }
     if (accion === 'borrarCatalogoVip') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });

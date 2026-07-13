@@ -3769,11 +3769,10 @@ async function enviarPedido(_stockVerificado) {
   cerrarCarrito();
   renderCatalogo();
 
-  const url1 = `https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`;
-  window.open(url1, '_blank');
-  // Backup: notificación Twilio al admin por si el WA no llega
-  const resumen = lineas.join('\n') + totalLine;
-  fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'notificarPedido', cliente: nombre, tipo: tipoCliente, resumen })).catch(() => {});
+  // WhatsApp con BOTONES (caso KI TOV 13/07: window.open tras esperar al servidor pierde el
+  // "permiso de click" y el navegador lo bloquea — el modal con <a> funciona siempre).
+  // La notificación Twilio al admin ahora la manda EL SERVIDOR al registrar (infalible).
+  mostrarConfirmacionWA(msg);
   showToast('¡Pedido enviado! ✓');
 }
 
@@ -9357,6 +9356,15 @@ async function _vipCargar() {
 async function crearLinkVip() {
   const ids = Object.keys(_acSel);
   if (!ids.length) { showToast('Tildá al menos un producto para el link'); return; }
+  // Modo edición: pisa el MISMO token → el cliente sigue con su URL de siempre
+  if (_acEditVip) {
+    const rE = await apiWrite(new URLSearchParams({ accion: 'actualizarCatalogoVip', t: _acEditVip.token, ids: ids.join(',') }), '');
+    if (rE && rE.ok) {
+      showToast('💾 Link de ' + _acEditVip.nombre + ' actualizado (' + rE.n + ' productos) — misma URL ✓');
+      _acEditVip = null; _acEditBanner();
+    } else showToast('⚠️ No se pudo actualizar: ' + ((rE && rE.error) || 'reintentá'));
+    return;
+  }
   const nombre = prompt('¿Para quién es este catálogo? (ej: Tomás)');
   if (nombre === null) return;
   const canal = (_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista';
@@ -9389,10 +9397,51 @@ async function verLinksVip() {
     ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span></div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
       <button onclick="navigator.clipboard.writeText('https://shuk-mamtakim.vercel.app/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
+      <button onclick="editarLinkVip('${l.token}','${esc(l.nombre).replace(/'/g,"\\'")}','${l.canal}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
       <button onclick="borrarLinkVip('${l.token}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.6rem 0">No hay links creados.</div>'}
     <button onclick="document.getElementById('viplink-overlay').remove()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>
   </div>`;
+}
+// ✏️ EDITAR un link vivo (pedido del usuario 13/07): carga su selección en el armador; al
+// tocar "Link privado con carrito" se GUARDA sobre el mismo token — la URL del cliente no cambia.
+let _acEditVip = null;   // { token, nombre, canal }
+async function editarLinkVip(t, nombre, canal) {
+  const d = await fetch(APPS_SCRIPT_URL + '?accion=getCatalogoVip&t=' + encodeURIComponent(t)).then(r => r.json()).catch(() => null);
+  if (!d || !Array.isArray(d.ids)) { showToast('No pude cargar ese link'); return; }
+  _acSel = {};
+  d.ids.forEach(id => { _acSel[id] = true; });
+  _acEditVip = { token: t, nombre: nombre || d.nombre || 'cliente', canal: canal || d.canal || 'minorista' };
+  const ov = document.getElementById('viplink-overlay'); if (ov) ov.remove();
+  _acRender();
+  _acEditBanner();
+  showToast('✏️ Editando el link de ' + _acEditVip.nombre + ' — tildá/destildá y guardá');
+}
+function _acEditBanner() {
+  let b = document.getElementById('ac-edit-banner');
+  const btnCrear = document.querySelector('button[onclick="crearLinkVip()"]');
+  if (!_acEditVip) { if (b) b.remove(); if (btnCrear) btnCrear.textContent = '🔗 Link privado con carrito'; return; }
+  if (!b && btnCrear) {
+    b = document.createElement('div');
+    b.id = 'ac-edit-banner';
+    btnCrear.parentNode.parentNode.insertBefore(b, btnCrear.parentNode);
+  }
+  if (!b) return;
+  const nSel = Object.keys(_acSel).length;
+  const agotados = _acProductos.filter(p => _acSel[p.id] && (parseInt(p.stock) || 0) <= 0).length;
+  b.style.cssText = 'background:#fdf3dc;border:1.5px solid #e8c97a;border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;font-size:0.8rem;color:#8a5a1e';
+  b.innerHTML = `✏️ <b>Editando el link de ${esc(_acEditVip.nombre)}</b> · ${nSel} producto${nSel !== 1 ? 's' : ''} tildado${nSel !== 1 ? 's' : ''} — al tocar el botón de abajo se guarda <b>con la misma URL</b>.
+    <div style="display:flex;gap:6px;margin-top:0.45rem;flex-wrap:wrap">
+      ${agotados > 0 ? `<button onclick="_acQuitarAgotados()" style="background:#fff;border:1.5px solid #e8c97a;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;color:#8a5a1e;font-family:inherit">🧹 Quitar ${agotados} agotado${agotados !== 1 ? 's' : ''}</button>` : ''}
+      <button onclick="_acEditVip=null;_acEditBanner();showToast('Edición cancelada')" style="background:#fff;border:1.5px solid #ddd;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;color:#888;font-family:inherit">✕ Cancelar edición</button>
+    </div>`;
+  if (btnCrear) btnCrear.textContent = '💾 Guardar cambios del link (misma URL)';
+}
+function _acQuitarAgotados() {
+  let n = 0;
+  _acProductos.forEach(p => { if (_acSel[p.id] && (parseInt(p.stock) || 0) <= 0) { delete _acSel[p.id]; n++; } });
+  _acRender(); _acEditBanner();
+  showToast('🧹 ' + n + ' agotado(s) quitado(s) del link');
 }
 async function borrarLinkVip(t) {
   if (!confirm('¿Revocar este link? El cliente que lo tenga deja de ver el catálogo.')) return;
