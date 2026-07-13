@@ -9293,6 +9293,7 @@ function setModo(m) {
     // cache; recién después se disparan los renders (que pegan al cache, sin saturar con ~12 pedidos).
     cargarPanelAdmin().finally(() => {
       renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderCuentaSocios(); renderCajaEnvios(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); renderStockTotal(); _llenarTrazarSelect();
+      renderResumenMiri();   // 📊 Mi resumen — clave para la SESIÓN de Miri (el toggle de Jony ya lo llamaba)
     });
     startAdminPolling();
   }
@@ -10086,23 +10087,25 @@ function renderSocioBar() {
   const btnTodo = document.getElementById('socio-btn-todo');
   const btnMiri = document.getElementById('socio-btn-miri');
   const labelMiri = document.getElementById('socio-label-miri');
-  // Miri: oculta los botones, muestra label fijo
+  // Miri: oculta los botones, muestra label fijo — y SIGUE al bloque común de abajo
+  // (⚠️ acá había un return que se salteaba ocultar Ganancias/Docs y el bloqueo de dueño:
+  //  la sesión de Miri veía pestañas y selector que el toggle de Jony sí ocultaba)
   if (socioActual === 'miri') {
     btnTodo.style.display = 'none';
     btnMiri.style.display = 'none';
     labelMiri.style.display = '';
-    return;
+  } else {
+    // Jony: muestra toggle, resalta el activo
+    labelMiri.style.display = 'none';
+    [['socio-btn-todo','todo'],['socio-btn-miri','miri']].forEach(([id,v]) => {
+      const b = document.getElementById(id);
+      b.style.display = '';
+      const on = vistaSocio === v;
+      b.style.background = on ? 'var(--azul)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--azul)';
+      b.style.boxShadow = on ? 'none' : 'inset 0 0 0 1.5px var(--azul)';
+    });
   }
-  // Jony: muestra toggle, resalta el activo
-  labelMiri.style.display = 'none';
-  [['socio-btn-todo','todo'],['socio-btn-miri','miri']].forEach(([id,v]) => {
-    const b = document.getElementById(id);
-    b.style.display = '';
-    const on = vistaSocio === v;
-    b.style.background = on ? 'var(--azul)' : '#fff';
-    b.style.color = on ? '#fff' : 'var(--azul)';
-    b.style.boxShadow = on ? 'none' : 'inset 0 0 0 1.5px var(--azul)';
-  });
   // Ganancias (diezmo/Pitzujim de Jony) y Docs (explican el split) NO se muestran en vista Miri
   const subGan = document.getElementById('subtab-ganancias');
   if (subGan) subGan.style.display = esVistaMiri() ? 'none' : '';
