@@ -1458,13 +1458,17 @@ Deno.serve(async (req) => {
           const stRows = await sbGet('productos', 'select=id,nombre,stock&id=in.(' + idsChk.join(',') + ')');
           const stMap: any = {}; stRows.forEach((r: any) => { stMap[String(r.id)] = r; });
           const faltan: string[] = [];
+          const faltanItems: any[] = [];   // estructurado: la tienda auto-ajusta el carrito con esto
           for (const u of stockUpdates.split(',')) {
             const pp = u.split(':'); const pid = (pp[0] || '').trim(), qty = parseInt(pp[1]) || 0;
             if (!pid || qty <= 0) continue;
             const st = stMap[pid]; const disp = st ? (parseInt(st.stock) || 0) : 0;
-            if (disp < qty) faltan.push('De "' + (st ? st.nombre : '#' + pid) + '" queda' + (disp === 1 ? '' : 'n') + ' ' + Math.max(0, disp) + ' y pediste ' + qty);
+            if (disp < qty) {
+              faltan.push('De "' + (st ? st.nombre : '#' + pid) + '" queda' + (disp === 1 ? '' : 'n') + ' ' + Math.max(0, disp) + ' y pediste ' + qty);
+              faltanItems.push({ id: pid, nombre: st ? st.nombre : '#' + pid, pedido: qty, hay: Math.max(0, disp) });
+            }
           }
-          if (faltan.length) return json({ error: 'stock', detalle: faltan.join(' · ') });
+          if (faltan.length) return json({ error: 'stock', detalle: faltan.join(' · '), items: faltanItems });
         }
       }
       const fila: any = { fecha: fechaAhora(), cliente, tipo: Q('tipo'), productos: Q('productos'), forma_pago: Q('formaPago'), notas: Q('notas'), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: QN('totalARS'), total_usd: QN('totalUSD'), ars_jony: QN('arsJONY'), ars_myri: QN('arsMyri'), usd_myri: QN('usdMyri'), comi_ars: QN('comiARS'), comi_usd: QN('comiUSD'), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: QN('usdJONY'), vid: vidVenta };
@@ -1475,13 +1479,15 @@ Deno.serve(async (req) => {
       const nVenta = ins.nVenta;
       // En cotización NO se descuenta stock (se descuenta recién al aceptarla desde el panel).
       if (stockUpdates && !esCotizacion) {
-        for (const u of stockUpdates.split(',')) {
+        // En PARALELO (feedback del usuario 13/07: el "Enviando pedido…" tardaba 15-20s con
+        // carritos grandes — el descuento era secuencial, un roundtrip por producto).
+        await Promise.all(stockUpdates.split(',').map(async (u: string) => {
           const pp = u.split(':'); const pid = pp[0], qty = parseInt(pp[1]) || 0;
-          if (!pid || !qty) continue;
+          if (!pid || !qty) return;
           const res = await moverStockShuk(pid, -qty, 'Venta #' + nVenta + ' — ' + cliente);
           const sobre = res ? qty - res.antes : 0;
           if (res && sobre > 0) await sendTwilioWA('+5491131754540', '⚠️ *SOBREVENTA*\n' + res.nombre + ': el pedido #' + nVenta + ' (' + cliente + ') pidió *' + qty + '* y solo había *' + res.antes + '*. Faltan ' + sobre + ' — revisalo antes de confirmar.');
-        }
+        }));
       }
       await altaClienteAuto(cliente, Q('tipo'));
       // Envío cobrado al cliente → Caja Envíos del dueño del pedido (el costo se carga al cobrar).
@@ -1575,7 +1581,11 @@ Deno.serve(async (req) => {
       return json({ ok: true, nuevo: true });
     }
     if (accion === 'notificarPedido') {
-      await sendTwilioWA('+5491131754540', '🛍️ *Nuevo pedido - Shuk Mamtakim*\n\n👤 *' + Q('cliente') + '* (' + Q('tipo') + ')\n\n' + Q('resumen'));
+      // Twilio WA corta en 1600 caracteres (error 21617 — caso real: pedido mayorista de Fabio
+      // 13/07 nunca llegó). Si el resumen es largo, se recorta con aviso: el detalle está en el panel.
+      let cuerpoNP = '🛍️ *Nuevo pedido - Shuk Mamtakim*\n\n👤 *' + Q('cliente') + '* (' + Q('tipo') + ')\n\n' + Q('resumen');
+      if (cuerpoNP.length > 1500) cuerpoNP = cuerpoNP.slice(0, 1450) + '\n…\n📋 *Pedido largo: el detalle completo está en el panel.*';
+      await sendTwilioWA('+5491131754540', cuerpoNP);
       return json({ ok: true });
     }
     // ═══ fin tienda pública ═══════════════════════════════════════════════════
@@ -2535,7 +2545,7 @@ Deno.serve(async (req) => {
       const [vts, cc, cat, dep, shukEn, prods, cons, ped, cierres, stockD] = await Promise.all([
         sbGet('candy_ventas', 'select=*&hijo=eq.' + enc), sbGet('candy_cc', 'select=cliente,monto&hijo=eq.' + enc),
         sbGet('candy_productos', 'select=*'), sbGet('candy_deposito', 'select=codigo,cantidad'),
-        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,imagen,stock,categoria,descripcion'),
+        sbGet('shuk_en_candy', 'select=shuk_id'), sbGet('productos', 'select=id,nombre,precio_min,costo,moneda,imagen,stock,categoria,descripcion'),
         sbGet('candy_consumo', 'select=*&hijo=eq.' + enc), sbGet('candy_pedidos', 'select=*'),
         sbGet('cierres_hijos', 'select=fecha&hijo=eq.' + enc), sbGet('stock_diario', 'select=fecha&hijo=eq.' + enc),
       ]);
@@ -2546,7 +2556,7 @@ Deno.serve(async (req) => {
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
       const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: parseFloat(r.costo) || 0, foto: r.foto || '', stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
-      const catalogo = propios.concat(shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: parseFloat(p.costo) || 0, foto: fotoShukUrl(primeraFoto(p.imagen)), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() })));
+      const catalogo = propios.concat(shukEn.map((s: any) => porId[String(s.shuk_id)]).filter(Boolean).map((p: any) => ({ codigo: 'shuk:' + p.id, nombre: p.nombre, precioVenta: parseFloat(p.precio_min) || 0, costo: parseFloat(p.costo) || 0, costoMoneda: (p.moneda || '$').toString().trim() === 'U$S' ? 'U$S' : '$', foto: fotoShukUrl(primeraFoto(p.imagen)), stock: parseInt(p.stock) || 0, origen: 'shuk', desc: p.descripcion || '', categoria: (p.categoria || 'Varios').toString() })));
       const consumo = cons.filter((c: any) => (c.fecha || '').toString().startsWith(hoy)).map((c: any) => ({ producto: c.producto, codigo: c.codigo, cantidad: c.cantidad, motivo: c.motivo }));
       // El pedido de la tienda guarda el kid en minúscula ('meir', 'jony'); el panel pregunta
       // por 'Meir'/'Pa'. normHijo empareja (y jony↔Pa son la misma persona) — como _normHijo_.

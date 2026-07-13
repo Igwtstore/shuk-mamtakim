@@ -3538,6 +3538,10 @@ function renderCarrito() {
   }).join('');
 
   const _savedNombre = localStorage.getItem('shuk_may_nombre') || '';
+  // Dirección/nota y forma de pago se RECUERDAN como el nombre (feedback de cliente real 13/07:
+  // tras un ajuste de stock se le volvían a pedir — engorroso y con el cliente esperando).
+  const _savedNota = localStorage.getItem('shuk_nota_pedido') || '';
+  const _savedPago = localStorage.getItem('shuk_forma_pago') || '';
   cont.innerHTML = itemsHTML + `
     <div class="nombre-campo">
       <label>Tu nombre</label>
@@ -3545,16 +3549,16 @@ function renderCarrito() {
     </div>
     <div class="nombre-campo">
       <label>Nota / indicación especial <span style="color:var(--texto-suave);font-weight:400">(opcional)</span></label>
-      <textarea id="nota-pedido" placeholder="Ej: Entregar en Av. Corrientes 1234, después de las 18hs, timbre 3B..." style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;resize:vertical;min-height:60px;box-sizing:border-box;"></textarea>
+      <textarea id="nota-pedido" oninput="try{localStorage.setItem('shuk_nota_pedido',this.value)}catch(e){}" placeholder="Ej: Entregar en Av. Corrientes 1234, después de las 18hs, timbre 3B..." style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;resize:vertical;min-height:60px;box-sizing:border-box;">${_savedNota.replace(/</g,'&lt;')}</textarea>
     </div>
     <div class="nombre-campo">
       <label>Forma de cobro</label>
-      <select id="forma-pago" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;color:#1a1a2e;">
-        <option value="">Seleccionar...</option>
-        <option value="Efectivo">Efectivo</option>
-        <option value="Transferencia">Transferencia</option>
-        <option value="Mercado Pago">Mercado Pago</option>
-        <option value="Cuenta corriente">Cuenta corriente</option>
+      <select id="forma-pago" onchange="try{localStorage.setItem('shuk_forma_pago',this.value)}catch(e){}" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;color:#1a1a2e;">
+        <option value=""${!_savedPago ? ' selected' : ''}>Seleccionar...</option>
+        <option value="Efectivo"${_savedPago === 'Efectivo' ? ' selected' : ''}>Efectivo</option>
+        <option value="Transferencia"${_savedPago === 'Transferencia' ? ' selected' : ''}>Transferencia</option>
+        <option value="Mercado Pago"${_savedPago === 'Mercado Pago' ? ' selected' : ''}>Mercado Pago</option>
+        <option value="Cuenta corriente"${_savedPago === 'Cuenta corriente' ? ' selected' : ''}>Cuenta corriente</option>
       </select>
     </div>
     <button class="pedido-btn" onclick="enviarPedido()">
@@ -3586,6 +3590,24 @@ function eliminarDelCarrito(id) {
 
 let _enviando = false, _enviandoManual = false;
 let _registroCallback = null;
+// ⚠️ Stock modificado durante la compra: el carrito ya fue AJUSTADO solo; este modal lo cuenta
+// claro y deja SEGUIR con un botón (feedback de cliente real 13/07: buscar y corregir a mano
+// en una lista sin fotos era engorroso).
+function _modalStockAjustado(lineas) {
+  const prev = document.getElementById('stock-ajuste-modal'); if (prev) prev.remove();
+  const m = document.createElement('div');
+  m.id = 'stock-ajuste-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:650;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:1.5rem 1.4rem;max-width:380px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+      <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.5rem">⚠️ Hubo una modificación de stock</div>
+      <div style="font-size:0.85rem;color:#555;line-height:1.6;margin-bottom:1rem">${lineas.map(l => esc(l)).join('<br>')}</div>
+      <div style="font-size:0.78rem;color:#888;margin-bottom:1rem">Ya ajustamos tu pedido — podés enviarlo así o revisar el carrito.</div>
+      <button onclick="document.getElementById('stock-ajuste-modal').remove(); enviarPedido(true);" style="width:100%;padding:0.85rem;background:#1a1a2e;color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;margin-bottom:0.5rem">📤 Enviar pedido ajustado</button>
+      <button onclick="document.getElementById('stock-ajuste-modal').remove()" style="width:100%;padding:0.6rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;cursor:pointer;color:var(--texto-suave)">Revisar el carrito</button>
+    </div>`;
+  document.body.appendChild(m);
+}
 async function enviarPedido(_stockVerificado) {
   if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
@@ -3635,7 +3657,8 @@ async function enviarPedido(_stockVerificado) {
         actualizarBadge(); renderCarrito(); renderCatalogo();
         _enviando = false;
         if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
-        showToast('⚠️ Justo se vendió: ' + cortos.map(it => `${it.nombre} (quedan ${frescos[it.id]})`).join(', ') + '. Ajustamos tu carrito, revisalo 🙏');
+        if (Object.keys(carrito).length) _modalStockAjustado(cortos.map(it => frescos[it.id] > 0 ? `• ${it.nombre}: pediste ${it.qty} → va ${frescos[it.id]}` : `• ${it.nombre}: se quedó sin stock (lo quitamos)`));
+        else alert('😕 Justo se vendió todo lo de tu pedido — perdoná. Te actualizamos el catálogo.');
         return;
       }
       _enviando = false;
@@ -3706,9 +3729,21 @@ async function enviarPedido(_stockVerificado) {
   if (_respVenta && _respVenta.error === 'stock') {
     _enviando = false;
     if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
-    alert('😕 Justo nos quedamos sin stock de algo de tu pedido:\n\n' + (_respVenta.detalle || '') + '\n\nAjustá las cantidades y volvé a intentar — te actualizamos el catálogo.');
-    cargarProductos();   // catálogo fresco: era la causa (página vieja abierta)
-    return;              // carrito INTACTO para que corrija
+    // AUTO-AJUSTE (feedback cliente real 13/07): el sistema acomoda las cantidades solo y
+    // ofrece seguir con UN botón — nada de buscar productos a mano en la lista.
+    const _ajustes = [];
+    (Array.isArray(_respVenta.items) ? _respVenta.items : []).forEach(fi => {
+      if (!carrito[fi.id]) return;
+      const pl = productos.find(x => String(x.id) === String(fi.id));
+      if (pl) pl.stock = fi.hay;
+      if (fi.hay > 0) { carrito[fi.id].qty = fi.hay; _ajustes.push(`• ${fi.nombre}: pediste ${fi.pedido} → va ${fi.hay}`); }
+      else { delete carrito[fi.id]; _ajustes.push(`• ${fi.nombre}: se quedó sin stock (lo quitamos)`); }
+    });
+    actualizarBadge(); renderCarrito(); renderCatalogo();
+    if (!Object.keys(carrito).length) { alert('😕 Justo se vendió todo lo de tu pedido — perdoná. Te actualizamos el catálogo.'); cargarProductos(); return; }
+    if (_ajustes.length) _modalStockAjustado(_ajustes);
+    else { alert('😕 Hubo un tema de stock: ' + (_respVenta.detalle || '') + '. Revisá el carrito.'); cargarProductos(); }
+    return;
   }
   if (_respVenta && _respVenta.error === 'rate') {
     _enviando = false;
