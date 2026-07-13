@@ -10409,6 +10409,25 @@ async function renderAnalitica() {
   if (!d || d.error) { cont.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕</div>'; return; }
   if (d.vacio) { cont.innerHTML = '<div class="admin-card"><div class="sinpedidos">Todavía no hay datos de tráfico. Se empiezan a registrar a medida que entren visitantes a la tienda. 👀</div></div>'; return; }
 
+  // ⚠️ REGLA SAGRADA: en vista Miri no se ve NADA de Jony. El tráfico se guarda por
+  // NOMBRE (sin ID, truncado a 40), así que se oculta todo nombre EXCLUSIVO de Jony;
+  // si Miri tiene un gemelo con el mismo nombre, se muestra (también es demanda de lo suyo).
+  if (esVistaMiri()) {
+    const kAna = n => String(n || '').substring(0, 40).trim().toLowerCase();
+    const nomJony = new Set(), nomMiri = new Set();
+    (productos || []).forEach(p => (p.dueno === 'Jony' ? nomJony : nomMiri).add(kAna(p.nombre)));
+    const soloJony = n => { const k = kAna(n); return nomJony.has(k) && !nomMiri.has(k); };
+    d.topProductos = (d.topProductos || []).filter(x => !soloJony(x.nombre));
+    d.abandonados = (d.abandonados || []).map(a => {
+      const items = (a.items || []).filter(it => !soloJony(it.n));
+      const nombres = (a.productos || []).filter(n => !soloJony(n));
+      if (!items.length && !nombres.length) return null;   // era todo de Jony → afuera
+      const filtrado = items.length !== (a.items || []).length || nombres.length !== (a.productos || []).length;
+      const total = filtrado ? items.reduce((s, it) => s + (it.q || 0) * (it.p || 0), 0) : a.total;
+      return { ...a, items: (a.items && a.items.length) ? items : a.items, productos: nombres, total };
+    }).filter(Boolean);
+  }
+
   window._anaData = d;   // para exportar a CSV
   const r = d.resumen;
   const pct = (a,b) => b > 0 ? Math.round(a/b*100) : 0;
