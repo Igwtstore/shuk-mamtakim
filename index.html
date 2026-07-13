@@ -1328,7 +1328,7 @@
         </div>
         <div class="nombre-campo" style="margin:0;flex:1.4;min-width:140px">
           <label>✡️ Hashgajá <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(supervisión)</span></label>
-          <input type="text" id="np-hashgaja" list="hashgaja-list" placeholder="Elegí o escribí una nueva…" />
+          <input type="text" id="np-hashgaja" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…" />
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Parve / Lácteo</label>
@@ -1471,7 +1471,7 @@
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
         <div class="nombre-campo" style="margin:0;flex:1.4;min-width:150px"><label>✡️ Hashgajá <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">(supervisión)</span></label>
-          <input type="text" id="ep-hashgaja" list="hashgaja-list" placeholder="Elegí o escribí una nueva…" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+          <input type="text" id="ep-hashgaja" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px"><label>Parve / Lácteo</label>
           <select id="ep-kosher" onchange="kosherChange('ep')" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option value="">— no mostrar</option><option value="Parve">🌿 Parve</option><option value="Lácteo">🥛 Lácteo</option></select>
@@ -5438,7 +5438,7 @@ function renderMasivo() {
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">✡️ Hashgajá (supervisión)</th><th style="${_mTh}">Parve / Lácteo</th><th style="${_mTh}">Jalav <span style="font-weight:400">(si es lácteo)</span></th></tr></thead><tbody>`;
     list.forEach(p => {
       const esLacteo = _mVal(p.id, 'kosherTipo') === 'Lácteo';
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" list="hashgaja-list" placeholder="Elegí o escribí una nueva…"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
     });
   } else {
     const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
