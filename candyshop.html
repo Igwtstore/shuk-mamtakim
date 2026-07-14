@@ -1407,6 +1407,7 @@ function renderPedidosPendientes(peds) {
       <div style="font-size:0.8rem;color:#6b5a48;margin:6px 0">${(p.items || []).map(it => `${it.cantidad}× ${esc(it.nombre)} — ${fmt(it.precio)} c/u = <b>${fmt((it.precio || 0) * (it.cantidad || 1))}</b>`).join('<br>')}</div>
       <div style="display:flex;gap:8px">
         <button onclick="cobrarPedido('${p.pedidoId}')" style="flex:1;background:#1a7a3c;color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-family:inherit;cursor:pointer">💵 Cobrar</button>
+        <button onclick="remitoTiendaCandy('${p.pedidoId}')" title="Remito para el cliente (imprimir o WhatsApp)" style="background:#fdf1f7;color:#c050a0;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">🧾</button>
         <button onclick="editarPedidoTienda('${p.pedidoId}')" title="Editar cantidades y precios" style="background:#eef4fb;color:#2c6fad;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✏️</button>
         <button onclick="cancelarPedido('${p.pedidoId}')" style="background:#f3e6e6;color:#c0392b;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✕</button>
       </div>
@@ -1477,6 +1478,88 @@ function cobrarPedido(pedidoId) {
   renderProductosGrid();
   renderWizardStep(2);                 // salta a "cantidades" (ya con productos) → luego pago
   renderCantidades();
+}
+// 🧾 Remito del pedido de la tienda: ventana imprimible (guardar PDF) + mandar por WhatsApp,
+// con piel Candy y las fotos del catálogo — se acabó el copiar y pegar para el cliente.
+function _remitoCandyTexto(p) {
+  const lineas = (p.items || []).map(it => `• ${it.cantidad}× ${it.nombre} — ${fmt(it.precio)} c/u = ${fmt((it.precio || 0) * (it.cantidad || 1))}`).join('\n');
+  return `🍬 *Candy Shop* — Detalle de tu pedido\n👤 ${p.cliente}\n\n${lineas}\n\n💰 *Total: ${fmt(p.total)}*${p.nota ? '\n📝 ' + p.nota : ''}\n\n¡Gracias por tu compra! 🎉`;
+}
+function _fotoCandyRemito(codigo) {
+  const c = (catalogoCache || []).find(x => String(x.codigo) === String(codigo));
+  const f = c ? ((c.fotos && c.fotos[0]) || c.foto || '') : '';
+  if (!f) return '';
+  return f.indexOf('res.cloudinary.com') !== -1 ? f.replace('/upload/', '/upload/w_80,h_80,c_fill/') : f;
+}
+function remitoTiendaCandy(pedidoId) {
+  const p = _pedidosPendientes.find(x => x.pedidoId === pedidoId);
+  if (!p) return;
+  const nro = String(p.pedidoId || '').replace(/\D/g, '').slice(-6) || '—';
+  const filas = (p.items || []).map(it => {
+    const foto = _fotoCandyRemito(it.codigo);
+    const img = foto
+      ? `<img src="${foto}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;display:block" onerror="this.style.display='none'">`
+      : `<div style="width:44px;height:44px;border-radius:8px;background:#fdf1f7;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🍬</div>`;
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #f7e8f0;width:56px">${img}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f7e8f0;font-weight:600;font-size:0.86rem;color:#3d2233">${esc(it.nombre)}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f7e8f0;text-align:center;font-size:0.84rem;color:#555">${it.cantidad}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f7e8f0;text-align:right;font-size:0.84rem;color:#555;white-space:nowrap">${fmt(it.precio)}</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f7e8f0;text-align:right;font-size:0.84rem;font-weight:700;color:#3d2233;white-space:nowrap">${fmt((it.precio || 0) * (it.cantidad || 1))}</td>
+    </tr>`;
+  }).join('');
+  const waUrl = p.telefono
+    ? 'https://wa.me/549' + String(p.telefono).replace(/\D/g, '') + '?text=' + encodeURIComponent(_remitoCandyTexto(p))
+    : 'https://wa.me/?text=' + encodeURIComponent(_remitoCandyTexto(p));
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Remito ${esc(p.cliente)} — Candy Shop</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#fdf3f8; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .page { max-width:700px; margin:0 auto; background:white; min-height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  .head { background:linear-gradient(120deg,#ff6ec4,#a06ee8); color:#fff; padding:22px 24px; }
+  .head h1 { font-size:1.5rem; letter-spacing:0.02em; }
+  .head small { opacity:0.85; font-size:0.74rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase }
+  .info { padding:16px 24px; display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; border-bottom:1px solid #f7e8f0; }
+  .info label { font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#c9a8bb; display:block; margin-bottom:2px; }
+  .info span { font-size:0.9rem; font-weight:700; color:#3d2233; }
+  .tabla { width:100%; border-collapse:collapse; }
+  .tabla tr:nth-child(even) { background:#fdf8fb; }
+  .th th { font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#c9a8bb; background:#fdf1f7; padding:7px 10px; text-align:right; }
+  .th th:nth-child(-n+2) { text-align:left; }
+  .total-bar { background:#3d2233; color:#ffe8f4; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:auto; }
+  .total-bar .val { font-size:1.25rem; font-weight:800; }
+  .nota-box { margin:12px 24px 0; background:#fff8fc; border-left:3px solid #e88ec4; padding:8px 12px; font-size:0.8rem; color:#8a4a6d; border-radius:0 6px 6px 0; }
+  .footer { padding:12px 24px; display:flex; gap:10px; justify-content:flex-end; background:#fdf1f7; }
+  .footer button, .footer a { border:none; border-radius:8px; padding:10px 18px; font-size:0.85rem; font-weight:700; cursor:pointer; text-decoration:none; }
+  .b-print { background:#a06ee8; color:#fff; }
+  .b-wa { background:#1a7a3c; color:#fff; }
+  @media print { html,body { background:white; } .footer { display:none; } .page { width:190mm; max-width:190mm; min-height:auto; margin:0 auto; } }
+</style></head><body>
+<div class="page">
+  <div class="head"><small>Remito · pedido #${nro}</small><h1>🍬 Candy Shop</h1></div>
+  <div class="info">
+    <div><label>Cliente</label><span>${esc(p.cliente)}</span></div>
+    <div><label>Fecha</label><span>${esc((p.fecha || '').split('T')[0] || p.fecha || '')}</span></div>
+    ${p.telefono ? `<div><label>WhatsApp</label><span>${esc(p.telefono)}</span></div>` : ''}
+  </div>
+  ${p.nota ? `<div class="nota-box">📝 ${esc(p.nota)}</div>` : ''}
+  <table class="tabla" style="margin-top:12px">
+    <tr class="th"><th></th><th>Producto</th><th style="text-align:center">Cant.</th><th>P. Unit.</th><th>Subtotal</th></tr>
+    ${filas}
+  </table>
+  <div class="total-bar"><span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.75">Total</span><span class="val">${fmt(p.total)}</span></div>
+  <div class="footer">
+    <a class="b-wa" href="${waUrl}" target="_blank">💬 Mandar por WhatsApp</a>
+    <button class="b-print" onclick="window.print()">🖨️ Imprimir / PDF</button>
+  </div>
+</div>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('El navegador bloqueó la ventana del remito — permití pop-ups para esta página.'); return; }
+  w.document.write(html);
+  w.document.close();
 }
 async function cancelarPedido(pedidoId) {
   const ped = _pedidosPendientes.find(p => p.pedidoId === pedidoId);
