@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.78</title>
+<title>Shuk Mamtakim — Documentación v3.79</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.79</td><td>Jul 2026</td><td><strong>🆕 Stock disponible: ordenar por "Últimos cargados".</strong> Caso real: Miri ahora carga productos desde su celular; Jony recibe la mercadería y necesitaba ver qué cargó ella para no repetir. En Stock disponible hay dos botones: "📦 Por categoría" (lo de siempre) y "🆕 Últimos cargados". Este último ordena del más nuevo al más viejo por fecha de carga, INCLUYE los productos con stock 0 (recién catalogados, todavía sin dar de alta, con el cartel "sin stock — dar de alta"), y muestra en cada tarjeta un chip con cuándo se cargó ("🆕 hoy 20:01" / "ayer" / "14/07") y de quién es (MIRI/JONY). Respeta la vista Miri (no muestra chip JONY ni productos de Jony). Backend: el catálogo admin ahora expone la fecha `creado`. Verificado headless 12/12 + regresión. <em>Aparte: el backup automático pasó de diario a CADA HORA.</em></td></tr>
       <tr><td>v3.78</td><td>Jul 2026</td><td><strong>💱 Gasto pagado desde DOS cajas + 🔒 link privado muerto sin productos.</strong> (1) Caso real (pago de U$S 250: 200 con dólares de la caja U$S + el resto en pesos del efectivo): botón "➕ Lo pagué desde DOS cajas (mixto)" en Registrar gasto — segunda parte con su monto/moneda/caja; se registran como "pago mixto (1/2)" y "(2/2)" con el mismo comprobante y cada caja resta lo suyo. Además: elegir la caja acomoda la moneda sola, y se BLOQUEA registrar U$S desde una caja de pesos (o al revés) — antes se podía y ensuciaba el extracto. Se sumó la caja ETF U$S JONY que faltaba en gastos. (2) Un link VIP vencido o borrado mostraba el aviso… y abajo la vidriera COMPLETA: ahora banner y nada más (cero productos, sin CTA mayorista). Verificado headless 13/13 (VIP contra la API real) + regresión.</td></tr>
       <tr><td>v3.77</td><td>Jul 2026</td><td><strong>🧾 Remito en la tienda Candy (arranca la puesta al día de Candy = Shuk, módulo Plata).</strong> Reclamo del usuario: para pasarle al cliente lo que compró había que copiar y pegar a mano. Ahora cada pedido de la tienda tiene botón 🧾: ventana imprimible con piel Candy (rosa/violeta, fotos del catálogo por código, renglones con precio y subtotal, nota, total) + botón "🖨️ Imprimir/PDF" + botón "💬 Mandar por WhatsApp" con el detalle ya armado (directo al número del cliente si lo dejó, share libre si no). Verificado headless 11/11 + regresión completa.</td></tr>
       <tr><td>v3.76</td><td>Jul 2026</td><td><strong>🔐 La cuenta propia de Miri queda IDÉNTICA al toggle "Solo Miri".</strong> Al estrenarse el login propio de Miri se vio que su sesión entraba por otra puerta que el toggle de Jony y se salteaba pasos: veía las pestañas Ganancias y Docs, el alta de producto le ofrecía elegir dueño "Jony", y "Mi resumen" no aparecía. Los DATOS siempre estuvieron filtrados (la vista quedaba forzada); era la capa visual de esa puerta. Ahora ambas puertas pasan por el mismo código: sin Ganancias/Docs, dueño clavado en Miri, "Mi resumen" al entrar, y si el navegador quedó parado en Ganancias cae a Panel. Verificado headless 10/10 (sesión completa simulada) + regresión.</td></tr>
@@ -815,7 +816,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.78 · Julio 2026 · Uso interno
+  Documentación v3.79 · Julio 2026 · Uso interno
 </div>
 
 </div>

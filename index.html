@@ -794,6 +794,9 @@
   .psec-btn { padding:0.5rem 1.05rem; border:1.5px solid var(--gris-medio); background:#fff; border-radius:22px; font-family:'DM Sans',sans-serif; font-weight:600; font-size:0.85rem; color:var(--texto-suave); cursor:pointer; white-space:nowrap; }
   .psec-btn.activo { background:var(--azul); color:#fff; border-color:var(--azul); }
   body.dark .psec-btn { background:#1f2937; }
+  .stock-orden-btn { padding:0.35rem 0.8rem; border:1.5px solid var(--gris-medio); background:#fff; border-radius:18px; font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.76rem; color:var(--texto-suave); cursor:pointer; white-space:nowrap; }
+  .stock-orden-btn.stock-orden-on { background:var(--azul); color:#fff; border-color:var(--azul); }
+  body.dark .stock-orden-btn { background:#1f2937; }
   .dash-card { background:var(--blanco); border-radius:var(--radio); padding:1rem 1.25rem; box-shadow:var(--sombra); }
   .dash-num { font-size:1.6rem; font-weight:700; color:var(--azul); }
   .dash-label { font-size:0.72rem; color:var(--texto-suave); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
@@ -1389,7 +1392,11 @@
   </div>
   <div class="admin-card" data-seccion="stock">
     <div class="admin-titulo">📦 Stock disponible</div>
-    <input id="stock-buscar" oninput="renderStockTotal()" placeholder="🔍 Buscar producto para editar…" style="width:100%;margin-bottom:0.6rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none">
+    <input id="stock-buscar" oninput="renderStockTotal()" placeholder="🔍 Buscar producto para editar…" style="width:100%;margin-bottom:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none">
+    <div style="display:flex;gap:0.4rem;margin-bottom:0.6rem;flex-wrap:wrap">
+      <button type="button" id="stock-orden-cat" onclick="setStockOrden('categoria')" class="stock-orden-btn stock-orden-on">📦 Por categoría</button>
+      <button type="button" id="stock-orden-rec" onclick="setStockOrden('recientes')" class="stock-orden-btn">🆕 Últimos cargados</button>
+    </div>
     <div id="stock-total-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
   </div>
   <div class="admin-card">
@@ -9785,16 +9792,42 @@ function hablarNavegador(texto, onfin) {
 if (typeof speechSynthesis !== 'undefined') { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch (e) {} }
 
 // ─── STOCK DISPONIBLE (sección Stock) ─────────────────────────────────────────
+let _stockOrden = 'categoria';   // 'categoria' (default) | 'recientes' (últimos cargados)
+function setStockOrden(modo) {
+  _stockOrden = modo;
+  document.getElementById('stock-orden-cat')?.classList.toggle('stock-orden-on', modo === 'categoria');
+  document.getElementById('stock-orden-rec')?.classList.toggle('stock-orden-on', modo === 'recientes');
+  renderStockTotal();
+}
+// Etiqueta amigable de "hace cuánto se cargó" a partir del timestamp `creado` (o el id como respaldo).
+function _cargadoHace(p) {
+  const t = p.creado ? new Date(p.creado).getTime() : NaN;
+  if (isNaN(t)) return '';
+  const hoy = new Date(); const d = new Date(t);
+  const mismoDia = (a,b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  const ayer = new Date(hoy); ayer.setDate(hoy.getDate()-1);
+  if (mismoDia(d, hoy)) return 'hoy ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  if (mismoDia(d, ayer)) return 'ayer';
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+}
 function renderStockTotal() {
   const cont = document.getElementById('stock-total-lista');
   if (!cont) return;
   if (!productos.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Cargando productos…</div>'; return; }
   const q = (document.getElementById('stock-buscar')?.value || '').trim().toLowerCase();
-  const lista = productosVisibles().filter(p => (p.stock||0) > 0 && (!q || (p.nombre||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)))
-    .sort((a,b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
+  const recientes = _stockOrden === 'recientes';
+  // En "recientes" se incluyen TAMBIÉN los de stock 0 (recién catalogados por Miri, todavía sin dar de alta).
+  const _cre = p => p.creado ? new Date(p.creado).getTime() : (parseInt(p.id) || 0);   // fecha real; respaldo por id
+  const lista = productosVisibles().filter(p => (recientes || (p.stock||0) > 0) && (!q || (p.nombre||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)))
+    .sort(recientes
+      ? (a,b) => _cre(b) - _cre(a)                                                       // último cargado primero
+      : (a,b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
   if (!lista.length) { cont.innerHTML = `<div style="padding:0.5rem 0;color:var(--texto-suave);font-size:0.85rem">${q ? 'Nada que coincida con la búsqueda.' : 'Sin stock cargado.'}</div>`; return; }
   const totalU = lista.reduce((s,p) => s + (p.stock||0), 0);
-  cont.innerHTML = `<div style="font-weight:700;margin-bottom:0.6rem;font-size:0.88rem">${lista.length} productos · ${totalU} unidades en total</div>
+  const cabecera = recientes
+    ? `${lista.length} productos · del más nuevo al más viejo 🆕`
+    : `${lista.length} productos · ${totalU} unidades en total`;
+  cont.innerHTML = `<div style="font-weight:700;margin-bottom:0.6rem;font-size:0.88rem">${cabecera}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:0.6rem">
       ${lista.map(p => {
         const imgs = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -9806,12 +9839,21 @@ function renderStockTotal() {
         } else {
           media = `<div style="height:78px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
         }
+        // En "recientes": chip con la fecha de carga + de quién es (para ver qué cargó Miri sin repetir).
+        const cargado = recientes ? _cargadoHace(p) : '';
+        const chipFecha = cargado ? `<div style="position:absolute;top:4px;left:4px;background:#2c6fad;color:#fff;border-radius:6px;padding:1px 6px;font-size:0.62rem;font-weight:700">🆕 ${cargado}</div>` : '';
+        const chipDueno = (recientes && !esVistaMiri() && p.dueno) ? `<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.03em;color:${p.dueno==='Jony'?'#c9954a':'#c050a0'};margin-top:1px">${p.dueno==='Jony'?'JONY':'MIRI'}</div>` : '';
+        const stockTxt = (p.stock||0) > 0
+          ? `<div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.</div>`
+          : `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);margin-top:0.25rem">sin stock — dar de alta</div>`;
         return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center;position:relative">
+          ${chipFecha}
           <button onclick="irAEditarProducto(${p.id})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
           ${media}
           <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
           <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
-          <div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.</div>
+          ${chipDueno}
+          ${stockTxt}
         </div>`;
       }).join('')}
     </div>`;
