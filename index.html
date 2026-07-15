@@ -2547,7 +2547,8 @@ async function _cargarQR(url) {
   } catch (e) { return ''; }
 }
 // Ordenador reutilizable de productos.
-const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
+const _ordenarProd = (orden, getNombre, getStock, getPrecio, getCreado) => (a, b) => {
+  if (orden === 'recientes' && getCreado) return (getCreado(b) || 0) - (getCreado(a) || 0) || getNombre(a).localeCompare(getNombre(b));   // último cargado primero
   if (orden === 'za') return getNombre(b).localeCompare(getNombre(a));
   if (orden === 'stock-si') return (getStock(b) > 0 ? 1 : 0) - (getStock(a) > 0 ? 1 : 0) || getNombre(a).localeCompare(getNombre(b));
   if (orden === 'stock-no') return (getStock(a) > 0 ? 1 : 0) - (getStock(b) > 0 ? 1 : 0) || getNombre(a).localeCompare(getNombre(b));
@@ -2555,6 +2556,8 @@ const _ordenarProd = (orden, getNombre, getStock, getPrecio) => (a, b) => {
   if (orden === 'precio-desc') return getPrecio(b) - getPrecio(a);
   return getNombre(a).localeCompare(getNombre(b));
 };
+// timestamp de carga del producto (fecha `creado`; respaldo por id creciente).
+function _creadoTs(p) { const t = p.creado ? new Date(p.creado).getTime() : NaN; return isNaN(t) ? (parseInt(p.id) || 0) : t; }
 function _acPrecioMin(p) { const v = parseFloat(String(p.precioMin).replace(',', '.')) || 0; return v > 0 ? '$ ' + Math.round(v).toLocaleString('es-AR') : '—'; }
 function _acPrecioMay(p) { const v = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0; if (v <= 0) return '—'; return p.moneda === 'U$S' ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR'); }
 // ── DESCUENTOS del catálogo (solo para el catálogo generado; no toca precios reales) ──
@@ -2609,7 +2612,7 @@ function _acFiltrados() {
     if (_acFiltro === 'ambos') return p.activo && vis === 'Ambos';
     if (_acFiltro === 'ocultos') return _acEsOculto(p);
     return true;
-  }).sort(_ordenarProd(_acOrden, p => p.nombre || '', p => parseFloat(p.stock) || 0, p => parseFloat(p.precioMin) || 0));
+  }).sort(_ordenarProd(_acOrden, p => p.nombre || '', p => parseFloat(p.stock) || 0, p => parseFloat(p.precioMin) || 0, _creadoTs));
 }
 // Genera solo las filas de la lista (para refrescarlas sin recrear el modal → el buscador no pierde el foco).
 function _acFilasHtml() {
@@ -2658,7 +2661,7 @@ function _acRender() {
       <div style="display:flex;gap:5px;margin-top:0.5rem;flex-wrap:wrap">${fbtn('todos','Todos')}${fbtn('minorista','🛍️ Min')}${fbtn('mayorista','📦 May')}${fbtn('ambos','👁️ Ambos')}${fbtn('ocultos','🙈 Ocultos')}</div>
       <label style="display:flex;align-items:center;gap:0.35rem;margin-top:0.5rem;font-size:0.75rem;color:#555;cursor:pointer"><input type="checkbox" ${_acOcultarSinStock?'checked':''} onchange="_acToggleSinStock(this.checked)" style="width:15px;height:15px"> 📦 Ocultar productos sin stock</label>
       <select onchange="_acOrden=this.value;_acRender()" style="width:100%;margin-top:0.5rem;padding:0.45rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.78rem;background:#fff">
-        ${['az:Ordenar: A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_acOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
+        ${['recientes:🆕 Últimos cargados','az:A → Z','za:Z → A','stock-si:Con stock primero','stock-no:Sin stock primero','precio-asc:Precio: menor a mayor','precio-desc:Precio: mayor a menor'].map(o => { const [v, t] = o.split(':'); return `<option value="${v}"${_acOrden === v ? ' selected' : ''}>${t}</option>`; }).join('')}
       </select>
       <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input id="ac-chk-all" type="checkbox" onchange="_acToggleAll(this.checked)" ${lista.length&&lista.every(p=>_acSel[p.id])?'checked':''} style="width:15px;height:15px"> Seleccionar todos los de la lista <span id="ac-contador" style="color:var(--texto-suave)">· ${nSel} elegido${nSel!==1?'s':''}</span></label>
       <div style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;background:#fff7ef;border:1px solid #f0d9bf;border-radius:8px;padding:6px 9px">
