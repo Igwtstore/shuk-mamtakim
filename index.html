@@ -2650,7 +2650,7 @@ function _acRender() {
   const lbtn = _acLbtn;
   const filas = _acFilasHtml();
   const nSel = Object.keys(_acSel).length;
-  ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow-y:auto">
     <div style="padding:0.9rem 1rem;border-bottom:1px solid var(--gris-medio)">
       <div style="font-weight:800;font-size:1.05rem;color:#c9954a">📕 Armar catálogo</div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">Elegí los productos (incluí los 🙈 ocultos), la plantilla y qué precios mostrar.</div>
@@ -2669,7 +2669,7 @@ function _acRender() {
         ${(_acDescGeneral || Object.keys(_acDescProd).length) ? `<button onclick="_acLimpiarDesc()" style="margin-left:auto;background:none;border:none;color:#c0392b;font-size:0.72rem;cursor:pointer;text-decoration:underline">limpiar</button>` : ''}
       </div>
     </div>
-    <div id="ac-lista" style="overflow-y:auto;flex:1">${filas}</div>
+    <div id="ac-lista" style="overflow-y:auto;flex:1;min-height:46vh">${filas}</div>
     <div style="padding:0.8rem 1rem;border-top:1px solid var(--gris-medio)">
       <div style="display:flex;gap:8px;margin-bottom:0.55rem">
         <select onchange="_acMarca=this.value" style="flex:1;padding:0.45rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.76rem;background:#fff">
