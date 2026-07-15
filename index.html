@@ -2306,8 +2306,10 @@ async function cargarProductos() {
         (Array.isArray(full) ? full : []).forEach(f => porId[String(f.id)] = f);
         productos.forEach(p => {
           const f = porId[String(p.id)];
-          if (f) { p.costo = parseFloat(f.costo) || 0; p.descBot = f.descBot || ''; p.nombresPrev = f.nombresPrev || ''; p.candyCod = (f.candyCod || '').trim(); }
+          if (f) { p.costo = parseFloat(f.costo) || 0; p.descBot = f.descBot || ''; p.nombresPrev = f.nombresPrev || ''; p.candyCod = (f.candyCod || '').trim(); p.creado = f.creado || ''; }
         });
+        // La fecha de carga recién llegó (endpoint admin) → refrescar el Stock si está en "últimos cargados".
+        if (typeof renderStockTotal === 'function') renderStockTotal();
       }
     } catch (e) {}
     // Stock compartido: para los productos vinculados a Candy, el stock real es el del depósito.
