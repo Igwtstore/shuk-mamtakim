@@ -979,6 +979,7 @@
     <input type="text" class="buscador" placeholder="Buscar producto..." id="buscador" oninput="filtrar()" />
   </div>
   <div class="filtros-wrap" id="filtros-wrap"></div>
+  <div class="filtros-wrap" id="kosher-filtros-wrap" style="margin-top:0.35rem"></div>
   <div class="catalogo" id="catalogo"></div>
 
   <div id="cookie-aviso" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#2d1a0a;color:#fff;font-size:0.74rem;padding:10px 14px;display:flex;align-items:center;justify-content:center;gap:12px;z-index:800">
@@ -3005,7 +3006,9 @@ function renderCatalogo() {
       if (vis !== 'Ambos' && vis !== tipoActual) return false;
     }
     return (p.nombre.toLowerCase().includes(query) || p.desc.toLowerCase().includes(query)) &&
-      (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva);
+      (_categoriaActiva === 'Todos' || (p.categoria||'Varios') === _categoriaActiva) &&
+      (!_kosherSup || (p.hashgaja||'').trim() === _kosherSup) &&        // ✡️ filtro supervisión
+      (!_kosherTipo || (p.kosherTipo||'').trim() === _kosherTipo);      // 🌿/🥛 filtro parve/lácteo
   }).sort((a, b) => {
     const aOut = a.stock <= 0 ? 1 : 0;
     const bOut = b.stock <= 0 ? 1 : 0;
@@ -9409,7 +9412,32 @@ function renderFiltros() {
   const baseF = _vipIds ? productos.filter(p => _vipIds.has(String(p.id))) : productos;
   const cats = ['Todos', ...CATEGORIA_ORDEN.filter(c => baseF.some(p => getCatIdx(p) === CATEGORIA_ORDEN.indexOf(c)))];
   wrap.innerHTML = cats.map(c => `<button class="filtro-btn${c===_categoriaActiva?' activo':''}" onclick="setCategoria('${c}')">${c}</button>`).join('');
+  renderKosherFiltros(baseF);
 }
+
+// ✡️ Filtros kosher de la tienda: desplegable de supervisión (las que existen) + chips Parve/Lácteo.
+// Solo se muestran si hay productos con el dato cargado (si no, ni aparecen).
+let _kosherSup = '', _kosherTipo = '';
+function renderKosherFiltros(baseF) {
+  const wrap = document.getElementById('kosher-filtros-wrap');
+  if (!wrap) return;
+  const base = baseF || (_vipIds ? productos.filter(p => _vipIds.has(String(p.id))) : productos);
+  const vis = base.filter(p => productosVisibles().includes(p));   // respeta la vista y el canal ya se filtra en catálogo
+  const sups = [...new Set(vis.map(p => (p.hashgaja || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const hayTipo = vis.some(p => (p.kosherTipo || '').trim());
+  if (!sups.length && !hayTipo) { wrap.innerHTML = ''; wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  const chip = (val, txt) => `<button class="filtro-btn${_kosherTipo===val?' activo':''}" onclick="setKosherTipo('${val}')" style="font-size:0.82rem">${txt}</button>`;
+  const sel = sups.length
+    ? `<select onchange="setKosherSup(this.value)" class="filtro-btn" style="cursor:pointer;max-width:210px">
+        <option value="">✡️ Supervisión: todas</option>
+        ${sups.map(s => `<option value="${esc(s)}"${_kosherSup===s?' selected':''}>✡️ ${esc(s)}</option>`).join('')}
+      </select>` : '';
+  const chips = hayTipo ? chip('', 'Todos') + chip('Parve', '🌿 Parve') + chip('Lácteo', '🥛 Lácteo') : '';
+  wrap.innerHTML = sel + chips;
+}
+function setKosherSup(v) { _kosherSup = v || ''; renderCatalogo(); }
+function setKosherTipo(v) { _kosherTipo = v || ''; renderFiltros(); renderCatalogo(); }
 
 function setCategoria(cat) {
   _categoriaActiva = cat;

@@ -173,6 +173,7 @@ body.dark .cart-item-total, body.dark .cart-total-monto { color: #e8ddf5; }
 </div>
 
 <div class="categorias-wrap" id="categorias"></div>
+<div class="categorias-wrap" id="kosher-filtros" style="margin-top:4px"></div>
 
 <div class="orden-wrap">
   <span>↕️ Ordenar:</span>
@@ -353,18 +354,41 @@ function filtrar() {
   const q = document.getElementById('buscar').value.toLowerCase().trim();
   let filtrados = catalogoData;
   if (catActiva !== 'Todos') filtrados = filtrados.filter(p => (p.categoria || 'Varios') === catActiva);
+  if (kosherSup) filtrados = filtrados.filter(p => (p.hashgaja || '').trim() === kosherSup);    // ✡️ supervisión
+  if (kosherTipo) filtrados = filtrados.filter(p => (p.kosherTipo || '').trim() === kosherTipo); // 🌿/🥛 parve/lácteo
   if (q) filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(q));
-  renderCatalogo(filtrados, !!(q || catActiva !== 'Todos'));
+  renderCatalogo(filtrados, !!(q || catActiva !== 'Todos' || kosherSup || kosherTipo));
 }
 function renderCategorias() {
   const el = document.getElementById('categorias'); if (!el) return;
   const cats = [...new Set(catalogoData.map(p => p.categoria || 'Varios'))]
     .sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
-  if (cats.length <= 1) { el.style.display = 'none'; return; }   // una sola categoría → no tiene sentido el filtro
-  el.style.display = 'flex';
-  const chip = (c, t) => `<button class="cat-chip ${catActiva === c ? 'activo' : ''}" onclick="setCategoria('${c.replace(/'/g, "\\'")}')">${t}</button>`;
-  el.innerHTML = chip('Todos', '🍬 Todos') + cats.map(c => chip(c, esc(c))).join('');
+  if (cats.length <= 1) { el.style.display = 'none'; } else {   // una sola categoría → no tiene sentido el filtro
+    el.style.display = 'flex';
+    const chip = (c, t) => `<button class="cat-chip ${catActiva === c ? 'activo' : ''}" onclick="setCategoria('${c.replace(/'/g, "\\'")}')">${t}</button>`;
+    el.innerHTML = chip('Todos', '🍬 Todos') + cats.map(c => chip(c, esc(c))).join('');
+  }
+  renderKosherFiltros();
 }
+// ✡️ Filtros kosher: desplegable de supervisión + chips Parve/Lácteo (solo si hay dato cargado).
+let kosherSup = '', kosherTipo = '';
+function renderKosherFiltros() {
+  const el = document.getElementById('kosher-filtros'); if (!el) return;
+  const sups = [...new Set(catalogoData.map(p => (p.hashgaja || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const hayTipo = catalogoData.some(p => (p.kosherTipo || '').trim());
+  if (!sups.length && !hayTipo) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  const chip = (val, txt) => `<button class="cat-chip ${kosherTipo === val ? 'activo' : ''}" onclick="setKosherTipo('${val}')">${txt}</button>`;
+  const sel = sups.length
+    ? `<select onchange="setKosherSup(this.value)" class="cat-chip" style="cursor:pointer;max-width:200px">
+        <option value="">✡️ Supervisión: todas</option>
+        ${sups.map(s => `<option value="${esc(s)}"${kosherSup === s ? ' selected' : ''}>✡️ ${esc(s)}</option>`).join('')}
+      </select>` : '';
+  const chips = hayTipo ? chip('', '✨ Todos') + chip('Parve', '🌿 Parve') + chip('Lácteo', '🥛 Lácteo') : '';
+  el.innerHTML = sel + chips;
+}
+function setKosherSup(v) { kosherSup = v || ''; filtrar(); }
+function setKosherTipo(v) { kosherTipo = v || ''; renderKosherFiltros(); filtrar(); }
 function setCategoria(c) { catActiva = c; renderCategorias(); filtrar(); }
 
 function renderCatalogo(productos, esFiltered) {
