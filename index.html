@@ -2599,6 +2599,7 @@ async function abrirArmarCatalogo() {
   if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // REGLA: vista Miri no ve lo de Jony
   _acProductos = lista.sort((a, b) => getCatIdx(a) - getCatIdx(b) || (a.nombre || '').localeCompare(b.nombre || ''));
   _acSel = {}; _acFiltro = 'todos'; _acDescGeneral = 0; _acDescProd = {};
+  _acEditVip = null;   // abrir el armador fresco = crear un link NUEVO (no arrastrar una edición previa)
   _acRender();
 }
 function _acFiltrados() {
@@ -2711,6 +2712,10 @@ function _acRender() {
       </div>
     </div>
   </div>`;
+  // 🔧 Cada render rehace el modal de cero → volver a pintar el modo "Editando el link"
+  // (cartel + botón "Guardar cambios · misma URL"). Sin esto, al destildar/filtrar se perdía
+  // la referencia visual y el botón volvía a "Link privado con carrito" (bug reportado 15/07).
+  _acEditBanner();
 }
 function _acSetFiltro(f) { _acFiltro = f; _acRender(); }
 function _acToggleSinStock(v) { _acOcultarSinStock = v; _acRender(); }
@@ -2749,6 +2754,7 @@ function _acToggle(id, el) {
   if (cont) cont.textContent = `· ${nSel} elegido${nSel !== 1 ? 's' : ''}`;
   const chkAll = document.getElementById('ac-chk-all');
   if (chkAll) { const lista = _acFiltrados(); chkAll.checked = lista.length > 0 && lista.every(p => _acSel[p.id]); }
+  if (_acEditVip) _acEditBanner();   // en modo edición, refrescar el contador del cartel (sin re-render de la lista)
 }
 function _acToggleAll(ch) { _acFiltrados().forEach(p => { if (ch) _acSel[p.id] = true; else delete _acSel[p.id]; }); _acRender(); }
 function _acSetDescProd(id, val) { const n = String(val).trim(); if (n === '') delete _acDescProd[id]; else _acDescProd[id] = Math.max(0, Math.min(100, Number(n) || 0)); }   // no re-renderiza (no perder foco)
