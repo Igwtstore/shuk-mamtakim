@@ -1594,9 +1594,10 @@
       </div>
       <div class="nombre-campo" style="margin:0">
         <label>Imputar a caja</label>
-        <select id="gasto-columna" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+        <select id="gasto-columna" onchange="gastoCajaMoneda('')" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
           <option value="MP_JONY">MP JONY</option>
           <option value="EFT_JONY">EFT $ JONY</option>
+          <option value="ETF_USD_JONY">ETF U$S JONY</option>
           <option value="MP_GABY">MP GABY</option>
           <option value="EFT_MYRI">EFT $ MYRI</option>
           <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
@@ -1605,6 +1606,41 @@
           <option value="CTA_CTE_ARS">Cta Cte $</option>
           <option value="CTA_CTE_USD">Cta Cte U$S</option>
         </select>
+      </div>
+      <!-- 💱 Pago mixto: un mismo gasto pagado desde DOS cajas (ej: U$S 200 de la caja U$S + el resto en pesos) -->
+      <div class="nombre-campo" style="margin:0">
+        <button type="button" id="gasto-mixto-btn" onclick="toggleGastoMixto()" style="background:none;border:1.5px dashed #c9b8a0;border-radius:8px;padding:0.5rem 0.8rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;font-weight:700;color:#8a7358;cursor:pointer;width:100%">➕ Lo pagué desde DOS cajas (mixto)</button>
+        <div id="gasto-mixto-row" style="display:none;margin-top:0.6rem;border:1.5px solid #e8e6e0;border-radius:10px;padding:0.7rem;background:#faf8f4">
+          <div style="font-size:0.74rem;color:#8a7358;margin-bottom:0.5rem">El monto de arriba sale de la primera caja. Acá va la <b>segunda parte</b> (ej: pagaste U$S 200 de la caja U$S y el resto en pesos del efectivo).</div>
+          <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+            <div class="nombre-campo" style="margin:0;flex:1;min-width:90px">
+              <label>Monto 2</label>
+              <input type="number" id="gasto-monto2" placeholder="0" min="0" />
+            </div>
+            <div class="nombre-campo" style="margin:0;width:100px">
+              <label>Moneda</label>
+              <select id="gasto-moneda2" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+                <option value="ARS">ARS $</option>
+                <option value="USD">USD U$S</option>
+              </select>
+            </div>
+            <div class="nombre-campo" style="margin:0;flex:1.4;min-width:130px">
+              <label>Caja 2</label>
+              <select id="gasto-columna2" onchange="gastoCajaMoneda('2')" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
+                <option value="MP_JONY">MP JONY</option>
+                <option value="EFT_JONY">EFT $ JONY</option>
+                <option value="ETF_USD_JONY">ETF U$S JONY</option>
+                <option value="MP_GABY">MP GABY</option>
+                <option value="EFT_MYRI">EFT $ MYRI</option>
+                <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+                <option value="COMI_ARS_JONY">Comi $ JONY</option>
+                <option value="COMI_USD_JONY">Comi U$S JONY</option>
+                <option value="CTA_CTE_ARS">Cta Cte $</option>
+                <option value="CTA_CTE_USD">Cta Cte U$S</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="nombre-campo" style="margin-bottom:0.6rem">
         <label>📎 Comprobante (opcional — factura/ticket/transferencia)</label>
@@ -2965,7 +3001,8 @@ function renderCatalogo() {
     return getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre);
   });
   if (!filtrados.length) {
-    catalogo.innerHTML = '<div class="loading">Sin resultados</div>';
+    // Link VIP muerto (set vacío): el banner rojo ya lo explica — nada de "Sin resultados".
+    catalogo.innerHTML = (_vipIds && _vipIds.size === 0) ? '' : '<div class="loading">Sin resultados</div>';
     return;
   }
   const card = (p) => {
@@ -5856,6 +5893,21 @@ function cargarPedidoManual() {
   renderStockAdmin();
 }
 
+// La moneda REAL de un gasto la define la caja de donde salió la plata.
+const _CAJAS_USD_GASTO = ['ETF_USD_JONY', 'ETF_USD_MYRI', 'COMI_USD_JONY', 'CTA_CTE_USD'];
+function gastoCajaMoneda(suf) {
+  const caja = document.getElementById('gasto-columna' + suf)?.value || '';
+  const m = document.getElementById('gasto-moneda' + suf);
+  if (m) m.value = _CAJAS_USD_GASTO.includes(caja) ? 'USD' : 'ARS';
+}
+function toggleGastoMixto() {
+  const row = document.getElementById('gasto-mixto-row');
+  const btn = document.getElementById('gasto-mixto-btn');
+  const abierto = row.style.display !== 'none';
+  row.style.display = abierto ? 'none' : '';
+  btn.textContent = abierto ? '➕ Lo pagué desde DOS cajas (mixto)' : '➖ Quitar la segunda caja';
+  if (abierto) { document.getElementById('gasto-monto2').value = ''; }
+}
 async function registrarGasto() {
   const desc = document.getElementById('gasto-desc').value.trim();
   const monto = parseFloat(document.getElementById('gasto-monto').value);
@@ -5864,19 +5916,39 @@ async function registrarGasto() {
   const columna = document.getElementById('gasto-columna').value;
   if (!desc) { showToast('Ingresá una descripción'); return; }
   if (!monto || monto <= 0) { showToast('Ingresá un monto válido'); return; }
+  // Coherencia moneda↔caja: U$S no puede salir de una caja de pesos (ni al revés).
+  const _chocan = (mon, caja) => _CAJAS_USD_GASTO.includes(caja) !== (mon === 'USD');
+  if (_chocan(moneda, columna)) { showToast('⚠️ La moneda y la caja no coinciden: ' + (moneda === 'USD' ? 'U$S de una caja de pesos' : 'pesos de una caja U$S') + '. Revisá.'); return; }
+  // 💱 Pago mixto: segunda parte desde OTRA caja (ej: U$S 200 de la caja U$S + el resto en pesos).
+  const mixtoAbierto = document.getElementById('gasto-mixto-row')?.style.display !== 'none';
+  const monto2 = mixtoAbierto ? parseFloat(document.getElementById('gasto-monto2').value) : 0;
+  const moneda2 = document.getElementById('gasto-moneda2')?.value || 'ARS';
+  const columna2 = document.getElementById('gasto-columna2')?.value || '';
+  if (mixtoAbierto) {
+    if (!monto2 || monto2 <= 0) { showToast('Ingresá el monto de la segunda caja (o quitá el mixto)'); return; }
+    if (_chocan(moneda2, columna2)) { showToast('⚠️ En la segunda parte la moneda y la caja no coinciden. Revisá.'); return; }
+    if (columna2 === columna && moneda2 === moneda) { showToast('Las dos partes salen de la MISMA caja — registralo en un solo monto'); return; }
+  }
   // Por apiWrite (manda la sesión y avisa si FALLA de verdad). Antes iba sin token y el motor
   // nuevo lo rechazaba con 'no autorizado'… mientras el toast decía "✓" — gasto perdido en silencio.
   const comprobante = await subirComprobantes(document.getElementById('gasto-comprobante'));
-  const params = new URLSearchParams({ accion: 'gasto', desc, monto, moneda, categoria, columna: columna || '' });
+  const sufijo = monto2 > 0 ? ' · pago mixto (1/2)' : '';
+  const params = new URLSearchParams({ accion: 'gasto', desc: desc + sufijo, monto, moneda, categoria, columna: columna || '' });
   if (comprobante) params.set('comprobante', comprobante);
-  const r = await apiWrite(params, '💸 Gasto registrado ✓');
-  if (r && r.ok) {
-    document.getElementById('gasto-desc').value = '';
-    document.getElementById('gasto-monto').value = '';
-    const gc = document.getElementById('gasto-comprobante'); if (gc) gc.value = '';
-    const gs = document.getElementById('gasto-comprobante-st'); if (gs) gs.textContent = '';
-    refreshAdmin();
+  const r = await apiWrite(params, monto2 > 0 ? '' : '💸 Gasto registrado ✓');
+  if (!r || !r.ok) return;
+  if (monto2 > 0) {
+    const p2 = new URLSearchParams({ accion: 'gasto', desc: desc + ' · pago mixto (2/2)', monto: monto2, moneda: moneda2, categoria, columna: columna2 });
+    if (comprobante) p2.set('comprobante', comprobante);   // el mismo ticket respalda las dos partes
+    const r2 = await apiWrite(p2, '💸 Gasto mixto registrado en las 2 cajas ✓');
+    if (!r2 || !r2.ok) { alert('⚠️ OJO: la parte 1 quedó registrada pero la parte 2 FALLÓ.\nRegistrá a mano: ' + desc + ' · pago mixto (2/2) — ' + (moneda2 === 'USD' ? 'U$S ' : '$ ') + monto2 + ' en ' + columna2); return; }
+    toggleGastoMixto();   // cierra y limpia el bloque mixto
   }
+  document.getElementById('gasto-desc').value = '';
+  document.getElementById('gasto-monto').value = '';
+  const gc = document.getElementById('gasto-comprobante'); if (gc) gc.value = '';
+  const gs = document.getElementById('gasto-comprobante-st'); if (gs) gs.textContent = '';
+  refreshAdmin();
 }
 
 // NUEVO PRODUCTO
@@ -9347,8 +9419,14 @@ async function _vipCargar() {
       const bm = document.getElementById('banner-mayorista-cta'); if (bm) bm.style.display = 'none';   // catálogo a medida: sin CTA de registro
       if (b) b.innerHTML = `<div style="background:linear-gradient(135deg,#1a1a2e,#3a3a5e);color:#fff;border-radius:14px;padding:0.9rem 1.1rem;margin:0.4rem 0 0.8rem;display:flex;align-items:center;gap:0.7rem"><span style="font-size:1.6rem">🤝</span><div><div style="font-weight:800;color:#c9954a;font-size:1.02rem">Catálogo especial para ${esc(d.nombre)}</div><div style="font-size:0.78rem;opacity:0.85">Una selección armada para vos — agregá al carrito y mandanos el pedido 🍬</div></div></div>`;
       renderFiltros(); renderCatalogo();
-    } else if (b) {
-      b.innerHTML = `<div style="background:#fde8e8;color:#c0392b;border-radius:12px;padding:0.8rem 1rem;margin:0.4rem 0 0.8rem;font-weight:700">⚠️ Este catálogo privado ya no está disponible — pedinos el link de nuevo.</div>`;
+    } else {
+      // 🔒 Link vencido/borrado: banner y NADA MÁS — un link privado muerto no puede
+      // convertirse en la vidriera completa (el cliente VIP vería precios/productos
+      // que no eran para él). Set VACÍO ⇒ el filtro del catálogo oculta todo.
+      _vipIds = new Set();
+      if (b) b.innerHTML = `<div style="background:#fde8e8;color:#c0392b;border-radius:12px;padding:0.8rem 1rem;margin:0.4rem 0 0.8rem;font-weight:700">⚠️ Este catálogo privado ya no está disponible — pedinos el link de nuevo.</div>`;
+      const bm = document.getElementById('banner-mayorista-cta'); if (bm) bm.style.display = 'none';
+      renderFiltros(); renderCatalogo();
     }
   } catch (e) {}
 }
