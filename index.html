@@ -11673,7 +11673,7 @@ function cobro_renderTramos() {
     const sym = b.moneda === 'USD' ? 'U$S' : '$';
     const totalTxt = sym + ' ' + _fmtMonto(b.total, b.moneda);
     const sum = tramos.reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
-    const cubierto = Math.abs(sum - b.total) < (b.moneda === 'USD' ? 0.01 : 1);
+    const est = _cobroEstado(sum, b.total, b.moneda, sym);
     html += `<div style="margin-bottom:0.6rem;border:1px solid #ece8df;border-radius:8px;padding:0.5rem 0.6rem">
       <div style="font-size:0.78rem;font-weight:600;color:var(--azul);margin-bottom:0.35rem">${b.label}: <span style="color:var(--verde)">${totalTxt}</span></div>`;
     tramos.forEach((t, i) => {
@@ -11686,19 +11686,29 @@ function cobro_renderTramos() {
     });
     html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.2rem">
       <button type="button" onclick="cobro_addTramo('${b.key}')" style="background:none;border:none;color:var(--azul);font-size:0.72rem;font-weight:600;cursor:pointer;padding:2px 0">➕ dividir en otra caja</button>
-      <span id="cobro-cub-${b.key}" style="font-size:0.68rem;color:${cubierto?'var(--verde)':'#c0392b'};font-weight:600">${cubierto?'✓ cubierto':('faltan '+sym+' '+_fmtMonto(b.total-sum, b.moneda))}</span>
+      <span id="cobro-cub-${b.key}" title="${est.title}" style="font-size:0.68rem;color:${est.color};font-weight:600">${est.txt}</span>
     </div></div>`;
   });
   cont.innerHTML = html;
+}
+// Estado de un balde del cobro: cubierto / falta (pagó de menos) / SOBRA (pagó de más).
+// Antes, pagar de más mostraba "faltan $X" (engañoso) — ahora dice "sobran $X" y aclara que
+// para dejar un excedente a favor va por "Pago a cuenta" (el cobro es por el monto EXACTO).
+function _cobroEstado(sum, total, moneda, sym) {
+  const tol = moneda === 'USD' ? 0.01 : 1, dif = sum - total;
+  if (Math.abs(dif) < tol) return { txt: '✓ cubierto', color: 'var(--verde)', title: '' };
+  if (dif > 0) return { txt: 'sobran ' + sym + ' ' + _fmtMonto(dif, moneda), color: '#9a6b00', title: 'El cobro es por el monto EXACTO del pedido. Si el cliente pagó de más, cobralo con “Pago a cuenta” y el excedente queda a favor.' };
+  return { txt: 'faltan ' + sym + ' ' + _fmtMonto(-dif, moneda), color: '#c0392b', title: '' };
 }
 function cobro_actualizarCubierto() {
   _cobroBaldes().forEach(b => {
     const span = document.getElementById('cobro-cub-' + b.key); if (!span) return;
     const sym = b.moneda === 'USD' ? 'U$S' : '$';
     const sum = (_cobroTramos[b.key]||[]).reduce((s,t)=> s + (parseFloat(t.monto)||0), 0);
-    const cubierto = Math.abs(sum - b.total) < (b.moneda === 'USD' ? 0.01 : 1);
-    span.style.color = cubierto ? 'var(--verde)' : '#c0392b';
-    span.textContent = cubierto ? '✓ cubierto' : ('faltan ' + sym + ' ' + _fmtMonto(b.total - sum, b.moneda));
+    const e = _cobroEstado(sum, b.total, b.moneda, sym);
+    span.style.color = e.color;
+    span.textContent = e.txt;
+    span.title = e.title;
   });
   // Bloque "faltante": aparece si algún balde quedó CORTO (pagó de menos).
   const falt = _cobroFaltantes();
