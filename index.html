@@ -2754,7 +2754,8 @@ function _acToggle(id, el) {
   if (cont) cont.textContent = `· ${nSel} elegido${nSel !== 1 ? 's' : ''}`;
   const chkAll = document.getElementById('ac-chk-all');
   if (chkAll) { const lista = _acFiltrados(); chkAll.checked = lista.length > 0 && lista.every(p => _acSel[p.id]); }
-  if (_acEditVip) _acEditBanner();   // en modo edición, refrescar el contador del cartel (sin re-render de la lista)
+  // en modo edición, refrescar SOLO el contador del cartel (no rebuildear → no perder foco del input de nombre)
+  if (_acEditVip) { const ec = document.getElementById('ac-edit-count'); if (ec) ec.textContent = nSel; }
 }
 function _acToggleAll(ch) { _acFiltrados().forEach(p => { if (ch) _acSel[p.id] = true; else delete _acSel[p.id]; }); _acRender(); }
 function _acSetDescProd(id, val) { const n = String(val).trim(); if (n === '') delete _acDescProd[id]; else _acDescProd[id] = Math.max(0, Math.min(100, Number(n) || 0)); }   // no re-renderiza (no perder foco)
@@ -9481,11 +9482,13 @@ async function _vipCargar() {
 async function crearLinkVip() {
   const ids = Object.keys(_acSel);
   if (!ids.length) { showToast('Tildá al menos un producto para el link'); return; }
-  // Modo edición: pisa el MISMO token → el cliente sigue con su URL de siempre
+  // Modo edición: pisa el MISMO token → el cliente sigue con su URL de siempre.
+  // Manda también el NOMBRE (editable en el cartel) y el canal, para poder re-apuntar el link a otro.
   if (_acEditVip) {
-    const rE = await apiWrite(new URLSearchParams({ accion: 'actualizarCatalogoVip', t: _acEditVip.token, ids: ids.join(',') }), '');
+    const nombreEd = (_acEditVip.nombre || '').trim() || 'cliente';
+    const rE = await apiWrite(new URLSearchParams({ accion: 'actualizarCatalogoVip', t: _acEditVip.token, ids: ids.join(','), nombre: nombreEd, canal: _acEditVip.canal || 'minorista' }), '');
     if (rE && rE.ok) {
-      showToast('💾 Link de ' + _acEditVip.nombre + ' actualizado (' + rE.n + ' productos) — misma URL ✓');
+      showToast('💾 Link de ' + nombreEd + ' actualizado (' + rE.n + ' productos) — misma URL ✓');
       _acEditVip = null; _acEditBanner();
     } else showToast('⚠️ No se pudo actualizar: ' + ((rE && rE.error) || 'reintentá'));
     return;
@@ -9495,6 +9498,20 @@ async function crearLinkVip() {
   const canal = (_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista';
   const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal }), '');
   if (!r.ok || !r.token) return;
+  _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
+}
+// ➕ Guardar la selección actual como un link NUEVO (token nuevo), sin tocar el original.
+// Sirve para: estoy editando el de un cliente y quiero el MISMO catálogo para otro, sin re-tildar todo.
+async function guardarLinkVipNuevo() {
+  const ids = Object.keys(_acSel);
+  if (!ids.length) { showToast('Tildá al menos un producto para el link'); return; }
+  const sugerido = _acEditVip ? '' : '';   // no sugerir el nombre del otro cliente (para no mandárselo con el nombre ajeno)
+  const nombre = prompt('¿Para quién es este NUEVO link? (se crea aparte, no toca el que estabas editando)', sugerido);
+  if (nombre === null) return;
+  const canal = _acEditVip ? (_acEditVip.canal || 'minorista') : ((_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista');
+  const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal }), '');
+  if (!r.ok || !r.token) return;
+  _acEditVip = null; _acEditBanner();   // salimos de edición: ahora es un link nuevo, independiente
   _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
 }
 function _vipMostrarLink(url, nombre, canal, n) {
@@ -9555,9 +9572,16 @@ function _acEditBanner() {
   const nSel = Object.keys(_acSel).length;
   const agotados = _acProductos.filter(p => _acSel[p.id] && (parseInt(p.stock) || 0) <= 0).length;
   b.style.cssText = 'background:#fdf3dc;border:1.5px solid #e8c97a;border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;font-size:0.8rem;color:#8a5a1e';
-  b.innerHTML = `✏️ <b>Editando el link de ${esc(_acEditVip.nombre)}</b> · ${nSel} producto${nSel !== 1 ? 's' : ''} tildado${nSel !== 1 ? 's' : ''} — al tocar el botón de abajo se guarda <b>con la misma URL</b>.
-    <div style="display:flex;gap:6px;margin-top:0.45rem;flex-wrap:wrap">
+  b.innerHTML = `✏️ <b>Editando un link</b> — se guarda con la <b>misma URL</b>.
+    <div style="display:flex;align-items:center;gap:6px;margin-top:0.45rem">
+      <span style="white-space:nowrap;font-size:0.76rem">👤 Para quién:</span>
+      <input value="${esc(_acEditVip.nombre)}" oninput="_acEditVip.nombre=this.value" placeholder="nombre del cliente" style="flex:1;min-width:0;padding:5px 9px;border:1.5px solid #e8c97a;border-radius:7px;font-family:inherit;font-size:0.8rem;background:#fff;color:#5c3d1e">
+      <span style="white-space:nowrap;font-size:0.72rem;color:#a8690b">· <span id="ac-edit-count">${nSel}</span> tildado${nSel !== 1 ? 's' : ''}</span>
+    </div>
+    <div style="font-size:0.68rem;color:#a8690b;margin-top:4px">💡 Cambiá el nombre y guardá para re-apuntar este mismo link a otro cliente.</div>
+    <div style="display:flex;gap:6px;margin-top:0.5rem;flex-wrap:wrap">
       ${agotados > 0 ? `<button onclick="_acQuitarAgotados()" style="background:#fff;border:1.5px solid #e8c97a;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;color:#8a5a1e;font-family:inherit">🧹 Quitar ${agotados} agotado${agotados !== 1 ? 's' : ''}</button>` : ''}
+      <button onclick="guardarLinkVipNuevo()" title="Crea un link NUEVO (otra URL) con lo tildado, sin tocar el que estás editando" style="background:#eef4ff;border:1.5px solid #b9d0f0;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;color:#2c6fad;font-family:inherit">➕ Guardar como link NUEVO</button>
       <button onclick="_acEditVip=null;_acEditBanner();showToast('Edición cancelada')" style="background:#fff;border:1.5px solid #ddd;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;color:#888;font-family:inherit">✕ Cancelar edición</button>
     </div>`;
   if (btnCrear) btnCrear.textContent = '💾 Guardar cambios del link (misma URL)';
