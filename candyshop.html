@@ -523,7 +523,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
       <div style="text-align:right;font-size:0.85rem;color:#555;margin-bottom:12px">Total: <strong id="ev-total" style="color:#5c3d1e">$0</strong></div>
       <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Cliente</label>
-      <input type="text" id="ev-cliente" placeholder="Vacío si pagó todo" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:12px">
+      <input type="text" id="ev-cliente" list="clientes-candy-list" placeholder="Vacío si pagó todo" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:12px">
       <label style="font-size:0.8rem;color:#888;display:block;margin-bottom:4px">Saldo pendiente (deuda)</label>
       <input type="number" id="ev-saldo" min="0" placeholder="0" style="width:100%;padding:10px;border:1.5px solid #e0d5c9;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-bottom:4px">
       <div id="ev-cobrado-hint" style="font-size:0.72rem;color:#8a6d4a;margin-bottom:16px;display:none"></div>
@@ -1371,6 +1371,13 @@ let _estadoDia = {};   // estado del circuito diario (apertura/cierre) del perfi
 function renderPanel(d) {
   catalogoCache = arr(d.catalogo);
   _estadoDia = d.cierre || {};
+  // 🧑 clientes conocidos → sugerencias al cargar ventas (elegir con el dedo, sin re-tipear nombres)
+  if (Array.isArray(d.clientes) && d.clientes.length) {
+    clientesCache = d.clientes;
+    let dl = document.getElementById('clientes-candy-list');
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'clientes-candy-list'; document.body.appendChild(dl); }
+    dl.innerHTML = clientesCache.map(n => `<option value="${esc(n)}">`).join('');
+  }
   renderDashboard(arr(d.ventas), catalogoCache, arr(d.deudores), arr(d.consumo));
   renderDeudores(arr(d.deudores));
   renderCatalogoFiltrado();
@@ -3902,6 +3909,7 @@ function seleccionarMetodo(m) {
 }
 let wVentaId = '';   // id único de la venta: el backend lo usa para NO duplicar si se reintenta
 let deudoresCache = [];
+let clientesCache = [];   // 🧑 TODOS los clientes conocidos (grafía canónica del server) — para sugerir al tipear y elegir con el dedo
 
 const WIZARD_TITLES = ['¿A quién?', '¿Qué vendiste?', '¿Cuántos?', '¿Cómo pagó?'];
 
@@ -3978,15 +3986,30 @@ function filtrarSugerencias() {
   renderSugerencias(q);
 }
 
-function renderSugerencias(q) {
+// 🧑 Sugerencias combinadas: primero los DEUDORES que matchean (con su saldo), después el resto
+// de clientes CONOCIDOS (grafía canónica). Así el chico elige con el dedo y no nacen variantes
+// del mismo nombre ('Natan marinberg' vs 'Natan Marinberg' — caso real que desincronizó el saldo).
+function _sugerenciasDe(q) {
   const nq = normCli(q);
-  const lista = deudoresCache.filter(d => !nq || normCli(d.cliente).includes(nq));
-  const el = document.getElementById('cliente-sugerencias');
-  el.innerHTML = lista.map(d => `
-    <div class="cliente-sug" onclick="seleccionarCliente('${d.cliente.replace(/'/g,"\\'")}')">
+  const deudores = deudoresCache.filter(d => !nq || normCli(d.cliente).includes(nq));
+  const enLista = new Set(deudores.map(d => normCli(d.cliente)));
+  const resto = nq ? clientesCache.filter(n => !enLista.has(normCli(n)) && normCli(n).includes(nq)).slice(0, 8) : [];
+  return { deudores, resto };
+}
+function _sugerenciasHtml(q, onPick) {
+  const s = _sugerenciasDe(q);
+  return s.deudores.map(d => `
+    <div class="cliente-sug" onclick="${onPick}('${d.cliente.replace(/'/g,"\\'")}')">
       <span>${d.cliente}</span>
-      ${d.saldo > 0 ? `<span class="cliente-sug-deuda">Debe ${fmt(d.saldo)}</span>` : '<span style="font-size:0.75rem;color:#aaa">Sin deuda</span>'}
+      ${d.saldo > 0 ? `<span class="cliente-sug-deuda">Debe ${fmt(d.saldo)}</span>` : d.saldo < 0 ? `<span style="font-size:0.75rem;color:#2c6fad">Le debemos ${fmt(-d.saldo)}</span>` : '<span style="font-size:0.75rem;color:#aaa">Sin deuda</span>'}
+    </div>`).join('') + s.resto.map(n => `
+    <div class="cliente-sug" onclick="${onPick}('${n.replace(/'/g,"\\'")}')">
+      <span>${n}</span><span style="font-size:0.75rem;color:#aaa">Cliente conocido</span>
     </div>`).join('');
+}
+function renderSugerencias(q) {
+  const el = document.getElementById('cliente-sugerencias');
+  el.innerHTML = _sugerenciasHtml(q, 'seleccionarCliente');
 }
 
 // Deuda actual de un cliente, desde la cache de deudores (sin pegarle al server).
@@ -4460,13 +4483,8 @@ function seleccionarFecha(iso) {
 }
 
 function filtrarRSugerencias() {
-  const q = document.getElementById('rw-cliente').value.toLowerCase();
-  const lista = deudoresCache.filter(d => !q || d.cliente.toLowerCase().includes(q));
-  document.getElementById('rw-sugerencias').innerHTML = lista.map(d =>
-    `<div class="cliente-sug" onclick="seleccionarRCliente('${d.cliente.replace(/'/g,"\\'")}')">
-      <span>${d.cliente}</span>
-      ${d.saldo > 0 ? `<span class="cliente-sug-deuda">Debe ${fmt(d.saldo)}</span>` : '<span style="font-size:0.75rem;color:#aaa">Sin deuda</span>'}
-    </div>`).join('');
+  const q = document.getElementById('rw-cliente').value;
+  document.getElementById('rw-sugerencias').innerHTML = _sugerenciasHtml(q, 'seleccionarRCliente');
 }
 
 function seleccionarRCliente(nombre) {

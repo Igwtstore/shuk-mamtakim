@@ -503,6 +503,19 @@ async function saldoClienteCandy(hijo: string, cliente: string) {
   cc.forEach((r: any) => { if (normCli(r.cliente) === obj) saldo += parseFloat(r.monto) || 0; });
   return saldo;
 }
+// 🧑 Grafía CANÓNICA del cliente Candy: si ya existe uno igual sin distinguir mayúsculas/acentos
+// (caso real: 'Natan marinberg' vs 'Natan Marinberg' desincronizó el saldo del panel de Iosi),
+// se usa la grafía YA GUARDADA — jamás se crea una variante nueva del mismo nombre.
+async function clienteCanonicoCandy(nombre: string) {
+  const limpio = (nombre || '').toString().trim().replace(/\s+/g, ' ');
+  if (!limpio) return limpio;
+  const k = normCli(limpio);
+  const cc = await sbGet('candy_cc', 'select=cliente&limit=10000');
+  for (const r of cc) { if (normCli(r.cliente) === k) return (r.cliente || '').toString().trim(); }
+  const vt = await sbGet('candy_ventas', 'select=cliente&cliente=neq.&limit=10000');
+  for (const r of vt) { if (normCli(r.cliente) === k) return (r.cliente || '').toString().trim(); }
+  return limpio;
+}
 async function ajustarDeposito(codigo: string, nombre: string, delta: number, origen = '') {
   const ex = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(codigo));
   const antes = ex.length ? (parseFloat(ex[0].cantidad) || 0) : 0;
@@ -1538,7 +1551,7 @@ Deno.serve(async (req) => {
     if (accion === 'registrarPedidoHijo') {
       let items: any[]; try { items = JSON.parse(Q('items') || '[]'); } catch { return json({ error: 'items inválido' }); }
       if (!items.length) return json({ error: 'sin items' });
-      const hijo = Q('hijo'), cliente = Q('cliente');
+      const hijo = Q('hijo'), cliente = await clienteCanonicoCandy(Q('cliente'));   // 🧑 grafía única (el pedido nace con el nombre ya conocido)
       if (!hijo || !cliente) return json({ error: 'falta hijo o cliente' });
       const total = QN('total') || items.reduce((s, it) => s + (parseFloat(it.subtotal) || 0), 0);
       // Anti pedidos falsos (paridad con la tienda Shuk): límite por dispositivo (vid) —
@@ -2017,6 +2030,7 @@ Deno.serve(async (req) => {
         await setConfig(kS, fechaAhora());
       }
       const fechaS = has('fecha') ? fechaRetro(P(body, 'fecha')) : fechaAhora();
+      if (body.cliente !== undefined) body.cliente = await clienteCanonicoCandy(P(body, 'cliente'));   // 🧑 grafía única
       await sbInsert('candy_ventas', { fecha: fechaS, hijo: P(body, 'hijo'), producto: P(body, 'productoNombre'), codigo: P(body, 'productoCodigo'), cantidad: parseInt(P(body, 'cantidad')) || 1, precio: N(body, 'precio'), total: N(body, 'total'), cliente: P(body, 'cliente'), es_debe: P(body, 'esDebe') || 'NO', pago_parcial: N(body, 'pagoParcial'), saldo_pendiente: N(body, 'saldoPendiente'), metodo_pago: P(body, 'metodoPago') === 'mp' ? 'mp' : 'efectivo' });
       if (N(body, 'saldoPendiente') > 0 && P(body, 'cliente')) {
         const q = parseInt(P(body, 'cantidad')) || 1;
@@ -2045,7 +2059,7 @@ Deno.serve(async (req) => {
       }
       let items: any[]; try { items = JSON.parse(P(body, 'items') || '[]'); } catch { return json({ error: 'items inválido' }); }
       if (!items.length) return json({ error: 'sin items' });
-      const hijo = P(body, 'hijo'), cliente = P(body, 'cliente'), esDebe = P(body, 'esDebe') || 'NO';
+      const hijo = P(body, 'hijo'), cliente = await clienteCanonicoCandy(P(body, 'cliente')), esDebe = P(body, 'esDebe') || 'NO';   // 🧑 grafía única
       const pagoParcial = N(body, 'pagoParcial'), metodo = P(body, 'metodoPago') === 'mp' ? 'mp' : 'efectivo';
       const fecha = has('fecha') ? fechaRetro(P(body, 'fecha')) : fechaAhora();
       const filas = items.map((it) => ({ fecha, hijo, producto: it.productoNombre || '', codigo: it.productoCodigo || '', cantidad: parseInt(it.cantidad) || 1, precio: parseFloat(it.precio) || 0, total: parseFloat(it.total) || 0, cliente, es_debe: esDebe, pago_parcial: pagoParcial, saldo_pendiente: parseFloat(it.saldoPendiente) || 0, metodo_pago: metodo }));
@@ -2324,7 +2338,7 @@ Deno.serve(async (req) => {
       const newCantidad = parseInt(P(body, 'cantidad')) || parseInt(v.cantidad) || 1;
       const newPrecio = has('precio') ? N(body, 'precio') : (parseFloat(v.precio) || 0);
       const newTotal = newCantidad * newPrecio;
-      const newCliente = body.cliente !== undefined ? P(body, 'cliente') : oldCliente;
+      const newCliente = body.cliente !== undefined ? await clienteCanonicoCandy(P(body, 'cliente')) : oldCliente;   // 🧑 grafía única
       let newSaldo = N(body, 'saldoPendiente');
       // ⚖️ Espejo del caso #46 del Shuk: editar una venta YA COBRADA no puede "cobrar sola"
       // la diferencia. Lo que entró de verdad = total viejo − saldo viejo; si el total nuevo
@@ -2359,7 +2373,7 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
     if (accion === 'registrarPagoCliente') {
-      const hijo = P(body, 'hijo'), cliente = P(body, 'cliente');
+      const hijo = P(body, 'hijo'), cliente = await clienteCanonicoCandy(P(body, 'cliente'));   // 🧑 grafía única
       const saldoActual = await saldoClienteCandy(hijo, cliente);
       const montoPago = P(body, 'monto') === 'todo' ? saldoActual : N(body, 'monto');
       // Pago con opciones (M3, 2026-07-07): método (efectivo/mp), comprobante y perdón de redondeo.
@@ -2376,14 +2390,16 @@ Deno.serve(async (req) => {
     }
     if (accion === 'registrarVueltoCC') {
       if (!P(body, 'cliente') || !has('monto')) return json({ ok: false });
-      await sbInsert('candy_cc', { fecha: fechaAhora(), hijo: P(body, 'hijo'), cliente: P(body, 'cliente'), monto: -(N(body, 'monto')), tipo: 'vuelto', detalle: P(body, 'producto') });
+      const cliVC = await clienteCanonicoCandy(P(body, 'cliente'));   // 🧑 grafía única
+      await sbInsert('candy_cc', { fecha: fechaAhora(), hijo: P(body, 'hijo'), cliente: cliVC, monto: -(N(body, 'monto')), tipo: 'vuelto', detalle: P(body, 'producto') });
       return json({ ok: true });
     }
     if (accion === 'registrarPagoVuelto') {
       if (!has('monto')) return json({ ok: false });
-      const saldo = await saldoClienteCandy(P(body, 'hijo'), P(body, 'cliente'));
+      const cliPV = await clienteCanonicoCandy(P(body, 'cliente'));   // 🧑 grafía única
+      const saldo = await saldoClienteCandy(P(body, 'hijo'), cliPV);
       const monto = P(body, 'monto') === 'todo' ? Math.abs(saldo) : N(body, 'monto');
-      await sbInsert('candy_cc', { fecha: fechaAhora(), hijo: P(body, 'hijo'), cliente: P(body, 'cliente'), monto, tipo: 'pago_vuelto', detalle: '' });
+      await sbInsert('candy_cc', { fecha: fechaAhora(), hijo: P(body, 'hijo'), cliente: cliPV, monto, tipo: 'pago_vuelto', detalle: '' });
       return json({ ok: true });
     }
     if (accion === 'guardarNotaCliente') { await setConfig('nota_cliente:' + P(body, 'cliente'), P(body, 'nota')); return json({ ok: true }); }
@@ -2661,6 +2677,12 @@ Deno.serve(async (req) => {
       const saldos: any = {};
       cc.forEach((r: any) => { if (!r.cliente) return; const k = normCli(r.cliente); if (!saldos[k]) saldos[k] = { cliente: r.cliente, saldo: 0 }; saldos[k].saldo += parseFloat(r.monto) || 0; });
       const deudores = Object.values(saldos).filter((x: any) => Math.abs(x.saldo) > 0.01).sort((a: any, b: any) => Math.abs(b.saldo) - Math.abs(a.saldo));
+      // 🧑 Clientes conocidos (todas las grafías unificadas) → el panel los sugiere al tipear un
+      // nombre, así los chicos eligen con el dedo y no nacen variantes ('Natan marinberg').
+      const cliSet: any = {};
+      cc.forEach((r: any) => { const k = normCli(r.cliente); if (k && !cliSet[k]) cliSet[k] = (r.cliente || '').toString().trim(); });
+      vts.forEach((v: any) => { const k = normCli(v.cliente); if (k && !cliSet[k]) cliSet[k] = (v.cliente || '').toString().trim(); });
+      const clientes = Object.values(cliSet).sort((a: any, b: any) => a.localeCompare(b));
       const depMap: any = {}; dep.forEach((d: any) => { const c = String(d.codigo); depMap[c] = (depMap[c] || 0) + (parseInt(d.cantidad) || 0); });
       const propios = cat.map((r: any) => ({ codigo: r.codigo, nombre: r.nombre, precioVenta: parseFloat(r.precio_venta) || 0, costo: parseFloat(r.costo) || 0, foto: r.foto || '', stock: depMap[String(r.codigo)] || 0, categoria: (r.categoria || 'Varios').toString(), precioOferta: parseFloat(r.precio_oferta) || 0, fechaOferta: (r.fecha_oferta || '').toString(), cantPack: parseInt(r.cant_pack) || 0, precioPack: parseFloat(r.precio_pack) || 0, siempreDisp: r.siempre_disp === true }));
       const porId: any = {}; prods.forEach((p: any) => porId[String(p.id)] = p);
@@ -2677,7 +2699,7 @@ Deno.serve(async (req) => {
       const fl: any = {}; stockD.forEach((r: any) => { if (r.fecha) fl[(r.fecha || '').toString().slice(0, 10)] = true; });
       let diaAbierto: string | null = null; Object.keys(fl).forEach((f) => { if (!cerr[f] && (!diaAbierto || fechaNum(f) > fechaNum(diaAbierto))) diaAbierto = f; });
       const cierre = { hoy, hoyCerrado: !!cerr[hoy], diaAbierto, diaAbiertoEsPasado: !!(diaAbierto && diaAbierto !== hoy) };
-      return json({ ventas: ventasHoy, deudores, catalogo, stockDia: [], consumo, cierre, visitas: {}, pedidos });
+      return json({ ventas: ventasHoy, deudores, catalogo, stockDia: [], consumo, cierre, visitas: {}, pedidos, clientes });
     }
     if (accion === 'ventas') return json((await sbGet('ventas', 'select=*&order=n_venta')).map(ventaFront));
     if (accion === 'getPagos') return json((await sbGet('pagos', 'select=*')).map(pagoFront));
