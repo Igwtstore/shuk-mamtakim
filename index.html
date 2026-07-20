@@ -1161,6 +1161,15 @@
     <input type="text" id="estado-tienda-msg" placeholder="Mensaje opcional para el cliente (ej: Volvemos el lunes)" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
     <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.4rem">🟡 Cotización: el cliente arma el pedido pero NO se descuenta stock; lo aceptás vos y ahí baja. 🔴 Cerrada: no puede pedir, ve un aviso con tu WhatsApp.</div>
   </div>
+  <div class="admin-card" data-seccion="inicio" id="card-geo">
+    <div class="admin-titulo">🌎 Vidriera geográfica</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Interruptor provisorio: limita quién VE la web (el backend no se toca). Actual: <b id="geo-actual">…</b></div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <button onclick="cambiarGeoGate('off')" class="geo-btn" data-geo="off" style="flex:1;min-width:120px;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">🌐 Abierta a todos</button>
+      <button onclick="cambiarGeoGate('mercosur')" class="geo-btn" data-geo="mercosur" style="flex:1;min-width:120px;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">🇦🇷 Solo Mercosur</button>
+    </div>
+    <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.4rem">🇦🇷 Solo Mercosur: los de afuera (Argentina + limítrofes: 🇺🇾🇧🇷🇵🇾🇧🇴🇨🇱) ven un cartel amable con tu WhatsApp. 🔑 Para entrar vos desde afuera o con VPN, usá tu <b>link de pase</b> (te lo pasó Claude — guardalo). ⚠️ No es seguridad de datos (una VPN lo saltea) — es solo tapar la vidriera.</div>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">📱 QR del catálogo</div>
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
@@ -2164,6 +2173,27 @@ function marcarEstadoTiendaBtn() {
     b.style.color = activo ? '#fff' : 'var(--texto)';
   });
   const inp = document.getElementById('estado-tienda-msg'); if (inp && _tiendaMsg && !inp.value) inp.value = _tiendaMsg;
+}
+
+// 🌎 Vidriera geográfica: interruptor provisorio (Todos / Solo Mercosur).
+async function cargarGeoGate() {
+  try {
+    const d = await fetch(APPS_SCRIPT_URL + '?accion=geoGate&z=' + Date.now()).then(r => r.json());
+    _pintarGeo((d && d.gate) === 'mercosur' ? 'mercosur' : 'off');
+  } catch (e) {}
+}
+function _pintarGeo(gate) {
+  const el = document.getElementById('geo-actual'); if (el) el.textContent = gate === 'mercosur' ? '🇦🇷 Solo Mercosur' : '🌐 Abierta a todos';
+  document.querySelectorAll('.geo-btn').forEach(b => {
+    const activo = b.dataset.geo === gate;
+    b.style.background = activo ? 'var(--azul)' : '#fff';
+    b.style.color = activo ? '#fff' : 'var(--texto)';
+  });
+}
+async function cambiarGeoGate(gate) {
+  if (gate === 'mercosur' && !confirm('¿Limitar la web SOLO al Mercosur?\nLos visitantes de afuera van a ver un cartel (no la tienda). Vos entrás con tu link de pase. Se puede volver a "Todos" cuando quieras.')) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'setGeoGate', gate }), gate === 'mercosur' ? '🌎 Vidriera limitada al Mercosur ✓' : '🌐 Vidriera abierta a todos ✓');
+  if (r && r.ok) _pintarGeo(gate);
 }
 
 // Acepta una cotización: la convierte en pedido y descuenta el stock
@@ -9718,7 +9748,7 @@ function aplicarPrivacidadPanel() {
   // El botón de importar Candy no es una card con sección → se controla a mano (mostrar/ocultar).
   const btn = document.getElementById('btn-importar-candy'); if (btn) btn.style.display = ocultar ? 'none' : '';
   // Las cards de IA y bandeja sí tienen sección (las posiciona setPanelSeccion); acá SOLO las ocultamos en Miri.
-  if (ocultar) ['card-ia', 'card-bandeja'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  if (ocultar) ['card-ia', 'card-bandeja', 'card-geo'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 }
 function setPanelSeccion(s, btn) {
   _panelSeccion = s;
@@ -10289,6 +10319,12 @@ function renderSocioBar() {
   // Miri: oculta los botones, muestra label fijo — y SIGUE al bloque común de abajo
   // (⚠️ acá había un return que se salteaba ocultar Ganancias/Docs y el bloqueo de dueño:
   //  la sesión de Miri veía pestañas y selector que el toggle de Jony sí ocultaba)
+  // 🔒 En la sesión de Miri: solo el Panel — se ocultan las pestañas Mayorista/Minorista
+  // (ella no navega la tienda; su lugar es su resumen). Jony las ve siempre.
+  const _btnMay = document.getElementById('btn-mayorista');
+  const _btnMin = document.getElementById('btn-minorista');
+  if (_btnMay) _btnMay.style.display = socioActual === 'miri' ? 'none' : '';
+  if (_btnMin) _btnMin.style.display = socioActual === 'miri' ? 'none' : '';
   if (socioActual === 'miri') {
     btnTodo.style.display = 'none';
     btnMiri.style.display = 'none';
@@ -12328,6 +12364,7 @@ if (localStorage.getItem('darkMode') === '1') {
 })();
 function init() {
   cargarEstadoTienda();   // estado de la tienda (abierta/cotización/cerrada)
+  cargarGeoGate();        // 🌎 estado del interruptor de vidriera geográfica
   const hash = window.location.hash.replace('#', '');
   const path = window.location.pathname;
   document.getElementById('modo-bar').style.display = 'none';

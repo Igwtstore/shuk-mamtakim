@@ -1454,7 +1454,7 @@ Deno.serve(async (req) => {
   }
   // ── ZONA PÚBLICA: las acciones de la TIENDA (clientes, sin login) — espejo exacto
   //    de lo que queda FUERA de PROTECTED_ACTIONS/PROTECTED_HIJOS en motor-v2.js.
-  const PUBLICAS = ['getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip'];
+  const PUBLICAS = ['getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
@@ -2076,6 +2076,8 @@ Deno.serve(async (req) => {
     }
     if (accion === 'resolverAvisoCandy') { const row = P(body, 'row'); if (!row) return json({ ok: false }); await sbPatch('avisos_candy', 'id=eq.' + encodeURIComponent(row), { estado: 'listo' }); return json({ ok: true }); }
     if (accion === 'setEstadoTienda') { await setConfig('TIENDA_ESTADO', P(body, 'estado') || 'abierta'); if (body.mensaje !== undefined) await setConfig('TIENDA_MSG', P(body, 'mensaje')); return json({ ok: true }); }
+    // 🌎 Vidriera geográfica (provisoria): interruptor que limita la WEB (no el backend) al Mercosur.
+    if (accion === 'setGeoGate') { await setConfig('GEO_GATE', P(body, 'gate') === 'mercosur' ? 'mercosur' : 'off'); return json({ ok: true }); }
     if (accion === 'setConfigCandy') { await setConfig('candy_mostrar_stock', boolHijo(body.mostrarStock) ? '1' : '0'); return json({ ok: true }); }
     if (accion === 'setCategoriaHijosLote') {
       const cods = P(body, 'codigos').split(',').map((s) => s.trim()).filter(Boolean);
@@ -2563,6 +2565,13 @@ Deno.serve(async (req) => {
     }
     if (accion === 'notificaciones') return json((await sbGet('notificaciones', 'select=*')).filter((r: any) => r.estado === 'pendiente' || r.estado === 'notificado').map((r: any) => ({ fecha: (r.fecha || '').toString(), productoId: (r.producto_id || '').toString(), producto: r.producto, nombre: r.nombre, telefono: (r.telefono || '').toString(), estado: r.estado, modoCliente: r.modo || 'mayorista' })));
     if (accion === 'getEstadoTienda') return json({ estado: await getConfig('TIENDA_ESTADO', 'abierta'), mensaje: await getConfig('TIENDA_MSG', '') });
+    // 🌎 Estado del geo-gate (PÚBLICO, cacheado 30s) — lo lee el middleware de Vercel en cada request.
+    // Devuelve el hash del pase (no el pase); el middleware valida ?pase hasheando y comparando.
+    if (accion === 'geoGate') {
+      const gate = await getConfig('GEO_GATE', 'off');
+      const passHash = await getConfig('GEO_PASS_HASH', '');
+      return new Response(JSON.stringify({ gate, passHash }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=30, s-maxage=30' } });
+    }
     if (accion === 'getConfigCandy') return json({ mostrarStock: (await getConfig('candy_mostrar_stock', '1')) !== '0' });
     if (accion === 'getCompras') return json((await sbGet('costos_jony', 'select=*')).map((r: any) => ({ fecha: r.fecha, productoId: (r.producto_id || '').toString(), producto: (r.producto || '').toString(), cantidad: parseFloat(r.cantidad) || 0, costoTotal: parseFloat(r.costo_total) || 0, costoUnitario: parseFloat(r.costo_unitario) || 0 })));
     if (accion === 'notasClientes') {
