@@ -3069,6 +3069,10 @@ function renderCatalogo() {
     const maxQty = p.stock;
     const precio = formatPrecio(p);
     const esPeso = esPesos(p);
+    // 🏷️ Link VIP con descuento: precio original tachado + chip del % (el precio nuevo ya viene rebajado)
+    const vipAntes = p._vipPct ? (modo === 'mayorista'
+      ? (_monedaMay(p) === 'U$S' ? 'U$S ' + (parseFloat(String(p._vipOrigMay || '0').replace(',', '.')) || 0).toFixed(2) : '$ ' + Math.round(parseFloat(String(p._vipOrigMay || '0').replace(',', '.')) || 0).toLocaleString('es-AR'))
+      : '$ ' + Math.round(parseFloat(p._vipOrigMin) || 0).toLocaleString('es-AR')) : '';
     // Chapitas kosher: Parve/Lácteo (con Jalav integrado) + hashgajá — solo si están cargadas
     const kBadges = [];
     if (p.kosherTipo === 'Parve') kBadges.push(['#e8f6ec', '#1e7a3c', '🌿 Parve']);
@@ -3091,6 +3095,9 @@ function renderCatalogo() {
         ${ofertaActiva(p) ? `
         <div class="precio-cartel" style="border-color:#c0392b">
           <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.8rem;margin-right:0.4rem">${precio}</span><span class="producto-precio" style="color:#c0392b">${esPeso ? '$ '+Math.round(p.precioOferta).toLocaleString('es-AR') : 'U$S '+p.precioOferta.toFixed(2)}</span>
+        </div>` : p._vipPct ? `
+        <div class="precio-cartel" style="border-color:#1e7a3c">
+          <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.8rem;margin-right:0.4rem">${vipAntes}</span><span class="producto-precio" style="color:#1e7a3c">${precio}</span><span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;margin-left:0.35rem;vertical-align:middle">-${p._vipPct}%</span>
         </div>` : `<div class="precio-cartel"><div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div></div>`}
         ${packActivo(p) ? `<div style="background:#fdf3e3;border-radius:6px;padding:3px 8px;font-size:0.75rem;color:var(--dorado);font-weight:600;margin-top:3px">🎁 x${p.cantPack} → ${esPeso ? '$ '+Math.round(p.precioPack).toLocaleString('es-AR') : 'U$S '+p.precioPack.toFixed(2)} c/u</div>` : ''}
       </div>
@@ -7736,7 +7743,10 @@ async function abrirEstadoCuenta(cliente) {
       if (_cobARS > 0.005 || _cobUSD > 0.005) {
         const caja = _cajaLbl(v.cajaJony) || _cajaLbl(v.cajaMyri);
         const _parc = (_dd.ars > 0.005 || _dd.usd > 0.005);
-        movs.push({ ts: ts + 1, fecha: fch, tipo: 'cobro', concepto: `✓ Cobrado${_parc ? ' (parcial)' : ''}${caja ? ' (' + caja + ')' : ''}`, ars: _cobARS, usd: _cobUSD, signo: -1 });
+        // v3.92: el cobro va con SU fecha real (si está estampada), no con la del pedido
+        const _fc = (v.fechaCobro || '').toString();
+        const _tsC = _fc ? _tsFecha(_fc) : ts + 1;
+        movs.push({ ts: _tsC > 0 ? _tsC : ts + 1, fecha: _fc ? _fc.split(' ')[0] : fch, tipo: 'cobro', concepto: `✓ Cobrado${_parc ? ' (parcial)' : ''}${caja ? ' (' + caja + ')' : ''}`, ars: _cobARS, usd: _cobUSD, signo: -1 });
       }
     });
   (pagos || []).filter(p => normCliente(p.cliente) === k).forEach(p => {
@@ -8027,7 +8037,7 @@ async function renderCaja() {
       const comiU = _sinComi ? 0 : (parseFloat(v.comiUSD || 0) || parseFloat((usdM * 0.15).toFixed(2)));
       // Detalle del pedido (productos), filtrado según la vista (Miri solo ve sus golosinas)
       _det[v.id] = { n: n, cliente: v.cliente || '', fecha: f, cobrado: !!(v.cajaJony || v.cajaMyri),
-                     lineas: _lineasPedidoVista(v.productos, soloMiri, v.stockUpdates), comprobante: v.comprobante || '',
+                     lineas: _lineasPedidoVista(v.productos, soloMiri, v.stockUpdates), comprobante: v.comprobante || '', fechaCobro: v.fechaCobro || '',
                      descPct: (() => { const mm = (v.productos || '').match(/Descuento global:\s*([\d.]+)\s*%/i); return mm ? parseFloat(mm[1]) || 0 : 0; })() };
       // 🔑 REGLA DE ORO: un pedido NO cobrado nunca entra a la caja física.
       // Va a "cuenta corriente / pendiente" hasta que confirmes el cobro. La forma de pago
@@ -8215,11 +8225,17 @@ async function renderCaja() {
       }
     });
 
-    // Fecha de cada movimiento (para el "Extracto por caja"): de ventas la del pedido (_det),
-    // del resto la que viene en el propio texto. No cambia ningún monto, solo agrega el dato.
+    // Fecha de cada movimiento (para el "Extracto por caja"): de ventas la del COBRO si está
+    // estampada (v3.92 — cuándo entró la plata de verdad; antes iba la del pedido y el extracto
+    // no coincidía con el resumen de MP), si no la del pedido. Del resto, la del propio texto.
     movs.forEach(m => {
       if (!m.fecha) {
-        if (m.vid && _det[m.vid]) m.fecha = _det[m.vid].fecha || '';
+        if (m.vid && _det[m.vid]) {
+          const dd = _det[m.vid];
+          m.fecha = dd.fechaCobro || dd.fecha || '';
+          // Si cobro y pedido difieren de día, se aclara en el detalle (el desc ya trae la del pedido)
+          if (dd.fechaCobro && dd.fecha && dd.fechaCobro.split(' ')[0] !== dd.fecha.split(' ')[0]) m.desc += ` · cobrado ${dd.fechaCobro.split(' ')[0]}`;
+        }
         else { const mm = (m.desc || '').match(/\d{2}\/\d{2}\/\d{4}(?: \d{2}:\d{2})?/); m.fecha = mm ? mm[0] : ''; }
       }
     });
@@ -9514,8 +9530,27 @@ async function _vipCargar() {
     if (d && Array.isArray(d.ids) && d.ids.length) {
       _vipInfo = d; _vipIds = new Set(d.ids.map(String));
       setModo(d.canal === 'mayorista' ? 'mayorista' : 'minorista');
+      // 🏷️ Descuentos guardados en el link (v3.92): se aplican SOBRE los productos una sola vez,
+      // así tarjeta, carrito, checkout y el pedido que entra al panel usan el precio rebajado.
+      // Misma matemática que el armador (_acConDesc): pesos entero p/arriba, U$S 2 dec p/arriba.
+      const descG = Number(d.desc) || 0, descP = (d.descProd && typeof d.descProd === 'object') ? d.descProd : {};
+      const pctDe = id => { const x = descP[id]; return (x !== undefined && x !== '' && !isNaN(x)) ? (Number(x) || 0) : descG; };
+      let hayDesc = false;
+      productos.forEach(p => {
+        if (!_vipIds.has(String(p.id)) || p._vipPct !== undefined) return;   // idempotente
+        const pct = pctDe(String(p.id));
+        if (!(pct > 0)) return;
+        hayDesc = true;
+        const may = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0;
+        const min = parseFloat(p.precioMin) || 0;
+        p._vipOrigMay = p.precioMay; p._vipOrigMin = p.precioMin; p._vipPct = pct;
+        if (may > 0) p.precioMay = _acConDesc(may, pct, p.moneda === 'U$S');
+        if (min > 0) p.precioMin = _acConDesc(min, pct, false);
+      });
+      const soloGeneral = descG > 0 && !Object.keys(descP).length;
+      const lineaDesc = hayDesc ? `<div style="font-size:0.78rem;margin-top:2px;color:#7be495;font-weight:700">🏷️ ${soloGeneral ? descG + '% OFF' : 'Descuento especial'} ya aplicado en los precios</div>` : '';
       const bm = document.getElementById('banner-mayorista-cta'); if (bm) bm.style.display = 'none';   // catálogo a medida: sin CTA de registro
-      if (b) b.innerHTML = `<div style="background:linear-gradient(135deg,#1a1a2e,#3a3a5e);color:#fff;border-radius:14px;padding:0.9rem 1.1rem;margin:0.4rem 0 0.8rem;display:flex;align-items:center;gap:0.7rem"><span style="font-size:1.6rem">🤝</span><div><div style="font-weight:800;color:#c9954a;font-size:1.02rem">Catálogo especial para ${esc(d.nombre)}</div><div style="font-size:0.78rem;opacity:0.85">Una selección armada para vos — agregá al carrito y mandanos el pedido 🍬</div></div></div>`;
+      if (b) b.innerHTML = `<div style="background:linear-gradient(135deg,#1a1a2e,#3a3a5e);color:#fff;border-radius:14px;padding:0.9rem 1.1rem;margin:0.4rem 0 0.8rem;display:flex;align-items:center;gap:0.7rem"><span style="font-size:1.6rem">🤝</span><div><div style="font-weight:800;color:#c9954a;font-size:1.02rem">Catálogo especial para ${esc(d.nombre)}</div><div style="font-size:0.78rem;opacity:0.85">Una selección armada para vos — agregá al carrito y mandanos el pedido 🍬</div>${lineaDesc}</div></div>`;
       renderFiltros(); renderCatalogo();
     } else {
       // 🔒 Link vencido/borrado: banner y NADA MÁS — un link privado muerto no puede
@@ -9530,14 +9565,22 @@ async function _vipCargar() {
 }
 
 // ── 🔗 CATÁLOGO VIP (lado panel): crear el link desde lo tildado en el armador ─────────
+// Descuentos del armador que viajan CON el link (pedido 21/07: antes solo aplicaban a PDF/imagen).
+// Manda el general + SOLO los por-producto de lo tildado.
+function _acDescParaLink(ids) {
+  const porProd = {};
+  ids.forEach(id => { const d = _acDescProd[id]; if (d !== undefined && d !== '' && !isNaN(d) && Number(d) > 0) porProd[id] = Number(d); });
+  return { desc: String(Number(_acDescGeneral) || 0), descProd: JSON.stringify(porProd) };
+}
 async function crearLinkVip() {
   const ids = Object.keys(_acSel);
   if (!ids.length) { showToast('Tildá al menos un producto para el link'); return; }
+  const dl = _acDescParaLink(ids);
   // Modo edición: pisa el MISMO token → el cliente sigue con su URL de siempre.
   // Manda también el NOMBRE (editable en el cartel) y el canal, para poder re-apuntar el link a otro.
   if (_acEditVip) {
     const nombreEd = (_acEditVip.nombre || '').trim() || 'cliente';
-    const rE = await apiWrite(new URLSearchParams({ accion: 'actualizarCatalogoVip', t: _acEditVip.token, ids: ids.join(','), nombre: nombreEd, canal: _acEditVip.canal || 'minorista' }), '');
+    const rE = await apiWrite(new URLSearchParams({ accion: 'actualizarCatalogoVip', t: _acEditVip.token, ids: ids.join(','), nombre: nombreEd, canal: _acEditVip.canal || 'minorista', desc: dl.desc, descProd: dl.descProd }), '');
     if (rE && rE.ok) {
       showToast('💾 Link de ' + nombreEd + ' actualizado (' + rE.n + ' productos) — misma URL ✓');
       _acEditVip = null; _acEditBanner();
@@ -9547,7 +9590,7 @@ async function crearLinkVip() {
   const nombre = prompt('¿Para quién es este catálogo? (ej: Tomás)');
   if (nombre === null) return;
   const canal = (_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista';
-  const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal }), '');
+  const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal, desc: dl.desc, descProd: dl.descProd }), '');
   if (!r.ok || !r.token) return;
   _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
 }
@@ -9560,7 +9603,8 @@ async function guardarLinkVipNuevo() {
   const nombre = prompt('¿Para quién es este NUEVO link? (se crea aparte, no toca el que estabas editando)', sugerido);
   if (nombre === null) return;
   const canal = _acEditVip ? (_acEditVip.canal || 'minorista') : ((_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista');
-  const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal }), '');
+  const dl = _acDescParaLink(ids);
+  const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal, desc: dl.desc, descProd: dl.descProd }), '');
   if (!r.ok || !r.token) return;
   _acEditVip = null; _acEditBanner();   // salimos de edición: ahora es un link nuevo, independiente
   _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
@@ -9588,7 +9632,7 @@ async function verLinksVip() {
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:460px;width:100%;max-height:80vh;overflow-y:auto">
     <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🗂 Links privados vivos</div>
     ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
-      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span></div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span>${(l.desc > 0 || l.nDescProd > 0) ? ` <span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:1px 6px;border-radius:6px">🏷️ ${l.desc > 0 && !l.nDescProd ? '-' + l.desc + '%' : 'con dto.'}</span>` : ''}</div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
       <button onclick="navigator.clipboard.writeText('https://shuk-mamtakim.vercel.app/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
       <button onclick="editarLinkVip('${l.token}','${esc(l.nombre).replace(/'/g,"\\'")}','${l.canal}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
       <button onclick="borrarLinkVip('${l.token}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
@@ -9604,6 +9648,8 @@ async function editarLinkVip(t, nombre, canal) {
   if (!d || !Array.isArray(d.ids)) { showToast('No pude cargar ese link'); return; }
   _acSel = {};
   d.ids.forEach(id => { _acSel[id] = true; });
+  _acDescGeneral = Number(d.desc) || 0;                       // precarga los descuentos guardados en el link
+  _acDescProd = (d.descProd && typeof d.descProd === 'object') ? { ...d.descProd } : {};
   _acEditVip = { token: t, nombre: nombre || d.nombre || 'cliente', canal: canal || d.canal || 'minorista' };
   const ov = document.getElementById('viplink-overlay'); if (ov) ov.remove();
   _acRender();

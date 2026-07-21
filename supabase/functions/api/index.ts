@@ -313,6 +313,11 @@ async function confirmarCobro(body: any) {
   // ── COMPROBANTE (se acumula) ──
   if (has('comprobante')) { const prevC = (v.comprobante || '').toString().trim(); const nuevoC = P(body, 'comprobante').trim(); patch.comprobante = prevC ? (prevC + '\n' + nuevoC) : nuevoC; }
 
+  // ── FECHA DEL COBRO (v3.92): cuándo entró la plata DE VERDAD (antes el extracto usaba la
+  // fecha del pedido → "no me coinciden las fechas con el resumen de MP", caso KI TOV #37).
+  // Se estampa la PRIMERA vez que se confirma; re-confirmar para ajustar cajas no la pisa.
+  if (!(v.fecha_cobro || '').toString().trim()) patch.fecha_cobro = fechaAhora();
+
   await sbPatch('ventas', 'id=eq.' + encodeURIComponent(id), patch);
   // Circuito F3: si la venta interna del cliente "Candy" se cobró con TC, la compra espejo
   // de Candy pasa de U\$S crudo a pesos reales (CS<nVenta> — solo esa).
@@ -337,7 +342,7 @@ const ventaFront = (v: any) => ({
   cajaJony: v.caja_jony || '', cajaMyri: v.caja_myri || '', tipoCambio: v.tipo_cambio || 0, stockUpdates: v.stock_updates || '',
   // ⚠️ estos dos quedaron stubeados en la migración (comprobante:'' / ajuste:0) y mataban
   // "🧾 Ver comprobante" y el chip "⚖️ Ajuste de cobro" en el panel (regresión desde 2026-07-02)
-  comprobante: (v.comprobante || '').toString(), ajuste: parseFloat(v.ajuste) || 0,
+  comprobante: (v.comprobante || '').toString(), ajuste: parseFloat(v.ajuste) || 0, fechaCobro: (v.fecha_cobro || '').toString(),
   corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
 });
 const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString() });
@@ -2422,7 +2427,9 @@ Deno.serve(async (req) => {
       const idsVip = P(body, 'ids').split(',').map((s) => s.trim()).filter(Boolean);
       if (!idsVip.length) return json({ error: 'elegí al menos un producto' });
       const tokVip = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
-      await setConfig('VIP_' + tokVip, JSON.stringify({ ids: idsVip, nombre: P(body, 'nombre') || 'cliente', canal: P(body, 'canal') === 'mayorista' ? 'mayorista' : 'minorista', creado: fechaAhora() }));
+      // v3.92: el link guarda también los descuentos del armador (general + por producto)
+      let descProdVip: any = {}; try { descProdVip = JSON.parse(P(body, 'descProd') || '{}'); } catch { descProdVip = {}; }
+      await setConfig('VIP_' + tokVip, JSON.stringify({ ids: idsVip, nombre: P(body, 'nombre') || 'cliente', canal: P(body, 'canal') === 'mayorista' ? 'mayorista' : 'minorista', creado: fechaAhora(), desc: Number(P(body, 'desc')) || 0, descProd: descProdVip }));
       return json({ ok: true, token: tokVip });
     }
     if (accion === 'getCatalogoVip') {
@@ -2430,12 +2437,12 @@ Deno.serve(async (req) => {
       if (!t) return json({ error: 'link inválido' });
       const raw = await getConfig('VIP_' + t, '');
       if (!raw) return json({ error: 'este catálogo ya no está disponible' });
-      try { const d = JSON.parse(raw); return json({ ids: d.ids || [], nombre: d.nombre || '', canal: d.canal || 'minorista' }); } catch { return json({ error: 'link inválido' }); }
+      try { const d = JSON.parse(raw); return json({ ids: d.ids || [], nombre: d.nombre || '', canal: d.canal || 'minorista', desc: Number(d.desc) || 0, descProd: d.descProd || {} }); } catch { return json({ error: 'link inválido' }); }
     }
     if (accion === 'listarCatalogosVip') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       const rows = await sbGet('config', 'select=clave,valor&clave=like.VIP_*');
-      return json(rows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: (r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '', n: (d.ids || []).length }; } catch { return null; } }).filter(Boolean));
+      return json(rows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: (r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '', n: (d.ids || []).length, desc: Number(d.desc) || 0, nDescProd: Object.keys(d.descProd || {}).length }; } catch { return null; } }).filter(Boolean));
     }
     if (accion === 'bloquearVidCandy') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
@@ -2460,6 +2467,8 @@ Deno.serve(async (req) => {
       dU.ids = (P(body, 'ids') || '').split(',').map((x: string) => x.trim()).filter(Boolean);
       if (P(body, 'nombre')) dU.nombre = P(body, 'nombre');
       if (P(body, 'canal')) dU.canal = P(body, 'canal');
+      if (body.desc !== undefined) dU.desc = Number(P(body, 'desc')) || 0;   // v3.92: descuentos editables
+      if (body.descProd !== undefined) { try { dU.descProd = JSON.parse(P(body, 'descProd') || '{}'); } catch { dU.descProd = {}; } }
       dU.editado = fechaAhora();
       await setConfig('VIP_' + tU, JSON.stringify(dU));
       return json({ ok: true, n: dU.ids.length });
