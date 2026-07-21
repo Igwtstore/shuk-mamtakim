@@ -7719,7 +7719,7 @@ function verDetalleDeudor(i) {
       const acc = (!soloMiri && p.id != null) ? `
         <button onclick="event.stopPropagation();abrirEditarPago('${p.id}')" title="Editar este pago" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">✏️</button>
         <button onclick="event.stopPropagation();anularPago('${p.id}')" title="Anular este pago" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">🗑️</button>` : '';
-      html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem;padding:3px 0"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${_tcTxt(p.tc)}${(p.comprobante || '').trim() ? ' 📎' : ''}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>`;
+      html += `<div style="padding:3px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${_tcTxt(p.tc)}${(p.comprobante || '').trim() ? ' 📎' : ''}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>${soloMiri ? '' : _desgloseBolsillos(p)}</div>`;
     });
   }
   const sARS = items.reduce((s, it) => s + Math.max(0, it.remARS), 0);
@@ -7874,6 +7874,20 @@ async function abrirEstadoCuenta(cliente) {
 // 💱 Transparencia (pedido del usuario 2026-07-21): cuando un cobro/pago tuvo conversión (TC>0),
 // el TC va SIEMPRE a la vista — así se ve a qué cambio se unieron los pesos y los dólares.
 function _tcTxt(tc) { const n = parseFloat(tc) || 0; return n > 0 ? ` · al cambio $${Math.round(n).toLocaleString('es-AR')}` : ''; }
+// 🟠🟢 Desglose INTERNO de un pago por bolsillo (Jony/Pitzujim vs Miri/golosinas), en $ y U$S.
+// Solo para el panel (detalle del deudor) — NUNCA se exporta ni se manda al cliente. Reglas del
+// auto-reparto: en $ Pitzujim primero, en U$S golosinas primero (guardado en montoPitz/montoPitzUsd).
+function _desgloseBolsillos(p) {
+  const jonyARS = Math.round(parseFloat(p.montoPitz) || 0);
+  const jonyUSD = parseFloat(p.montoPitzUsd) || 0;
+  const miriARS = Math.round((parseFloat(p.montoARS) || 0) - jonyARS);
+  const miriUSD = (parseFloat(p.montoUSD) || 0) - jonyUSD;
+  const fmt = (a, u) => [a > 0 ? '$' + a.toLocaleString('es-AR') : '', u > 0.005 ? 'U$S ' + u.toFixed(2) : ''].filter(Boolean).join(' + ');
+  const jT = fmt(jonyARS, jonyUSD), mT = fmt(miriARS, miriUSD);
+  if (!jT && !mT) return '';
+  const chip = (txt, col, bg) => `<span style="color:${col};background:${bg};border-radius:5px;padding:1px 6px;font-size:0.64rem;font-weight:700">${txt}</span>`;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${jT ? chip('▸ Jony (Pitzujim): ' + jT, '#8a5a1e', '#fdf3dc') : ''}${mT ? chip('▸ Miri (golosinas): ' + mT, '#1e7a3c', '#e8f6ec') : ''}</div>`;
+}
 // 💵 Concepto claro del pago (pedido del usuario 2026-07-21): si pagó TODO en pesos y una parte
 // se convirtió a U$S, contamos el circuito completo — "entró $100.000: $26.500 a la deuda en $ +
 // $73.500 al cambio $1.540 = U$S 47,73". Solo en vista completa (en Miri se ve solo su golosina).
