@@ -7719,7 +7719,7 @@ function verDetalleDeudor(i) {
       const acc = (!soloMiri && p.id != null) ? `
         <button onclick="event.stopPropagation();abrirEditarPago('${p.id}')" title="Editar este pago" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">✏️</button>
         <button onclick="event.stopPropagation();anularPago('${p.id}')" title="Anular este pago" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">🗑️</button>` : '';
-      html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem;padding:3px 0"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${(p.comprobante || '').trim() ? ' 📎' : ''}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>`;
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem;padding:3px 0"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${_tcTxt(p.tc)}${(p.comprobante || '').trim() ? ' 📎' : ''}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>`;
     });
   }
   const sARS = items.reduce((s, it) => s + Math.max(0, it.remARS), 0);
@@ -7848,7 +7848,7 @@ async function abrirEstadoCuenta(cliente) {
         // v3.92: el cobro va con SU fecha real (si está estampada), no con la del pedido
         const _fc = (v.fechaCobro || '').toString();
         const _tsC = _fc ? _tsFecha(_fc) : ts + 1;
-        movs.push({ ts: _tsC > 0 ? _tsC : ts + 1, fecha: _fc ? _fc.split(' ')[0] : fch, tipo: 'cobro', concepto: `✓ Cobrado${_parc ? ' (parcial)' : ''}${caja ? ' (' + caja + ')' : ''}`, ars: _cobARS, usd: _cobUSD, signo: -1 });
+        movs.push({ ts: _tsC > 0 ? _tsC : ts + 1, fecha: _fc ? _fc.split(' ')[0] : fch, tipo: 'cobro', concepto: `✓ Cobrado${_parc ? ' (parcial)' : ''}${caja ? ' (' + caja + ')' : ''}${_tcTxt(v.tipoCambio)}`, ars: _cobARS, usd: _cobUSD, signo: -1 });
       }
     });
   (pagos || []).filter(p => normCliente(p.cliente) === k).forEach(p => {
@@ -7858,7 +7858,7 @@ async function abrirEstadoCuenta(cliente) {
     if (ars <= 0 && usd <= 0) return;
     const nota = (p.nota || '').toString().trim();
     movs.push({ ts: _tsFecha(p.fecha), fecha: (p.fecha || '').split(' ')[0], tipo: 'pago',
-      concepto: `Pago a cuenta${p.caja ? ' (' + _cajaLbl(p.caja) + ')' : ''}${nota ? ' · ' + nota : ''}`, ars, usd, signo: -1 });
+      concepto: `Pago a cuenta${p.caja ? ' (' + _cajaLbl(p.caja) + ')' : ''}${nota ? ' · ' + nota : ''}${_tcTxt(p.tc)}`, ars, usd, signo: -1 });
   });
   if (!movs.length) { showToast('Este cliente no tiene movimientos'); return; }
   movs.sort((a, b) => a.ts - b.ts || (a.tipo === 'pedido' ? -1 : 1));
@@ -7869,6 +7869,9 @@ async function abrirEstadoCuenta(cliente) {
     emitido: new Date().toLocaleDateString('es-AR') };
   _renderEstadoCta();
 }
+// 💱 Transparencia (pedido del usuario 2026-07-21): cuando un cobro/pago tuvo conversión (TC>0),
+// el TC va SIEMPRE a la vista — así se ve a qué cambio se unieron los pesos y los dólares.
+function _tcTxt(tc) { const n = parseFloat(tc) || 0; return n > 0 ? ` · al cambio $${Math.round(n).toLocaleString('es-AR')}` : ''; }
 function _fmtSigno(ars, usd, signo) {
   const sg = signo > 0 ? '+' : '−';
   const parts = [];
