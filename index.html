@@ -7632,6 +7632,7 @@ function _mostrarOverlayDetalle(html) {
   box.innerHTML = html + '<button onclick="document.getElementById(\'caja-detalle-overlay\').remove()" style="margin-top:14px;width:100%;padding:0.55rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>';
   ov.appendChild(box);
 }
+function _cerrarOverlayDetalle() { const ov = document.getElementById('caja-detalle-overlay'); if (ov) ov.remove(); }
 
 // Imputa los pagos a los pedidos de un deudor: primero los pagos atados a un pedido (pedidoId),
 // luego los pagos GENERALES (sin pedidoId) al pedido más VIEJO primero (FIFO). Devuelve cada
@@ -7706,13 +7707,19 @@ function verDetalleDeudor(i) {
     </div>`;
   });
   if (d.pagos && d.pagos.length) {
-    html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta recibidos</div>`;
+    html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta recibidos${soloMiri ? '' : ' <span style="font-weight:400;color:var(--texto-suave);font-size:0.68rem">· tocá ✏️/🗑️ para corregir</span>'}</div>`;
+    window._pagoIdx = window._pagoIdx || {};
     d.pagos.forEach(p => {
       // En vista Myri solo la parte golosinas del pago (la Pitzujim es de Jony).
       const ars = soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
       const t = [ars > 0 ? money(ars) : '', (parseFloat(p.montoUSD) || 0) > 0 ? 'U$S ' + parseFloat(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
       if (!t) return;
-      html += `<div style="display:flex;justify-content:space-between;font-size:0.76rem;padding:2px 0"><span style="color:var(--texto-suave)">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}</span><span style="font-weight:700;color:var(--verde)">− ${t}</span></div>`;
+      window._pagoIdx[p.id] = p;
+      // Editar/anular SOLO en vista completa (en vista Miri se muestra parte de Jony → no se toca)
+      const acc = (!soloMiri && p.id != null) ? `
+        <button onclick="event.stopPropagation();abrirEditarPago('${p.id}')" title="Editar este pago" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">✏️</button>
+        <button onclick="event.stopPropagation();anularPago('${p.id}')" title="Anular este pago" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">🗑️</button>` : '';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem;padding:3px 0"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${(p.comprobante || '').trim() ? ' 📎' : ''}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>`;
     });
   }
   const sARS = items.reduce((s, it) => s + Math.max(0, it.remARS), 0);
@@ -7722,6 +7729,81 @@ function verDetalleDeudor(i) {
   const cliEsc2 = (d.nombre || '').replace(/'/g, "\\'");
   html += `<button onclick="abrirEstadoCuenta('${cliEsc2}')" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-family:inherit;font-weight:700;font-size:0.85rem;cursor:pointer">📄 Estado de cuenta completo (con saldos)</button>`;
   _mostrarOverlayDetalle(html);
+}
+
+// ─── ✏️/🗑️ EDITAR o ANULAR un pago a cuenta ya registrado (v3.96) ───────────────
+// Solo en vista completa (no Miri). Todo se recalcula solo desde la tabla pagos.
+function _cajasOptionsHTML(sel) {
+  const grupos = [
+    ['Cajas MYRI', [['MP_GABY', 'MP GABY'], ['EFT_MYRI', 'EFT $ MYRI'], ['ETF_USD_MYRI', 'ETF U$S MYRI']]],
+    ['Cajas JONY', [['EFT_JONY', 'EFT $ JONY'], ['MP_JONY', 'MP JONY'], ['ETF_USD_JONY', 'ETF U$S JONY']]],
+    ['Otro', [['PERDON', '🎁 Perdón / Redondeo (no entra a caja)']]],
+  ];
+  return grupos.map(g => `<optgroup label="${g[0]}">${g[1].map(c => `<option value="${c[0]}"${c[0] === sel ? ' selected' : ''}>${c[1]}</option>`).join('')}</optgroup>`).join('');
+}
+let _editPagoId = null;
+function abrirEditarPago(id) {
+  const p = (window._pagoIdx || {})[id];
+  if (!p) { showToast('No encontré ese pago'); return; }
+  _editPagoId = id;
+  const m = (p.fecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  const fechaISO = m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+  const inp = 'width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:0.9rem;box-sizing:border-box;margin-bottom:0.6rem';
+  const lbl = 'font-size:0.78rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.2rem';
+  let ov = document.getElementById('editpago-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'editpago-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:390px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="font-weight:800;font-size:1.05rem;color:var(--azul)">✏️ Editar pago</div>
+    <div style="font-size:0.74rem;color:var(--texto-suave);margin:2px 0 0.9rem">${esc(p.cliente || '')} · registrado ${esc(p.fecha || '')}${p.pedidoId ? ' · atado a un pedido' : ' · a cuenta'}</div>
+    <label style="${lbl}">Monto $ (pesos)</label>
+    <input type="number" id="editpago-ars" value="${Math.round(p.montoARS) || ''}" min="0" style="${inp}">
+    <label style="${lbl}">Monto U$S</label>
+    <input type="number" id="editpago-usd" value="${p.montoUSD || ''}" min="0" step="0.01" style="${inp}">
+    <label style="${lbl}">📅 ¿Cuándo entró la plata?</label>
+    <input type="date" id="editpago-fecha" value="${fechaISO}" style="${inp}">
+    <label style="${lbl}">¿A qué caja entró?</label>
+    <select id="editpago-caja" style="${inp};background:#fff">${_cajasOptionsHTML(p.caja)}</select>
+    <label style="${lbl}">💱 TC <span style="font-weight:400;color:var(--texto-suave);font-size:0.68rem">(si pagó U$S en pesos)</span></label>
+    <input type="number" id="editpago-tc" value="${p.tc || ''}" min="0" placeholder="0" style="${inp}">
+    <div style="display:flex;gap:6px;margin-top:0.4rem">
+      <button onclick="guardarEdicionPago()" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar cambios</button>
+      <button onclick="document.getElementById('editpago-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
+    </div>
+    <button onclick="anularPago('${id}')" style="width:100%;margin-top:0.55rem;padding:0.6rem;background:#fde8e8;color:#c0392b;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">🗑️ Anular este pago</button>
+  </div>`;
+}
+async function guardarEdicionPago() {
+  if (!_editPagoId) return;
+  const ars = Math.round(parseFloat(document.getElementById('editpago-ars').value) || 0);
+  const usd = parseFloat(document.getElementById('editpago-usd').value) || 0;
+  if (ars <= 0 && usd <= 0) { showToast('Poné un monto (pesos o U$S)'); return; }
+  const caja = document.getElementById('editpago-caja').value;
+  const tc = parseFloat(document.getElementById('editpago-tc').value) || 0;
+  const pfv = document.getElementById('editpago-fecha').value || '';
+  const params = new URLSearchParams({ accion: 'editarPagoCuenta', pagoId: _editPagoId, montoARS: ars, montoUSD: usd, caja, tipoCambio: tc });
+  const m = pfv.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const hoyISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+    const hora = pfv === hoyISO ? new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false }) : '12:00';
+    params.set('fecha', `${m[3]}/${m[2]}/${m[1]} ${hora}`);
+  }
+  const r = await apiWrite(params, '✏️ Pago actualizado ✓');
+  if (r && r.ok) {
+    document.getElementById('editpago-overlay')?.remove();
+    _cerrarOverlayDetalle();
+    refreshAdmin();
+  } else showToast('⚠️ No se pudo editar: ' + ((r && r.error) || 'reintentá'));
+}
+async function anularPago(id) {
+  const p = (window._pagoIdx || {})[id] || {};
+  const mstr = [p.montoARS > 0 ? '$ ' + Math.round(p.montoARS).toLocaleString('es-AR') : '', p.montoUSD > 0 ? 'U$S ' + Number(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
+  if (!confirm(`¿Anular el pago de ${mstr || 'este cliente'}?\n\nLa deuda vuelve a subir y la caja se ajusta. No se puede deshacer (si te equivocaste, después lo cargás de nuevo).`)) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'anularPagoCuenta', pagoId: id }), '🗑️ Pago anulado');
+  if (r && r.ok) {
+    document.getElementById('editpago-overlay')?.remove();
+    _cerrarOverlayDetalle();
+    refreshAdmin();
+  } else showToast('⚠️ No se pudo anular: ' + ((r && r.error) || 'reintentá'));
 }
 
 // ─── ESTADO DE CUENTA del cliente (extracto cronológico con saldo corriente) ────

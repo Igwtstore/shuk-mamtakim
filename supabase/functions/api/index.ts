@@ -188,6 +188,34 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
   out.comisionUSD = Math.round(out.comisionUSD * 100) / 100; out.pitzUSD = Math.round(out.pitzUSD * 100) / 100;
   return out;
 }
+// ⚖️ Auto-reparto de un pago: qué parte es Pitzujim (Jony) y qué parte golosinas (Miri), contra
+// la deuda viva FIFO del cliente. Compartido por registrar y EDITAR un pago (v3.96). Al editar,
+// excludePagoId saca el propio pago del cálculo (si no, se contaría a sí mismo → doble).
+async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: number, montoUSD: number, montoPitzExplicito: number, excludePagoId?: string): Promise<{ pitzARS: number; pitzUSD: number }> {
+  let pitzARS = montoPitzExplicito || 0, pitzUSD = 0;
+  try {
+    const cliPago = normCli(cliente);
+    const [vsCli, pgsCli] = await Promise.all([sbGet('ventas', 'select=*'), sbGet('pagos', 'select=*')]);
+    const vsDel = vsCli.filter((v: any) => normCli(v.cliente) === cliPago);
+    let pgsDel = pgsCli.filter((p: any) => normCli(p.cliente) === cliPago);
+    if (excludePagoId) pgsDel = pgsDel.filter((p: any) => String(p.id) !== String(excludePagoId));
+    const resid = coberturaPagos(vsDel, pgsDel, 0);   // residual por pedido, como si este pago no existiera
+    let items = Object.values(resid) as any[];
+    if (pedidoId) items = items.filter((it: any) => String(it.v.id) === String(pedidoId));
+    items.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha));
+    let poolA = montoARS, poolU = montoUSD;
+    let autoPitzA = 0, autoPitzU = 0;
+    items.forEach((it: any) => {
+      let a = Math.min(poolA, it.jA); poolA -= a; autoPitzA += a;   // $: Pitzujim primero
+      a = Math.min(poolA, it.mA); poolA -= a;                       // $: después golosinas
+      a = Math.min(poolU, it.mU); poolU -= a;                       // U$S: golosinas primero
+      a = Math.min(poolU, it.jU); poolU -= a; autoPitzU += a;       // U$S: después Pitzujim
+    });
+    if (pitzARS <= 0) pitzARS = Math.round(autoPitzA);
+    pitzUSD = Math.round(autoPitzU * 100) / 100;
+  } catch { /* si el reparto falla, queda en 0 (como antes) */ }
+  return { pitzARS, pitzUSD };
+}
 // Fecha del último corte (en ms) — los pagos anteriores ya quedaron liquidados en ese corte.
 async function msUltimoCorte() {
   const c = await sbGet('cortes', 'select=fecha&order=id.desc&limit=1');
@@ -348,7 +376,7 @@ const ventaFront = (v: any) => ({
   comprobante: (v.comprobante || '').toString(), ajuste: parseFloat(v.ajuste) || 0, fechaCobro: (v.fecha_cobro || '').toString(),
   corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
 });
-const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString() });
+const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
 const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
@@ -1817,28 +1845,7 @@ Deno.serve(async (req) => {
       // cuenta entre socios: en $ Pitzujim primero, en U$S golosinas primero. El reparto queda
       // GUARDADO en el pago (monto_pitz / monto_pitz_usd) → caja, cuenta corriente y vista
       // Miri leen todos lo mismo. Si el front mandó montoPitz explícito (>0), se respeta.
-      let pitzARS = N(body, 'montoPitz'), pitzUSD = 0;
-      try {
-        const cliPago = normCli(P(body, 'cliente'));
-        const [vsCli, pgsCli] = await Promise.all([sbGet('ventas', 'select=*'), sbGet('pagos', 'select=*')]);
-        const vsDel = vsCli.filter((v: any) => normCli(v.cliente) === cliPago);
-        const pgsDel = pgsCli.filter((p: any) => normCli(p.cliente) === cliPago);
-        const resid = coberturaPagos(vsDel, pgsDel, 0);   // deja jA/mA/jU/mU RESIDUALES por pedido
-        const pidPago = P(body, 'pedidoId');
-        let items = Object.values(resid) as any[];
-        if (pidPago) items = items.filter((it: any) => String(it.v.id) === String(pidPago));
-        items.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha));
-        let poolA = N(body, 'montoARS'), poolU = N(body, 'montoUSD');
-        let autoPitzA = 0, autoPitzU = 0;
-        items.forEach((it: any) => {
-          let a = Math.min(poolA, it.jA); poolA -= a; autoPitzA += a;   // $: Pitzujim primero
-          a = Math.min(poolA, it.mA); poolA -= a;                       // $: después golosinas
-          a = Math.min(poolU, it.mU); poolU -= a;                       // U$S: golosinas primero
-          a = Math.min(poolU, it.jU); poolU -= a; autoPitzU += a;       // U$S: después Pitzujim
-        });
-        if (pitzARS <= 0) pitzARS = Math.round(autoPitzA);
-        pitzUSD = Math.round(autoPitzU * 100) / 100;
-      } catch { /* si el reparto falla, el pago se guarda igual (reparto en 0, como antes) */ }
+      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'));
       // 📅 v3.95: si el modal manda la fecha real del pago, ESA va (si no, "ahora")
       const fechaPagoElegida = P(body, 'fecha').trim();
       const fechaPago = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fechaPagoElegida) ? fechaPagoElegida : fechaAhora();
@@ -1858,6 +1865,30 @@ Deno.serve(async (req) => {
       }
       // El front muestra el reparto en el toast: el usuario VE a qué bolsillo fue cada peso.
       return json({ ok: true, reparto: { pitzARS, pitzUSD, golARS: Math.max(0, N(body, 'montoARS') - pitzARS), golUSD: Math.max(0, Math.round((N(body, 'montoUSD') - pitzUSD) * 100) / 100) } });
+    }
+    // ✏️ EDITAR un pago a cuenta ya registrado (v3.96): corrige monto/caja/fecha/TC y RE-HACE el
+    // auto-reparto Pitzujim/golosinas (excluyéndose a sí mismo). Todo lo demás (deuda, caja,
+    // ganancia, cuenta socios) se recalcula solo desde la tabla pagos. nota/comprobante intactos.
+    if (accion === 'editarPagoCuenta') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const pidE = P(body, 'pagoId');
+      const rowsE = await sbGet('pagos', 'select=*&id=eq.' + encodeURIComponent(pidE));
+      if (!rowsE.length) return json({ error: 'ese pago ya no existe' });
+      const pgE = rowsE[0];
+      const mA = N(body, 'montoARS'), mU = N(body, 'montoUSD');
+      if (mA === 0 && mU === 0) return json({ error: 'monto vacío' });
+      const fEd = P(body, 'fecha').trim();
+      const fFinal = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fEd) ? fEd : (pgE.fecha || fechaAhora());
+      const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, 0, pidE);
+      await sbPatch('pagos', 'id=eq.' + encodeURIComponent(pidE), { monto_ars: mA, monto_usd: mU, monto_pitz: rep.pitzARS, monto_pitz_usd: rep.pitzUSD, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio') });
+      return json({ ok: true, reparto: rep });
+    }
+    // 🗑️ ANULAR un pago a cuenta (v3.96): lo borra; la deuda del cliente vuelve a subir y la
+    // caja se ajusta solas (todo deriva de la tabla pagos). Sin materializado que reparar.
+    if (accion === 'anularPagoCuenta') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      await sbDelete('pagos', 'id=eq.' + encodeURIComponent(P(body, 'pagoId')));
+      return json({ ok: true });
     }
     if (accion === 'registrarMovSocio') {
       if (N(body, 'montoARS') === 0 && N(body, 'montoUSD') === 0) return json({ error: 'nada para registrar' });
