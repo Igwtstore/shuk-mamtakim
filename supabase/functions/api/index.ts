@@ -313,10 +313,13 @@ async function confirmarCobro(body: any) {
   // ── COMPROBANTE (se acumula) ──
   if (has('comprobante')) { const prevC = (v.comprobante || '').toString().trim(); const nuevoC = P(body, 'comprobante').trim(); patch.comprobante = prevC ? (prevC + '\n' + nuevoC) : nuevoC; }
 
-  // ── FECHA DEL COBRO (v3.92): cuándo entró la plata DE VERDAD (antes el extracto usaba la
+  // ── FECHA DEL COBRO (v3.92/93): cuándo entró la plata DE VERDAD (antes el extracto usaba la
   // fecha del pedido → "no me coinciden las fechas con el resumen de MP", caso KI TOV #37).
-  // Se estampa la PRIMERA vez que se confirma; re-confirmar para ajustar cajas no la pisa.
-  if (!(v.fecha_cobro || '').toString().trim()) patch.fecha_cobro = fechaAhora();
+  // Si el modal manda la fecha elegida (📅), ESA manda (también al re-confirmar). Si no viene,
+  // se estampa "ahora" solo la primera vez.
+  const fcElegida = P(body, 'fechaCobro').trim();
+  if (/^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fcElegida)) patch.fecha_cobro = fcElegida;
+  else if (!(v.fecha_cobro || '').toString().trim()) patch.fecha_cobro = fechaAhora();
 
   await sbPatch('ventas', 'id=eq.' + encodeURIComponent(id), patch);
   // Circuito F3: si la venta interna del cliente "Candy" se cobró con TC, la compra espejo

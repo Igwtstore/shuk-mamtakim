@@ -1981,6 +1981,10 @@
     <div id="cobro-jony-wrap" style="display:none"><span id="cobro-jony-amt"></span><select id="cobro-caja-jony"></select></div>
     <div id="cobro-myri-wrap" style="display:none"><span id="cobro-myri-amt"></span><select id="cobro-caja-myri"></select></div>
     <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📅 ¿Cuándo entró la plata? <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(la fecha REAL del cobro — el extracto usa esta)</span></label>
+      <input type="date" id="cobro-fecha" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
+    </div>
+    <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📎 Comprobante (opcional — foto de transferencia/MP)</label>
       <input type="file" id="cobro-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('cobro-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
       <div id="cobro-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
@@ -4275,6 +4279,8 @@ async function renderPedidos() {
       lista.innerHTML = '<div class="sinpedidos">⚠️ Se venció la sesión. Recargá la página y volvé a entrar.</div>';
       return;
     }
+    // Fecha de cobro ya estampada por pedido (para precargar el 📅 del modal al re-confirmar)
+    window._fcPorId = {}; (Array.isArray(ventas) ? ventas : []).forEach(v => { window._fcPorId[v.id] = v.fechaCobro || ''; });
     if (!Array.isArray(ventas) || !ventas.length) {
       lista.innerHTML = '<div class="sinpedidos">No hay pedidos aún.</div>';
       return;
@@ -11877,6 +11883,13 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
   document.getElementById('cobro-tc-result').textContent = '';
   const ci = document.getElementById('cobro-comprobante'); if (ci) ci.value = '';
   const cs = document.getElementById('cobro-comprobante-st'); if (cs) cs.textContent = '';
+  // 📅 Fecha REAL del cobro: hoy por defecto; si ya estaba estampada (re-confirmar), esa.
+  const cf = document.getElementById('cobro-fecha');
+  if (cf) {
+    const fcPrev = (window._fcPorId && window._fcPorId[id]) || '';
+    const m = fcPrev.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    cf.value = m ? `${m[3]}-${m[2]}-${m[1]}` : new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+  }
   const cr = document.getElementById('cobro-recibido'); if (cr) cr.value = '';
   const cpr = document.getElementById('cobro-pesos-real'); if (cpr) cpr.value = '';
   const cph = document.getElementById('cobro-pesos-hint'); if (cph) cph.textContent = '';
@@ -12213,6 +12226,14 @@ async function confirmarCobroModal() {
   const comprobante = await subirComprobantes(document.getElementById('cobro-comprobante'));
   const params = new URLSearchParams({ accion: 'confirmarCobro', id: _cobroId, cajaJony, cajaMyri, tipoCambio });
   params.set('tramos', JSON.stringify(tramos));   // cobro fraccionado: dónde entró cada parte
+  // 📅 fecha REAL del cobro elegida en el modal (si es hoy, con la hora actual; si es otro día, 12:00)
+  { const cfv = (document.getElementById('cobro-fecha') || {}).value || '';
+    const mm = cfv.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (mm) {
+      const hoyISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+      const hora = cfv === hoyISO ? new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false }) : '12:00';
+      params.set('fechaCobro', `${mm[3]}/${mm[2]}/${mm[1]} ${hora}`);
+    } }
   if (perdonar) params.set('perdonarFaltante', '1');   // reduce el split de cada balde a lo realmente cobrado
   if (comprobante) params.set('comprobante', comprobante);
   // Envío: costo del cadete + quién lo pagó (+ cobrado, por si se carga acá). Va a la Caja Envíos.
