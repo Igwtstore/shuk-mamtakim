@@ -7781,6 +7781,9 @@ async function guardarEdicionPago() {
   const tc = parseFloat(document.getElementById('editpago-tc').value) || 0;
   const pfv = document.getElementById('editpago-fecha').value || '';
   const params = new URLSearchParams({ accion: 'editarPagoCuenta', pagoId: _editPagoId, montoARS: ars, montoUSD: usd, caja, tipoCambio: tc });
+  // total en mano recalculado si sigue habiendo conversión (U$S pagados en pesos); si no, 0 (lo limpia)
+  { const _cu = _CAJAS_USD.indexOf(caja) !== -1;
+    params.set('totalMano', String((usd > 0 && tc > 0 && !_cu && caja !== 'PERDON') ? Math.round(ars + usd * tc) : 0)); }
   const m = pfv.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
     const hoyISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -7856,9 +7859,8 @@ async function abrirEstadoCuenta(cliente) {
     const ars = soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
     const usd = soloMiri ? ((parseFloat(p.montoUSD) || 0) - (parseFloat(p.montoPitzUsd) || 0)) : (parseFloat(p.montoUSD) || 0);
     if (ars <= 0 && usd <= 0) return;
-    const nota = (p.nota || '').toString().trim();
     movs.push({ ts: _tsFecha(p.fecha), fecha: (p.fecha || '').split(' ')[0], tipo: 'pago',
-      concepto: `Pago a cuenta${p.caja ? ' (' + _cajaLbl(p.caja) + ')' : ''}${nota ? ' · ' + nota : ''}${_tcTxt(p.tc)}`, ars, usd, signo: -1 });
+      concepto: _pagoConcepto(p, soloMiri), ars, usd, signo: -1 });
   });
   if (!movs.length) { showToast('Este cliente no tiene movimientos'); return; }
   movs.sort((a, b) => a.ts - b.ts || (a.tipo === 'pedido' ? -1 : 1));
@@ -7872,6 +7874,21 @@ async function abrirEstadoCuenta(cliente) {
 // 💱 Transparencia (pedido del usuario 2026-07-21): cuando un cobro/pago tuvo conversión (TC>0),
 // el TC va SIEMPRE a la vista — así se ve a qué cambio se unieron los pesos y los dólares.
 function _tcTxt(tc) { const n = parseFloat(tc) || 0; return n > 0 ? ` · al cambio $${Math.round(n).toLocaleString('es-AR')}` : ''; }
+// 💵 Concepto claro del pago (pedido del usuario 2026-07-21): si pagó TODO en pesos y una parte
+// se convirtió a U$S, contamos el circuito completo — "entró $100.000: $26.500 a la deuda en $ +
+// $73.500 al cambio $1.540 = U$S 47,73". Solo en vista completa (en Miri se ve solo su golosina).
+function _pagoConcepto(p, soloMiri) {
+  const caja = p.caja ? ' (' + _cajaLbl(p.caja) + ')' : '';
+  const usd = parseFloat(p.montoUSD) || 0, tc = parseFloat(p.tc) || 0, totM = Math.round(parseFloat(p.totalMano) || 0);
+  if (!soloMiri && totM > 0 && usd > 0 && tc > 0) {
+    const aPesos = Math.round(parseFloat(p.montoARS) || 0);
+    const conv = totM - aPesos;
+    return `Pago a cuenta${caja} · entró $${totM.toLocaleString('es-AR')}: $${aPesos.toLocaleString('es-AR')} a la deuda en $ + $${conv.toLocaleString('es-AR')} al cambio $${Math.round(tc).toLocaleString('es-AR')} = U$S ${usd.toFixed(2)}`;
+  }
+  const nota = (p.nota || '').toString().trim();
+  const notaTxt = (nota && nota.toLowerCase() !== 'pago a cuenta') ? ' · ' + nota : '';   // no repetir el default
+  return `Pago a cuenta${caja}${notaTxt}${_tcTxt(p.tc)}`;
+}
 function _fmtSigno(ars, usd, signo) {
   const sg = signo > 0 ? '+' : '−';
   const parts = [];
@@ -12315,6 +12332,14 @@ async function confirmarPagoCuenta() {
   if (!_pagoPedidoId && _ps && _ps.value) _pedFinal = _ps.value;
   const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
   const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta' });
+  // 💵 v3.99: total en mano (pesos) cuando pagó U$S EN PESOS (caja de pesos + TC) — para mostrar
+  // después "entró $100.000 → $26.500 a pesos + $73.500 al cambio $1.540". Usa el del repartidor
+  // si lo usó (exacto), si no lo calcula (monto_ars + U$S×TC).
+  { const _cajaEsUSD = _CAJAS_USD.indexOf(caja) !== -1;
+    if (usd > 0 && tcPago > 0 && !_cajaEsUSD && caja !== 'PERDON') {
+      const _rep = Math.round(parseFloat(document.getElementById('pago-total-mano')?.value) || 0);
+      params.set('totalMano', String(_rep > 0 ? _rep : Math.round(ars + usd * tcPago)));
+    } }
   // 📅 fecha REAL del pago elegida en el modal (si es hoy, con la hora actual; si es otro día, 12:00)
   { const pfv = (document.getElementById('pago-fecha') || {}).value || '';
     const pfm = pfv.match(/^(\d{4})-(\d{2})-(\d{2})$/);
