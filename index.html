@@ -2878,9 +2878,13 @@ async function _imgADataUrlCuadrada(url, sz) {
     const img = new Image();
     img.onload = () => {
       try {
-        const s = Math.min(img.width, img.height), sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+        // Encaje ENTERO sobre cuadrado blanco (contain) — el recorte centrado cortaba los paquetes altos
         const cv = document.createElement('canvas'); cv.width = sz; cv.height = sz;
-        cv.getContext('2d').drawImage(img, sx, sy, s, s, 0, 0, sz, sz);
+        const ctx2 = cv.getContext('2d');
+        ctx2.fillStyle = '#ffffff'; ctx2.fillRect(0, 0, sz, sz);
+        const k = Math.min(sz / img.width, sz / img.height);
+        const dw = img.width * k, dh = img.height * k;
+        ctx2.drawImage(img, (sz - dw) / 2, (sz - dh) / 2, dw, dh);
         res(cv.toDataURL('image/jpeg', 0.85));
       } catch (e) { res(dataUrl); }
     };
@@ -2901,7 +2905,8 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     const a = []; if (_acVerMin) a.push(uno('min', 'Por unidad')); if (_acVerMay) a.push(uno('may', 'Por mayor'));
     let s = a.join('\n');               // cada precio en su línea (las etiquetas son largas)
     const ref = _acRefTxt(p);
-    if (ref) s += '\n(' + ref + ')';   // equivalencia en pesos, en su propia línea
+    // OJO: la helvetica interna de jsPDF no tiene el glifo "≈" (salía basura tipo «"H») → "aprox."
+    if (ref) s += '\n(' + ref.replace('≈', 'aprox.') + ')';   // equivalencia en pesos, en su propia línea
     return s;
   };
   let y = 0, pag = 0;
@@ -2920,7 +2925,7 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
       y += 56; pdf.setDrawColor(...cMarca); pdf.setLineWidth(1.5); pdf.line(margin, y, W - margin, y); y += 16;
       if (_acRefPesos && _acTcRef > 0) {   // aclaración del TC usado para la referencia en pesos
         pdf.setFont('helvetica', 'italic'); pdf.setFontSize(7.5); pdf.setTextColor(...gris);
-        pdf.text('(≈ $) referencia en pesos a tipo de cambio $' + _acTcRef.toLocaleString('es-AR'), margin, y - 2);
+        pdf.text('(aprox. $) referencia en pesos a tipo de cambio $' + _acTcRef.toLocaleString('es-AR'), margin, y - 2);
         y += 12;
       }
     }
@@ -8160,7 +8165,7 @@ async function renderCaja() {
     if (Array.isArray(pagosCuenta)) pagosCuenta.forEach(p => {
       const aRS = parseFloat(p.montoARS)||0, uSD = parseFloat(p.montoUSD)||0;
       const esPerdon = p.caja === 'PERDON';   // perdón/redondeo: baja la deuda, NO entra a ninguna caja
-      const desc = esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`;
+      const desc = (esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`) + _clipsDe(p.comprobante);
       if (aRS > 0 && p.caja) {
         if (!esPerdon) {
           // Espejo del caso U$S-en-pesos: si la deuda en PESOS la pagó con DÓLARES FÍSICOS (caja
