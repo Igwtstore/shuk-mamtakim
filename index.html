@@ -2044,6 +2044,16 @@
   <div style="background:white;border-radius:16px;padding:1.5rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:0.3rem">💵 Pago a cuenta</div>
     <div id="pago-sub" style="font-size:0.8rem;color:var(--texto-suave);margin-bottom:1rem"></div>
+    <!-- 💰 Repartidor (v3.94): "me pagó todo en pesos" → salda la deuda en $ primero y el resto baja los U$S vía TC, solo -->
+    <div id="pago-repartir-wrap" style="margin-bottom:0.85rem;background:#eef7ee;border:1.5px solid #bfe3c8;border-radius:10px;padding:0.7rem 0.8rem">
+      <label style="font-size:0.8rem;font-weight:700;color:#1e7a3c;display:block;margin-bottom:0.35rem">💰 ¿Te pagó todo en PESOS? Poné el total y reparto solo</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="number" id="pago-total-mano" placeholder="Total $ en mano" min="0" style="flex:2;min-width:110px;padding:0.5rem 0.6rem;border:1.5px solid #bfe3c8;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box" />
+        <input type="number" id="pago-tc-mano" placeholder="TC $" min="1" title="Tipo de cambio U$S 1 = $" style="flex:1;min-width:70px;padding:0.5rem 0.6rem;border:1.5px solid #bfe3c8;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box" />
+        <button type="button" onclick="pagoRepartirTotal()" style="background:#1e7a3c;color:#fff;border:none;border-radius:8px;padding:0.5rem 0.9rem;font-weight:800;font-size:0.82rem;cursor:pointer;font-family:inherit">➗ Repartir</button>
+      </div>
+      <div id="pago-repartir-res" style="font-size:0.72rem;color:#1e7a3c;margin-top:0.35rem;font-weight:600"></div>
+    </div>
     <!-- Reparto Pitzujim / golosinas (solo pago de un pedido mixto) -->
     <div id="pago-split-wrap" style="display:none">
       <div style="margin-bottom:0.75rem">
@@ -12029,6 +12039,11 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   const pci = document.getElementById('pago-comprobante'); if (pci) pci.value = '';
   const pcs = document.getElementById('pago-comprobante-st'); if (pcs) pcs.textContent = '';
   remPitz = Math.round(remPitz||0); remGolARS = Math.round(remGolARS||0); remGolUSD = parseFloat(remGolUSD||0); remPitzUSD = parseFloat(remPitzUSD||0);
+  // 💰 Repartidor: guarda la deuda restante y limpia sus campos
+  window._pagoRem = { esPedido, pitz: remPitz, arsTotal: esPedido ? remPitz + remGolARS : remGolARS, usd: esPedido ? remPitzUSD + remGolUSD : remGolUSD };
+  const ptm = document.getElementById('pago-total-mano'); if (ptm) ptm.value = '';
+  const ptcm = document.getElementById('pago-tc-mano'); if (ptcm) ptcm.value = '';
+  const prr = document.getElementById('pago-repartir-res'); if (prr) prr.textContent = '';
   if (esPedido) {
     // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
     // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
@@ -12057,6 +12072,43 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
 function cerrarPagoModal() {
   document.getElementById('pago-modal').style.display = 'none';
   _pagoCliente = ''; _pagoPedidoId = '';
+}
+// 💰 Repartidor (v3.94): el cliente pagó TODO en pesos → salda la deuda en $ primero y el resto
+// baja la deuda en U$S vía TC. Deja los campos cargados para REVISAR y confirmar (no registra solo).
+function pagoRepartirTotal() {
+  const R = window._pagoRem || {};
+  const res = document.getElementById('pago-repartir-res');
+  const total = Math.round(parseFloat(document.getElementById('pago-total-mano')?.value) || 0);
+  const tc = parseFloat(document.getElementById('pago-tc-mano')?.value) || 0;
+  const $f = v => Math.round(v).toLocaleString('es-AR');
+  if (total <= 0) { if (res) res.textContent = 'Poné cuántos pesos te dio en total.'; return; }
+  const aPesos = Math.min(total, Math.round(R.arsTotal || 0));   // 1º: saldar la deuda en pesos
+  let resto = total - aPesos, aUSD = 0;
+  if (resto > 0 && (R.usd || 0) > 0) {
+    if (!(tc > 0)) { if (res) res.textContent = `⚠️ Sobran $ ${$f(resto)} para imputar a los U$S — completá el TC y volvé a tocar Repartir.`; return; }
+    aUSD = Math.floor(Math.min(resto / tc, R.usd) * 100) / 100;  // 2 decimales, sin pasarse de la deuda
+  }
+  // Los pesos que no van a U$S (deuda en $, redondeo del TC o excedente) van al campo $ — así
+  // la caja recibe EXACTO lo que entró en mano y cualquier sobra queda a favor.
+  const arsCampo = total - Math.round(aUSD * tc);
+  if (R.esPedido) {
+    const aPitz = Math.min(arsCampo, Math.round(R.pitz || 0));
+    document.getElementById('pago-pitz').value = aPitz > 0 ? aPitz : '';
+    document.getElementById('pago-gol').value = (arsCampo - aPitz) > 0 ? arsCampo - aPitz : '';
+  } else {
+    document.getElementById('pago-ars').value = arsCampo > 0 ? arsCampo : '';
+  }
+  document.getElementById('pago-usd').value = aUSD > 0 ? aUSD.toFixed(2) : '';
+  if (aUSD > 0) { const ptc = document.getElementById('pago-tc'); if (ptc) ptc.value = tc; }
+  const aFavor = Math.max(0, arsCampo - Math.round(R.arsTotal || 0));
+  if (res) {
+    const partes = [];
+    if (aPesos > 0) partes.push(`salda $ ${$f(Math.min(aPesos, R.arsTotal || 0))} de deuda en pesos`);
+    if (aUSD > 0) partes.push(`bajan U$S ${aUSD.toFixed(2)} de la deuda (= $ ${$f(aUSD * tc)})`);
+    if (aFavor > 0) partes.push(`$ ${$f(aFavor)} quedan A FAVOR`);
+    res.textContent = `✓ ${partes.join(' · ')} — revisá y confirmá abajo.`;
+  }
+  pago_evalTC();
 }
 // El cliente paga una deuda en U$S pero entrega PESOS: si hay monto U$S + caja de pesos, pedir el TC.
 // Así la plata entra en pesos a la caja (transparencia Miri) y la deuda en dólares baja en U$S.
