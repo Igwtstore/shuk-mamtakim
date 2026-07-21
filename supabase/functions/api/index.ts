@@ -335,7 +335,10 @@ const ventaFront = (v: any) => ({
   estado: v.estado || 'pendiente', totalARS: v.total_ars || 0, totalUSD: v.total_usd || 0, nVenta: v.n_venta,
   arsJONY: v.ars_jony || 0, arsMyri: v.ars_myri || 0, usdMyri: v.usd_myri || 0, comiARS: v.comi_ars || 0, comiUSD: v.comi_usd || 0,
   cajaJony: v.caja_jony || '', cajaMyri: v.caja_myri || '', tipoCambio: v.tipo_cambio || 0, stockUpdates: v.stock_updates || '',
-  comprobante: '', ajuste: 0, corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
+  // ⚠️ estos dos quedaron stubeados en la migración (comprobante:'' / ajuste:0) y mataban
+  // "🧾 Ver comprobante" y el chip "⚖️ Ajuste de cobro" en el panel (regresión desde 2026-07-02)
+  comprobante: (v.comprobante || '').toString(), ajuste: parseFloat(v.ajuste) || 0,
+  corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
 });
 const pagoFront = (p: any) => ({ fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
