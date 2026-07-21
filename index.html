@@ -2082,6 +2082,10 @@
       <input type="number" id="pago-usd" placeholder="0" min="0" step="0.01" oninput="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
     </div>
     <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📅 ¿Cuándo entró la plata? <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(la fecha REAL del pago — el extracto usa esta)</span></label>
+      <input type="date" id="pago-fecha" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
+    </div>
+    <div style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">¿A qué caja entró?</label>
       <select id="pago-caja" onchange="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
         <optgroup label="Cajas MYRI">
@@ -12044,6 +12048,8 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   const ptm = document.getElementById('pago-total-mano'); if (ptm) ptm.value = '';
   const ptcm = document.getElementById('pago-tc-mano'); if (ptcm) ptcm.value = '';
   const prr = document.getElementById('pago-repartir-res'); if (prr) prr.textContent = '';
+  // 📅 fecha real del pago: hoy por defecto (editable si lo registrás tarde)
+  const pfe = document.getElementById('pago-fecha'); if (pfe) pfe.value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
   if (esPedido) {
     // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
     // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
@@ -12214,6 +12220,14 @@ async function confirmarPagoCuenta() {
   if (!_pagoPedidoId && _ps && _ps.value) _pedFinal = _ps.value;
   const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
   const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta' });
+  // 📅 fecha REAL del pago elegida en el modal (si es hoy, con la hora actual; si es otro día, 12:00)
+  { const pfv = (document.getElementById('pago-fecha') || {}).value || '';
+    const pfm = pfv.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (pfm) {
+      const hoyISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+      const hora = pfv === hoyISO ? new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false }) : '12:00';
+      params.set('fecha', `${pfm[3]}/${pfm[2]}/${pfm[1]} ${hora}`);
+    } }
   if (comprobante) params.set('comprobante', comprobante);
   cerrarPagoModal();
   const r = await apiWrite(params, '💵 Pago registrado ✓');

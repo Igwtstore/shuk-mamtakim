@@ -1839,7 +1839,10 @@ Deno.serve(async (req) => {
         if (pitzARS <= 0) pitzARS = Math.round(autoPitzA);
         pitzUSD = Math.round(autoPitzU * 100) / 100;
       } catch { /* si el reparto falla, el pago se guarda igual (reparto en 0, como antes) */ }
-      await sbInsert('pagos', { fecha: fechaAhora(), cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante') });
+      // 📅 v3.95: si el modal manda la fecha real del pago, ESA va (si no, "ahora")
+      const fechaPagoElegida = P(body, 'fecha').trim();
+      const fechaPago = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fechaPagoElegida) ? fechaPagoElegida : fechaAhora();
+      await sbInsert('pagos', { fecha: fechaPago, cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante') });
       // Circuito F3: pago del cliente "Candy" con TC → convertir compras del circuito a pesos.
       // Atado a un pedido → solo la compra de esa venta; general → todas las pendientes en U\$S.
       if ((P(body, 'cliente') || '').trim() === 'Candy' && N(body, 'tipoCambio') > 0) {

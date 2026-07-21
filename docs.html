@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v3.94</title>
+<title>Shuk Mamtakim — Documentación v3.95</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v3.95</td><td>Jul 2026</td><td><strong>📅 Fecha real también en los pagos a cuenta.</strong> El modal de "Pago a cuenta" tiene el mismo campo "📅 ¿Cuándo entró la plata?" que el cobro (v3.93): arranca en hoy y si registrás tarde un pago viejo elegís el día real — el extracto de caja y el estado de cuenta lo fechan ahí. Completa el circuito: cobros Y pagos a cuenta, todos con la fecha en que entró la plata de verdad.</td></tr>
       <tr><td>v3.94</td><td>Jul 2026</td><td><strong>➗ Repartidor de pagos en pesos.</strong> En "Pago a cuenta", nuevo recuadro verde "💰 ¿Te pagó todo en PESOS?": ponés el total en mano + el TC y reparte solo — salda primero la deuda en pesos y el resto baja la deuda en U$S al TC (caso KI TOV: $96.500 + U$S 894,50, paga $500.000 → $96.500 a la deuda en pesos + U$S 260,32 menos de deuda). El redondeo o excedente queda A FAVOR en pesos, la caja recibe EXACTO lo que entró en mano, y los campos quedan cargados para revisar antes de confirmar (no registra solo). Si sobra plata y falta el TC, avisa. Funciona en deuda total y por pedido (Pitzujim primero).</td></tr>
       <tr><td>v3.93</td><td>Jul 2026</td><td><strong>📅 La fecha del cobro la ponés VOS (y el historial quedó corregido).</strong> (1) El modal de "Confirmar cobro" tiene un campo "📅 ¿Cuándo entró la plata?": arranca en hoy, y si confirmás tarde un cobro viejo elegís el día real — ESA fecha manda en el extracto y el estado de cuenta. Al re-confirmar, precarga la ya estampada (y podés corregirla). (2) Historial: se dedujo la fecha real de los 22 cobros viejos que tenían comprobante adjunto (del momento en que se subió el comprobante, que es cuando se confirmó el cobro) — 16 estaban fechados con el día del pedido cuando la plata entró hasta 2 semanas después (ej. #2: pedido 01/06, cobro real 15/06). El extracto de caja ahora cuadra con el resumen de MP.</td></tr>
       <tr><td>v3.92</td><td>Jul 2026</td><td><strong>🏷️ Links privados CON descuento + 📅 fecha real del cobro.</strong> (1) Los descuentos del armador (general y por producto) ahora viajan DENTRO del link privado: el cliente ve el precio viejo tachado + el rebajado + chip "-X%", el banner avisa "OFF ya aplicado", y el carrito/pedido entran con el precio rebajado. Al editar un link se precargan sus descuentos, y la lista de links vivos muestra la etiqueta 🏷️. (2) El sistema ahora guarda CUÁNDO se confirmó el cobro (antes solo existía la fecha del pedido → el extracto de caja no coincidía con el resumen de MP; caso KI TOV #37: pedido 28/06, transferencia real 09/07). El extracto y el estado de cuenta usan la fecha real del cobro cuando existe (con la aclaración "· cobrado dd/mm"); re-confirmar para ajustar cajas NO la pisa. Los cobros viejos quedan como estaban (no se puede adivinar su fecha); el #37 se corrigió a mano con el comprobante a la vista.</td></tr>
@@ -831,7 +832,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v3.94 · Julio 2026 · Uso interno
+  Documentación v3.95 · Julio 2026 · Uso interno
 </div>
 
 </div>
