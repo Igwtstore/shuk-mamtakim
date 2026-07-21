@@ -12170,15 +12170,26 @@ function pagoRepartirTotal() {
   const tc = parseFloat(document.getElementById('pago-tc-mano')?.value) || 0;
   const $f = v => Math.round(v).toLocaleString('es-AR');
   if (total <= 0) { if (res) res.textContent = 'Poné cuántos pesos te dio en total.'; return; }
-  const aPesos = Math.min(total, Math.round(R.arsTotal || 0));   // 1º: saldar la deuda en pesos
-  let resto = total - aPesos, aUSD = 0;
-  if (resto > 0 && (R.usd || 0) > 0) {
-    if (!(tc > 0)) { if (res) res.textContent = `⚠️ Sobran $ ${$f(resto)} para imputar a los U$S — completá el TC y volvé a tocar Repartir.`; return; }
-    aUSD = Math.floor(Math.min(resto / tc, R.usd) * 100) / 100;  // 2 decimales, sin pasarse de la deuda
+  const deudaPesos = Math.round(R.arsTotal || 0);
+  const deudaUSD = R.usd || 0;
+  const aPesos = Math.min(total, deudaPesos);   // 1º: los pesos cubren la deuda en pesos, ni un peso más
+  let resto = total - aPesos, aUSD = 0, aFavor = 0;
+  if (resto > 0) {
+    if (deudaUSD > 0) {
+      if (!(tc > 0)) { if (res) res.textContent = `⚠️ Sobran $ ${$f(resto)} para imputar a los U$S — completá el TC y volvé a tocar Repartir.`; return; }
+      // 2º: TODO el resto baja la deuda en U$S. Redondeo al centavo (así no queda "a favor"
+      // por el resto que no llega a otro centavo de dólar — pedido del usuario 2026-07-21).
+      aUSD = Math.round((resto / tc) * 100) / 100;
+      if (aUSD >= deudaUSD) {                 // el pago tapa TODA la deuda en U$S y todavía sobra
+        aUSD = deudaUSD;
+        aFavor = Math.max(0, resto - Math.round(aUSD * tc));
+      }
+    } else {
+      aFavor = resto;   // no hay deuda en U$S: el excedente sí es a favor en pesos
+    }
   }
-  // Los pesos que no van a U$S (deuda en $, redondeo del TC o excedente) van al campo $ — así
-  // la caja recibe EXACTO lo que entró en mano y cualquier sobra queda a favor.
-  const arsCampo = total - Math.round(aUSD * tc);
+  // Campo pesos = deuda en pesos exacta (+ el a favor REAL, solo si el pago cubrió toda la deuda).
+  const arsCampo = aPesos + aFavor;
   if (R.esPedido) {
     const aPitz = Math.min(arsCampo, Math.round(R.pitz || 0));
     document.getElementById('pago-pitz').value = aPitz > 0 ? aPitz : '';
@@ -12188,10 +12199,9 @@ function pagoRepartirTotal() {
   }
   document.getElementById('pago-usd').value = aUSD > 0 ? aUSD.toFixed(2) : '';
   if (aUSD > 0) { const ptc = document.getElementById('pago-tc'); if (ptc) ptc.value = tc; }
-  const aFavor = Math.max(0, arsCampo - Math.round(R.arsTotal || 0));
   if (res) {
     const partes = [];
-    if (aPesos > 0) partes.push(`salda $ ${$f(Math.min(aPesos, R.arsTotal || 0))} de deuda en pesos`);
+    if (aPesos > 0) partes.push(`salda $ ${$f(aPesos)} de deuda en pesos`);
     if (aUSD > 0) partes.push(`bajan U$S ${aUSD.toFixed(2)} de la deuda (= $ ${$f(aUSD * tc)})`);
     if (aFavor > 0) partes.push(`$ ${$f(aFavor)} quedan A FAVOR`);
     res.textContent = `✓ ${partes.join(' · ')} — revisá y confirmá abajo.`;
