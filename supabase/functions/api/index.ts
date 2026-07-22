@@ -412,7 +412,7 @@ const ventaFront = (v: any) => ({
 const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString(), totalMano: parseFloat(p.total_mano) || 0, reparto: (p.reparto || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
-const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
+const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), peso: parseFloat(p.peso) || 0, vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
 const rendFront = (r: any) => ({ fecha: r.fecha, desc: r.descripcion, monto: r.monto, moneda: r.moneda, columna: r.columna || '', comprobante: (r.comprobante || '').toString() });
 
 // _enviosData: saldo y deuda derivada de la caja de envíos (idempotente).
@@ -1780,6 +1780,7 @@ Deno.serve(async (req) => {
       if (has('activo')) patch.activo = P(body, 'activo').toUpperCase() !== 'NO';
       if (has('visible')) { patch.visible_cat = P(body, 'visible'); patch.visible = P(body, 'visible') !== 'No'; }   // Ambos/Min/May + boolean
       if (has('unidadesPorPaquete')) patch.unidades_por_paquete = Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1);   // Circuito Candy↔Shuk: cuántas unidades trae el paquete/bolsa
+      if (has('peso')) patch.peso = parseFloat(String(P(body, 'peso')).replace(',', '.')) || 0;   // peso por bolsa (g), interno — para orden de compra
       if (body.vinculo !== undefined) patch.vinculo = PV('vinculo');   // gemelos: mismo producto con stock de los dos dueños ('' / '__VACIO__' = desvincular)
       if (has('stock')) { const antes = parseInt(pr[0].stock) || 0, nsx = parseInt(P(body, 'stock')) || 0; patch.stock = nsx; if (nsx !== antes) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: id, producto: pr[0].nombre, cambio: nsx - antes, antes, despues: nsx, origen: 'Edición manual (editor de producto)' }); }
       await sbPatch('productos', 'id=eq.' + encodeURIComponent(id), patch);
@@ -1829,6 +1830,7 @@ Deno.serve(async (req) => {
           if (k === 'costo') { patch.costo = parseFloat(v.replace(',', '.')) || 0; return; }
           if (k === 'visible') { patch.visible_cat = v; patch.visible = v !== 'No'; return; }
           if (k === 'unidadesPorPaquete') { patch.unidades_por_paquete = Math.max(1, parseInt(v) || 1); return; }
+          if (k === 'peso') { patch.peso = parseFloat(String(v).replace(',', '.')) || 0; return; }
           if (k === 'vinculo') { patch.vinculo = (v === '__VACIO__' ? '' : v); return; }
           if (map[k]) patch[map[k]] = (v === '__VACIO__' ? '' : v);
         });
@@ -1864,7 +1866,7 @@ Deno.serve(async (req) => {
       const all = await sbGet('productos', 'select=id');
       let maxId = 0; all.forEach((p: any) => { const n = parseInt(p.id) || 0; if (n > maxId) maxId = n; });
       const nid = String(maxId + 1); const stockIni = parseInt(P(body, 'stock')) || 0;
-      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
+      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), peso: parseFloat(String(P(body, 'peso') || '').replace(',', '.')) || 0, hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
       if (stockIni > 0) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: nid, producto: P(body, 'nombre'), cambio: stockIni, antes: 0, despues: stockIni, origen: 'Alta de producto' });
       return json({ ok: true, id: nid });
     }
@@ -1953,6 +1955,33 @@ Deno.serve(async (req) => {
     if (accion === 'anularPagoCuenta') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       await sbDelete('pagos', 'id=eq.' + encodeURIComponent(P(body, 'pagoId')));
+      return json({ ok: true });
+    }
+    // 🛒 ÓRDENES DE COMPRA / REPOSICIÓN (v4.06): guardar/listar/leer. Tabla ordenes_compra con RLS
+    // (solo la EF con service_role la toca). items = JSON de lo que se va a reponer.
+    if (accion === 'guardarOrdenCompra') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      let itemsOC: any[] = []; try { itemsOC = JSON.parse(P(body, 'items') || '[]'); } catch { itemsOC = []; }
+      if (!itemsOC.length) return json({ error: 'orden vacía' });
+      await sbInsert('ordenes_compra', { fecha: P(body, 'fecha') || fechaAhora(), items: itemsOC, total_peso: N(body, 'totalPeso'), total_costo: N(body, 'totalCosto'), nota: P(body, 'nota'), estado: 'abierta' });
+      return json({ ok: true });
+    }
+    if (accion === 'listarOrdenesCompra') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const rowsOC = await sbGet('ordenes_compra', 'select=id,fecha,total_peso,total_costo,nota,estado&order=id.desc&limit=40');
+      return json(rowsOC.map((o: any) => ({ id: o.id, fecha: o.fecha, totalPeso: parseFloat(o.total_peso) || 0, totalCosto: parseFloat(o.total_costo) || 0, nota: (o.nota || '').toString(), estado: (o.estado || '').toString() })));
+    }
+    if (accion === 'getOrdenCompra') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const rowsG = await sbGet('ordenes_compra', 'select=*&id=eq.' + encodeURIComponent(Q('id')));
+      if (!rowsG.length) return json({ error: 'no existe' });
+      const o = rowsG[0];
+      let its: any[] = []; try { its = typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []); } catch { its = []; }
+      return json({ id: o.id, fecha: o.fecha, items: its, totalPeso: parseFloat(o.total_peso) || 0, totalCosto: parseFloat(o.total_costo) || 0, nota: (o.nota || '').toString(), estado: (o.estado || '').toString() });
+    }
+    if (accion === 'borrarOrdenCompra') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      await sbDelete('ordenes_compra', 'id=eq.' + encodeURIComponent(P(body, 'id')));
       return json({ ok: true });
     }
     if (accion === 'registrarMovSocio') {

@@ -1339,6 +1339,10 @@
           <label title="Cuántas unidades sueltas trae el paquete/bolsa cerrada (lo usa Candy para vender por unidad)">📦 U. por paquete</label>
           <input type="number" id="np-upp" min="1" step="1" value="1" />
         </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:110px">
+          <label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
+          <input type="number" id="np-peso" min="0" step="1" placeholder="0" />
+        </div>
         <div class="nombre-campo" style="margin:0;flex:1.4;min-width:140px">
           <label>✡️ Hashgajá <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(supervisión)</span></label>
           <input type="text" id="np-hashgaja" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…" />
@@ -1406,6 +1410,7 @@
     <div style="display:flex;gap:0.4rem;margin-bottom:0.6rem;flex-wrap:wrap">
       <button type="button" id="stock-orden-cat" onclick="setStockOrden('categoria')" class="stock-orden-btn stock-orden-on">📦 Por categoría</button>
       <button type="button" id="stock-orden-rec" onclick="setStockOrden('recientes')" class="stock-orden-btn">🆕 Últimos cargados</button>
+      <button type="button" onclick="abrirOrdenCompra()" class="stock-orden-btn" style="margin-left:auto;background:#1e7a3c;color:#fff;border-color:#1e7a3c">🛒 Orden de compra</button>
     </div>
     <div id="stock-total-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
   </div>
@@ -1481,6 +1486,9 @@
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Cuántas unidades sueltas trae el paquete/bolsa cerrada (lo usa Candy para vender por unidad)">📦 U. por paquete</label>
           <input type="number" id="ep-upp" min="1" step="1" value="1" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
+          <input type="number" id="ep-peso" min="0" step="1" placeholder="0" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:180px"><label title="Si el MISMO producto existe con stock de los dos dueños, vinculalos: Candy los ve como uno solo y compra primero de Jony (al costo) y después de Miri">🔗 Producto gemelo</label>
           <button type="button" id="ep-vinculo-btn" onclick="abrirVincularGemelo()" style="width:100%;padding:0.6rem;border:1.5px dashed var(--gris-medio);border-radius:8px;background:#fff;cursor:pointer;font-size:0.78rem;color:var(--texto-suave);font-family:'DM Sans',sans-serif">Sin vincular</button>
@@ -2343,7 +2351,7 @@ async function cargarProductos() {
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
   try {
     // Catálogo desde Supabase (columnas públicas; costo/candyCod son privados)
-    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,vinculo,hashgaja,kosher_tipo,jalav&order=id', { headers: SB_ANON_H });
+    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,peso,vinculo,hashgaja,kosher_tipo,jalav&order=id', { headers: SB_ANON_H });
     const data = await r.json();
     productos = data.map(p => ({
       id: parseInt(p.id),
@@ -2357,6 +2365,7 @@ async function cargarProductos() {
       categoria: (p.categoria || 'Varios').trim(),
       visible: (p.visible_cat || 'Ambos').trim(),
       unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1),
+      peso: parseFloat(p.peso) || 0,
       vinculo: (p.vinculo || '').trim(),
       hashgaja: (p.hashgaja || '').trim(),
       kosherTipo: (p.kosher_tipo || '').trim(),
@@ -5545,6 +5554,7 @@ async function abrirMasivo() {
         moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: _mDispNum(p.precioMay), precioMin: _mDispNum(p.precioMin),
         costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0),
         unidadesPorPaquete: _mDispTxt(p.unidadesPorPaquete || 1),
+        peso: _mDispTxt(p.peso || 0),
         hashgaja: _mDispTxt(p.hashgaja || ''), kosherTipo: _mDispTxt(p.kosherTipo || ''), jalav: _mDispTxt(p.jalav || '')
       };
     });
@@ -5643,9 +5653,9 @@ function renderMasivo() {
   } else {
     const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
     const _thSort = (c, lbl, extra) => `<th style="${_mTh}cursor:pointer;user-select:none" ${extra||''} onclick="masivoSort('${c}')" title="Ordenar por ${lbl}">${lbl}${_flecha(c)}</th>`;
-    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th></tr></thead><tbody>`;
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -6868,6 +6878,7 @@ function cargarProductoEditor(id) {
   epMonedaChange();
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
   { const eu = document.getElementById('ep-upp'); if (eu) eu.value = p.unidadesPorPaquete || 1; }
+  { const epe = document.getElementById('ep-peso'); if (epe) epe.value = p.peso || ''; }
   { const eh = document.getElementById('ep-hashgaja'); if (eh) eh.value = p.hashgaja || ''; }
   { const ek = document.getElementById('ep-kosher'); if (ek) ek.value = p.kosherTipo || ''; }
   { const ej = document.getElementById('ep-jalav'); if (ej) ej.value = p.jalav || ''; kosherChange('ep'); }
@@ -6979,6 +6990,7 @@ async function guardarEdicionProducto() {
     moneda: document.getElementById('ep-moneda').value === 'U$S' ? 'U$S' : '$',
     visible: document.getElementById('ep-visible').value,
     unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
+    peso: document.getElementById('ep-peso')?.value || '0',
     vinculo: _epVinculo || '__VACIO__',
     hashgaja: (document.getElementById('ep-hashgaja')?.value || '').trim() || '__VACIO__',
     kosherTipo: document.getElementById('ep-kosher')?.value || '__VACIO__',
@@ -7230,6 +7242,8 @@ async function guardarNuevoProducto() {
     if (costo && parseFloat(costo) > 0) params.set('costo', costo);
     const uppAlta = parseInt(document.getElementById('np-upp')?.value) || 1;
     if (uppAlta > 1) params.set('unidadesPorPaquete', uppAlta);
+    const pesoAlta = parseFloat(document.getElementById('np-peso')?.value) || 0;
+    if (pesoAlta > 0) params.set('peso', pesoAlta);
     const hashgAlta = (document.getElementById('np-hashgaja')?.value || '').trim();
     if (hashgAlta) params.set('hashgaja', hashgAlta);
     const kosherAlta = document.getElementById('np-kosher')?.value || '';
@@ -7248,6 +7262,7 @@ async function guardarNuevoProducto() {
       const _nc = document.getElementById('np-costo'); if (_nc) _nc.value = '';
       ['np-hashgaja', 'np-kosher', 'np-jalav'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
       const _nu = document.getElementById('np-upp'); if (_nu) _nu.value = '1';
+      const _npe = document.getElementById('np-peso'); if (_npe) _npe.value = '';
       document.getElementById('np-categoria').value = '';
       document.getElementById('np-foto').value = '';
       document.getElementById('np-preview').style.display = 'none';
@@ -10135,53 +10150,235 @@ function _cargadoHace(p) {
   if (mismoDia(d, ayer)) return 'ayer';
   return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
 }
+// ══════════════ 🛒 ORDEN DE COMPRA / REPOSICIÓN (v4.06) ══════════════
+// Elegir productos a reponer + cantidad; suma peso (× peso por bolsa) y costo; PDF; guardar/historial.
+let _ocProductos = [], _ocSel = {}, _ocCant = {}, _ocFiltro = 'reponer';
+async function abrirOrdenCompra() {
+  let ov = document.getElementById('oc-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'oc-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0.8rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:560px;width:100%"><div class="sinpedidos">Cargando productos… 🛒</div></div>';
+  let r = []; try { r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getProductosAdmin'); } catch (e) {}
+  let lista = Array.isArray(r) ? r : [];
+  if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // vista Miri: solo sus productos
+  _ocProductos = lista.sort((a, b) => (a.stock||0) - (b.stock||0) || (a.nombre||'').localeCompare(b.nombre||''));   // sin stock primero
+  _ocSel = {}; _ocCant = {}; _ocFiltro = 'reponer';
+  _ocRender();
+}
+function _ocFiltrados() {
+  const q = (document.getElementById('oc-buscar')?.value || '').trim().toLowerCase();
+  return _ocProductos.filter(p => {
+    if (q && !(p.nombre||'').toLowerCase().includes(q)) return false;
+    if (_ocFiltro === 'reponer' && (p.stock||0) > 3 && !_ocSel[p.id]) return false;   // reponer = sin stock o bajo (≤3)
+    return true;
+  });
+}
+function _ocSetFiltro(f) { _ocFiltro = f; _ocRender(); }
+function _ocRender() {
+  const ov = document.getElementById('oc-overlay'); if (!ov) return;
+  const lista = _ocFiltrados();
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:580px;width:100%;max-height:92vh;display:flex;flex-direction:column">
+    <div style="padding:1rem 1.1rem 0.6rem;border-bottom:1px solid var(--gris-medio)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.15rem">🛒 Orden de compra</div>
+        <button onclick="verOrdenesCompra()" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:5px 10px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:inherit">🗂 Guardadas</button>
+      </div>
+      <input id="oc-buscar" oninput="_ocRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
+      <div style="display:flex;gap:0.4rem;margin-top:0.5rem">
+        <button onclick="_ocSetFiltro('reponer')" class="stock-orden-btn ${_ocFiltro==='reponer'?'stock-orden-on':''}">🚫 Para reponer</button>
+        <button onclick="_ocSetFiltro('todos')" class="stock-orden-btn ${_ocFiltro==='todos'?'stock-orden-on':''}">Todos</button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0.3rem 1.1rem">
+      ${lista.length ? lista.map(_ocFilaHtml).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:1rem 0">Nada para mostrar.</div>'}
+    </div>
+    <div id="oc-totales" style="padding:0.6rem 1.1rem;border-top:1px solid var(--gris-medio);font-size:0.82rem"></div>
+    <div style="padding:0.8rem 1.1rem;display:flex;gap:6px;border-top:1px solid var(--gris-medio)">
+      <button onclick="ordenCompraPDF()" style="flex:1;padding:0.65rem;background:#eef4ff;color:var(--azul);border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">🖨️ PDF</button>
+      <button onclick="guardarOrdenCompra()" style="flex:1;padding:0.65rem;background:#1e7a3c;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar</button>
+      <button onclick="document.getElementById('oc-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+    </div>
+  </div>`;
+  _ocActualizarTotales();
+}
+function _ocFilaHtml(p) {
+  const sel = !!_ocSel[p.id];
+  const imgs = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:34px;height:34px;object-fit:contain;background:#f5f0e8;border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:#f5f0e8;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+  const stock = p.stock||0;
+  const stockChip = `<span style="font-size:0.66rem;font-weight:700;color:${stock<=0?'#c0392b':(stock<=3?'var(--dorado)':'var(--verde)')}">${stock<=0?'sin stock':stock+' u.'}</span>`;
+  const peso = parseFloat(p.peso)||0;
+  const pesoInfo = peso > 0 ? `<span style="font-size:0.64rem;color:var(--texto-suave)">${peso}g/bolsa</span>` : `<span style="font-size:0.64rem;color:#c0392b;font-weight:700">⚠️ falta peso</span>`;
+  const chipDueno = (!esVistaMiri() && p.dueno) ? `<span style="font-size:0.58rem;font-weight:800;color:${p.dueno==='Jony'?'#c9954a':'#c050a0'}"> ${p.dueno==='Jony'?'JONY':'MIRI'}</span>` : '';
+  return `<div style="display:flex;align-items:center;gap:8px;padding:0.5rem 0;border-bottom:1px solid var(--gris);background:${sel?'#eef7ee':'#fff'}" id="oc-row-${p.id}">
+    <input type="checkbox" ${sel?'checked':''} onchange="_ocToggle('${p.id}', this)" style="width:17px;height:17px;flex-shrink:0;cursor:pointer">
+    ${thumb}
+    <div style="flex:1;min-width:0">
+      <div style="font-size:0.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}${chipDueno}</div>
+      <div>${stockChip} · ${pesoInfo}</div>
+    </div>
+    <input type="number" min="0" value="${_ocCant[p.id]||''}" placeholder="cant" oninput="_ocSetCant('${p.id}', this.value)" style="width:56px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:8px;text-align:center;font-family:inherit;flex-shrink:0">
+  </div>`;
+}
+function _ocToggle(id, el) {
+  if (_ocSel[id]) { delete _ocSel[id]; delete _ocCant[id]; } else _ocSel[id] = true;
+  const row = document.getElementById('oc-row-' + id); if (row) row.style.background = _ocSel[id] ? '#eef7ee' : '#fff';
+  _ocActualizarTotales();
+}
+function _ocSetCant(id, val) {
+  const n = Math.max(0, parseInt(val) || 0);
+  if (n > 0) { _ocCant[id] = n; _ocSel[id] = true; const cb = document.querySelector(`#oc-row-${id} input[type=checkbox]`); if (cb) cb.checked = true; const row = document.getElementById('oc-row-' + id); if (row) row.style.background = '#eef7ee'; }
+  else { delete _ocCant[id]; }
+  _ocActualizarTotales();
+}
+function _ocItems() {
+  return _ocProductos.filter(p => _ocSel[p.id] && (_ocCant[p.id]||0) > 0).map(p => {
+    const cant = _ocCant[p.id], peso = parseFloat(p.peso)||0, costo = parseFloat(p.costo)||0;
+    return { id: String(p.id), nombre: p.nombre, desc: p.desc||'', dueno: p.dueno||'', stock: p.stock||0, cantidad: cant, peso, pesoTotal: peso*cant, costo, costoTotal: costo*cant, moneda: p.moneda||'$', imagen: p.imagen||'' };
+  });
+}
+function _ocActualizarTotales() {
+  const el = document.getElementById('oc-totales'); if (!el) return;
+  const items = _ocItems();
+  const sinPeso = items.filter(i => i.peso <= 0);
+  const totPeso = items.reduce((s,i) => s + (i.peso>0?i.pesoTotal:0), 0);
+  const totBolsas = items.reduce((s,i) => s + i.cantidad, 0);
+  const cARS = items.filter(i=>i.moneda!=='U$S').reduce((s,i)=>s+i.costoTotal,0);
+  const cUSD = items.filter(i=>i.moneda==='U$S').reduce((s,i)=>s+i.costoTotal,0);
+  const costoTxt = [cARS>0?'$ '+Math.round(cARS).toLocaleString('es-AR'):'', cUSD>0?'U$S '+cUSD.toFixed(2):''].filter(Boolean).join(' + ');
+  el.innerHTML = items.length
+    ? `<b>${items.length}</b> ítems · <b>${totBolsas}</b> bolsas · <b>${(totPeso/1000).toFixed(2)} kg</b>${sinPeso.length?` <span style="color:#c0392b">(${sinPeso.length} sin peso, no suman)</span>`:''}${costoTxt?` · 💵 costo ${costoTxt}`:''}`
+    : '<span style="color:var(--texto-suave)">Elegí productos y poné cuántas bolsas reponer.</span>';
+}
+async function guardarOrdenCompra() {
+  const items = _ocItems();
+  if (!items.length) { showToast('Elegí al menos un producto con cantidad'); return; }
+  const totPeso = items.reduce((s,i)=>s+(i.peso>0?i.pesoTotal:0),0);
+  const totCosto = items.reduce((s,i)=>s+i.costoTotal,0);
+  const r = await apiWrite(new URLSearchParams({ accion:'guardarOrdenCompra', items:JSON.stringify(items), totalPeso:Math.round(totPeso), totalCosto:Math.round(totCosto), nota:'' }), '💾 Orden guardada ✓');
+  if (r && r.ok) document.getElementById('oc-overlay')?.remove();
+}
+function _ocFotoUrl(imagen) {
+  const primera = (imagen||'').split(',')[0].trim(); if (!primera) return '';
+  if (/^https?:\/\//i.test(primera)) return primera.indexOf('res.cloudinary.com')!==-1 ? primera.replace('/upload/','/upload/w_160,h_160,c_fit/') : primera;
+  if (primera.includes('/') && !primera.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return `${CLOUDINARY_BASE}/w_160,h_160,c_fit/${primera}`;
+  return `${CLOUDINARY_BASE}/w_160,h_160,c_fit/shuk-mamtakim/${primera}`;
+}
+function _ordenCompraHTML(items) {
+  const hoy = new Date().toLocaleString('es-AR');
+  const totPeso = items.reduce((s,i)=>s+(i.peso>0?i.pesoTotal:0),0);
+  const totBolsas = items.reduce((s,i)=>s+i.cantidad,0);
+  const filas = items.map(i => {
+    const url = _ocFotoUrl(i.imagen);
+    const img = url ? `<img src="${url}" style="width:44px;height:44px;object-fit:contain;background:#f5f0e8;border-radius:6px" onerror="this.style.display='none'">` : '🍬';
+    const pesoT = i.peso>0 ? `${(i.pesoTotal/1000).toFixed(2)} kg` : '<span style="color:#c0392b">⚠️ s/peso</span>';
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:56px">${img}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3"><div style="font-weight:600;font-size:0.84rem">${esc(i.nombre)}</div>${i.desc?`<div style="font-size:0.7rem;color:#999">${esc(i.desc)}</div>`:''}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-size:0.8rem;color:${i.stock<=0?'#c0392b':'#888'}">${i.stock<=0?'sin stock':i.stock+' u.'}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-weight:700;font-size:0.95rem">${i.cantidad}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.78rem;color:#666">${i.peso>0?i.peso+' g':'—'}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-weight:700">${pesoT}</td>
+    </tr>`;
+  }).join('');
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Orden de compra</title>
+    <style>@page{size:A4 portrait;margin:12mm} body{font-family:'Helvetica Neue',Arial,sans-serif;color:#2d2a24} table{width:100%;border-collapse:collapse} .btn{background:#1e7a3c;color:#fff;border:none;border-radius:7px;padding:9px 20px;font-weight:700;cursor:pointer} @media print{.btn{display:none}}</style></head><body>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div><div style="font-size:1.4rem;font-weight:800;color:#1e7a3c">🛒 Orden de compra</div><div style="font-size:0.8rem;color:#999">${hoy}</div></div>
+      <button class="btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+    </div>
+    <div style="background:#eef7ee;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700">Total: ${items.length} productos · ${totBolsas} bolsas · ${(totPeso/1000).toFixed(2)} kg</div>
+    <table><thead><tr style="background:#f5f0e8"><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Foto</th><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Producto</th><th style="padding:7px 8px;font-size:0.62rem;text-transform:uppercase;color:#999">Stock</th><th style="padding:7px 8px;font-size:0.62rem;text-transform:uppercase;color:#999">Cant.</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso/bolsa</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso total</th></tr></thead><tbody>${filas}</tbody></table>
+    </body></html>`;
+}
+function ordenCompraPDF() {
+  const items = _ocItems();
+  if (!items.length) { showToast('Elegí productos primero'); return; }
+  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(items)); win.document.close();
+}
+async function verOrdenesCompra() {
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=listarOrdenesCompra').catch(()=>[]);
+  const ords = Array.isArray(r) ? r : [];
+  const ov = document.getElementById('oc-overlay'); if (!ov) return;
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:460px;width:100%;max-height:85vh;overflow-y:auto">
+    <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem">🗂 Órdenes guardadas</div>
+    ${ords.length ? ords.map(o => `<div style="display:flex;align-items:center;gap:8px;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(o.fecha||'')}</div><div style="font-size:0.72rem;color:var(--texto-suave)">${(o.totalPeso/1000).toFixed(2)} kg${o.nota?' · '+esc(o.nota):''}</div></div>
+      <button onclick="reabrirOrdenCompra('${o.id}')" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">Ver</button>
+      <button onclick="borrarOrdenCompra('${o.id}')" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+    </div>`).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:0.6rem 0">No hay órdenes guardadas.</div>'}
+    <button onclick="abrirOrdenCompra()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:#1e7a3c;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">← Nueva orden</button>
+  </div>`;
+}
+async function reabrirOrdenCompra(id) {
+  const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getOrdenCompra&id=' + encodeURIComponent(id)).catch(()=>null);
+  if (!d || !Array.isArray(d.items)) { showToast('No pude cargar la orden'); return; }
+  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(d.items)); win.document.close();   // re-imprimir la guardada
+}
+async function borrarOrdenCompra(id) {
+  if (!confirm('¿Borrar esta orden guardada?')) return;
+  const r = await apiWrite(new URLSearchParams({ accion:'borrarOrdenCompra', id }), '🗑️ Orden borrada');
+  if (r && r.ok) verOrdenesCompra();
+}
+
+// Tarjeta de un producto en la vista Stock — reusada por el grid principal y el desplegable "Sin stock".
+function _stockCard(p, recientes) {
+  const imgs = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
+  let media;
+  if (imgs.length) {
+    const u = imgUrl(imgs[0]);
+    media = `<img src="${u[0]}" data-f1="${u[1]||''}" data-f2="${u[2]||''}" data-f3="${u[3]||''}" onerror="imgFallbackNext(this)" loading="lazy" style="width:100%;height:78px;object-fit:cover;border-radius:6px">
+      <div style="display:none;height:78px;background:var(--gris);border-radius:6px;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
+  } else {
+    media = `<div style="height:78px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
+  }
+  const cargado = recientes ? _cargadoHace(p) : '';
+  const chipFecha = cargado ? `<div style="position:absolute;top:4px;left:4px;background:#2c6fad;color:#fff;border-radius:6px;padding:1px 6px;font-size:0.62rem;font-weight:700">🆕 ${cargado}</div>` : '';
+  const chipDueno = (recientes && !esVistaMiri() && p.dueno) ? `<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.03em;color:${p.dueno==='Jony'?'#c9954a':'#c050a0'};margin-top:1px">${p.dueno==='Jony'?'JONY':'MIRI'}</div>` : '';
+  const stockTxt = (p.stock||0) > 0
+    ? `<div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.</div>`
+    : `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);margin-top:0.25rem">sin stock — dar de alta</div>`;
+  return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center;position:relative">
+    ${chipFecha}
+    <button onclick="irAEditarProducto(${p.id})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
+    ${media}
+    <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
+    <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
+    ${chipDueno}
+    ${stockTxt}
+  </div>`;
+}
 function renderStockTotal() {
   const cont = document.getElementById('stock-total-lista');
   if (!cont) return;
   if (!productos.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Cargando productos…</div>'; return; }
   const q = (document.getElementById('stock-buscar')?.value || '').trim().toLowerCase();
+  const matchQ = p => !q || (p.nombre||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q);
   const recientes = _stockOrden === 'recientes';
   // En "recientes" se incluyen TAMBIÉN los de stock 0 (recién catalogados por Miri, todavía sin dar de alta).
   const _cre = p => p.creado ? new Date(p.creado).getTime() : (parseInt(p.id) || 0);   // fecha real; respaldo por id
-  const lista = productosVisibles().filter(p => (recientes || (p.stock||0) > 0) && (!q || (p.nombre||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)))
+  const base = productosVisibles();
+  const lista = base.filter(p => (recientes || (p.stock||0) > 0) && matchQ(p))
     .sort(recientes
       ? (a,b) => _cre(b) - _cre(a)                                                       // último cargado primero
       : (a,b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
-  if (!lista.length) { cont.innerHTML = `<div style="padding:0.5rem 0;color:var(--texto-suave);font-size:0.85rem">${q ? 'Nada que coincida con la búsqueda.' : 'Sin stock cargado.'}</div>`; return; }
+  const grid = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:0.6rem">${arr.map(p => _stockCard(p, recientes)).join('')}</div>`;
+  // 🚫 Sin stock (stock <= 0): desplegable al final para ver qué recomprar (pedido del usuario 2026-07-22).
+  // Solo en modo "Por categoría" (en "Últimos cargados" ya aparecen mezclados, no hace falta duplicar).
+  const sinStock = recientes ? [] : base.filter(p => (p.stock||0) <= 0 && matchQ(p))
+    .sort((a,b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
+  const desplegSinStock = sinStock.length ? `
+    <details style="margin-top:0.9rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.6rem">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.88rem;color:#c0392b;list-style:none">🚫 Sin stock (${sinStock.length}) — para reponer <span style="font-size:0.66rem;color:var(--texto-suave);font-weight:400">▸ tocá para ver</span></summary>
+      <div style="margin-top:0.6rem">${grid(sinStock)}</div>
+    </details>` : '';
+  if (!lista.length && !sinStock.length) { cont.innerHTML = `<div style="padding:0.5rem 0;color:var(--texto-suave);font-size:0.85rem">${q ? 'Nada que coincida con la búsqueda.' : 'Sin stock cargado.'}</div>`; return; }
   const totalU = lista.reduce((s,p) => s + (p.stock||0), 0);
   const cabecera = recientes
     ? `${lista.length} productos · del más nuevo al más viejo 🆕`
     : `${lista.length} productos · ${totalU} unidades en total`;
   cont.innerHTML = `<div style="font-weight:700;margin-bottom:0.6rem;font-size:0.88rem">${cabecera}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:0.6rem">
-      ${lista.map(p => {
-        const imgs = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
-        let media;
-        if (imgs.length) {
-          const u = imgUrl(imgs[0]);
-          media = `<img src="${u[0]}" data-f1="${u[1]||''}" data-f2="${u[2]||''}" data-f3="${u[3]||''}" onerror="imgFallbackNext(this)" loading="lazy" style="width:100%;height:78px;object-fit:cover;border-radius:6px">
-            <div style="display:none;height:78px;background:var(--gris);border-radius:6px;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
-        } else {
-          media = `<div style="height:78px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
-        }
-        // En "recientes": chip con la fecha de carga + de quién es (para ver qué cargó Miri sin repetir).
-        const cargado = recientes ? _cargadoHace(p) : '';
-        const chipFecha = cargado ? `<div style="position:absolute;top:4px;left:4px;background:#2c6fad;color:#fff;border-radius:6px;padding:1px 6px;font-size:0.62rem;font-weight:700">🆕 ${cargado}</div>` : '';
-        const chipDueno = (recientes && !esVistaMiri() && p.dueno) ? `<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.03em;color:${p.dueno==='Jony'?'#c9954a':'#c050a0'};margin-top:1px">${p.dueno==='Jony'?'JONY':'MIRI'}</div>` : '';
-        const stockTxt = (p.stock||0) > 0
-          ? `<div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.</div>`
-          : `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);margin-top:0.25rem">sin stock — dar de alta</div>`;
-        return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center;position:relative">
-          ${chipFecha}
-          <button onclick="irAEditarProducto(${p.id})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
-          ${media}
-          <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
-          <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
-          ${chipDueno}
-          ${stockTxt}
-        </div>`;
-      }).join('')}
-    </div>`;
+    ${lista.length ? grid(lista) : `<div style="color:var(--texto-suave);font-size:0.82rem">${q ? 'Nada con stock coincide con la búsqueda.' : 'Nada con stock para mostrar.'}</div>`}
+    ${desplegSinStock}`;
 }
 
 // ─── TRAZAR PRODUCTO (quién lo compró) ────────────────────────────────────────
