@@ -2085,7 +2085,12 @@
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📅 ¿Cuándo entró la plata? <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(la fecha REAL del pago — el extracto usa esta)</span></label>
       <input type="date" id="pago-fecha" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
     </div>
-    <div style="margin-bottom:0.75rem">
+    <!-- ✂️ Fraccionar en cajas por dueño (v4.05): cada parte a su caja, sin deuda entre socios -->
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:0.6rem;font-size:0.82rem;font-weight:600;color:#1e7a3c;cursor:pointer;background:#eef7ee;border:1.5px solid #bfe3c8;border-radius:10px;padding:0.5rem 0.7rem">
+      <input type="checkbox" id="pago-fraccionar" onchange="pagoFraccionarToggle()" style="width:16px;height:16px;cursor:pointer">
+      ✂️ Fraccionar en cajas <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">— la parte de cada uno a su caja</span>
+    </label>
+    <div id="pago-caja-unica" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">¿A qué caja entró?</label>
       <select id="pago-caja" onchange="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
         <optgroup label="Cajas MYRI">
@@ -2101,6 +2106,21 @@
         <optgroup label="Otro">
           <option value="PERDON">🎁 Perdón / Redondeo (no entra a ninguna caja)</option>
         </optgroup>
+      </select>
+    </div>
+    <div id="pago-caja-fracc" style="display:none;margin-bottom:0.75rem;background:#f7fbf7;border:1.5px solid #d8ecdc;border-radius:10px;padding:0.7rem">
+      <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:0.5rem">El sistema calcula cuánto es de cada uno y manda cada parte a su caja.</div>
+      <label style="font-size:0.8rem;font-weight:700;color:#1e7a3c;display:block;margin-bottom:0.25rem">🟢 Parte de Miri (golosinas) → caja:</label>
+      <select id="pago-caja-miri" onchange="pago_evalTC()" style="width:100%;margin-bottom:0.6rem;padding:0.55rem 0.75rem;border:1.5px solid #bfe3c8;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;background:white">
+        <option value="MP_GABY">MP GABY</option>
+        <option value="EFT_MYRI">EFT $ MYRI</option>
+        <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+      </select>
+      <label style="font-size:0.8rem;font-weight:700;color:#8a5a1e;display:block;margin-bottom:0.25rem">🟠 Parte de Jony (Pitzujim) → caja:</label>
+      <select id="pago-caja-jony" onchange="pago_evalTC()" style="width:100%;padding:0.55rem 0.75rem;border:1.5px solid #e8d5b5;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;background:white">
+        <option value="MP_JONY">MP JONY</option>
+        <option value="EFT_JONY">EFT $ JONY</option>
+        <option value="ETF_USD_JONY">ETF U$S JONY</option>
       </select>
     </div>
     <!-- ⚖️ Criterio de reparto Jony/Miri para ESTE pago (v4.01). Default: Jony primero. -->
@@ -12176,6 +12196,7 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   // 📅 fecha real del pago: hoy por defecto (editable si lo registrás tarde)
   const pfe = document.getElementById('pago-fecha'); if (pfe) pfe.value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
   const prep = document.getElementById('pago-reparto'); if (prep) prep.value = 'jony';   // ⚖️ default: Jony primero
+  const pfr = document.getElementById('pago-fraccionar'); if (pfr) pfr.checked = false; pagoFraccionarToggle();   // ✂️ arranca sin fraccionar
   if (esPedido) {
     // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
     // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
@@ -12265,14 +12286,27 @@ function _pagoArsActual() {
 //  · deuda U$S pagada con PESOS a una caja de pesos (v3.41)
 //  · deuda en $ pagada con DÓLARES FÍSICOS a una caja U$S (v3.63, caso Sarah) — a la caja
 //    entran los U$S reales (÷TC) así el arqueo físico cierra; la deuda en $ baja igual.
+function pagoFraccionarToggle() {
+  const on = !!document.getElementById('pago-fraccionar')?.checked;
+  const u = document.getElementById('pago-caja-unica'), f = document.getElementById('pago-caja-fracc');
+  if (u) u.style.display = on ? 'none' : '';
+  if (f) f.style.display = on ? 'block' : 'none';
+  pago_evalTC();
+}
 function pago_evalTC() {
   const usd = parseFloat(document.getElementById('pago-usd')?.value) || 0;
   const ars = _pagoArsActual();
-  const caja = document.getElementById('pago-caja')?.value || '';
+  // En modo fraccionado el TC aplica si CUALQUIERA de las dos cajas convierte
+  const fracc = !!document.getElementById('pago-fraccionar')?.checked;
+  const cajas = fracc
+    ? [document.getElementById('pago-caja-miri')?.value || '', document.getElementById('pago-caja-jony')?.value || '']
+    : [document.getElementById('pago-caja')?.value || ''];
+  const caja = cajas[0];
+  const hayUSD = cajas.some(c => c && _CAJAS_USD.indexOf(c) !== -1);
+  const hayPesos = cajas.some(c => c && c !== 'PERDON' && _CAJAS_USD.indexOf(c) === -1);
   const esCajaUSD = !!caja && (_CAJAS_USD.indexOf(caja) !== -1);
-  const cajaPesos = !!caja && caja !== 'PERDON' && !esCajaUSD;
   const w = document.getElementById('pago-tc-wrap');
-  const necesita = (usd > 0 && cajaPesos) || (ars > 0 && esCajaUSD);
+  const necesita = (usd > 0 && hayPesos) || (ars > 0 && hayUSD);
   if (w) w.style.display = necesita ? 'block' : 'none';
   const lbl = document.getElementById('pago-tc-label');
   if (lbl) lbl.textContent = (ars > 0 && esCajaUSD)
@@ -12342,11 +12376,14 @@ async function confirmarPagoCuenta() {
   }
   const usd = parseFloat(document.getElementById('pago-usd').value) || 0;
   if (ars <= 0 && usd <= 0) { showToast('Ingresá un monto'); return; }
-  const caja = document.getElementById('pago-caja').value;
+  const fracc = !!document.getElementById('pago-fraccionar')?.checked;   // ✂️ fraccionar en cajas por dueño
+  const cajaMiri = fracc ? (document.getElementById('pago-caja-miri').value || '') : '';
+  const cajaJony = fracc ? (document.getElementById('pago-caja-jony').value || '') : '';
+  const caja = fracc ? '' : document.getElementById('pago-caja').value;
   const tcVis = document.getElementById('pago-tc-wrap').style.display !== 'none';
   const tcPago = tcVis ? (parseFloat(document.getElementById('pago-tc').value) || 0) : 0;
   if (tcVis && tcPago <= 0) {
-    const _cajaUsdG = _CAJAS_USD.indexOf(caja) !== -1;
+    const _cajaUsdG = fracc ? [cajaMiri, cajaJony].some(c => _CAJAS_USD.indexOf(c) !== -1) : (_CAJAS_USD.indexOf(caja) !== -1);
     showToast(_cajaUsdG ? 'Poné el tipo de cambio (los pesos te los pagó con U$S físicos)' : 'Poné el tipo de cambio (pagó los U$S en pesos)');
     return;
   }
@@ -12356,14 +12393,14 @@ async function confirmarPagoCuenta() {
   if (!_pagoPedidoId && _ps && _ps.value) _pedFinal = _ps.value;
   const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
   const _rep = (document.getElementById('pago-reparto') || {}).value || '';   // ⚖️ criterio de reparto elegido
-  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta', reparto:_rep });
-  // 💵 v3.99: total en mano (pesos) cuando pagó U$S EN PESOS (caja de pesos + TC) — para mostrar
-  // después "entró $100.000 → $26.500 a pesos + $73.500 al cambio $1.540". Usa el del repartidor
-  // si lo usó (exacto), si no lo calcula (monto_ars + U$S×TC).
-  { const _cajaEsUSD = _CAJAS_USD.indexOf(caja) !== -1;
+  const params = fracc
+    ? new URLSearchParams({ accion:'registrarPagoFraccionado', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, cajaMiri, cajaJony, tipoCambio:tcPago, nota:'Pago a cuenta', reparto:_rep })
+    : new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta', reparto:_rep });
+  // 💵 v3.99: total en mano (pesos) cuando pagó U$S EN PESOS (caja de pesos + TC) — solo pago único.
+  if (!fracc) { const _cajaEsUSD = _CAJAS_USD.indexOf(caja) !== -1;
     if (usd > 0 && tcPago > 0 && !_cajaEsUSD && caja !== 'PERDON') {
-      const _rep = Math.round(parseFloat(document.getElementById('pago-total-mano')?.value) || 0);
-      params.set('totalMano', String(_rep > 0 ? _rep : Math.round(ars + usd * tcPago)));
+      const _rm = Math.round(parseFloat(document.getElementById('pago-total-mano')?.value) || 0);
+      params.set('totalMano', String(_rm > 0 ? _rm : Math.round(ars + usd * tcPago)));
     } }
   // 📅 fecha REAL del pago elegida en el modal (si es hoy, con la hora actual; si es otro día, 12:00)
   { const pfv = (document.getElementById('pago-fecha') || {}).value || '';
@@ -12382,6 +12419,11 @@ async function confirmarPagoCuenta() {
     const pitz = [r.reparto.pitzARS > 0 ? '$ ' + Math.round(r.reparto.pitzARS).toLocaleString('es-AR') : '', r.reparto.pitzUSD > 0 ? 'U$S ' + r.reparto.pitzUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
     const gol = [r.reparto.golARS > 0 ? '$ ' + Math.round(r.reparto.golARS).toLocaleString('es-AR') : '', r.reparto.golUSD > 0 ? 'U$S ' + r.reparto.golUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
     setTimeout(() => showToast('⚖️ Repartido solo: ' + pitz + ' → Pitzujim (Jony)' + (gol ? ' · ' + gol + ' → golosinas (Miri)' : '')), 900);
+  }
+  // ✂️ Fraccionado: mostrar a qué caja fue cada parte
+  if (r.ok && r.jony && r.miri) {
+    const _m = (o) => [o.ars > 0 ? '$ ' + Math.round(o.ars).toLocaleString('es-AR') : '', o.usd > 0 ? 'U$S ' + Number(o.usd).toFixed(2) : ''].filter(Boolean).join(' + ') || '—';
+    setTimeout(() => showToast(`✂️ ${_m(r.jony)} → ${_cajaLbl(r.jony.caja)} (Jony) · ${_m(r.miri)} → ${_cajaLbl(r.miri.caja)} (Miri)`), 900);
   }
   if (r.ok) refreshAdmin();
 }

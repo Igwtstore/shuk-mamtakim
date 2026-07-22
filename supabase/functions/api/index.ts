@@ -1900,6 +1900,33 @@ Deno.serve(async (req) => {
       // El front muestra el reparto en el toast: el usuario VE a qué bolsillo fue cada peso.
       return json({ ok: true, reparto: { pitzARS, pitzUSD, golARS: Math.max(0, N(body, 'montoARS') - pitzARS), golUSD: Math.max(0, Math.round((N(body, 'montoUSD') - pitzUSD) * 100) / 100) } });
     }
+    // ✂️ PAGO FRACCIONADO EN CAJAS (v4.05): el mismo pago, partido por dueño → la parte de Jony
+    // (Pitzujim) va a la caja de Jony y la de Miri (golosinas) a la de Miri, cada una en su caja.
+    // Así NO queda deuda entre socios (cada uno recibe su plata directo). Crea DOS filas de pago,
+    // cada una con reparto guardado ('fraccionado' → coberturaPagos respeta las partes).
+    if (accion === 'registrarPagoFraccionado') {
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const mA = N(body, 'montoARS'), mU = N(body, 'montoUSD'), tc = N(body, 'tipoCambio');
+      if (mA === 0 && mU === 0) return json({ error: 'monto vacío' });
+      const critF = (P(body, 'reparto') === 'jony' || P(body, 'reparto') === 'prorrata') ? P(body, 'reparto') : '';
+      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), mA, mU, N(body, 'montoPitz'), undefined, critF);
+      const golARS = Math.max(0, mA - pitzARS), golUSD = Math.max(0, Math.round((mU - pitzUSD) * 100) / 100);
+      const cajaMiri = P(body, 'cajaMiri'), cajaJony = P(body, 'cajaJony');
+      if ((pitzARS > 0 || pitzUSD > 0) && !cajaJony) return json({ error: 'falta la caja de Jony (Pitzujim)' });
+      if ((golARS > 0 || golUSD > 0) && !cajaMiri) return json({ error: 'falta la caja de Miri (golosinas)' });
+      const fEl = P(body, 'fecha').trim();
+      const fPago = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fEl) ? fEl : fechaAhora();
+      const cli = P(body, 'cliente'), pid = P(body, 'pedidoId'), nota = P(body, 'nota') || 'Pago a cuenta', comp = P(body, 'comprobante');
+      // Parte de Jony (Pitzujim) → caja de Jony (todo el monto es Pitzujim)
+      if (pitzARS > 0 || pitzUSD > 0) {
+        await sbInsert('pagos', { fecha: fPago, cliente: cli, pedido_id: pid, monto_ars: pitzARS, monto_usd: pitzUSD, monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: cajaJony, tc, nota, comprobante: comp, reparto: 'fraccionado' });
+      }
+      // Parte de Miri (golosinas) → caja de Miri (nada Pitzujim)
+      if (golARS > 0 || golUSD > 0) {
+        await sbInsert('pagos', { fecha: fPago, cliente: cli, pedido_id: pid, monto_ars: golARS, monto_usd: golUSD, monto_pitz: 0, monto_pitz_usd: 0, caja: cajaMiri, tc, nota, comprobante: comp, reparto: 'fraccionado' });
+      }
+      return json({ ok: true, jony: { ars: pitzARS, usd: pitzUSD, caja: cajaJony }, miri: { ars: golARS, usd: golUSD, caja: cajaMiri } });
+    }
     // ✏️ EDITAR un pago a cuenta ya registrado (v3.96): corrige monto/caja/fecha/TC y RE-HACE el
     // auto-reparto Pitzujim/golosinas (excluyéndose a sí mismo). Todo lo demás (deuda, caja,
     // ganancia, cuenta socios) se recalcula solo desde la tabla pagos. nota/comprobante intactos.

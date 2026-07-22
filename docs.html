@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v4.03</title>
+<title>Shuk Mamtakim — Documentación v4.05</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v4.05</td><td>Jul 2026</td><td><strong>✂️ Pago a cuenta fraccionado en cajas (cada dueño a su caja).</strong> En el modal de "Pago a cuenta", nuevo tilde "✂️ Fraccionar en cajas": elegís una caja para la parte de Miri (golosinas) y otra para la de Jony (Pitzujim), y el sistema parte el pago solo — cada plata va DIRECTO a su caja, sin que quede deuda entre socios. Sirve para las liquidaciones donde el cliente paga todo y cada socio recibe su parte por separado. (De paso se arregló que el modal scrollee solo — antes en el celular no se llegaba a los botones.)</td></tr>
       <tr><td>v4.03</td><td>Jul 2026</td><td><strong>📷 La foto del remito, de verdad entera (el arreglo posta).</strong> El v4.02 cambió el encuadre pero la foto seguía cortada: la causa real era que la miniatura del remito se pedía a Cloudinary con recorte cuadrado forzado (c_fill), así que llegaba YA cortada del servidor (las tabletas apaisadas perdían arriba/abajo). Ahora se pide con ajuste proporcional (c_fit) y más resolución → la foto llega entera y nítida. (Si veías la anterior, es porque el recorte venía del servidor, no del navegador.)</td></tr>
       <tr><td>v4.02</td><td>Jul 2026</td><td><strong>🏷️ Editar el descuento de un pedido + 📷 fotos enteras en el remito.</strong> (1) Cuando un pedido tenía descuento por producto (ej. de un link con -10%), al editarlo el campo "Desc%" arrancaba en 0 y el "[-10%]" quedaba pegado en la descripción — no se podía tocar. Ahora el editor lee el descuento, recupera el precio original y lo muestra en Desc% (editable), con la descripción limpia; si no lo tocás, se re-guarda idéntico. (2) El remito con fotos recortaba las imágenes apaisadas (las tabletas Milka horizontales se veían cortadas por los lados, sobre todo la de chocolate blanco) — ahora la foto entra ENTERA (contain).</td></tr>
       <tr><td>v4.01</td><td>Jul 2026</td><td><strong>⚖️ Elegís el reparto Jony/Miri en cada cobranza.</strong> Antes el sistema repartía cada pago con una regla fija asimétrica (en $ Jony/Pitzujim primero, en U$S Miri/golosinas primero → tu cobranza en dólares quedaba última). Ahora el modal de "Pago a cuenta" tiene un selector: <em>💰 Jony primero</em> (por defecto), <em>⚖️ Prorrata</em> (proporcional a lo que vendió cada uno) o <em>🔁 Automático</em> (como venía). Cada pago guarda su criterio. <strong>El pasado NO se toca</strong>: los pagos ya hechos quedan con su reparto de siempre (verificado: la ganancia histórica quedó idéntica al centavo), solo los nuevos usan lo que elijas. Sirve para la cobranza fina y la rendición con Miri.</td></tr>
@@ -840,7 +841,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v4.03 · Julio 2026 · Uso interno
+  Documentación v4.05 · Julio 2026 · Uso interno
 </div>
 
 </div>
