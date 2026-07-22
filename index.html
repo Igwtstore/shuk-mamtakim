@@ -10152,7 +10152,7 @@ function _cargadoHace(p) {
 }
 // ══════════════ 🛒 ORDEN DE COMPRA / REPOSICIÓN (v4.06) ══════════════
 // Elegir productos a reponer + cantidad; suma peso (× peso por bolsa) y costo; PDF; guardar/historial.
-let _ocProductos = [], _ocSel = {}, _ocCant = {}, _ocFiltro = 'reponer';
+let _ocProductos = [], _ocSel = {}, _ocCant = {}, _ocFiltro = 'reponer', _ocOrdenId = null;
 async function abrirOrdenCompra() {
   let ov = document.getElementById('oc-overlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'oc-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0.8rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
@@ -10161,7 +10161,7 @@ async function abrirOrdenCompra() {
   let lista = Array.isArray(r) ? r : [];
   if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // vista Miri: solo sus productos
   _ocProductos = lista.sort((a, b) => (a.stock||0) - (b.stock||0) || (a.nombre||'').localeCompare(b.nombre||''));   // sin stock primero
-  _ocSel = {}; _ocCant = {}; _ocFiltro = 'reponer';
+  _ocSel = {}; _ocCant = {}; _ocFiltro = 'reponer'; _ocOrdenId = null;
   _ocRender();
 }
 function _ocFiltrados() {
@@ -10179,7 +10179,7 @@ function _ocRender() {
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:580px;width:100%;max-height:92vh;display:flex;flex-direction:column">
     <div style="padding:1rem 1.1rem 0.6rem;border-bottom:1px solid var(--gris-medio)">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.15rem">🛒 Orden de compra</div>
+        <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.15rem">🛒 Orden de compra${_ocOrdenId ? ' <span style="font-size:0.68rem;color:#1e7a3c;font-family:\'DM Sans\',sans-serif">· editando la guardada</span>' : ''}</div>
         <button onclick="verOrdenesCompra()" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:5px 10px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:inherit">🗂 Guardadas</button>
       </div>
       <input id="oc-buscar" oninput="_ocRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
@@ -10214,6 +10214,7 @@ function _ocFilaHtml(p) {
     ${thumb}
     <div style="flex:1;min-width:0">
       <div style="font-size:0.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}${chipDueno}</div>
+      ${p.desc ? `<div style="font-size:0.66rem;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.desc)}">${esc(p.desc)}</div>` : ''}
       <div>${stockChip} · ${pesoInfo}</div>
     </div>
     <input type="number" min="0" value="${_ocCant[p.id]||''}" placeholder="cant" oninput="_ocSetCant('${p.id}', this.value)" style="width:56px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:8px;text-align:center;font-family:inherit;flex-shrink:0">
@@ -10254,7 +10255,9 @@ async function guardarOrdenCompra() {
   if (!items.length) { showToast('Elegí al menos un producto con cantidad'); return; }
   const totPeso = items.reduce((s,i)=>s+(i.peso>0?i.pesoTotal:0),0);
   const totCosto = items.reduce((s,i)=>s+i.costoTotal,0);
-  const r = await apiWrite(new URLSearchParams({ accion:'guardarOrdenCompra', items:JSON.stringify(items), totalPeso:Math.round(totPeso), totalCosto:Math.round(totCosto), nota:'' }), '💾 Orden guardada ✓');
+  const params = new URLSearchParams({ accion:'guardarOrdenCompra', items:JSON.stringify(items), totalPeso:Math.round(totPeso), totalCosto:Math.round(totCosto), nota:'' });
+  if (_ocOrdenId) params.set('id', _ocOrdenId);   // editar la misma orden en vez de crear otra
+  const r = await apiWrite(params, _ocOrdenId ? '💾 Orden actualizada ✓' : '💾 Orden guardada ✓');
   if (r && r.ok) document.getElementById('oc-overlay')?.remove();
 }
 function _ocFotoUrl(imagen) {
@@ -10303,7 +10306,8 @@ async function verOrdenesCompra() {
     <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem">🗂 Órdenes guardadas</div>
     ${ords.length ? ords.map(o => `<div style="display:flex;align-items:center;gap:8px;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(o.fecha||'')}</div><div style="font-size:0.72rem;color:var(--texto-suave)">${(o.totalPeso/1000).toFixed(2)} kg${o.nota?' · '+esc(o.nota):''}</div></div>
-      <button onclick="reabrirOrdenCompra('${o.id}')" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">Ver</button>
+      <button onclick="reabrirOrdenCompra('${o.id}')" title="Abrir para seguir editándola" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️ Editar</button>
+      <button onclick="imprimirOrdenGuardada('${o.id}')" title="Reimprimir / PDF" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 9px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">🖨️</button>
       <button onclick="borrarOrdenCompra('${o.id}')" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:0.6rem 0">No hay órdenes guardadas.</div>'}
     <button onclick="abrirOrdenCompra()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:#1e7a3c;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">← Nueva orden</button>
@@ -10312,7 +10316,17 @@ async function verOrdenesCompra() {
 async function reabrirOrdenCompra(id) {
   const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getOrdenCompra&id=' + encodeURIComponent(id)).catch(()=>null);
   if (!d || !Array.isArray(d.items)) { showToast('No pude cargar la orden'); return; }
-  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(d.items)); win.document.close();   // re-imprimir la guardada
+  await abrirOrdenCompra();   // recarga productos frescos + resetea el estado
+  _ocSel = {}; _ocCant = {};
+  d.items.forEach(it => { if (it.id != null) { const c = parseInt(it.cantidad) || 0; if (c > 0) { _ocCant[it.id] = c; _ocSel[it.id] = true; } } });
+  _ocOrdenId = id;        // guardar-actualiza esta misma orden
+  _ocFiltro = 'todos';    // mostrar todos para que aparezcan los elegidos
+  _ocRender();
+}
+async function imprimirOrdenGuardada(id) {
+  const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getOrdenCompra&id=' + encodeURIComponent(id)).catch(()=>null);
+  if (!d || !Array.isArray(d.items)) { showToast('No pude cargar la orden'); return; }
+  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(d.items)); win.document.close();
 }
 async function borrarOrdenCompra(id) {
   if (!confirm('¿Borrar esta orden guardada?')) return;

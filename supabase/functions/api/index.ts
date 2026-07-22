@@ -1963,7 +1963,13 @@ Deno.serve(async (req) => {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       let itemsOC: any[] = []; try { itemsOC = JSON.parse(P(body, 'items') || '[]'); } catch { itemsOC = []; }
       if (!itemsOC.length) return json({ error: 'orden vacía' });
-      await sbInsert('ordenes_compra', { fecha: P(body, 'fecha') || fechaAhora(), items: itemsOC, total_peso: N(body, 'totalPeso'), total_costo: N(body, 'totalCosto'), nota: P(body, 'nota'), estado: 'abierta' });
+      const oidOC = P(body, 'id');
+      const camposOC = { items: itemsOC, total_peso: N(body, 'totalPeso'), total_costo: N(body, 'totalCosto'), nota: P(body, 'nota') };
+      if (oidOC) {   // editar una orden existente (no pisa la fecha original)
+        await sbPatch('ordenes_compra', 'id=eq.' + encodeURIComponent(oidOC), camposOC);
+        return json({ ok: true, id: oidOC });
+      }
+      await sbInsert('ordenes_compra', { fecha: P(body, 'fecha') || fechaAhora(), estado: 'abierta', ...camposOC });
       return json({ ok: true });
     }
     if (accion === 'listarOrdenesCompra') {
