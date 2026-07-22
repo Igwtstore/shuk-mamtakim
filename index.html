@@ -12999,13 +12999,13 @@ function abrirRemitoPDF(v) {
     // Antes se le anteponía la base SIEMPRE y rompía → quedaba el placeholder 🍬.
     if (/^https?:\/\//i.test(primera)) {
       return primera.indexOf('res.cloudinary.com') !== -1
-        ? primera.replace('/upload/', '/upload/w_80,h_80,c_fill/')
+        ? primera.replace('/upload/', '/upload/w_160,h_160,c_fit/')
         : primera;
     }
     if (primera.includes('/') && !primera.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-      return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/${primera}`;
+      return `${CLOUDINARY_BASE}/w_160,h_160,c_fit/${primera}`;
     }
-    return `${CLOUDINARY_BASE}/w_80,h_80,c_fill/shuk-mamtakim/${primera}`;
+    return `${CLOUDINARY_BASE}/w_160,h_160,c_fit/shuk-mamtakim/${primera}`;
   };
   // Parsear líneas en columnas con foto (en vista Miri, sin las de Jony)
   const filas = (soloMiri ? _lineasPedidoVista(v.productos, true, v.stockUpdates) : (v.productos||'').split(' || ')).map(linea => {
