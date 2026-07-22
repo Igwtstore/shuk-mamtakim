@@ -2103,6 +2103,15 @@
         </optgroup>
       </select>
     </div>
+    <!-- ⚖️ Criterio de reparto Jony/Miri para ESTE pago (v4.01). Default: Jony primero. -->
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">⚖️ ¿Cómo repartir entre vos y Miri? <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(cuando el pago no cubre todo)</span></label>
+      <select id="pago-reparto" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
+        <option value="jony">💰 Jony (Pitzujim) primero</option>
+        <option value="prorrata">⚖️ Prorrata (proporcional a cada uno)</option>
+        <option value="">🔁 Automático (como venía)</option>
+      </select>
+    </div>
     <!-- TC: aparece si se paga una deuda en U$S pero con PESOS (monto U$S > 0 + caja de pesos) -->
     <div id="pago-tc-wrap" style="display:none;margin-bottom:0.75rem;background:var(--dorado-claro);border-radius:8px;padding:0.75rem">
       <label id="pago-tc-label" style="font-size:0.78rem;font-weight:600;color:var(--dorado);display:block;margin-bottom:0.3rem">💱 Pagó los U$S en pesos — Tipo de cambio U$S 1 = $</label>
@@ -12166,6 +12175,7 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   const prr = document.getElementById('pago-repartir-res'); if (prr) prr.textContent = '';
   // 📅 fecha real del pago: hoy por defecto (editable si lo registrás tarde)
   const pfe = document.getElementById('pago-fecha'); if (pfe) pfe.value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const prep = document.getElementById('pago-reparto'); if (prep) prep.value = 'jony';   // ⚖️ default: Jony primero
   if (esPedido) {
     // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
     // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
@@ -12345,7 +12355,8 @@ async function confirmarPagoCuenta() {
   const _ps = document.getElementById('pago-pedido-sel');
   if (!_pagoPedidoId && _ps && _ps.value) _pedFinal = _ps.value;
   const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
-  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta' });
+  const _rep = (document.getElementById('pago-reparto') || {}).value || '';   // ⚖️ criterio de reparto elegido
+  const params = new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta', reparto:_rep });
   // 💵 v3.99: total en mano (pesos) cuando pagó U$S EN PESOS (caja de pesos + TC) — para mostrar
   // después "entró $100.000 → $26.500 a pesos + $73.500 al cambio $1.540". Usa el del repartidor
   // si lo usó (exacto), si no lo calcula (monto_ars + U$S×TC).

@@ -128,9 +128,23 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
     it.jA -= pz; it.mA -= gA; it.mU -= gU; it.jU -= pzU;
     if (cuenta) { it.cub.jA += pz; it.cub.mA += gA; it.cub.mU += gU; it.cub.jU += pzU; }
   });
-  // Generales: FIFO por componente (Pitzujim primero en $, golosinas primero en U$S)
+  // Generales: FIFO por componente. Los pagos NUEVOS con criterio elegido (p.reparto seteado)
+  // respetan sus partes YA guardadas (Pitzujim = monto_pitz / monto_pitz_usd); los VIEJOS (sin
+  // reparto) siguen con el orden histórico fijo — así el pasado queda IDÉNTICO (v4.01).
   ord.filter((p) => !p.pedido_id && (p.caja || '') !== 'PERDON').forEach((p) => {
     const cuenta = _fparMin(p.fecha) > msCorte;
+    if (p.reparto) {
+      // parte Pitzujim (Jony) y golosinas (Miri) guardadas → se distribuyen FIFO por bolsillo
+      let pPz = parseFloat(p.monto_pitz) || 0, pGa = Math.max(0, (parseFloat(p.monto_ars) || 0) - (parseFloat(p.monto_pitz) || 0));
+      let pPu = parseFloat(p.monto_pitz_usd) || 0, pGu = Math.max(0, (parseFloat(p.monto_usd) || 0) - (parseFloat(p.monto_pitz_usd) || 0));
+      (res[norm(p.cliente)] || []).forEach((it: any) => {
+        let a = Math.min(pPz, it.jA); it.jA -= a; pPz -= a; if (cuenta) it.cub.jA += a;
+        a = Math.min(pGa, it.mA); it.mA -= a; pGa -= a; if (cuenta) it.cub.mA += a;
+        a = Math.min(pGu, it.mU); it.mU -= a; pGu -= a; if (cuenta) it.cub.mU += a;
+        a = Math.min(pPu, it.jU); it.jU -= a; pPu -= a; if (cuenta) it.cub.jU += a;
+      });
+      return;
+    }
     let pA = parseFloat(p.monto_ars) || 0, pU = parseFloat(p.monto_usd) || 0;
     (res[norm(p.cliente)] || []).forEach((it: any) => {
       let a = Math.min(pA, it.jA); it.jA -= a; pA -= a; if (cuenta) it.cub.jA += a;
@@ -191,8 +205,12 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
 // ⚖️ Auto-reparto de un pago: qué parte es Pitzujim (Jony) y qué parte golosinas (Miri), contra
 // la deuda viva FIFO del cliente. Compartido por registrar y EDITAR un pago (v3.96). Al editar,
 // excludePagoId saca el propio pago del cálculo (si no, se contaría a sí mismo → doble).
-async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: number, montoUSD: number, montoPitzExplicito: number, excludePagoId?: string): Promise<{ pitzARS: number; pitzUSD: number }> {
-  let pitzARS = montoPitzExplicito || 0, pitzUSD = 0;
+// criterio (v4.01): 'auto' = orden histórico (Pitzujim $ primero, golosinas U$S primero) ·
+// 'jony' = Pitzujim (Jony) primero en las DOS monedas · 'prorrata' = proporcional a lo que cada
+// uno tiene de deuda. Si el front manda montoPitzExplicito>0, se respeta (solo modo 'auto').
+async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: number, montoUSD: number, montoPitzExplicito: number, excludePagoId?: string, criterio?: string): Promise<{ pitzARS: number; pitzUSD: number }> {
+  const modo = (criterio === 'jony' || criterio === 'prorrata') ? criterio : 'auto';
+  let pitzARS = (modo === 'auto') ? (montoPitzExplicito || 0) : 0, pitzUSD = 0;
   try {
     const cliPago = normCli(cliente);
     const [vsCli, pgsCli] = await Promise.all([sbGet('ventas', 'select=*'), sbGet('pagos', 'select=*')]);
@@ -203,16 +221,31 @@ async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: 
     let items = Object.values(resid) as any[];
     if (pedidoId) items = items.filter((it: any) => String(it.v.id) === String(pedidoId));
     items.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha));
-    let poolA = montoARS, poolU = montoUSD;
-    let autoPitzA = 0, autoPitzU = 0;
-    items.forEach((it: any) => {
-      let a = Math.min(poolA, it.jA); poolA -= a; autoPitzA += a;   // $: Pitzujim primero
-      a = Math.min(poolA, it.mA); poolA -= a;                       // $: después golosinas
-      a = Math.min(poolU, it.mU); poolU -= a;                       // U$S: golosinas primero
-      a = Math.min(poolU, it.jU); poolU -= a; autoPitzU += a;       // U$S: después Pitzujim
-    });
-    if (pitzARS <= 0) pitzARS = Math.round(autoPitzA);
-    pitzUSD = Math.round(autoPitzU * 100) / 100;
+    if (modo === 'prorrata') {
+      // Proporcional a la deuda TOTAL de cada uno (Jony=jA/jU, Miri=mA/mU), por moneda.
+      let jA = 0, mA = 0, jU = 0, mU = 0;
+      items.forEach((it: any) => { jA += it.jA; mA += it.mA; jU += it.jU; mU += it.mU; });
+      const denA = jA + mA, denU = jU + mU;
+      pitzARS = denA > 0 ? Math.round(Math.min(montoARS, denA) * jA / denA) : 0;
+      pitzUSD = denU > 0 ? Math.round(Math.min(montoUSD, denU) * jU / denU * 100) / 100 : 0;
+    } else {
+      let poolA = montoARS, poolU = montoUSD, autoPitzA = 0, autoPitzU = 0;
+      items.forEach((it: any) => {
+        if (modo === 'jony') {
+          let a = Math.min(poolA, it.jA); poolA -= a; autoPitzA += a;   // $: Pitzujim primero
+          a = Math.min(poolA, it.mA); poolA -= a;                       // $: golosinas después
+          a = Math.min(poolU, it.jU); poolU -= a; autoPitzU += a;       // U$S: Pitzujim primero (¡Jony!)
+          a = Math.min(poolU, it.mU); poolU -= a;                       // U$S: golosinas después
+        } else {   // 'auto' (histórico)
+          let a = Math.min(poolA, it.jA); poolA -= a; autoPitzA += a;   // $: Pitzujim primero
+          a = Math.min(poolA, it.mA); poolA -= a;                       // $: golosinas después
+          a = Math.min(poolU, it.mU); poolU -= a;                       // U$S: golosinas primero
+          a = Math.min(poolU, it.jU); poolU -= a; autoPitzU += a;       // U$S: Pitzujim después
+        }
+      });
+      if (pitzARS <= 0) pitzARS = Math.round(autoPitzA);
+      pitzUSD = Math.round(autoPitzU * 100) / 100;
+    }
   } catch { /* si el reparto falla, queda en 0 (como antes) */ }
   return { pitzARS, pitzUSD };
 }
@@ -376,7 +409,7 @@ const ventaFront = (v: any) => ({
   comprobante: (v.comprobante || '').toString(), ajuste: parseFloat(v.ajuste) || 0, fechaCobro: (v.fecha_cobro || '').toString(),
   corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
 });
-const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString(), totalMano: parseFloat(p.total_mano) || 0 });
+const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString(), totalMano: parseFloat(p.total_mano) || 0, reparto: (p.reparto || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
 const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
@@ -1845,11 +1878,12 @@ Deno.serve(async (req) => {
       // cuenta entre socios: en $ Pitzujim primero, en U$S golosinas primero. El reparto queda
       // GUARDADO en el pago (monto_pitz / monto_pitz_usd) → caja, cuenta corriente y vista
       // Miri leen todos lo mismo. Si el front mandó montoPitz explícito (>0), se respeta.
-      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'));
+      const critPago = (P(body, 'reparto') === 'jony' || P(body, 'reparto') === 'prorrata') ? P(body, 'reparto') : '';
+      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'), undefined, critPago);
       // 📅 v3.95: si el modal manda la fecha real del pago, ESA va (si no, "ahora")
       const fechaPagoElegida = P(body, 'fecha').trim();
       const fechaPago = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fechaPagoElegida) ? fechaPagoElegida : fechaAhora();
-      await sbInsert('pagos', { fecha: fechaPago, cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante'), total_mano: N(body, 'totalMano') || null });
+      await sbInsert('pagos', { fecha: fechaPago, cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante'), total_mano: N(body, 'totalMano') || null, reparto: critPago || null });
       // Circuito F3: pago del cliente "Candy" con TC → convertir compras del circuito a pesos.
       // Atado a un pedido → solo la compra de esa venta; general → todas las pendientes en U\$S.
       if ((P(body, 'cliente') || '').trim() === 'Candy' && N(body, 'tipoCambio') > 0) {
@@ -1879,8 +1913,10 @@ Deno.serve(async (req) => {
       if (mA === 0 && mU === 0) return json({ error: 'monto vacío' });
       const fEd = P(body, 'fecha').trim();
       const fFinal = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fEd) ? fEd : (pgE.fecha || fechaAhora());
-      const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, 0, pidE);
-      const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: rep.pitzARS, monto_pitz_usd: rep.pitzUSD, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio') };
+      // criterio: el que mande el front, o el que ya tenía guardado el pago (no lo pierde al editar)
+      const critEd = (P(body, 'reparto') === 'jony' || P(body, 'reparto') === 'prorrata') ? P(body, 'reparto') : ((pgE.reparto === 'jony' || pgE.reparto === 'prorrata') ? pgE.reparto : '');
+      const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, 0, pidE, critEd);
+      const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: rep.pitzARS, monto_pitz_usd: rep.pitzUSD, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio'), reparto: critEd || null };
       if (body.totalMano !== undefined) patchPago.total_mano = N(body, 'totalMano') || null;   // total en mano (si el front lo recalculó)
       await sbPatch('pagos', 'id=eq.' + encodeURIComponent(pidE), patchPago);
       return json({ ok: true, reparto: rep });
