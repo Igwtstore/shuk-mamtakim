@@ -10266,8 +10266,14 @@ function _ocFotoUrl(imagen) {
   if (primera.includes('/') && !primera.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return `${CLOUDINARY_BASE}/w_160,h_160,c_fit/${primera}`;
   return `${CLOUDINARY_BASE}/w_160,h_160,c_fit/shuk-mamtakim/${primera}`;
 }
-function _ordenCompraHTML(items) {
-  const hoy = new Date().toLocaleString('es-AR');
+function _ordenCompraHTML(items, id, fecha) {
+  const fechaMostrar = fecha || new Date().toLocaleString('es-AR');
+  const numTxt = id ? 'N° ' + id : '';
+  // Título = nombre del PDF que sugiere el navegador (dd-mm-yyyy, sin / ni : que rompen el archivo)
+  const fechaFile = fecha
+    ? fecha.split(' ')[0].replace(/\//g, '-')
+    : new Date().toLocaleDateString('sv-SE').split('-').reverse().join('-');   // yyyy-mm-dd → dd-mm-yyyy (con ceros)
+  const titulo = 'Orden de compra' + (id ? ' ' + id : '') + ' - ' + fechaFile;
   const totPeso = items.reduce((s,i)=>s+(i.peso>0?i.pesoTotal:0),0);
   const totBolsas = items.reduce((s,i)=>s+i.cantidad,0);
   const filas = items.map(i => {
@@ -10283,10 +10289,10 @@ function _ordenCompraHTML(items) {
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-weight:700">${pesoT}</td>
     </tr>`;
   }).join('');
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Orden de compra</title>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${esc(titulo)}</title>
     <style>@page{size:A4 portrait;margin:12mm} body{font-family:'Helvetica Neue',Arial,sans-serif;color:#2d2a24} table{width:100%;border-collapse:collapse} .btn{background:#1e7a3c;color:#fff;border:none;border-radius:7px;padding:9px 20px;font-weight:700;cursor:pointer} @media print{.btn{display:none}}</style></head><body>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <div><div style="font-size:1.4rem;font-weight:800;color:#1e7a3c">🛒 Orden de compra</div><div style="font-size:0.8rem;color:#999">${hoy}</div></div>
+      <div><div style="font-size:1.4rem;font-weight:800;color:#1e7a3c">🛒 Orden de compra${numTxt ? ` <span style="font-size:1rem;color:#888;font-weight:700">${numTxt}</span>` : ''}</div><div style="font-size:0.8rem;color:#999">${esc(fechaMostrar)}</div></div>
       <button class="btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
     </div>
     <div style="background:#eef7ee;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700">Total: ${items.length} productos · ${totBolsas} bolsas · ${(totPeso/1000).toFixed(2)} kg</div>
@@ -10296,7 +10302,7 @@ function _ordenCompraHTML(items) {
 function ordenCompraPDF() {
   const items = _ocItems();
   if (!items.length) { showToast('Elegí productos primero'); return; }
-  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(items)); win.document.close();
+  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(items, _ocOrdenId, null)); win.document.close();   // número si es una guardada que estás editando
 }
 async function verOrdenesCompra() {
   const r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=listarOrdenesCompra').catch(()=>[]);
@@ -10326,7 +10332,7 @@ async function reabrirOrdenCompra(id) {
 async function imprimirOrdenGuardada(id) {
   const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=getOrdenCompra&id=' + encodeURIComponent(id)).catch(()=>null);
   if (!d || !Array.isArray(d.items)) { showToast('No pude cargar la orden'); return; }
-  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(d.items)); win.document.close();
+  const win = window.open('', '_blank'); win.document.write(_ordenCompraHTML(d.items, d.id, d.fecha)); win.document.close();
 }
 async function borrarOrdenCompra(id) {
   if (!confirm('¿Borrar esta orden guardada?')) return;

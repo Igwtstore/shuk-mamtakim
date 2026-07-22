@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v4.09</title>
+<title>Shuk Mamtakim — Documentación v4.10</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v4.10</td><td>Jul 2026</td><td><strong>🛒 El PDF de la orden de compra ya trae número y fecha.</strong> Antes el archivo se guardaba solo como "Orden de compra". Ahora el nombre del PDF (y el encabezado) incluye el número de la orden (si es una guardada) y la fecha: "Orden de compra 7 - 22-07-2026". Las órdenes nuevas (sin guardar) salen con la fecha del día.</td></tr>
       <tr><td>v4.09</td><td>Jul 2026</td><td><strong>🛒 Orden de compra: editar la guardada + ver el gusto.</strong> (1) Ahora podés guardar una orden, cerrarla, y más tarde reabrirla para <strong>seguir editándola</strong>: en "🗂 Guardadas" tocás "✏️ Editar" y vuelve a abrirse con lo que habías marcado; al guardar, <strong>actualiza la misma orden</strong> (no crea otra). Botón 🖨️ aparte para reimprimir sin editar. (2) En cada fila del listado ahora se muestra la <strong>descripción/gusto</strong> en letra chica (antes se veían varios "Chocolate Elite" iguales sin saber cuál era cuál).</td></tr>
       <tr><td>v4.08</td><td>Jul 2026</td><td><strong>🛒 Generador de orden de compra / reposición.</strong> En Stock, botón "🛒 Orden de compra": marcás qué reponer (arranca mostrando los sin stock y bajos ≤3, o "Todos"), ponés cuántas bolsas de cada uno, y el sistema suma el <strong>peso total</strong> (× peso por bolsa) y el <strong>costo estimado</strong> (por moneda). Los productos sin peso cargado se marcan "⚠️ falta peso" y no suman (no bloquean). Muestra el <strong>stock actual</strong> al lado de cada uno. Exportable a <strong>PDF con foto</strong> (foto · producto · stock · cantidad · peso), y se puede <strong>guardar</strong> (historial 🗂 para reabrir/reimprimir/borrar).</td></tr>
       <tr><td>v4.07</td><td>Jul 2026</td><td><strong>⚖️ Peso por bolsa en los productos (interno).</strong> Nuevo campo "Peso x bolsa (g)" en el alta, la edición y el editor masivo (para rellenar en lote). Es interno: NO se muestra al cliente, sirve para calcular el peso de la orden de compra.</td></tr>
@@ -845,7 +846,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v4.09 · Julio 2026 · Uso interno
+  Documentación v4.10 · Julio 2026 · Uso interno
 </div>
 
 </div>
