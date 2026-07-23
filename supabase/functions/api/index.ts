@@ -2876,6 +2876,21 @@ Deno.serve(async (req) => {
       const [envios, ventas] = await Promise.all([sbGet('envios', 'select=*'), sbGet('ventas', 'select=id,caja_jony,caja_myri')]);
       return json(enviosData(envios, ventas));
     }
+    // Guarda SOLO el cobrado del envío de una venta en la Caja Envíos (entrada liviana desde el remito).
+    // El costo del cadete y quién lo pagó se completan como siempre al confirmar el cobro.
+    if (accion === 'setEnvioCobrado') {
+      const idEnv = P(body, 'ventaId');
+      if (!idEnv) return json({ error: 'falta ventaId' });
+      const vv = (await sbGet('ventas', 'select=n_venta,cliente,ars_jony,usd_jony,ars_myri,usd_myri&id=eq.' + encodeURIComponent(idEnv)))[0];
+      if (!vv) return json({ error: 'venta inexistente' });
+      await upsertEnvio(idEnv, {
+        nVenta: vv.n_venta,
+        cliente: (vv.cliente || '').toString(),
+        dueno: duenoVenta(vv.ars_jony || 0, vv.usd_jony || 0, vv.ars_myri || 0, vv.usd_myri || 0),
+        cobrado: Math.round(N(body, 'cobrado')),
+      });
+      return json({ ok: true });
+    }
     if (accion === 'panelAdmin') {
       const [ventas, gastos, rendiciones, pagos, clientes, movs, envios] = await Promise.all([
         sbGet('ventas', 'select=*&order=n_venta'), sbGet('gastos', 'select=*'), sbGet('rendiciones', 'select=*'),

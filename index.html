@@ -13179,7 +13179,16 @@ function _buildRemitoTexto(v, tc) {
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   // Totales: en vista Miri, solo lo de Miri (arsMyri/usdMyri); en Todo, el total del pedido.
   const usd = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
-  const ars = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+  const arsProd = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+  const envio = _remitoEnvioVal();
+  const ars = arsProd + envio;
+  if (envio > 0) {
+    const subt = [];
+    if (arsProd > 0) subt.push(`$ ${Math.round(arsProd).toLocaleString('es-AR')}`);
+    if (usd > 0) subt.push(`U$S ${usd.toFixed(2)}`);
+    lines.push(`   Subtotal productos: ${subt.join(' + ')}`);
+    lines.push(`   📦 Envío: $ ${envio.toLocaleString('es-AR')}`);
+  }
   const totales = [];
   if (ars > 0) totales.push(`$ ${Math.round(ars).toLocaleString('es-AR')}`);
   if (usd > 0) totales.push(`U$S ${usd.toFixed(2)}`);
@@ -13193,6 +13202,36 @@ function _buildRemitoTexto(v, tc) {
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`Shuk Mamtakim 🍬 — shuk-mamtakim.vercel.app`);
   return lines.join('\n');
+}
+
+// Envío cobrado al cliente que se muestra en el remito (0 = no mostrar línea).
+function _remitoEnvioVal() {
+  const inp = document.getElementById('remito-envio-input');
+  return inp ? Math.round(parseFloat((inp.value || '').replace(',', '.')) || 0) : 0;
+}
+
+// Guarda el envío cobrado en la Caja Envíos (una vez, al terminar de editarlo).
+async function _remitoGuardarEnvio() {
+  if (!_remitoVenta) return;
+  const id = _remitoVenta.id;
+  const cobrado = _remitoEnvioVal();
+  const prev = Math.round(parseFloat((_enviosPorVenta[id] || {}).cobrado) || 0);
+  if (cobrado === prev) return;   // sin cambios → no toca la Caja Envíos
+  const st = document.getElementById('remito-envio-status');
+  if (st) { st.textContent = 'Guardando…'; st.style.color = '#6a9a7c'; }
+  const params = new URLSearchParams();
+  params.set('accion', 'setEnvioCobrado');
+  params.set('ventaId', String(id));
+  params.set('cobrado', String(cobrado));
+  const r = await apiWrite(params);
+  if (r && r.ok) {
+    _enviosPorVenta[id] = Object.assign({}, _enviosPorVenta[id] || {}, { ventaId: id, cobrado });
+    if (st) { st.textContent = '✓ guardado en Caja Envíos'; st.style.color = '#2f7a4e'; }
+    if (typeof renderCajaEnvios === 'function') renderCajaEnvios();
+  } else if (st) {
+    st.textContent = '⚠️ no se guardó';
+    st.style.color = '#c0392b';
+  }
 }
 
 function _remitoRender() {
@@ -13214,6 +13253,10 @@ function abrirRemito(v) {
   if (box) box.style.display = hayUSD ? 'block' : 'none';
   const on = document.getElementById('remito-tc-on'); if (on) on.checked = false;
   const inp = document.getElementById('remito-tc-input'); if (inp) inp.value = _tc > 0 ? Math.round(_tc) : '';
+  // Envío: precargado con lo que ya haya en la Caja Envíos de este pedido (editable).
+  const envInp = document.getElementById('remito-envio-input');
+  if (envInp) { const ec = Math.round(parseFloat((_enviosPorVenta[v.id] || {}).cobrado) || 0); envInp.value = ec > 0 ? ec : ''; }
+  const envSt = document.getElementById('remito-envio-status'); if (envSt) envSt.textContent = '';
   _remitoRender();
   const telCli = _telPorCliente[v.cliente] || '';
   document.getElementById('remito-phone').value = telCli ? (telCli.length === 10 ? '549' + telCli : telCli) : '';
@@ -13243,8 +13286,10 @@ function copiarRemito() {
 function abrirRemitoPDF(v) {
   if (!v) return;
   const soloMiri = esVistaMiri();   // REGLA: en vista Miri el remito NO muestra NADA de Jony
-  const tARS = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
+  const tARSProd = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
   const tUSD = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
+  const envioPDF = _remitoEnvioVal();
+  const tARS = tARSProd + envioPDF;
   const totales = [];
   if (tARS > 0) totales.push(`$ ${Math.round(tARS).toLocaleString('es-AR')}`);
   if (tUSD > 0) totales.push(`U$S ${tUSD.toFixed(2)}`);
@@ -13315,7 +13360,7 @@ function abrirRemitoPDF(v) {
 
   // Conversión a pesos (informativa): toma el TC elegido en el modal (auto de la página o manual).
   const tcPDF = (typeof _remitoTCval === 'function') ? _remitoTCval() : 0;
-  const _usdPDF = parseFloat(v.totalUSD) || 0, _arsPDF = parseFloat(v.totalARS) || 0;
+  const _usdPDF = parseFloat(v.totalUSD) || 0, _arsPDF = (parseFloat(v.totalARS) || 0) + envioPDF;
   const _granARS = Math.round(_arsPDF + _usdPDF * tcPDF);
   const _selloFechaHora = new Date().toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
@@ -13371,8 +13416,12 @@ function abrirRemitoPDF(v) {
     <span></span><span>Producto</span><span style="text-align:center">Cant.</span><span>P. Unit.</span><span>Subtotal</span>
   </div>
   <table class="tabla"><tbody>${lineas}</tbody></table>
+  ${envioPDF > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 24px;background:#f7fbf8;border-top:1px solid #f0ebe3">
+    <span style="font-size:0.78rem;color:#666">📦 Envío a domicilio</span>
+    <span style="font-size:0.9rem;font-weight:700;color:#2d1a0a">$ ${envioPDF.toLocaleString('es-AR')}</span>
+  </div>` : ''}
   <div class="total-bar">
-    <span class="lbl">Total del pedido</span>
+    <span class="lbl">Total del pedido${envioPDF > 0 ? ' (con envío)' : ''}</span>
     <span class="val">${totales.join(' + ')}</span>
   </div>
   ${tcPDF > 0 && _usdPDF > 0 ? `<div style="background:#3a2614;color:#fdf3e3;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,0.15)">
@@ -13838,6 +13887,15 @@ function cerrarEditPedido() {
       <button onclick="cerrarRemito()" style="background:var(--gris);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer">✕</button>
     </div>
     <div class="remito-body">
+      <div id="remito-envio-box" style="background:#f0f7f2;border:1px solid #cbe6d5;border-radius:10px;padding:10px 12px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:0.82rem;font-weight:700;color:#2f7a4e">📦 Envío que se le cobra al cliente</label>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <span style="font-size:0.78rem;color:#888">$</span>
+          <input id="remito-envio-input" type="number" min="0" step="any" inputmode="numeric" placeholder="0" oninput="_remitoRender()" onchange="_remitoGuardarEnvio()" style="width:110px;padding:6px 8px;border:1.5px solid #bcdcc7;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
+          <span id="remito-envio-status" style="font-size:0.7rem;color:#2f7a4e"></span>
+        </div>
+        <div style="font-size:0.68rem;color:#6a9a7c;margin-top:6px">Aparece en el remito y queda guardado en la 📦 Caja Envíos. El costo del cadete se completa al cobrar.</div>
+      </div>
       <div id="remito-tc-box" style="display:none;background:#fff8ec;border:1px solid #f0d9a8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
         <label style="display:flex;align-items:center;gap:7px;font-size:0.82rem;font-weight:700;color:#9a6b00;cursor:pointer">
           <input type="checkbox" id="remito-tc-on" onchange="_remitoRender()"> 💵 Mostrar equivalente en pesos
