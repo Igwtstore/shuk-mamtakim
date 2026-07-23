@@ -1414,6 +1414,22 @@
     </div>
     <div id="stock-total-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
   </div>
+  <div class="admin-card" data-seccion="stock">
+    <div class="admin-titulo">📊 Lo más vendido <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· ranking de productos</span></div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-bottom:0.6rem">
+      <select id="mv-periodo" onchange="renderMasVendido()" style="padding:0.4rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.82rem;background:#fff;outline:none">
+        <option value="7">Últimos 7 días</option>
+        <option value="30" selected>Últimos 30 días</option>
+        <option value="90">Últimos 90 días</option>
+        <option value="0">Todo</option>
+      </select>
+      <div style="display:flex;gap:0.3rem;margin-left:auto">
+        <button type="button" id="mv-crit-uni" onclick="setMvCriterio('unidades')" class="stock-orden-btn stock-orden-on">📦 Unidades</button>
+        <button type="button" id="mv-crit-plata" onclick="setMvCriterio('plata')" class="stock-orden-btn">💰 Plata</button>
+      </div>
+    </div>
+    <div id="mv-lista"><div class="sinpedidos" style="padding:0.4rem 0">Cargando...</div></div>
+  </div>
   <div class="admin-card">
     <div class="admin-titulo">🎁 Ofertas y packs</div>
     <div id="ofertas-lista" style="display:flex;flex-direction:column;gap:0.5rem;max-height:320px;overflow-y:auto"></div>
@@ -9639,7 +9655,7 @@ function setModo(m) {
     // 1 sola llamada (panelAdmin) precarga ventas/gastos/rendiciones/pagos/clientes/socios en el
     // cache; recién después se disparan los renders (que pegan al cache, sin saturar con ~12 pedidos).
     cargarPanelAdmin().finally(() => {
-      renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderCuentaSocios(); renderCajaEnvios(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); renderStockTotal(); _llenarTrazarSelect();
+      renderPedidos(); renderCuentaCorriente(); renderVisitas(); renderCaja(); renderCuentaSocios(); renderCajaEnvios(); renderManualProductos(); renderNotificaciones(); verificarStockBajo(); cargarNotasClientes(); renderOfertasAdmin(); cargarClientesDatalist(); cargarProductosJonySelect(); renderStockTotal(); renderMasVendido(); _llenarTrazarSelect();
       renderResumenMiri();   // 📊 Mi resumen — clave para la SESIÓN de Miri (el toggle de Jony ya lo llamaba)
     });
     startAdminPolling();
@@ -10424,6 +10440,108 @@ function renderStockTotal() {
     ${desplegSinStock}`;
 }
 
+// ─── 📊 LO MÁS VENDIDO ────────────────────────────────────────────────────────
+// Ranking de productos por unidades o por plata, leyendo las ventas reales (no canceladas).
+// Fuente: el texto de cada pedido (precio histórico real). Cada línea se matchea a un
+// producto por nombre (mismo criterio que el remito) para traer id/dueño/stock/foto.
+let _mvCriterio = 'unidades';   // 'unidades' | 'plata'
+
+// Matchea una línea de pedido ("Nombre · desc") a un producto (por id). Réplica del remito.
+function _matchProdLinea(nombreCompleto) {
+  const fl = (nombreCompleto || '').trim().toLowerCase();
+  if (!fl) return null;
+  let cands = (productos || []).filter(p => _nombresDe(p).some(nm => {
+    const pn = (nm || '').toLowerCase();
+    return pn && (fl === pn || fl.startsWith(pn + ' · '));
+  }));
+  if (!cands.length) return null;
+  cands.sort((a, b) => (b.nombre || '').length - (a.nombre || '').length);
+  let prod = cands[0];
+  if (cands.length > 1) {
+    const maxLen = (cands[0].nombre || '').length;
+    const top = cands.filter(c => (c.nombre || '').length === maxLen);
+    if (top.length > 1) {
+      const resto = fl.slice(maxLen).replace(/^ · /, '').trim();
+      prod = top.find(c => {
+        const pd = (c.desc || '').toLowerCase();
+        return pd && resto && (pd.startsWith(resto) || resto.startsWith(pd.substring(0, 45).trim()));
+      }) || top[0];
+    }
+  }
+  return prod;
+}
+// Parsea un monto de la línea según la moneda (ARS: los puntos son miles; U$S: punto decimal).
+function _mvMonto(s, moneda) {
+  if (moneda === 'U$S') return parseFloat((s || '').replace(',', '.')) || 0;
+  return parseInt((s || '').replace(/\./g, '')) || 0;
+}
+function setMvCriterio(c) {
+  _mvCriterio = c;
+  const u = document.getElementById('mv-crit-uni'), p = document.getElementById('mv-crit-plata');
+  if (u) u.className = 'stock-orden-btn' + (c === 'unidades' ? ' stock-orden-on' : '');
+  if (p) p.className = 'stock-orden-btn' + (c === 'plata' ? ' stock-orden-on' : '');
+  renderMasVendido();
+}
+async function renderMasVendido() {
+  const cont = document.getElementById('mv-lista');
+  if (!cont) return;
+  const soloMiri = esVistaMiri();
+  const dias = parseInt(document.getElementById('mv-periodo')?.value || '30');   // 0 = todo
+  const corte = dias > 0 ? Date.now() - dias * 86400000 : 0;
+  const ventas = await apiGet('ventas').catch(() => []);
+  if (!Array.isArray(ventas)) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem">No se pudo cargar.</div>'; return; }
+  const agg = {};
+  ventas.forEach(v => {
+    if (v.estado === 'cancelado' || v.estado === 'cotizacion') return;
+    if (corte) { const ts = _tsFecha(v.fecha); if (ts && ts < corte) return; }
+    (v.productos || '').split(' || ').forEach(linea => {
+      const m = linea.match(/^•\s*(\d+)x\s+(.+?)\s+—\s+(?:\$|U\$S)\s+[\d.,]+\s+c\/u\s+=\s+(\$|U\$S)\s+([\d.,]+)/);
+      if (!m) return;
+      const qty = parseInt(m[1]) || 0;
+      const nombreCompleto = m[2].trim();
+      const moneda = m[3];
+      const subT = _mvMonto(m[4], moneda);
+      const prod = _matchProdLinea(nombreCompleto);
+      if (soloMiri && (!prod || prod.dueno === 'Jony')) return;   // privacidad Miri
+      const key = prod ? String(prod.id) : ('L:' + nombreCompleto.toLowerCase());
+      if (!agg[key]) agg[key] = { nombre: prod ? prod.nombre : nombreCompleto.split(' · ')[0], dueno: prod ? (prod.dueno || '') : '', stock: prod ? (prod.stock || 0) : null, imagen: prod ? (prod.imagen || '') : '', unidades: 0, ars: 0, usd: 0 };
+      agg[key].unidades += qty;
+      if (moneda === '$') agg[key].ars += subT; else agg[key].usd += subT;
+    });
+  });
+  let arr = Object.values(agg).filter(a => a.unidades > 0);
+  if (!arr.length) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem;padding:0.3rem 0">Sin ventas en este período.</div>'; return; }
+  const tc = _tc > 0 ? _tc : 1500;
+  const valPlata = a => a.ars + a.usd * tc;
+  if (_mvCriterio === 'plata') arr.sort((a, b) => valPlata(b) - valPlata(a) || b.unidades - a.unidades);
+  else arr.sort((a, b) => b.unidades - a.unidades || valPlata(b) - valPlata(a));
+  arr = arr.slice(0, 60);
+  const money = a => [a.ars > 0 ? '$ ' + Math.round(a.ars).toLocaleString('es-AR') : '', a.usd > 0.009 ? 'U$S ' + a.usd.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+  const medalla = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+  cont.innerHTML = arr.map((a, i) => {
+    const imgs = (a.imagen || '').split(',').map(s => s.trim()).filter(Boolean);
+    const thumb = imgs.length
+      ? `<img src="${imgUrl(imgs[0])[0]}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:38px;height:38px;object-fit:cover;border-radius:6px;flex-shrink:0">`
+      : `<div style="width:38px;height:38px;border-radius:6px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const chipDueno = (!soloMiri && a.dueno) ? `<span style="font-size:0.58rem;font-weight:800;color:${a.dueno === 'Jony' ? '#c9954a' : '#c050a0'}">${a.dueno === 'Jony' ? 'JONY' : 'MIRI'}</span>` : '';
+    const stockTxt = a.stock === null ? '' : `<span style="font-size:0.66rem;color:${a.stock <= 0 ? '#c0392b' : a.stock <= 3 ? 'var(--dorado)' : 'var(--texto-suave)'}">stock ${a.stock}${a.stock <= 0 ? ' ⚠️' : ''}</span>`;
+    const destacado = _mvCriterio === 'unidades' ? `${a.unidades} u.` : money(a);
+    const secundario = _mvCriterio === 'unidades' ? money(a) : `${a.unidades} u.`;
+    return `<div style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0;border-bottom:1px solid var(--gris)">
+      <span style="font-size:0.9rem;font-weight:800;min-width:26px;text-align:center">${medalla(i)}</span>
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.8rem;font-weight:600;color:var(--azul);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.nombre)}</div>
+        <div style="display:flex;gap:0.5rem;align-items:center">${chipDueno}${stockTxt}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:0.9rem;font-weight:800;color:var(--verde)">${destacado}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave)">${secundario}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // ─── TRAZAR PRODUCTO (quién lo compró) ────────────────────────────────────────
 // Clave que identifica al producto en las líneas del pedido: "nombre · desc[0:45]" (mismo formato que se guarda).
 function _claveProducto(p) {
@@ -10864,7 +10982,7 @@ function setVistaSocio(v) {
   // Re-render del panel (secciones siempre presentes)
   renderManualProductos(); verificarStockBajo(); renderOfertasAdmin();
   renderPedidos(); renderCuentaCorriente(); renderCaja(); renderCuentaSocios(); renderCajaEnvios(); cargarProductosJonySelect();
-  renderStockTotal(); _llenarTrazarSelect();
+  renderStockTotal(); renderMasVendido(); _llenarTrazarSelect();
   // Re-render del tab activo
   if (_adminTabActual === 'dashboard') renderDashboard();
   else if (_adminTabActual === 'clientes') renderClientes();
