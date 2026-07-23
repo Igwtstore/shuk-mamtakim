@@ -4246,6 +4246,10 @@ async function renderCuentaCorriente() {
     }
     badge.textContent = deudoresL.length + ' deudor' + (deudoresL.length !== 1 ? 'es' : '');
     badge.style.display = deudoresL.length ? '' : 'none';
+    // Saldo neto por cliente (negativo = plata a favor) para que el remito pueda avisarlo.
+    // Respeta la vista actual (Miri ve solo su parte), porque porCliente ya se arma según la vista.
+    window._saldoNetoCliente = {};
+    Object.values(porCliente).forEach(dd => { window._saldoNetoCliente[normCliente(dd.nombre)] = { ars: dd.totalARS || 0, usd: dd.totalUSD || 0 }; });
     // Datos para el popup de detalle por deudor (pedidos + pagos a cuenta + saldo).
     window._ccData = {};
     entries.forEach((d, i) => {
@@ -7753,7 +7757,9 @@ function verDetalleDeudor(i) {
   if (d.pagos && d.pagos.length) {
     html += `<div style="font-size:0.78rem;font-weight:700;color:var(--verde);margin:0.5rem 0 0.2rem">💵 Pagos a cuenta recibidos${soloMiri ? '' : ' <span style="font-weight:400;color:var(--texto-suave);font-size:0.68rem">· tocá ✏️/🗑️ para corregir</span>'}</div>`;
     window._pagoIdx = window._pagoIdx || {};
-    d.pagos.forEach(p => {
+    // Orden cronológico (más viejo primero) — antes salían en el orden de la base (por id), desordenados.
+    const _pagosOrd = d.pagos.slice().sort((a, b) => _tsFecha(a.fecha) - _tsFecha(b.fecha));
+    _pagosOrd.forEach(p => {
       // En vista Myri solo la parte golosinas del pago (la Pitzujim es de Jony).
       const ars = soloMiri ? ((parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0)) : (parseFloat(p.montoARS) || 0);
       const t = [ars > 0 ? money(ars) : '', (parseFloat(p.montoUSD) || 0) > 0 ? 'U$S ' + parseFloat(p.montoUSD).toFixed(2) : ''].filter(Boolean).join(' + ');
@@ -13193,6 +13199,11 @@ function _buildRemitoTexto(v, tc) {
   if (ars > 0) totales.push(`$ ${Math.round(ars).toLocaleString('es-AR')}`);
   if (usd > 0) totales.push(`U$S ${usd.toFixed(2)}`);
   lines.push(`💰 *TOTAL: ${totales.join(' + ')}*`);
+  const fav = _remitoFavor(v.cliente);
+  if (fav) {
+    const favTxt = [fav.ars > 1 ? `$ ${Math.round(fav.ars).toLocaleString('es-AR')}` : '', fav.usd > 0.01 ? `U$S ${fav.usd.toFixed(2)}` : ''].filter(Boolean).join(' + ');
+    lines.push(`💚 _Tenés saldo a favor: ${favTxt}. Este pedido se descuenta de tu saldo a favor._`);
+  }
   if (tc > 0 && usd > 0) {
     const granARS = Math.round(ars + usd * tc);
     lines.push(`💵 _Equiv. en pesos (informativo): ≈ $ ${granARS.toLocaleString('es-AR')}_`);
@@ -13202,6 +13213,16 @@ function _buildRemitoTexto(v, tc) {
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`Shuk Mamtakim 🍬 — shuk-mamtakim.vercel.app`);
   return lines.join('\n');
+}
+
+// Saldo a favor del cliente (plata que dejó adelantada). Devuelve {ars, usd} en positivo, o null.
+// Se lee del mapa que arma Cuenta Corriente (respeta la vista Miri/Todo).
+function _remitoFavor(cliente) {
+  const s = (window._saldoNetoCliente || {})[normCliente(cliente || '')];
+  if (!s) return null;
+  const ars = Math.abs(Math.min(0, s.ars || 0));
+  const usd = Math.abs(Math.min(0, s.usd || 0));
+  return (ars > 1 || usd > 0.01) ? { ars, usd } : null;
 }
 
 // Envío cobrado al cliente que se muestra en el remito (0 = no mostrar línea).
@@ -13424,6 +13445,15 @@ function abrirRemitoPDF(v) {
     <span class="lbl">Total del pedido${envioPDF > 0 ? ' (con envío)' : ''}</span>
     <span class="val">${totales.join(' + ')}</span>
   </div>
+  ${(() => {
+    const fav = _remitoFavor(v.cliente);
+    if (!fav) return '';
+    const favTxt = [fav.ars > 1 ? `$ ${Math.round(fav.ars).toLocaleString('es-AR')}` : '', fav.usd > 0.01 ? `U$S ${fav.usd.toFixed(2)}` : ''].filter(Boolean).join(' + ');
+    return `<div style="background:#e8f5ee;color:#1a7a3c;padding:11px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <span style="font-size:0.74rem;font-weight:700">💚 Tenés saldo a favor · este pedido se descuenta de tu saldo a favor</span>
+      <span style="font-size:1rem;font-weight:800;white-space:nowrap">${favTxt}</span>
+    </div>`;
+  })()}
   ${tcPDF > 0 && _usdPDF > 0 ? `<div style="background:#3a2614;color:#fdf3e3;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,0.15)">
     <span style="font-size:0.66rem;opacity:0.75;text-transform:uppercase;letter-spacing:0.05em">Equivalente en pesos (informativo) · TC U$S 1 = $ ${Math.round(tcPDF).toLocaleString('es-AR')}</span>
     <span style="font-size:1.05rem;font-weight:800">≈ $ ${_granARS.toLocaleString('es-AR')}</span>
