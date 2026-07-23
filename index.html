@@ -1423,9 +1423,10 @@
         <option value="90">Últimos 90 días</option>
         <option value="0">Todo</option>
       </select>
-      <div style="display:flex;gap:0.3rem;margin-left:auto">
+      <div style="display:flex;gap:0.3rem;margin-left:auto;flex-wrap:wrap">
         <button type="button" id="mv-crit-uni" onclick="setMvCriterio('unidades')" class="stock-orden-btn stock-orden-on">📦 Unidades</button>
         <button type="button" id="mv-crit-plata" onclick="setMvCriterio('plata')" class="stock-orden-btn">💰 Plata</button>
+        <button type="button" id="mv-crit-rent" onclick="setMvCriterio('rentabilidad')" class="stock-orden-btn">💹 Rentabilidad</button>
       </div>
     </div>
     <div id="mv-lista"><div class="sinpedidos" style="padding:0.4rem 0">Cargando...</div></div>
@@ -10499,9 +10500,10 @@ function _mvMonto(s, moneda) {
 }
 function setMvCriterio(c) {
   _mvCriterio = c;
-  const u = document.getElementById('mv-crit-uni'), p = document.getElementById('mv-crit-plata');
-  if (u) u.className = 'stock-orden-btn' + (c === 'unidades' ? ' stock-orden-on' : '');
-  if (p) p.className = 'stock-orden-btn' + (c === 'plata' ? ' stock-orden-on' : '');
+  [['mv-crit-uni', 'unidades'], ['mv-crit-plata', 'plata'], ['mv-crit-rent', 'rentabilidad']].forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stock-orden-btn' + (c === val ? ' stock-orden-on' : '');
+  });
   renderMasVendido();
 }
 async function renderMasVendido() {
@@ -10526,7 +10528,7 @@ async function renderMasVendido() {
       const prod = _matchProdLinea(nombreCompleto);
       if (soloMiri && (!prod || prod.dueno === 'Jony')) return;   // privacidad Miri
       const key = prod ? String(prod.id) : ('L:' + nombreCompleto.toLowerCase());
-      if (!agg[key]) agg[key] = { id: prod ? String(prod.id) : null, nombre: prod ? prod.nombre : nombreCompleto.split(' · ')[0], dueno: prod ? (prod.dueno || '') : '', stock: prod ? (prod.stock || 0) : null, imagen: prod ? (prod.imagen || '') : '', unidades: 0, ars: 0, usd: 0 };
+      if (!agg[key]) agg[key] = { id: prod ? String(prod.id) : null, nombre: prod ? prod.nombre : nombreCompleto.split(' · ')[0], dueno: prod ? (prod.dueno || '') : '', stock: prod ? (prod.stock || 0) : null, imagen: prod ? (prod.imagen || '') : '', costo: prod ? (parseFloat(prod.costo) || 0) : 0, moneda: prod ? (prod.moneda || '$') : '$', unidades: 0, ars: 0, usd: 0 };
       agg[key].unidades += qty;
       if (moneda === '$') agg[key].ars += subT; else agg[key].usd += subT;
     });
@@ -10535,7 +10537,17 @@ async function renderMasVendido() {
   if (!arr.length) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.82rem;padding:0.3rem 0">Sin ventas en este período.</div>'; return; }
   const tc = _tc > 0 ? _tc : 1500;
   const valPlata = a => a.ars + a.usd * tc;
+  // Ganancia estimada (normalizada a $ con el TC): venta − costo×unidades. null = sin costo cargado.
+  const costoArs = a => a.moneda === 'U$S' ? a.costo * tc : a.costo;
+  const valGanancia = a => a.costo > 0 ? (valPlata(a) - a.unidades * costoArs(a)) : null;
   if (_mvCriterio === 'plata') arr.sort((a, b) => valPlata(b) - valPlata(a) || b.unidades - a.unidades);
+  else if (_mvCriterio === 'rentabilidad') arr.sort((a, b) => {
+    const ga = valGanancia(a), gb = valGanancia(b);
+    if (ga === null && gb === null) return b.unidades - a.unidades;   // los sin costo, al fondo
+    if (ga === null) return 1;
+    if (gb === null) return -1;
+    return gb - ga;
+  });
   else arr.sort((a, b) => b.unidades - a.unidades || valPlata(b) - valPlata(a));
   // Se listan TODOS los que se vendieron (aunque sea 1 unidad) — pedido del usuario.
   const money = a => [a.ars > 0 ? '$ ' + Math.round(a.ars).toLocaleString('es-AR') : '', a.usd > 0.009 ? 'U$S ' + a.usd.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
@@ -10547,8 +10559,14 @@ async function renderMasVendido() {
       : `<div style="width:38px;height:38px;border-radius:6px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const chipDueno = (!soloMiri && a.dueno) ? `<span style="font-size:0.58rem;font-weight:800;color:${a.dueno === 'Jony' ? '#c9954a' : '#c050a0'}">${a.dueno === 'Jony' ? 'JONY' : 'MIRI'}</span>` : '';
     const stockTxt = a.stock === null ? '' : `<span style="font-size:0.66rem;color:${a.stock <= 0 ? '#c0392b' : a.stock <= 3 ? 'var(--dorado)' : 'var(--texto-suave)'}">stock ${a.stock}${a.stock <= 0 ? ' ⚠️' : ''}</span>`;
-    const destacado = _mvCriterio === 'unidades' ? `${a.unidades} u.` : money(a);
-    const secundario = _mvCriterio === 'unidades' ? money(a) : `${a.unidades} u.`;
+    let destHtml, secTxt;
+    if (_mvCriterio === 'unidades') { destHtml = `<span style="color:var(--verde)">${a.unidades} u.</span>`; secTxt = money(a); }
+    else if (_mvCriterio === 'plata') { destHtml = `<span style="color:var(--verde)">${money(a)}</span>`; secTxt = `${a.unidades} u.`; }
+    else { // rentabilidad
+      const g = valGanancia(a);
+      if (g === null) { destHtml = `<span style="color:var(--dorado);font-size:0.78rem">⚠️ sin costo</span>`; secTxt = `${a.unidades} u. · ${money(a)}`; }
+      else { destHtml = `<span style="color:${g >= 0 ? 'var(--verde)' : '#c0392b'}">${g < 0 ? '−' : ''}$ ${Math.round(Math.abs(g)).toLocaleString('es-AR')}</span>`; secTxt = `${a.unidades} u. · vendió ${money(a)}`; }
+    }
     const btnOC = a.id ? `<button onclick="ocAgregarProducto('${a.id}')" title="Agregar a la orden de compra" style="flex-shrink:0;background:#eaf6ee;color:#1e7a3c;border:1px solid #bfe3c9;border-radius:8px;padding:5px 8px;font-size:0.72rem;font-weight:800;cursor:pointer;font-family:inherit">🛒＋</button>` : '';
     return `<div style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0;border-bottom:1px solid var(--gris)">
       <span style="font-size:0.9rem;font-weight:800;min-width:26px;text-align:center">${medalla(i)}</span>
@@ -10558,8 +10576,8 @@ async function renderMasVendido() {
         <div style="display:flex;gap:0.5rem;align-items:center">${chipDueno}${stockTxt}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:0.9rem;font-weight:800;color:var(--verde)">${destacado}</div>
-        <div style="font-size:0.66rem;color:var(--texto-suave)">${secundario}</div>
+        <div style="font-size:0.9rem;font-weight:800">${destHtml}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave)">${secTxt}</div>
       </div>
       ${btnOC}
     </div>`;
