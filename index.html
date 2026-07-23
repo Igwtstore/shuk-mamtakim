@@ -1429,6 +1429,7 @@
         <button type="button" id="mv-crit-rent" onclick="setMvCriterio('rentabilidad')" class="stock-orden-btn">💹 Rentabilidad</button>
       </div>
     </div>
+    <div id="mv-orden-btn"></div>
     <div id="mv-lista"><div class="sinpedidos" style="padding:0.4rem 0">Cargando...</div></div>
   </div>
   <div class="admin-card">
@@ -10176,6 +10177,7 @@ function _cargadoHace(p) {
 // ══════════════ 🛒 ORDEN DE COMPRA / REPOSICIÓN (v4.06) ══════════════
 // Elegir productos a reponer + cantidad; suma peso (× peso por bolsa) y costo; PDF; guardar/historial.
 let _ocProductos = [], _ocSel = {}, _ocCant = {}, _ocFiltro = 'reponer', _ocOrdenId = null;
+let _ocNotaAuto = '', _ocPersistTimer = null, _ocPersistiendo = false;
 function _ocAsegurarOverlay() {
   let ov = document.getElementById('oc-overlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'oc-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0.8rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
@@ -10189,25 +10191,63 @@ async function _ocCargarProductos(force) {
   if (esVistaMiri()) lista = lista.filter(p => p.dueno !== 'Jony');   // vista Miri: solo sus productos
   _ocProductos = lista.sort((a, b) => (a.stock||0) - (b.stock||0) || (a.nombre||'').localeCompare(b.nombre||''));   // sin stock primero
 }
+// Abre el panel de la orden ACTUAL (preserva lo que venís sumando; no lo pisa).
 async function abrirOrdenCompra() {
   const ov = _ocAsegurarOverlay();
   ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:560px;width:100%"><div class="sinpedidos">Cargando productos… 🛒</div></div>';
   await _ocCargarProductos(true);
-  _ocSel = {}; _ocCant = {}; _ocFiltro = 'reponer'; _ocOrdenId = null;
+  _ocFiltro = Object.keys(_ocSel).length ? 'todos' : 'reponer';   // si venís sumando, que se vean
   _ocRender();
 }
-// Agrega un producto a la orden de compra desde otro lado (ej. "Lo más vendido") sin pisar
-// lo que ya tengas marcado. Si la orden no está abierta, la abre mostrándolo.
-async function ocAgregarProducto(id) {
-  const ov = _ocAsegurarOverlay();
-  if (!_ocProductos.length) ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:560px;width:100%"><div class="sinpedidos">Cargando productos… 🛒</div></div>';
+// Empieza una orden vacía (descarta lo que hubiera sin guardar).
+async function nuevaOrdenCompra() {
+  _ocSel = {}; _ocCant = {}; _ocOrdenId = null; _ocNotaAuto = '';
+  _mvActualizarBtnOrden();
+  await abrirOrdenCompra();
+}
+// Suma un producto a la orden SIN abrir el panel (pedido del usuario). Solo avisa + marca el botón,
+// y AUTO-GUARDA la lista (aparece en 🗂 Guardadas como "Lo más vendido · fecha hora").
+async function ocAgregarProducto(id, btnEl) {
   await _ocCargarProductos();
   if (!_ocProductos.some(p => String(p.id) === String(id))) { showToast('⚠️ Ese producto no está en el catálogo'); return; }
   _ocSel[id] = true;
   if (!_ocCant[id]) _ocCant[id] = 1;   // arranca con 1, editable
-  _ocFiltro = 'todos';                 // que se vea aunque tenga stock
-  _ocRender();
-  showToast('🛒 Agregado a la orden de compra');
+  if (!_ocNotaAuto && !_ocOrdenId) { const _d = new Date(), _p2 = x => String(x).padStart(2, '0'); _ocNotaAuto = `Lo más vendido · ${_p2(_d.getDate())}/${_p2(_d.getMonth() + 1)} ${_p2(_d.getHours())}:${_p2(_d.getMinutes())} hs`; }
+  const n = Object.keys(_ocSel).length;
+  showToast(`🛒 Sumado a la orden · ${n} producto${n !== 1 ? 's' : ''}`);
+  if (btnEl) { btnEl.textContent = '✓'; btnEl.style.background = '#1e7a3c'; btnEl.style.color = '#fff'; btnEl.style.borderColor = '#1e7a3c'; btnEl.title = 'Ya está en la orden'; }
+  _mvActualizarBtnOrden();
+  _ocPersistirDebounced();   // guarda la lista sola (debounce)
+  if (document.getElementById('oc-overlay')) { _ocFiltro = 'todos'; _ocRender(); }   // si está abierta, refrescar
+}
+// Auto-guardado de la orden en construcción (crea la lista la 1ª vez, luego actualiza la misma).
+function _ocPersistirDebounced() {
+  if (_ocPersistTimer) clearTimeout(_ocPersistTimer);
+  _ocPersistTimer = setTimeout(() => { _ocPersistTimer = null; _ocPersistirAuto(); }, 900);
+}
+async function _ocPersistirAuto() {
+  if (_ocPersistiendo) { _ocPersistirDebounced(); return; }   // ya hay un guardado en vuelo → reintenta
+  const items = _ocItems();
+  if (!items.length) return;
+  _ocPersistiendo = true;
+  try {
+    const totPeso = items.reduce((s, i) => s + (i.peso > 0 ? i.pesoTotal : 0), 0);
+    const totCosto = items.reduce((s, i) => s + i.costoTotal, 0);
+    const params = new URLSearchParams({ accion: 'guardarOrdenCompra', items: JSON.stringify(items), totalPeso: Math.round(totPeso), totalCosto: Math.round(totCosto), nota: _ocNotaAuto || '' });
+    if (_ocOrdenId) params.set('id', _ocOrdenId);   // actualiza la misma lista
+    const r = await apiWrite(params);   // silencioso (sin toast de éxito)
+    if (r && r.ok && !_ocOrdenId && r.id != null) _ocOrdenId = String(r.id);   // primera vez: guardo el id para seguir actualizando
+  } finally {
+    _ocPersistiendo = false;
+  }
+}
+// Botón "🛒 Ver la orden (N)" en la tarjeta de Lo más vendido (aparece si hay algo sumado).
+function _mvActualizarBtnOrden() {
+  const el = document.getElementById('mv-orden-btn'); if (!el) return;
+  const n = Object.keys(_ocSel).length;
+  el.innerHTML = n
+    ? `<button onclick="abrirOrdenCompra()" style="width:100%;margin:0 0 0.6rem;padding:0.5rem;background:#1e7a3c;color:#fff;border:none;border-radius:9px;font-weight:800;font-size:0.84rem;cursor:pointer;font-family:inherit">🛒 Ver la orden de compra (${n})</button>`
+    : '';
 }
 function _ocFiltrados() {
   const q = (document.getElementById('oc-buscar')?.value || '').trim().toLowerCase();
@@ -10300,10 +10340,11 @@ async function guardarOrdenCompra() {
   if (!items.length) { showToast('Elegí al menos un producto con cantidad'); return; }
   const totPeso = items.reduce((s,i)=>s+(i.peso>0?i.pesoTotal:0),0);
   const totCosto = items.reduce((s,i)=>s+i.costoTotal,0);
-  const params = new URLSearchParams({ accion:'guardarOrdenCompra', items:JSON.stringify(items), totalPeso:Math.round(totPeso), totalCosto:Math.round(totCosto), nota:'' });
+  if (_ocPersistTimer) { clearTimeout(_ocPersistTimer); _ocPersistTimer = null; }   // cancelar auto-guardado pendiente
+  const params = new URLSearchParams({ accion:'guardarOrdenCompra', items:JSON.stringify(items), totalPeso:Math.round(totPeso), totalCosto:Math.round(totCosto), nota:_ocNotaAuto || '' });
   if (_ocOrdenId) params.set('id', _ocOrdenId);   // editar la misma orden en vez de crear otra
   const r = await apiWrite(params, _ocOrdenId ? '💾 Orden actualizada ✓' : '💾 Orden guardada ✓');
-  if (r && r.ok) document.getElementById('oc-overlay')?.remove();
+  if (r && r.ok) { document.getElementById('oc-overlay')?.remove(); _ocSel = {}; _ocCant = {}; _ocOrdenId = null; _ocNotaAuto = ''; _mvActualizarBtnOrden(); }
 }
 function _ocFotoUrl(imagen) {
   const primera = (imagen||'').split(',')[0].trim(); if (!primera) return '';
@@ -10361,7 +10402,7 @@ async function verOrdenesCompra() {
       <button onclick="imprimirOrdenGuardada('${o.id}')" title="Reimprimir / PDF" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 9px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">🖨️</button>
       <button onclick="borrarOrdenCompra('${o.id}')" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:0.6rem 0">No hay órdenes guardadas.</div>'}
-    <button onclick="abrirOrdenCompra()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:#1e7a3c;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">← Nueva orden</button>
+    <button onclick="nuevaOrdenCompra()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:#1e7a3c;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">← Nueva orden</button>
   </div>`;
 }
 async function reabrirOrdenCompra(id) {
@@ -10567,7 +10608,8 @@ async function renderMasVendido() {
       if (g === null) { destHtml = `<span style="color:var(--dorado);font-size:0.78rem">⚠️ sin costo</span>`; secTxt = `${a.unidades} u. · ${money(a)}`; }
       else { destHtml = `<span style="color:${g >= 0 ? 'var(--verde)' : '#c0392b'}">${g < 0 ? '−' : ''}$ ${Math.round(Math.abs(g)).toLocaleString('es-AR')}</span>`; secTxt = `${a.unidades} u. · vendió ${money(a)}`; }
     }
-    const btnOC = a.id ? `<button onclick="ocAgregarProducto('${a.id}')" title="Agregar a la orden de compra" style="flex-shrink:0;background:#eaf6ee;color:#1e7a3c;border:1px solid #bfe3c9;border-radius:8px;padding:5px 8px;font-size:0.72rem;font-weight:800;cursor:pointer;font-family:inherit">🛒＋</button>` : '';
+    const yaEn = a.id && _ocSel[a.id];
+    const btnOC = a.id ? `<button onclick="ocAgregarProducto('${a.id}', this)" title="${yaEn ? 'Ya está en la orden' : 'Agregar a la orden de compra'}" style="flex-shrink:0;background:${yaEn ? '#1e7a3c' : '#eaf6ee'};color:${yaEn ? '#fff' : '#1e7a3c'};border:1px solid ${yaEn ? '#1e7a3c' : '#bfe3c9'};border-radius:8px;padding:5px 8px;font-size:0.72rem;font-weight:800;cursor:pointer;font-family:inherit">${yaEn ? '✓' : '🛒＋'}</button>` : '';
     return `<div style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0;border-bottom:1px solid var(--gris)">
       <span style="font-size:0.9rem;font-weight:800;min-width:26px;text-align:center">${medalla(i)}</span>
       ${thumb}
@@ -10582,6 +10624,7 @@ async function renderMasVendido() {
       ${btnOC}
     </div>`;
   }).join('');
+  _mvActualizarBtnOrden();
 }
 
 // ─── TRAZAR PRODUCTO (quién lo compró) ────────────────────────────────────────

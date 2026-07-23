@@ -1969,8 +1969,11 @@ Deno.serve(async (req) => {
         await sbPatch('ordenes_compra', 'id=eq.' + encodeURIComponent(oidOC), camposOC);
         return json({ ok: true, id: oidOC });
       }
-      await sbInsert('ordenes_compra', { fecha: P(body, 'fecha') || fechaAhora(), estado: 'abierta', ...camposOC });
-      return json({ ok: true });
+      // insert devolviendo el id (para poder ir actualizando la misma lista, ej. auto-guardado desde Lo más vendido)
+      const insOC = await fetch(SB_URL + '/rest/v1/ordenes_compra', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ fecha: P(body, 'fecha') || fechaAhora(), estado: 'abierta', ...camposOC }) });
+      if (!insOC.ok) return json({ error: 'no se pudo guardar la orden' });
+      const newOC = await insOC.json().catch(() => []);
+      return json({ ok: true, id: Array.isArray(newOC) && newOC[0] ? newOC[0].id : undefined });
     }
     if (accion === 'listarOrdenesCompra') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
