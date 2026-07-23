@@ -10373,6 +10373,21 @@ function _stockCard(p, recientes) {
     ${stockTxt}
   </div>`;
 }
+let _sinStockLista = [];   // cache de los "sin stock" para el buscador propio del desplegable
+// Buscador DENTRO del desplegable "Sin stock" — filtra solo esa grilla, sin re-renderizar toda
+// la sección (así el desplegable no se cierra ni pierde el foco del input).
+function filtrarSinStock() {
+  const q = (document.getElementById('sinstock-buscar')?.value || '').trim().toLowerCase();
+  const grid = document.getElementById('sinstock-grid');
+  if (!grid) return;
+  const recientes = _stockOrden === 'recientes';
+  const filt = q ? _sinStockLista.filter(p => (p.nombre||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q) || (p.categoria||'').toLowerCase().includes(q)) : _sinStockLista;
+  grid.innerHTML = filt.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:0.6rem">${filt.map(p => _stockCard(p, recientes)).join('')}</div>`
+    : `<div style="padding:0.4rem 0;color:var(--texto-suave);font-size:0.82rem">Nada sin stock coincide con "${esc(q)}".</div>`;
+  const cnt = document.getElementById('sinstock-count');
+  if (cnt) cnt.textContent = q ? `${filt.length}/${_sinStockLista.length}` : String(_sinStockLista.length);
+}
 function renderStockTotal() {
   const cont = document.getElementById('stock-total-lista');
   if (!cont) return;
@@ -10392,10 +10407,12 @@ function renderStockTotal() {
   // Solo en modo "Por categoría" (en "Últimos cargados" ya aparecen mezclados, no hace falta duplicar).
   const sinStock = recientes ? [] : base.filter(p => (p.stock||0) <= 0 && matchQ(p))
     .sort((a,b) => getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
+  _sinStockLista = sinStock;   // cache para el buscador propio del desplegable
   const desplegSinStock = sinStock.length ? `
     <details style="margin-top:0.9rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.6rem">
-      <summary style="cursor:pointer;font-weight:700;font-size:0.88rem;color:#c0392b;list-style:none">🚫 Sin stock (${sinStock.length}) — para reponer <span style="font-size:0.66rem;color:var(--texto-suave);font-weight:400">▸ tocá para ver</span></summary>
-      <div style="margin-top:0.6rem">${grid(sinStock)}</div>
+      <summary style="cursor:pointer;font-weight:700;font-size:0.88rem;color:#c0392b;list-style:none">🚫 Sin stock (<span id="sinstock-count">${sinStock.length}</span>) — para reponer <span style="font-size:0.66rem;color:var(--texto-suave);font-weight:400">▸ tocá para ver</span></summary>
+      <input id="sinstock-buscar" oninput="filtrarSinStock()" placeholder="🔍 Buscar en los sin stock…" style="width:100%;margin:0.6rem 0 0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none">
+      <div id="sinstock-grid">${grid(sinStock)}</div>
     </details>` : '';
   if (!lista.length && !sinStock.length) { cont.innerHTML = `<div style="padding:0.5rem 0;color:var(--texto-suave);font-size:0.85rem">${q ? 'Nada que coincida con la búsqueda.' : 'Sin stock cargado.'}</div>`; return; }
   const totalU = lista.reduce((s,p) => s + (p.stock||0), 0);
