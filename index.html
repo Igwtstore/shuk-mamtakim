@@ -10179,7 +10179,7 @@ function _cargadoHace(p) {
 // ══════════════ 🛒 ORDEN DE COMPRA / REPOSICIÓN (v4.06) ══════════════
 // Elegir productos a reponer + cantidad; suma peso (× peso por bolsa) y costo; PDF; guardar/historial.
 let _ocProductos = [], _ocSel = {}, _ocCant = {}, _ocFiltro = 'reponer', _ocOrdenId = null;
-let _ocNotaAuto = '', _ocPersistTimer = null, _ocSaveChain = Promise.resolve(), _ocGen = 0;
+let _ocNotaAuto = '', _ocPersistTimer = null, _ocSaveChain = Promise.resolve(), _ocGen = 0, _ocQuery = '';
 function _ocAsegurarOverlay() {
   let ov = document.getElementById('oc-overlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'oc-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0.8rem'; ov.onclick = e => { if (e.target === ov) cerrarOrdenCompra(); }; document.body.appendChild(ov); }
@@ -10201,6 +10201,7 @@ async function abrirOrdenCompra() {
   const ov = _ocAsegurarOverlay();
   ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:560px;width:100%"><div class="sinpedidos">Cargando productos… 🛒</div></div>';
   await _ocCargarProductos(true);
+  _ocQuery = '';   // buscador limpio al abrir
   _ocFiltro = Object.keys(_ocSel).length ? 'todos' : 'reponer';   // si venís sumando, que se vean
   _ocRender();
 }
@@ -10278,9 +10279,9 @@ function _mvActualizarBtnOrden() {
     : '';
 }
 function _ocFiltrados() {
-  const q = (document.getElementById('oc-buscar')?.value || '').trim().toLowerCase();
+  const q = (_ocQuery || '').trim().toLowerCase();
   const base = _ocProductos.filter(p => {
-    if (q && !(p.nombre||'').toLowerCase().includes(q)) return false;
+    if (q && !(p.nombre||'').toLowerCase().includes(q) && !(p.desc||'').toLowerCase().includes(q)) return false;
     if (_ocFiltro === 'reponer' && (p.stock||0) > 3 && !_ocSel[p.id]) return false;   // reponer = sin stock o bajo (≤3)
     return true;
   });
@@ -10294,6 +10295,14 @@ function _ocFiltrados() {
   });
 }
 function _ocSetFiltro(f) { _ocFiltro = f; _ocRender(); }
+// Búsqueda: solo re-renderiza la LISTA (no todo el panel) para no destruir el input y perder el foco.
+function _ocBuscar(q) { _ocQuery = q; _ocRenderLista(); }
+function _ocRenderLista() {
+  const cont = document.getElementById('oc-lista-cont'); if (!cont) return;
+  const lista = _ocFiltrados();
+  cont.innerHTML = lista.length ? lista.map(_ocFilaHtml).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:1rem 0">Nada para mostrar.</div>';
+  _ocActualizarTotales();
+}
 function _ocRender() {
   const ov = document.getElementById('oc-overlay'); if (!ov) return;
   const lista = _ocFiltrados();
@@ -10303,13 +10312,13 @@ function _ocRender() {
         <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.15rem">🛒 Orden de compra${_ocOrdenId ? ' <span style="font-size:0.68rem;color:#1e7a3c;font-family:\'DM Sans\',sans-serif">· editando la guardada</span>' : ''}</div>
         <button onclick="verOrdenesCompra()" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:5px 10px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:inherit">🗂 Guardadas</button>
       </div>
-      <input id="oc-buscar" oninput="_ocRender()" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
+      <input id="oc-buscar" value="${esc(_ocQuery||'')}" oninput="_ocBuscar(this.value)" placeholder="🔍 Buscar producto…" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box">
       <div style="display:flex;gap:0.4rem;margin-top:0.5rem">
         <button onclick="_ocSetFiltro('reponer')" class="stock-orden-btn ${_ocFiltro==='reponer'?'stock-orden-on':''}">🚫 Para reponer</button>
         <button onclick="_ocSetFiltro('todos')" class="stock-orden-btn ${_ocFiltro==='todos'?'stock-orden-on':''}">Todos</button>
       </div>
     </div>
-    <div style="flex:1;overflow-y:auto;padding:0.3rem 1.1rem">
+    <div id="oc-lista-cont" style="flex:1;overflow-y:auto;padding:0.3rem 1.1rem">
       ${lista.length ? lista.map(_ocFilaHtml).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:1rem 0">Nada para mostrar.</div>'}
     </div>
     <div id="oc-totales" style="padding:0.6rem 1.1rem;border-top:1px solid var(--gris-medio);font-size:0.82rem"></div>
