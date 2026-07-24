@@ -10415,13 +10415,12 @@ function _ordenCompraHTML(items, id, fecha) {
   const totBolsas = items.reduce((s,i)=>s+i.cantidad,0);
   const filas = items.map(i => {
     const url = _ocFotoUrl(i.imagen);
-    const img = url ? `<img src="${url}" style="width:44px;height:44px;object-fit:contain;background:#f5f0e8;border-radius:6px" onerror="this.style.display='none'">` : '🍬';
+    const img = url ? `<img src="${url}" style="width:64px;height:64px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.display='none'">` : '🍬';
     const pesoT = i.peso>0 ? `${(i.pesoTotal/1000).toFixed(2)} kg` : '<span style="color:#c0392b">⚠️ s/peso</span>';
     return `<tr>
-      <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:56px">${img}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3"><div style="font-weight:600;font-size:0.84rem">${esc(i.nombre)}</div>${i.desc?`<div style="font-size:0.7rem;color:#999">${esc(i.desc)}</div>`:''}</td>
-      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-size:0.8rem;color:${i.stock<=0?'#c0392b':'#888'}">${i.stock<=0?'sin stock':i.stock+' u.'}</td>
-      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-weight:700;font-size:0.95rem">${i.cantidad}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:76px">${img}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3"><div style="font-weight:600;font-size:0.9rem">${esc(i.nombre)}</div>${i.desc?`<div style="font-size:0.74rem;color:#999">${esc(i.desc)}</div>`:''}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-weight:800;font-size:1.1rem">${i.cantidad}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.78rem;color:#666">${i.peso>0?i.peso+' g':'—'}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-weight:700">${pesoT}</td>
     </tr>`;
@@ -10433,7 +10432,7 @@ function _ordenCompraHTML(items, id, fecha) {
       <button class="btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
     </div>
     <div style="background:#eef7ee;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700">Total: ${items.length} productos · ${totBolsas} bolsas · ${(totPeso/1000).toFixed(2)} kg</div>
-    <table><thead><tr style="background:#f5f0e8"><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Foto</th><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Producto</th><th style="padding:7px 8px;font-size:0.62rem;text-transform:uppercase;color:#999">Stock</th><th style="padding:7px 8px;font-size:0.62rem;text-transform:uppercase;color:#999">Cant.</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso/bolsa</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso total</th></tr></thead><tbody>${filas}</tbody></table>
+    <table><thead><tr style="background:#f5f0e8"><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Foto</th><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Producto</th><th style="padding:7px 8px;font-size:0.62rem;text-transform:uppercase;color:#999">Cant.</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso/bolsa</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso total</th></tr></thead><tbody>${filas}</tbody></table>
     </body></html>`;
 }
 function ordenCompraPDF() {
