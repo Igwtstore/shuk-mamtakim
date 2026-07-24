@@ -1410,7 +1410,7 @@
     <div style="display:flex;gap:0.4rem;margin-bottom:0.6rem;flex-wrap:wrap">
       <button type="button" id="stock-orden-cat" onclick="setStockOrden('categoria')" class="stock-orden-btn stock-orden-on">📦 Por categoría</button>
       <button type="button" id="stock-orden-rec" onclick="setStockOrden('recientes')" class="stock-orden-btn">🆕 Últimos cargados</button>
-      <button type="button" onclick="abrirOrdenCompra()" class="stock-orden-btn" style="margin-left:auto;background:#1e7a3c;color:#fff;border-color:#1e7a3c">🛒 Orden de compra</button>
+      <button type="button" id="btn-orden-compra" onclick="abrirOrdenCompra()" class="stock-orden-btn" style="margin-left:auto;background:#1e7a3c;color:#fff;border-color:#1e7a3c">🛒 Orden de compra</button>
     </div>
     <div id="stock-total-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
   </div>
@@ -10002,6 +10002,8 @@ function aplicarPrivacidadPanel() {
   const ocultar = (typeof esVistaMiri === 'function') && esVistaMiri();
   // El botón de importar Candy no es una card con sección → se controla a mano (mostrar/ocultar).
   const btn = document.getElementById('btn-importar-candy'); if (btn) btn.style.display = ocultar ? 'none' : '';
+  // La orden de compra es solo de Jony (por ahora) → se oculta su botón en vista Miri.
+  const btnOC = document.getElementById('btn-orden-compra'); if (btnOC) btnOC.style.display = ocultar ? 'none' : '';
   // Las cards de IA y bandeja sí tienen sección (las posiciona setPanelSeccion); acá SOLO las ocultamos en Miri.
   if (ocultar) ['card-ia', 'card-bandeja', 'card-geo'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 }
@@ -10269,6 +10271,7 @@ function _ocGuardar(okMsg) {
 // Botón "🛒 Ver la orden (N)" en la tarjeta de Lo más vendido (aparece si hay algo sumado).
 function _mvActualizarBtnOrden() {
   const el = document.getElementById('mv-orden-btn'); if (!el) return;
+  if (esVistaMiri()) { el.innerHTML = ''; return; }   // orden de compra solo de Jony
   const n = Object.keys(_ocSel).length;
   el.innerHTML = n
     ? `<button onclick="abrirOrdenCompra()" style="width:100%;margin:0 0 0.6rem;padding:0.5rem;background:#1e7a3c;color:#fff;border:none;border-radius:9px;font-weight:800;font-size:0.84rem;cursor:pointer;font-family:inherit">🛒 Ver la orden de compra (${n})</button>`
@@ -10648,9 +10651,10 @@ async function renderMasVendido() {
       if (g === null) { destHtml = `<span style="color:var(--dorado);font-size:0.78rem">⚠️ sin costo</span>`; secTxt = `${a.unidades} u. · ${money(a)}`; }
       else { destHtml = `<span style="color:${g >= 0 ? 'var(--verde)' : '#c0392b'}">${g < 0 ? '−' : ''}$ ${Math.round(Math.abs(g)).toLocaleString('es-AR')}</span>`; secTxt = `${a.unidades} u. · vendió ${money(a)}`; }
     }
+    // La orden de compra es solo de Jony (por ahora): el campo de cantidad no aparece en vista Miri.
     const cantAct = a.id ? (_ocCant[a.id] || '') : '';
     const enOrden = cantAct !== '' && cantAct > 0;
-    const ctrlOC = a.id ? `<input type="number" min="0" inputmode="numeric" value="${cantAct}" placeholder="cant" oninput="mvSetCant('${a.id}', this.value)" title="Cuántas reponer → se agrega a la orden de compra" style="width:58px;padding:6px 5px;border:1.6px solid ${enOrden ? '#1e7a3c' : '#bfe3c9'};border-radius:9px;text-align:center;font-family:inherit;font-size:0.82rem;font-weight:${enOrden ? '800' : '500'};color:${enOrden ? '#1e7a3c' : 'inherit'};background:${enOrden ? '#eaf6ee' : '#fff'};flex-shrink:0;outline:none">` : '';
+    const ctrlOC = (a.id && !soloMiri) ? `<input type="number" min="0" inputmode="numeric" value="${cantAct}" placeholder="cant" oninput="mvSetCant('${a.id}', this.value)" title="Cuántas reponer → se agrega a la orden de compra" style="width:58px;padding:6px 5px;border:1.6px solid ${enOrden ? '#1e7a3c' : '#bfe3c9'};border-radius:9px;text-align:center;font-family:inherit;font-size:0.82rem;font-weight:${enOrden ? '800' : '500'};color:${enOrden ? '#1e7a3c' : 'inherit'};background:${enOrden ? '#eaf6ee' : '#fff'};flex-shrink:0;outline:none">` : '';
     return `<div style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0;border-bottom:1px solid var(--gris)">
       <span style="font-size:0.9rem;font-weight:800;min-width:26px;text-align:center">${medalla(i)}</span>
       ${thumb}
