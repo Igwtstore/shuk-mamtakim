@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v4.20</title>
+<title>Shuk Mamtakim — Documentación v4.21</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v4.21</td><td>Jul 2026</td><td><strong>🐛 Arreglado el "tope de ~38 artículos" en la orden de compra.</strong> Cuando marcabas muchos productos, la lista se cortaba en ~38 y perdía el resto. La causa: la orden se guardaba mandando todos los ítems (con sus fotos) <strong>en la dirección web (URL)</strong>, que tiene un límite de largo — al pasarse, el servidor rechazaba el guardado (error 414) y quedaba la última versión que sí entró (~38). Ahora se guarda <strong>en el cuerpo del pedido (POST), sin límite</strong>: probado con 100 artículos y guardó los 100. Ya no se pierde nada por más largo que sea.</td></tr>
       <tr><td>v4.20</td><td>Jul 2026</td><td><strong>🔍 Se arregló el buscador de la orden de compra.</strong> Escribir en "🔍 Buscar producto…" no hacía nada (se reconstruía el panel entero en cada tecla y perdía el foco). Ahora filtra en vivo, sin perder lo tipeado, y busca <strong>por nombre y por descripción/gusto</strong>. El texto de búsqueda se conserva al cambiar de filtro (Para reponer / Todos).</td></tr>
       <tr><td>v4.19</td><td>Jul 2026</td><td><strong>🔒 La orden de compra es solo de Jony.</strong> Toda la orden de compra / reposición (el botón "🛒 Orden de compra", el campo de cantidad en "Lo más vendido" y el botón "Ver la orden") ahora <strong>se oculta en vista Miri</strong>. Miri sigue viendo el ranking de lo más vendido (solo sus productos), pero no la herramienta de compra. Así queda claro que la reposición la maneja Jony y no hay listas cruzadas.</td></tr>
       <tr><td>v4.18</td><td>Jul 2026</td><td><strong>🔢 Cantidad + gusto en "Lo más vendido", orden prolijo y varios arreglos.</strong> (1) Cada fila del ranking tiene ahora su <strong>campo de cantidad</strong> (ponés cuántas reponer sin abrir nada; se suma a la orden y se auto-guarda). (2) Se muestra la <strong>descripción/gusto</strong> de cada producto (antes se veían varios iguales sin saber cuál era). (3) Al abrir una orden, lo que ya cargaste aparece <strong>primero y en orden alfabético</strong>. (4) Arreglos finos del auto-guardado: si vaciás la orden ya no queda una "lista fantasma"; si el servidor tarda, no se pierde la cantidad tipeada ni sale un aviso falso; guardar a mano y el auto-guardado ya no crean listas duplicadas; editar dentro del panel también se guarda solo; y reabrir una lista guardada conserva su nombre.</td></tr>
@@ -856,7 +857,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v4.20 · Julio 2026 · Uso interno
+  Documentación v4.21 · Julio 2026 · Uso interno
 </div>
 
 </div>

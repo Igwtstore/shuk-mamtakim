@@ -10260,9 +10260,11 @@ function _ocGuardar(okMsg) {
     }
     const totPeso = items.reduce((s, i) => s + (i.peso > 0 ? i.pesoTotal : 0), 0);
     const totCosto = items.reduce((s, i) => s + i.costoTotal, 0);
-    const params = new URLSearchParams({ accion: 'guardarOrdenCompra', items: JSON.stringify(items), totalPeso: Math.round(totPeso), totalCosto: Math.round(totCosto), nota: _ocNotaAuto || '' });
-    if (_ocOrdenId) params.set('id', _ocOrdenId);   // actualiza la misma lista
-    const r = await apiWrite(params, okMsg);
+    // POST con body JSON (no GET): con muchos ítems + fotos la URL se pasaba del límite y truncaba
+    // el guardado (tope ~38 artículos). Por body no hay límite.
+    const payload = { accion: 'guardarOrdenCompra', items: JSON.stringify(items), totalPeso: Math.round(totPeso), totalCosto: Math.round(totCosto), nota: _ocNotaAuto || '' };
+    if (_ocOrdenId) payload.id = _ocOrdenId;   // actualiza la misma lista
+    const r = await apiWritePost(payload, okMsg);
     if (r && r.ok && !_ocOrdenId && r.id != null && _ocGen === gen) _ocOrdenId = String(r.id);   // 1ª vez: guardo el id
     return r;
   };
@@ -13119,6 +13121,23 @@ async function apiWrite(params, okMsg) {
     const data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => ({}));
     // Respuesta transitoria (HTML) en una ESCRITURA: no sabemos si se ejecutó → NO afirmar éxito,
     // NO reintentar solos (evita duplicar plata). El usuario verifica antes de repetir.
+    if (data && data.__transitorio) { showToast('⚠️ El servidor tardó. Revisá si se guardó antes de reintentar.'); return { error: 'transitorio' }; }
+    if (data && data.error) { showToast('⚠️ ' + data.error); return { error: data.error }; }
+    if (okMsg) showToast(okMsg);
+    return Object.assign({ ok: true }, data);
+  } catch (e) {
+    showToast('⚠️ Sin conexión — no se guardó. Reintentá.');
+    return { error: 'network' };
+  }
+}
+// Igual que apiWrite pero manda el payload en el BODY (POST JSON) → sin límite de largo de URL.
+// Para escrituras con payload grande (ej. orden de compra con muchos ítems + fotos): por GET la
+// URL se truncaba y se perdían artículos (tope ~38). El token se agrega solo (fetch global).
+async function apiWritePost(paramsObj, okMsg) {
+  invalidarCache();
+  try {
+    const r = await fetch(APPS_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ token: _authToken }, paramsObj)) });
+    const data = await r.json().catch(() => ({ __transitorio: true }));
     if (data && data.__transitorio) { showToast('⚠️ El servidor tardó. Revisá si se guardó antes de reintentar.'); return { error: 'transitorio' }; }
     if (data && data.error) { showToast('⚠️ ' + data.error); return { error: data.error }; }
     if (okMsg) showToast(okMsg);
