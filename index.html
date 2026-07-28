@@ -7727,8 +7727,22 @@ function _imputarPedidos(pedidos, pagos, soloMiri) {
     it.jA -= pzA; it.mA -= gA; it.jU -= pzU; it.mU -= gU;
   });
   items.sort((a, b) => parseF(a.v.fecha) - parseF(b.v.fecha));   // más viejo primero
-  // Generales ("Automático"): FIFO por componente, mismo orden que socios/ganancia
+  // Generales: FIFO por componente, mismo orden que socios/ganancia.
+  // ⚖️ v4.23: si el pago se registró con un criterio ELEGIDO (p.reparto), se respetan sus partes
+  // guardadas (montoPitz / montoPitzUsd) — igual que el backend (coberturaPagos). Los pagos viejos
+  // (sin criterio) siguen con el orden histórico fijo, así el pasado no se mueve.
   ord.filter(p => !p.pedidoId).forEach(p => {
+    if (p.reparto) {
+      let pPz = parseFloat(p.montoPitz) || 0, pGa = Math.max(0, (parseFloat(p.montoARS) || 0) - (parseFloat(p.montoPitz) || 0));
+      let pPu = parseFloat(p.montoPitzUsd) || 0, pGu = Math.max(0, (parseFloat(p.montoUSD) || 0) - (parseFloat(p.montoPitzUsd) || 0));
+      items.forEach(it => {
+        let a = Math.min(pPz, it.jA); it.jA -= a; pPz -= a;
+        a = Math.min(pGa, it.mA); it.mA -= a; pGa -= a;
+        a = Math.min(pGu, it.mU); it.mU -= a; pGu -= a;
+        a = Math.min(pPu, it.jU); it.jU -= a; pPu -= a;
+      });
+      return;
+    }
     let poolA = parseFloat(p.montoARS) || 0, poolU = parseFloat(p.montoUSD) || 0;
     items.forEach(it => {
       let a = Math.min(poolA, it.jA); it.jA -= a; poolA -= a;   // $: Pitzujim primero
@@ -8837,14 +8851,30 @@ async function renderCuentaSocios() {
     const caja = (p.caja||'').trim();
     if (caja === 'PERDON') return;   // perdón/redondeo: no entró plata a ninguna caja
     const list = _resPorCli[normCliente(p.cliente)] || [];
-    let poolA = parseFloat(p.montoARS)||0, poolU = parseFloat(p.montoUSD)||0;
     let usadoPitz = 0, usadoGolA = 0, usadoGolU = 0, usadoPitzU = 0;
-    list.forEach(it => {
-      let ap = Math.min(poolA, it.jA); it.jA -= ap; poolA -= ap; usadoPitz += ap;      // $: Pitzujim primero
-      ap = Math.min(poolA, it.mA); it.mA -= ap; poolA -= ap; usadoGolA += ap;          // $: después golosinas
-      ap = Math.min(poolU, it.mU); it.mU -= ap; poolU -= ap; usadoGolU += ap;          // U$S: golosinas primero
-      ap = Math.min(poolU, it.jU); it.jU -= ap; poolU -= ap; usadoPitzU += ap;         // U$S: después Pitzujim
-    });
+    if (p.reparto) {
+      // ⚖️ v4.23: el pago se registró con un criterio ELEGIDO (Jony primero / prorrata / auto) y sus
+      // partes ya quedaron guardadas (montoPitz / montoPitzUsd). Se respetan, igual que en el backend
+      // (coberturaPagos). Antes esta pantalla las ignoraba y usaba el orden fijo → un pago imputado a
+      // Pitzujim de Jony figuraba como golosinas de Miri e inflaba la deuda entre socios.
+      let pPz = parseFloat(p.montoPitz)||0, pGa = Math.max(0, (parseFloat(p.montoARS)||0) - (parseFloat(p.montoPitz)||0));
+      let pPu = parseFloat(p.montoPitzUsd)||0, pGu = Math.max(0, (parseFloat(p.montoUSD)||0) - (parseFloat(p.montoPitzUsd)||0));
+      list.forEach(it => {
+        let ap = Math.min(pPz, it.jA); it.jA -= ap; pPz -= ap; usadoPitz += ap;
+        ap = Math.min(pGa, it.mA); it.mA -= ap; pGa -= ap; usadoGolA += ap;
+        ap = Math.min(pGu, it.mU); it.mU -= ap; pGu -= ap; usadoGolU += ap;
+        ap = Math.min(pPu, it.jU); it.jU -= ap; pPu -= ap; usadoPitzU += ap;
+      });
+    } else {
+      // Pagos VIEJOS (sin criterio elegido): orden histórico fijo — el pasado queda IDÉNTICO.
+      let poolA = parseFloat(p.montoARS)||0, poolU = parseFloat(p.montoUSD)||0;
+      list.forEach(it => {
+        let ap = Math.min(poolA, it.jA); it.jA -= ap; poolA -= ap; usadoPitz += ap;      // $: Pitzujim primero
+        ap = Math.min(poolA, it.mA); it.mA -= ap; poolA -= ap; usadoGolA += ap;          // $: después golosinas
+        ap = Math.min(poolU, it.mU); it.mU -= ap; poolU -= ap; usadoGolU += ap;          // U$S: golosinas primero
+        ap = Math.min(poolU, it.jU); it.jU -= ap; poolU -= ap; usadoPitzU += ap;         // U$S: después Pitzujim
+      });
+    }
     const tcP = parseFloat(p.tc)||0;
     // Pitzujim: si lo cobró MYRI, se lo debe a Jony (si lo cobró Jony, es su propia plata)
     if (usadoPitz > 0 && MYRI_ARS.includes(caja)) pitzMyri += usadoPitz;
