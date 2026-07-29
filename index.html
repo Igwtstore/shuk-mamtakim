@@ -7971,6 +7971,26 @@ async function abrirEstadoCuenta(cliente) {
   movs.sort((a, b) => a.ts - b.ts || (a.tipo === 'pedido' ? -1 : 1));
   let sA = 0, sU = 0;
   movs.forEach(m => { sA += m.signo * m.ars; sU += m.signo * m.usd; m.sA = sA; m.sU = sU; });
+  // ⚖️ v4.27: en vista Miri, si al cliente le sobra plata acá pero YA la usó en otra compra, el
+  // extracto tiene que decirlo — si no, el documento que se le manda promete un saldo que no existe
+  // (caso Sarah Kantor: mostraba U$S 76,83 a favor cuando libres había 22,97). Se agrega una línea
+  // 🔒 NEUTRA ("aplicado a otra compra"): no dice de quién era la mercadería, así no expone nada de Jony.
+  if (soloMiri && (sA < -1 || sU < -0.01)) {
+    const pedsFull = ventas.filter(v => normCliente(v.cliente) === k && v.estado !== 'cancelado' && v.estado !== 'cotizacion');
+    let dA = 0, dU = 0;
+    pedsFull.forEach(v => { const q = _deudaPedido(v, false); dA += q.ars; dU += q.usd; });
+    let pA = 0, pU = 0;
+    (pagos || []).filter(p => normCliente(p.cliente) === k).forEach(p => { pA += parseFloat(p.montoARS) || 0; pU += parseFloat(p.montoUSD) || 0; });
+    const netoA = dA - pA, netoU = dU - pU;               // negativo = plata libre de verdad
+    const ajA = Math.max(0, Math.min(0, netoA) - sA);     // cuánto del a favor ya está usado
+    const ajU = Math.max(0, Math.min(0, netoU) - sU);
+    if (ajA > 0.5 || ajU > 0.005) {
+      const ult = movs[movs.length - 1];
+      sA += ajA; sU += ajU;
+      movs.push({ ts: ult.ts + 1, fecha: ult.fecha, tipo: 'ajuste', concepto: 'Aplicado a otra compra',
+        ars: ajA, usd: ajU, signo: 1, sA, sU });
+    }
+  }
   const tel = (_telPorCliente && (_telPorCliente[cliente])) || '';
   window._estadoCta = { cliente, movs, saldoARS: sA, saldoUSD: sU, tel,
     emitido: new Date().toLocaleDateString('es-AR') };
@@ -9246,14 +9266,20 @@ function _resumenMiriCalc(ventas, cajaMovs, ds, soc, ccData) {
     if (m.mon === 'USD') porCaja[m.col].usd += val; else porCaja[m.col].ars += val;
   });
   // Te deben (cuenta corriente, parte de Miri) — desde _ccData ya imputado (pagos a cuenta FIFO)
-  let debenARS = 0, debenUSD = 0;
-  Object.values(ccData || {}).forEach(d => { debenARS += parseFloat(d.totalARS) || 0; debenUSD += parseFloat(d.totalUSD) || 0; });
+  // v4.27: las DEUDAS y los SALDOS A FAVOR van separados. Antes se sumaban juntos y "Te deben"
+  // podía salir NEGATIVO (ej. "$ −17"), que no significa nada para el que lo lee.
+  let debenARS = 0, debenUSD = 0, favorARS = 0, favorUSD = 0;
+  Object.values(ccData || {}).forEach(d => {
+    const a = parseFloat(d.totalARS) || 0, u = parseFloat(d.totalUSD) || 0;
+    if (a > 0) debenARS += a; else favorARS += -a;   // favor* en positivo
+    if (u > 0) debenUSD += u; else favorUSD += -u;
+  });
   // Golosinas de Miri que cobró Jony (te las debe)
   const jonyDebeARS = parseFloat((ds || {}).jonyTiene) || 0;
   const jonyDebeUSD = parseFloat((ds || {}).jonyTieneU) || 0;
-  // Cuadre por construcción: lo que YA cobró Miri = vendido − te deben − lo que cobró Jony
-  const cobradoARS = vendARS - debenARS - jonyDebeARS;
-  const cobradoUSD = vendUSD - debenUSD - jonyDebeUSD;
+  // Cuadre por construcción: vendido = ya cobrado + te deben − cobrado de más + lo que cobró Jony
+  const cobradoARS = vendARS - debenARS + favorARS - jonyDebeARS;
+  const cobradoUSD = vendUSD - debenUSD + favorUSD - jonyDebeUSD;
   // Estado POR VENTA (pedido del usuario 2026-07-09: Sarah #51 y Meir #42 sin cobrar parecían
   // plata en mano — "Miri va a querer un dinero que no está"). La deuda viva de cada pedido
   // sale de _ccData (ya imputada: pagos atados + generales FIFO, en vista Miri).
@@ -9262,7 +9288,7 @@ function _resumenMiriCalc(ventas, cajaMovs, ds, soc, ccData) {
     if (it.remARS > 1 || it.remUSD > 0.01) remPorVenta[it.v.id] = { ars: it.remARS, usd: it.remUSD };
   }));
   const nSinCobrar = vivas.filter(v => remPorVenta[v.id]).length;
-  return { vivas, vendARS, vendUSD, CAJAS_M, porCaja, debenARS, debenUSD, jonyDebeARS, jonyDebeUSD,
+  return { vivas, vendARS, vendUSD, CAJAS_M, porCaja, debenARS, debenUSD, favorARS, favorUSD, jonyDebeARS, jonyDebeUSD,
     cobradoARS, cobradoUSD, remPorVenta, nSinCobrar, soc: soc || { ars: 0, usd: 0 } };
 }
 function _resumenMiriHTML(R) {
@@ -9287,6 +9313,7 @@ function _resumenMiriHTML(R) {
     <div style="font-size:0.78rem;font-weight:700;color:var(--azul);margin-bottom:0.3rem">💰 Esa plata, ¿dónde está?</div>
     ${fila('✅ Ya la cobraste vos', dosMon(R.cobradoARS, R.cobradoUSD))}
     ${fila('⏳ Te deben (cuenta corriente)', dosMon(R.debenARS, R.debenUSD))}
+    ${(R.favorARS > 0.5 || R.favorUSD > 0.005) ? fila('💚 Cobrado de más (clientes con saldo a favor)', '− ' + dosMon(R.favorARS, R.favorUSD)) : ''}
     ${(R.jonyDebeARS > 0.5 || R.jonyDebeUSD > 0.005) ? fila('🤝 La cobró Jony (te la debe)', dosMon(R.jonyDebeARS, R.jonyDebeUSD)) : ''}
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0 0;margin-top:4px;border-top:2px solid var(--azul)">
       <span style="font-weight:800;font-size:0.9rem">= Total vendido</span>
