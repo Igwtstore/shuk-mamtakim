@@ -10,6 +10,9 @@ const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
 
+// URL pública del sitio (la que se abre al tocar una notificación). Espejo de `SITIO` en index.html.
+const SITIO_PUSH = 'https://shukmamtakim.com.ar/';
+
 const CAJAS_ARS = ['MP_GABY', 'EFT_MYRI', 'EFT_JONY', 'MP_JONY', 'CTA_CTE_ARS'];
 const _CAJAS_JONY_ENV = ['MP_JONY', 'EFT_JONY', 'ETF_USD_JONY', 'COMI_USD_JONY'];
 const _CAJAS_MIRI_ENV = ['MP_GABY', 'EFT_MYRI', 'ETF_USD_MYRI'];
@@ -3017,12 +3020,25 @@ Deno.serve(async (req) => {
       const titulo = Q('titulo') || '🛍️ Shuk Mamtakim';
       const mensaje = Q('mensaje');
       if (!mensaje) return json({ error: 'sin mensaje' });
-      await fetch('https://api.onesignal.com/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Key os_v2_app_bzffawgxufafxbwjq2xeffakwte3mjhkcfje2qevxjorgj4osj3vac6be2h2xriszbv7b7okaqv6ug4v6e4omyx6p6u74imuvhszyei' },
-        body: JSON.stringify({ app_id: '0e4a5058-d7a1-405b-86c9-86ae42940ab4', included_segments: ['All'], headings: { es: titulo, en: titulo }, contents: { es: mensaje, en: mensaje }, url: 'https://shukmamtakim.com.ar/' }),
-      });
-      return json({ ok: true });
+      // La clave sale del secret ONESIGNAL_KEY (si no está, cae al valor viejo del código).
+      const osKey = Deno.env.get('ONESIGNAL_KEY') || 'os_v2_app_bzffawgxufafxbwjq2xeffakwte3mjhkcfje2qevxjorgj4osj3vac6be2h2xriszbv7b7okaqv6ug4v6e4omyx6p6u74imuvhszyei';
+      // OJO: antes se hacía el fetch sin mirar la respuesta y se devolvía ok:true SIEMPRE — el panel
+      // decía "enviada" aunque OneSignal la rechazara. Ahora se informa el resultado real.
+      try {
+        const rPush = await fetch('https://api.onesignal.com/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + osKey },
+          body: JSON.stringify({ app_id: '0e4a5058-d7a1-405b-86c9-86ae42940ab4', included_segments: ['All'], headings: { es: titulo, en: titulo }, contents: { es: mensaje, en: mensaje }, url: SITIO_PUSH }),
+        });
+        const dPush = await rPush.json().catch(() => ({}));
+        if (!rPush.ok || dPush.errors) {
+          const det = Array.isArray(dPush.errors) ? dPush.errors.join(' · ') : (dPush.errors ? JSON.stringify(dPush.errors) : 'HTTP ' + rPush.status);
+          return json({ error: 'push_rechazada', mensaje: det, destinatarios: 0 });
+        }
+        return json({ ok: true, id: dPush.id || '', destinatarios: dPush.recipients != null ? dPush.recipients : null });
+      } catch (ePush) {
+        return json({ error: 'push_sin_red', mensaje: String((ePush as Error).message || ePush), destinatarios: 0 });
+      }
     }
     // ── Flyers de Candy (texto IA + fondo/envío vía worker + historial) ──
     if (accion === 'flyerTexto') {

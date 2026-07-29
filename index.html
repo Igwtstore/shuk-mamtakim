@@ -12346,10 +12346,22 @@ function enviarPushAcumulado() {
     titulo: '🛍️ Shuk Mamtakim — Novedades',
     mensaje: lineas.join('\n')
   });
-  fetch(APPS_SCRIPT_URL + '?' + params.toString()).catch(() => {});
+  // Se espera la respuesta REAL: antes se avisaba "enviada ✓" a ciegas y la push podía
+  // haber sido rechazada (clave vencida, app sin web push) sin que nadie se enterara.
+  fetch(APPS_SCRIPT_URL + '?' + params.toString())
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.ok) {
+        const n = d.destinatarios;
+        showToast(n === 0 ? 'Notificación enviada, pero no hay nadie suscripto todavía'
+                          : 'Notificación enviada' + (n ? ' a ' + n + ' cliente' + (n === 1 ? '' : 's') : '') + ' ✓');
+      } else {
+        showToast('⚠️ No se pudo enviar la notificación: ' + ((d && d.mensaje) || 'error desconocido'));
+      }
+    })
+    .catch(() => showToast('⚠️ No se pudo enviar la notificación (sin conexión)'));
   _pushBuffer = { stock: [], nuevos: [] };
   _pushTimer = null;
-  showToast('Notificación enviada a los clientes ✓');
 }
 
 function verificarStockBajo() {
