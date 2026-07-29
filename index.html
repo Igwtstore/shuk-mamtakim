@@ -8803,10 +8803,15 @@ async function renderCuentaSocios() {
   _pagosOrd.filter(p => p.pedidoId).forEach(p => {
     const it = (_resPorCli[normCliente(p.cliente)] || []).find(x => String(x.v.id) === String(p.pedidoId));
     if (!it) return;
+    // v4.25: separa la parte de cada dueño TAMBIÉN en U$S (montoPitzUsd), igual que el backend
+    // (coberturaPagos). Antes descontaba todo el U$S de las golosinas de Miri y nunca tocaba la
+    // deuda en U$S de Jony → el pool general después imputaba sobre una deuda equivocada.
     const pitz = parseFloat(p.montoPitz)||0;
+    const pitzU = parseFloat(p.montoPitzUsd)||0;
     it.jA = Math.max(0, it.jA - pitz);
-    it.mA = Math.max(0, it.mA - ((parseFloat(p.montoARS)||0) - pitz));
-    it.mU = Math.max(0, it.mU - (parseFloat(p.montoUSD)||0));
+    it.mA = Math.max(0, it.mA - Math.max(0, (parseFloat(p.montoARS)||0) - pitz));
+    it.jU = Math.max(0, it.jU - pitzU);
+    it.mU = Math.max(0, it.mU - Math.max(0, (parseFloat(p.montoUSD)||0) - pitzU));
   });
   (pagos || []).forEach(p => {
     if (!p.pedidoId) return;   // atados: reparto explícito (los generales van abajo, imputados)
@@ -8906,6 +8911,15 @@ async function renderCuentaSocios() {
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15, pago: true });
   });
 
+  // 🔍 Auditoría: deuda que quedó viva por cliente y bolsillo DESPUÉS de imputar todos los pagos.
+  // Debe coincidir con lo que calcula el backend (coberturaPagos). Si no coincide, hay una
+  // imputación desalineada → lo detecta el auditor de consistencia (tests). Solo dato, no afecta nada.
+  window._sociosResto = {};
+  Object.keys(_resPorCli).forEach(k => {
+    const t = { jA: 0, mA: 0, jU: 0, mU: 0 };
+    _resPorCli[k].forEach(it => { t.jA += Math.max(0, it.jA); t.mA += Math.max(0, it.mA); t.jU += Math.max(0, it.jU); t.mU += Math.max(0, it.mU); });
+    window._sociosResto[k] = t;
+  });
   const saldadoARS = parseFloat(liq.totalARS)||0, saldadoUSD = parseFloat(liq.totalUSD)||0;
   const ars = comiDebe + pitzMyri - jonyTiene + movsARS - saldadoARS;
   const usd = comiDebeU + pitzMyriU - jonyTieneU + movsUSD - saldadoUSD;   // + Pitzujim U$S que cobró Myri
