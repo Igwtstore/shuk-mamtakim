@@ -8703,7 +8703,7 @@ async function renderCuentaSocios() {
   const detPitzMyri = [], detJonyTiene = [], detComiDebe = [];
   const _vPorId = {}; ventas.forEach(v => { _vPorId[String(v.id)] = v; });
   ventas.filter(v => v.estado !== 'cancelado' && v.estado !== 'cotizacion').forEach(v => {
-    const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    const _s0 = { pm: pitzMyri, pmU: pitzMyriU, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
     let _cdesc = 0, _cdescU = 0;   // comisión ya descontada del neto (para mostrar el desglose)
     (() => {
     if (v.corte) return;   // ya liquidado en un corte → no cuenta en el período actual
@@ -8776,9 +8776,9 @@ async function renderCuentaSocios() {
       }
     }
     })();
-    const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
+    const _dPm = pitzMyri - _s0.pm, _dPmU = pitzMyriU - _s0.pmU, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     const _dCd = comiDebe - _s0.cd, _dCdU = comiDebeU - _s0.cdU;
-    if (_dPm > 0.004) detPitzMyri.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dPm, usd: 0 });
+    if (_dPm > 0.004 || _dPmU > 0.004) detPitzMyri.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dPm, usd: _dPmU });
     if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, comi: _cdesc, comiU: _cdescU });
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ nVenta: v.nVenta, cliente: v.cliente, fecha: (v.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15 });
   });
@@ -8810,7 +8810,7 @@ async function renderCuentaSocios() {
   });
   (pagos || []).forEach(p => {
     if (!p.pedidoId) return;   // atados: reparto explícito (los generales van abajo, imputados)
-    const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    const _s0 = { pm: pitzMyri, pmU: pitzMyriU, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
     let _cdesc = 0, _cdescU = 0;
     (() => {
     const caja = (p.caja||'').trim();
@@ -8837,15 +8837,15 @@ async function renderCuentaSocios() {
     }
     })();
     const _vp = _vPorId[String(p.pedidoId)] || {};
-    const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
+    const _dPm = pitzMyri - _s0.pm, _dPmU = pitzMyriU - _s0.pmU, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     const _dCd = comiDebe - _s0.cd, _dCdU = comiDebeU - _s0.cdU;
-    if (_dPm > 0.004) detPitzMyri.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
+    if (_dPm > 0.004 || _dPmU > 0.004) detPitzMyri.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: _dPmU, pago: true });
     if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, comi: _cdesc, comiU: _cdescU, pago: true });
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ nVenta: _vp.nVenta, cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15, pago: true });
   });
   // 2º: GENERALES — imputación FIFO por componente (Pitzujim primero en $, golosinas primero en U$S)
   _pagosOrd.filter(p => !p.pedidoId).forEach(p => {
-    const _s0 = { pm: pitzMyri, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
+    const _s0 = { pm: pitzMyri, pmU: pitzMyriU, jt: jonyTiene, jtU: jonyTieneU, cd: comiDebe, cdU: comiDebeU };
     let _cdesc = 0, _cdescU = 0;
     (() => {
     const caja = (p.caja||'').trim();
@@ -8899,9 +8899,9 @@ async function renderCuentaSocios() {
       }
     }
     })();
-    const _dPm = pitzMyri - _s0.pm, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
+    const _dPm = pitzMyri - _s0.pm, _dPmU = pitzMyriU - _s0.pmU, _dJt = jonyTiene - _s0.jt, _dJtU = jonyTieneU - _s0.jtU;
     const _dCd = comiDebe - _s0.cd, _dCdU = comiDebeU - _s0.cdU;
-    if (_dPm > 0.004) detPitzMyri.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: 0, pago: true });
+    if (_dPm > 0.004 || _dPmU > 0.004) detPitzMyri.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dPm, usd: _dPmU, pago: true });
     if (_dJt > 0.004 || _dJtU > 0.004) detJonyTiene.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dJt, usd: _dJtU, comi: _cdesc, comiU: _cdescU, pago: true });
     if (_dCd > 0.004 || _dCdU > 0.004) detComiDebe.push({ cliente: p.cliente, fecha: (p.fecha||'').split(' ')[0], ars: _dCd, usd: _dCdU, baseArs: _dCd / 0.15, baseUsd: _dCdU / 0.15, pago: true });
   });
@@ -8913,7 +8913,7 @@ async function renderCuentaSocios() {
   // Desglose para el Excel de rendición de Miri (cómo se compone el saldo con Jony).
   window._sociosDesglose = {
     comiDebe: Math.round(comiDebe), pitzMyri: Math.round(pitzMyri), jonyTiene: Math.round(jonyTiene),
-    comiDebeU: parseFloat(comiDebeU.toFixed(2)), jonyTieneU: parseFloat(jonyTieneU.toFixed(2)),
+    comiDebeU: parseFloat(comiDebeU.toFixed(2)), jonyTieneU: parseFloat(jonyTieneU.toFixed(2)), pitzMyriU: parseFloat(pitzMyriU.toFixed(2)),
     enviosARS: Math.round(parseFloat(movsSoc.enviosARS) || 0), manualARS: Math.round(parseFloat(movsSoc.manualARS) || 0),
     saldadoARS: Math.round(saldadoARS), saldadoUSD: parseFloat(saldadoUSD.toFixed(2))
   };
@@ -8970,6 +8970,48 @@ async function renderCuentaSocios() {
       ${(_pComi > 0.5 || _pComiU > 0.004) ? filaC('⏳ De pedidos sin cobrar todavía (cuando se cobren)', _pComi, _pComiU) : ''}
       <div style="font-size:0.63rem;color:var(--texto-suave);margin-top:0.25rem">${esMiri ? 'Las dos vías suman lo mismo: la de ventas que cobraste vos va al saldo; la de ventas que cobró Jony ya quedó descontada del neto que él te debe.' : 'Lo "sin cobrar" no es plata perdida: esos pedidos están en la cuenta corriente (deudores).'}</div>
       ${extra || ''}
+    </div>`;
+  };
+
+  // 💲 Desglose del saldo en DÓLARES, renglón por renglón (mismo criterio que el de pesos).
+  // Antes solo se mostraba el número final: si sumabas lo visible no daba, porque faltaba el
+  // renglón "Pitzujim en U$S que cobró Myri" (pitzMyriU). Pedido del usuario 2026-07-28.
+  const _desgloseUSD = (esMiri) => {
+    const netoU = comiDebeU + pitzMyriU - jonyTieneU + movsUSD - saldadoUSD;
+    if (Math.abs(comiDebeU) < 0.005 && Math.abs(pitzMyriU) < 0.005 && Math.abs(jonyTieneU) < 0.005 && Math.abs(netoU) < 0.005) return '';
+    const fu2 = n => 'U$S ' + Math.abs(n).toFixed(2);
+    const filaU = (lbl, val, sign) => Math.abs(val) < 0.005 ? '' :
+      `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:2px 0"><span style="color:var(--texto-suave)">${lbl}</span><span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${fu2(val)}</span></div>`;
+    // Renglón con detalle desplegable, filtrando SOLO las líneas que tienen monto en U$S.
+    const filaDetU = (lbl, val, sign, det, verbo, esComi) => {
+      if (Math.abs(val) < 0.005) return '';
+      const conU = (det || []).filter(d => (esComi ? (d.usd || 0) : (d.usd || 0)) > 0.004);
+      if (!conU.length) return filaU(lbl, val, sign);
+      const lineas = conU.map(d => {
+        const cab = `• ${d.pago ? 'Pago a cuenta' : 'Venta'}${d.nVenta ? ' #' + esc(String(d.nVenta)) : ''}${d.cliente ? ' · ' + esc(d.cliente) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''}`;
+        const cuerpo = esComi
+          ? ` — golosinas U$S ${(d.baseUsd || 0).toFixed(2)} → comisión <b>U$S ${(d.usd || 0).toFixed(2)}</b>`
+          : ` — ${verbo} U$S ${(d.usd || 0).toFixed(2)}` + ((d.comiU || 0) > 0.004 ? ` <span style="color:#9a8c66">(golosinas U$S ${((d.usd || 0) + (d.comiU || 0)).toFixed(2)} − comisión U$S ${(d.comiU || 0).toFixed(2)})</span>` : '');
+        return `<div style="font-size:0.68rem;color:var(--texto-suave);padding:1px 0">${cab}${cuerpo}</div>`;
+      }).join('');
+      return `<details style="padding:2px 0">
+        <summary style="display:flex;justify-content:space-between;font-size:0.75rem;cursor:pointer;list-style:none;gap:6px">
+          <span style="color:var(--texto-suave)">${lbl} <span style="font-size:0.62rem;color:var(--dorado)">▸ ver detalle</span></span>
+          <span style="font-weight:600;color:${sign==='+'?'var(--verde)':'#c0392b'};white-space:nowrap">${sign} ${fu2(val)}</span>
+        </summary>
+        <div style="padding:0.3rem 0 0.2rem 0.6rem">${lineas}</div>
+      </details>`;
+    };
+    return `<div style="background:#fff8ec;border:1px solid #f0d9a8;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem">
+      <div style="font-size:0.68rem;color:#9a6b00;font-weight:700;margin-bottom:0.3rem">💲 El saldo en DÓLARES, de dónde sale:</div>
+      ${filaDetU(esMiri ? 'Comisión de tus ventas en U$S (15% para Jony)' : 'Comisión en U$S que Myri te debe', comiDebeU, '+', detComiDebe, '', true)}
+      ${filaDetU(esMiri ? 'Ventas de Jony en U$S que cobraste vos (se las debés)' : 'Ventas tuyas en U$S que cobró Myri (te las debe)', pitzMyriU, '+', detPitzMyri, esMiri ? 'cobraste' : 'cobró', false)}
+      ${filaDetU(esMiri ? 'Tus golosinas en U$S que cobró Jony (te las debe)' : 'Golosinas de Myri en U$S que cobraste vos (se las debés)', jonyTieneU, '−', detJonyTiene, esMiri ? 'cobró' : 'cobraste', false)}
+      ${Math.abs(movsUSD) > 0.005 ? filaU('Movimientos manuales en U$S', movsUSD, movsUSD > 0 ? '+' : '−') : ''}
+      ${Math.abs(saldadoUSD) > 0.005 ? filaU('Ya saldado', saldadoUSD, '−') : ''}
+      <div style="display:flex;justify-content:space-between;font-size:0.8rem;padding-top:0.35rem;margin-top:0.3rem;border-top:1px solid #f0d9a8;font-weight:700">
+        <span>${netoU >= 0 ? (esMiri ? 'Le debés a Jony' : 'Myri te debe') : (esMiri ? 'Jony te debe' : 'Le debés a Myri')}</span><span>${fu2(netoU)}</span>
+      </div>
     </div>`;
   };
 
@@ -9044,8 +9086,8 @@ async function renderCuentaSocios() {
       </details>` : ''}
       ${saldadoARS !== 0 ? filaM('Ya saldado', saldadoARS, '−') : ''}
     </div>
-    ${_comiBox(true, '')}
-    <div style="font-size:0.66rem;color:var(--texto-suave);margin-bottom:0.5rem">${Math.abs(usd) >= 0.01 ? 'El saldo en dólares se muestra arriba aparte.' : ''}</div>`;
+    ${_desgloseUSD(true)}
+    ${_comiBox(true, '')}`;
   }
   if (!soloMiri) {
     // Desglose claro para Jony: de dónde sale el saldo (ventas cruzadas)
@@ -9104,7 +9146,8 @@ async function renderCuentaSocios() {
       ${filaEnvios}
       ${saldadoARS !== 0 ? fila('Ya saldado', saldadoARS, '−') : ''}
       ${Math.abs(neto) >= 1 ? `<div style="display:flex;justify-content:space-between;font-size:0.8rem;padding-top:0.35rem;margin-top:0.3rem;border-top:1px solid var(--gris-medio);font-weight:700"><span>${neto>0?'Myri te debe':'Le debés a Myri'}</span><span>${f(neto)}</span></div>` : ''}
-    </div>`;
+    </div>
+    ${_desgloseUSD(false)}`;
 
     // 🔎 DIAGNÓSTICO de comisión: cuánto ya ganaste y cuánto falta cobrar.
     // Pagado = caja REAL (esCobradoReal). Lo no cobrado es comisión FUTURA (no perdida):
