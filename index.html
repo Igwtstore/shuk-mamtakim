@@ -4245,6 +4245,29 @@ async function renderCuentaCorriente() {
         d.jonyUSD -= pg.pitzU; d.miriUSD -= (soloMiri ? pg.usd : (pg.usd - pg.pitzU));   // U$S separado por el reparto guardado
       }
     });
+    // ⚖️ v4.26: en vista Miri, el SALDO A FAVOR se reduce por lo que el cliente deba del otro lado.
+    // Un cliente es UNO SOLO: si le sobra plata en la caja de Miri pero se llevó mercadería de Jony,
+    // esa plata YA está comprometida (la cuenta entre socios la registra como "Miri cobró plata de
+    // Jony"). Mostrarla entera hacía que Miri creyera que podía entregar de más (caso Sarah Kantor
+    // 2026-07-28: veía U$S 76,83 a favor cuando libres había U$S 22,97).
+    // 🔒 Privacidad: el a favor nunca baja de 0 — jamás se convierte en deuda visible, así Miri no
+    // puede deducir ni el monto ni la existencia de un pedido de Jony.
+    if (soloMiri) {
+      Object.entries(porCliente).forEach(([k, d]) => {
+        if (!(d.totalARS < -1 || d.totalUSD < -0.01)) return;   // solo los que tienen a favor
+        const pedsFull = (ventas || []).filter(v => normCliente(v.cliente) === k && v.estado !== 'cancelado' && v.estado !== 'cotizacion');
+        const pagosFull = (pagos || []).filter(p => normCliente(p.cliente) === k);
+        // Saldo NETO del cliente (los dos bolsillos juntos): negativo = plata realmente libre.
+        let dA = 0, dU = 0;
+        pedsFull.forEach(v => { const q = _deudaPedido(v, false); dA += q.ars; dU += q.usd; });
+        let pA = 0, pU = 0;
+        pagosFull.forEach(p => { pA += parseFloat(p.montoARS) || 0; pU += parseFloat(p.montoUSD) || 0; });
+        const netoA = dA - pA, netoU = dU - pU;
+        // El a favor que ve Miri no puede superar lo que al cliente le queda libre de verdad.
+        d.totalARS = Math.max(d.totalARS, Math.min(0, netoA));
+        d.totalUSD = Math.max(d.totalUSD, Math.min(0, netoU));
+      });
+    }
     // Pago libre: lista de TODOS los clientes (aunque estén saldados) + visible solo en vista Jony
     const _dlCC = document.getElementById('cc-clientes-list');
     if (_dlCC) _dlCC.innerHTML = Object.values(porCliente).map(d => `<option value="${esc(d.nombre)}"></option>`).join('');
