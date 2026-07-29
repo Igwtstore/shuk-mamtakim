@@ -13,7 +13,7 @@
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:url" content="https://shuk-mamtakim.vercel.app/tienda?v=2">
+<meta property="og:url" id="og-url" content="https://shuk-mamtakim.vercel.app/tienda?v=2">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1208,13 +1208,13 @@
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
       <div style="text-align:center">
         <div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.5rem">MAYORISTA</div>
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/mayorista" style="border-radius:8px;border:2px solid var(--gris-medio)" />
-        <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/mayorista</div>
+        <img id="qr-img-may" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/mayorista" style="border-radius:8px;border:2px solid var(--gris-medio)" />
+        <div id="qr-txt-may" style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/mayorista</div>
       </div>
       <div style="text-align:center">
         <div style="font-size:0.75rem;font-weight:600;color:var(--texto-suave);margin-bottom:0.5rem">MINORISTA</div>
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/%23min-pL3q7" style="border-radius:8px;border:2px solid var(--gris-medio)" />
-        <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/#min-pL3q7</div>
+        <img id="qr-img-min" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://shuk-mamtakim.vercel.app/%23min-pL3q7" style="border-radius:8px;border:2px solid var(--gris-medio)" />
+        <div id="qr-txt-min" style="font-size:0.68rem;color:var(--texto-suave);margin-top:0.3rem">shuk-mamtakim.vercel.app/#min-pL3q7</div>
       </div>
     </div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.75rem">Mantenelos presionados para guardar o compartir por WhatsApp.</div>
@@ -2331,6 +2331,24 @@ window.fetch = function(url, opts) {
   }
   return _origFetch(url, opts);
 };
+// 🌐 Dominio público del sitio: TODO link que se le manda a un cliente (VIP, QR, ofertas, PDF,
+// remito, WhatsApp) sale de acá → para mudar de dominio se cambia SOLO esta línea.
+// Dominio propio: shukmamtakim.com.ar (NIC.AR → Vercel). El .vercel.app sigue vivo siempre, así que
+// los links ya enviados a clientes nunca se rompen.
+const SITIO = 'https://shuk-mamtakim.vercel.app';
+const SITIO_DOM = SITIO.replace(/^https?:\/\//, '');
+// Los QR y el og:url están escritos en el HTML: se sincronizan con SITIO al cargar, así cambiar
+// el dominio en un solo lugar también los actualiza (no quedan apuntando al dominio viejo).
+function _sincronizarSitio() {
+  const qr = u => 'https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=' + encodeURIComponent(u);
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  set('qr-img-may', el => el.src = qr(SITIO + '/mayorista'));
+  set('qr-txt-may', el => el.textContent = SITIO_DOM + '/mayorista');
+  set('qr-img-min', el => el.src = qr(SITIO + '/#min-pL3q7'));
+  set('qr-txt-min', el => el.textContent = SITIO_DOM + '/#min-pL3q7');
+  set('og-url', el => el.setAttribute('content', SITIO + '/tienda?v=2'));
+}
+document.addEventListener('DOMContentLoaded', _sincronizarSitio);
 const APPS_SCRIPT_URL = 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';   // motor Supabase (switch 2026-07-02)
 const SB_REST = 'https://soarkknjewgcewryxqac.supabase.co/rest/v1';
 const SB_ANON_H = { apikey: 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2', Authorization: 'Bearer sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2' };
@@ -2636,7 +2654,7 @@ async function generarCatalogoPDF() {
 
   const pie = () => {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...gris);
-    doc.text('Pedidos por WhatsApp: +54 9 11 3175-4540   ·   shuk-mamtakim.vercel.app', W / 2, H - 22, { align: 'center' });
+    doc.text('Pedidos por WhatsApp: +54 9 11 3175-4540   ·   ' + SITIO_DOM, W / 2, H - 22, { align: 'center' });
   };
   const encabezado = () => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(...dorado);
@@ -5575,7 +5593,7 @@ function difundirOfertas() {
     if (ofertaActiva(p)) return `🔥 *${p.nombre}* — ahora $${Math.round(p.precioOferta).toLocaleString('es-AR')}`;
     return `🎁 *${p.nombre}* — pack x${p.cantPack} por $${Math.round(p.precioPack).toLocaleString('es-AR')}`;
   });
-  const msg = `🍬 *¡Ofertas de Shuk Mamtakim!*\n\n${lineas.join('\n')}\n\n👉 Pedí acá: https://shuk-mamtakim.vercel.app/tienda\nVálido por tiempo limitado 🏃`;
+  const msg = `🍬 *¡Ofertas de Shuk Mamtakim!*\n\n${lineas.join('\n')}\n\n👉 Pedí acá: ${SITIO}/tienda\nVálido por tiempo limitado 🏃`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -10148,7 +10166,7 @@ async function crearLinkVip() {
   const canal = (_acVerMay && !_acVerMin) ? 'mayorista' : 'minorista';
   const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal, desc: dl.desc, descProd: dl.descProd }), '');
   if (!r.ok || !r.token) return;
-  _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
+  _vipMostrarLink(SITIO + '/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
 }
 // ➕ Guardar la selección actual como un link NUEVO (token nuevo), sin tocar el original.
 // Sirve para: estoy editando el de un cliente y quiero el MISMO catálogo para otro, sin re-tildar todo.
@@ -10163,7 +10181,7 @@ async function guardarLinkVipNuevo() {
   const r = await apiWrite(new URLSearchParams({ accion: 'crearCatalogoVip', ids: ids.join(','), nombre: (nombre || '').trim() || 'cliente', canal, desc: dl.desc, descProd: dl.descProd }), '');
   if (!r.ok || !r.token) return;
   _acEditVip = null; _acEditBanner();   // salimos de edición: ahora es un link nuevo, independiente
-  _vipMostrarLink('https://shuk-mamtakim.vercel.app/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
+  _vipMostrarLink(SITIO + '/?vip=' + r.token, (nombre || '').trim() || 'cliente', canal, ids.length);
 }
 function _vipMostrarLink(url, nombre, canal, n) {
   let ov = document.getElementById('viplink-overlay');
@@ -10189,7 +10207,7 @@ async function verLinksVip() {
     <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🗂 Links privados vivos</div>
     ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span>${(l.desc > 0 || l.nDescProd > 0) ? ` <span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:1px 6px;border-radius:6px">🏷️ ${l.desc > 0 && !l.nDescProd ? '-' + l.desc + '%' : 'con dto.'}</span>` : ''}</div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
-      <button onclick="navigator.clipboard.writeText('https://shuk-mamtakim.vercel.app/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
+      <button onclick="navigator.clipboard.writeText(SITIO + '/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
       <button onclick="editarLinkVip('${l.token}','${esc(l.nombre).replace(/'/g,"\\'")}','${l.canal}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
       <button onclick="borrarLinkVip('${l.token}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.6rem 0">No hay links creados.</div>'}
@@ -10294,7 +10312,7 @@ function compartirProducto(id) {
   const precio = formatPrecio(p);
   // Deep link AL PRODUCTO (?p=ID): la tienda abre y lo resalta. Respeta el canal (minorista por
   // default; mayorista si se está viendo mayorista).
-  const base = modo === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/';
+  const base = modo === 'mayorista' ? SITIO + '/mayorista' : SITIO + '/';
   const link = `${base}?p=${p.id}`;
   const msg = `🛍️ *${p.nombre}*\n${p.desc || ''}\n💰 *${precio}*\n\n👉 Mirá este producto: ${link}`;
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
@@ -11688,7 +11706,7 @@ function recordarDeudaWA(cliente, totStr, tel) {
 }
 
 function contactarCliente(nombre, tipo, tel) {
-  const link = tipo === 'Minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista';
+  const link = tipo === 'Minorista' ? SITIO + '/#min-pL3q7' : SITIO + '/mayorista';
   const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
   const waBase = tel ? `https://wa.me/549${tel}` : `https://wa.me/`;
   window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -12578,7 +12596,7 @@ async function renderNotificaciones() {
         const prod = g.nombre.replace(/'/g,'').replace(/"/g,'');
         const modo = c.modoCliente||'minorista';
         const esViejo = dias >= 3;
-        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? 'https://shuk-mamtakim.vercel.app/#min-pL3q7' : 'https://shuk-mamtakim.vercel.app/mayorista'}`;
+        const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? SITIO + '/#min-pL3q7' : SITIO + '/mayorista'}`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
           <div>
             <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span>${_telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px">⚠️ número dudoso</span>' : ''}</div>
@@ -12617,7 +12635,7 @@ function eliminarNotificacion(productoId, telefono) {
 }
 
 function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
-  const link = modoCliente === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/#min-pL3q7';
+  const link = modoCliente === 'mayorista' ? SITIO + '/mayorista' : SITIO + '/#min-pL3q7';
   const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
@@ -12645,7 +12663,7 @@ function _similarPrecio(p) {
   return (p.moneda === 'U$S') ? 'U$S ' + may.toFixed(2) : '$ ' + Math.round(may).toLocaleString('es-AR');
 }
 function _similarLink(p) {
-  const base = _similarCtx.modoCliente === 'mayorista' ? 'https://shuk-mamtakim.vercel.app/mayorista' : 'https://shuk-mamtakim.vercel.app/';
+  const base = _similarCtx.modoCliente === 'mayorista' ? SITIO + '/mayorista' : SITIO + '/';
   return `${base}?p=${p.id}`;
 }
 function _similarSelProds() { return Object.keys(_similarSel).map(id => productos.find(p => String(p.id) === String(id))).filter(Boolean); }
@@ -12692,7 +12710,7 @@ async function _similarImagen() {
         ${url ? `<img src="${url}" crossorigin="anonymous" style="width:66px;height:66px;object-fit:contain;background:#f5f0e8;border-radius:8px">` : `<div style="width:66px;height:66px;background:#f5f0e8;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🍬</div>`}
         <div style="flex:1;min-width:0"><div style="font-weight:700;color:#1a1a2e;font-size:0.95rem">${esc(p.nombre)}</div><div style="font-size:0.76rem;color:#999">${esc((p.desc || '').substring(0, 60))}</div><div style="font-weight:800;color:#1a7a3a;margin-top:2px">${_similarPrecio(p)}</div></div>
       </div>`; }).join('')}</div>
-    <div style="padding:8px 16px;color:#aaa;font-size:0.7rem;border-top:1px solid #eee">shuk-mamtakim.vercel.app</div></div>`;
+    <div style="padding:8px 16px;color:#aaa;font-size:0.7rem;border-top:1px solid #eee">${SITIO_DOM}</div></div>`;
   await new Promise(r => setTimeout(r, 500));   // dar tiempo a que carguen las fotos
   const canvas = await h2c(document.getElementById('similar-card'), { useCORS: true, backgroundColor: '#fff', scale: 2 });
   off.innerHTML = '';
@@ -13856,7 +13874,7 @@ function _buildRemitoTexto(v, tc) {
   }
   if (v.notas && v.notas !== 'Manual') lines.push(`📝 Nota: ${v.notas}`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-  lines.push(`Shuk Mamtakim 🍬 — shuk-mamtakim.vercel.app`);
+  lines.push(`Shuk Mamtakim 🍬 — ${SITIO_DOM}`);
   return lines.join('\n');
 }
 
@@ -14068,7 +14086,7 @@ function abrirRemitoPDF(v) {
 <div class="page">
   <img class="banner" src="https://res.cloudinary.com/dq2boloyp/image/upload/w_700/website_banner_rhyfih.png" alt="Shuk Mamtakim">
   <div class="nro-bar">
-    <span>shuk-mamtakim.vercel.app</span>
+    <span>${SITIO_DOM}</span>
     <strong>REMITO #${v.nVenta}</strong>
   </div>
   <div class="info">
