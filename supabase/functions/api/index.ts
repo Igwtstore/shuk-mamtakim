@@ -41,12 +41,20 @@ function matchProd(cands: any[], descLinea: string) {
   }
   return null;
 }
-function gananciaPitz(productosStr: string, mapa: any, tc: number) {
+function gananciaPitz(productosStr: string, mapa: any, tc: number, msVenta?: number) {
   const out = { ars: 0, usd: 0, faltaCosto: [] as string[], faltaTC: false };
   (productosStr || '').split(' || ').forEach((linea) => {
     const t = (linea || '').trim(); if (!t || t[0] !== '•') return;
     const L = parseLinea(t); if (!L) return;
-    const cands = mapa[L.nombre.toLowerCase()]; if (!cands || !cands.length) return;
+    let cands = mapa[L.nombre.toLowerCase()]; if (!cands || !cands.length) return;
+    // Un producto dado de alta DESPUÉS de la venta no pudo venderse ahí. Protege el caso del CLON
+    // (mismo nombre, otro dueño): sin esto, clonar para Jony haría que las ventas viejas —ya cobradas
+    // como mercadería de Miri— computaran ganancia de Pitzujim retroactiva. creadoMs=0 → no se filtra.
+    if (msVenta && msVenta > 0) {
+      const vivos = cands.filter((c: any) => !c.creadoMs || c.creadoMs <= msVenta + 86400000);
+      if (!vivos.length) return;
+      cands = vivos;
+    }
     const p = matchProd(cands, L.desc); if (!p) return;
     if (!(p.costo > 0)) {   // sin costo → no cuenta, se reporta con nombre + desc (verificador de costos)
       const etq = L.nombre + (L.desc ? ' · ' + L.desc : '');
@@ -68,13 +76,21 @@ function comiPeriodo(arsM: number, usdM: number, comiARS: number, comiUSD: numbe
   if (usdM > 0) { if (tc > 0 && CAJAS_ARS.indexOf(cajaM) !== -1) cARS += Math.round(usdM * tc * 0.15); else cUSD += comiUSD || Math.round(usdM * 0.15 * 100) / 100; }
   return { cARS, cUSD };
 }
+// Alta real confiable solo a partir de acá: los productos migrados a Supabase quedaron todos con
+// creado = 2026-07-02 (fecha de la migración), que no refleja cuándo se dieron de alta de verdad.
+const MS_POST_MIGRACION = Date.parse('2026-07-04T00:00:00Z');
 function mapaProdJony(productos: any[]) {
   const map: any = {};
   productos.forEach((p) => {
     if ((p.dueno || '').toString().trim() !== 'Jony') return;
     const moneda = ((p.moneda || '$').toString().trim() === 'U$S') ? 'U$S' : '$';
     const costo = parseFloat(String(p.costo || '0').replace(',', '.')) || 0;
-    const entry = { id: p.id, moneda, costo, desc: (p.descripcion || '').toString().trim().toLowerCase(), nombre: (p.nombre || '').toString().trim().toLowerCase() };
+    // v4.33: 'creado' sirve para no aplicar un producto a ventas ANTERIORES a su alta (caso CLON).
+    // OJO: los 144 productos migrados el 02/07/2026 tienen creado = fecha de la MIGRACIÓN, no la real
+    // (las ventas arrancan el 01/06) → para esos NO se puede filtrar. Solo se confía en los posteriores.
+    const _cms = p.creado ? Date.parse(String(p.creado)) : 0;
+    const creadoMs = (!isNaN(_cms) && _cms > MS_POST_MIGRACION) ? _cms : 0;   // 0 = "no filtrar por fecha"
+    const entry = { id: p.id, moneda, costo, creadoMs, desc: (p.descripcion || '').toString().trim().toLowerCase(), nombre: (p.nombre || '').toString().trim().toLowerCase() };
     const push = (k: string) => { if (k) (map[k] = map[k] || []).push(entry); };
     push((p.nombre || '').toString().trim().toLowerCase());
     (p.nombres_prev || '').toString().split('|').forEach((n: string) => push(n.trim().toLowerCase()));
@@ -178,7 +194,7 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
       const arsM = parseFloat(v.ars_myri) || 0, usdM = parseFloat(v.usd_myri) || 0;
       const comiARS = parseFloat(v.comi_ars) || 0, comiUSD = parseFloat(v.comi_usd) || 0;
       const cajaM = (v.caja_myri || '').toString();
-      const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
+      const gp = gananciaPitz((v.productos || '').toString(), mapa, tc, _fparMin(v.fecha));
       gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
       if (gp.faltaTC) marcarTC(v);
       const tieneTramos = (v.tramos || '').toString().trim() !== '';
@@ -199,7 +215,7 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
     const bJ = (parseFloat(v.ars_jony) || 0) + (parseFloat(v.usd_jony) || 0);
     const fJ = bJ > 0 ? Math.min(1, (c.jA + c.jU) / bJ) : 0;
     if (fJ > 0) {
-      const gp = gananciaPitz((v.productos || '').toString(), mapa, tc);
+      const gp = gananciaPitz((v.productos || '').toString(), mapa, tc, _fparMin(v.fecha));
       gp.faltaCosto.forEach((n) => { if (out.faltaCosto.indexOf(n) === -1) out.faltaCosto.push(n); });
       if (gp.faltaTC) marcarTC(v);
       out.pitzARS += Math.round(gp.ars * fJ); out.pitzUSD += Math.round(gp.usd * fJ * 100) / 100;
@@ -2641,7 +2657,7 @@ Deno.serve(async (req) => {
     if (accion === 'hacerCorte') {
       // Liquida la ganancia cobrada del período: calcula el Maaser, marca esas ventas con el corteId
       // (para que el período vuelva a 0) y registra el corte.
-      const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
+      const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev,creado'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
       const per = calcularGanancias(ventas, productos, pagos, msC);
       const gananciaARS = Math.round(per.comisionARS + per.pitzARS);
       const gananciaUSD = Math.round((per.comisionUSD + per.pitzUSD) * 100) / 100;
@@ -2685,7 +2701,7 @@ Deno.serve(async (req) => {
     }
 
     if (accion === 'getGanancias') {
-      const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
+      const [ventas, productos, pagos, msC] = await Promise.all([sbGet('ventas', 'select=*&order=n_venta'), sbGet('productos', 'select=id,nombre,dueno,moneda,costo,descripcion,nombres_prev,creado'), sbGet('pagos', 'select=*&order=id'), msUltimoCorte()]);
       const p = calcularGanancias(ventas, productos, pagos, msC);
       const balance = p.comisionARS + p.pitzARS;
       return json({ balance, balanceUSD: Math.round((p.comisionUSD + p.pitzUSD) * 100) / 100, comisionARS: p.comisionARS, comisionUSD: p.comisionUSD, pitz: p.pitzARS, pitzUSD: p.pitzUSD, movimientos: [], faltaCosto: p.faltaCosto, faltaTC: p.faltaTC, faltaTCVentas: p.faltaTCVentas || [] });

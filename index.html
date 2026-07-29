@@ -1573,6 +1573,7 @@
       <div id="ep-status" style="font-size:0.75rem;color:var(--texto-suave);margin-top:0.3rem"></div>
       <button type="button" onclick="analizarFotoEditor()" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:linear-gradient(135deg,#7b2ff7,#f107a3);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.82rem;cursor:pointer;font-family:'DM Sans',sans-serif">✨ Que la IA mire la foto y sugiera nombre + descripción</button>
       <button class="guardar-stock-btn" style="margin-top:0.6rem" onclick="guardarEdicionProducto()">💾 Guardar cambios</button>
+      <button class="guardar-stock-btn" type="button" style="margin-top:0.5rem;background:#eef7ee;color:#1e7a3c" onclick="abrirClonarProducto()">👯 Clonar para el otro dueño (no toca el historial)</button>
       <button class="guardar-stock-btn" style="margin-top:0.5rem;background:#fff3e0;color:#b8860b" onclick="eliminarProductoEditor()">🙈 Ocultar producto (se conserva el historial)</button>
       <button class="guardar-stock-btn" style="margin-top:0.4rem;background:#fde8e8;color:#c0392b" onclick="borrarProductoEditor()">🗑️ Borrar definitivamente (se va del catálogo)</button>
     </div>
@@ -7038,6 +7039,81 @@ function agregarFotosEditor(input) {
     _epMedia.push({ k: 'new', v: f });
   }
   renderFotosEditor();
+}
+
+// 👯 CLONAR un producto para el OTRO dueño (2026-07-29).
+// Por qué clonar y NO cambiar el dueño del original: la ganancia de Pitzujim mira el dueño ACTUAL
+// del producto y recorre las ventas PASADAS (mapaProdJony + gananciaPitz). Si a un producto de Miri
+// que ya se vendió le cambiás el dueño a Jony, esas ventas viejas —que ya pagaron comisión como
+// mercadería de Miri— empezarían ADEMÁS a computar ganancia de Pitzujim: doble conteo retroactivo.
+// Clonando, el histórico queda intacto: el original sigue siendo de Miri y el clon arranca de cero.
+function abrirClonarProducto() {
+  if (!_epId) { showToast('Abrí primero la ficha de un producto'); return; }
+  const p = (productos || []).find(x => String(x.id) === String(_epId));
+  if (!p) { showToast('No encontré el producto'); return; }
+  const otro = (p.dueno === 'Jony') ? 'Miri' : 'Jony';
+  const ov = document.createElement('div');
+  ov.id = 'clon-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.1rem 1.2rem;max-width:420px;width:100%">
+    <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem;margin-bottom:0.2rem">👯 Clonar producto</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.8rem">Se crea una copia nueva. <b>El original no se toca</b> y el historial de ventas queda intacto.</div>
+    <div style="background:var(--gris);border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.8rem">
+      <div style="font-size:0.85rem;font-weight:700">${esc(p.nombre)}</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave)">${esc((p.desc || '').substring(0, 70))}</div>
+      <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:3px">hoy es de <b>${esc(p.dueno || '—')}</b></div>
+    </div>
+    <label style="font-size:0.8rem;font-weight:700;color:var(--azul);display:block;margin-bottom:0.25rem">El clon va a ser de:</label>
+    <select id="clon-dueno" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.9rem;background:#fff;margin-bottom:0.7rem">
+      <option value="${otro}" selected>${otro}</option>
+      <option value="${esc(p.dueno || 'Miri')}">${esc(p.dueno || 'Miri')} (mismo dueño)</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:7px;font-size:0.8rem;cursor:pointer;margin-bottom:0.9rem">
+      <input type="checkbox" id="clon-ocultar-orig" style="width:16px;height:16px"> Ocultar el original de la tienda
+      <span style="font-size:0.68rem;color:var(--texto-suave)">(no lo borra)</span>
+    </label>
+    <div style="font-size:0.68rem;color:var(--texto-suave);background:#fff8ec;border:1px solid #f0d9a8;border-radius:8px;padding:0.5rem 0.65rem;margin-bottom:0.8rem">
+      Se copian nombre, descripción, fotos, precios, costo, categoría, moneda, kosher, peso y cinta. <b>El stock arranca en 0.</b>
+    </div>
+    <div style="display:flex;gap:7px">
+      <button onclick="document.getElementById('clon-overlay').remove()" style="flex:1;padding:0.6rem;background:var(--gris);border:none;border-radius:9px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button id="clon-btn" onclick="confirmarClonarProducto()" style="flex:2;padding:0.6rem;background:#1e7a3c;color:#fff;border:none;border-radius:9px;font-weight:800;cursor:pointer;font-family:inherit">👯 Crear el clon</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+async function confirmarClonarProducto() {
+  const p = (productos || []).find(x => String(x.id) === String(_epId));
+  if (!p) { showToast('No encontré el producto'); return; }
+  const dueno = document.getElementById('clon-dueno')?.value || 'Jony';
+  const ocultarOrig = !!document.getElementById('clon-ocultar-orig')?.checked;
+  const btn = document.getElementById('clon-btn');
+  const prev = _bloquearBtn(btn, '⏳ Clonando...');
+  const params = new URLSearchParams({
+    accion: 'agregarProducto', nombre: p.nombre, desc: p.desc || '',
+    pMay: String(p.precioMay || 0), pMin: String(p.precioMin || 0),
+    stock: '0',                       // el clon arranca sin stock (es mercadería que todavía no cargaste)
+    imagen: p.imagen || '', categoria: p.categoria || 'Varios',
+    visible: p.visible || 'Ambos', dueno, moneda: p.moneda === 'U$S' ? 'U$S' : '$',
+    clientId: 'clon-' + Date.now()
+  });
+  if (p.costo > 0) params.set('costo', String(p.costo));
+  if ((p.unidadesPorPaquete || 1) > 1) params.set('unidadesPorPaquete', String(p.unidadesPorPaquete));
+  if ((p.peso || 0) > 0) params.set('peso', String(p.peso));
+  if ((p.etiqueta || '').trim()) params.set('etiqueta', p.etiqueta.trim());
+  if ((p.hashgaja || '').trim()) params.set('hashgaja', p.hashgaja.trim());
+  if ((p.kosherTipo || '').trim()) params.set('kosherTipo', p.kosherTipo.trim());
+  if ((p.jalav || '').trim()) params.set('jalav', p.jalav.trim());
+  const r = await apiWrite(params);
+  if (!r || r.error) { _restaurarBtn(btn, prev); return; }
+  if (ocultarOrig) await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: String(p.id), activo: 'NO' }));
+  document.getElementById('clon-overlay')?.remove();
+  showToast(`👯 Clon creado para ${dueno} ✓`);
+  await cargarProductos();
+  if (typeof renderStockTotal === 'function') renderStockTotal();
+  if (typeof renderCatalogo === 'function') renderCatalogo();
 }
 
 async function guardarEdicionProducto() {
