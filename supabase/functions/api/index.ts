@@ -110,12 +110,17 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
       d.jA = parseFloat(v.ars_jony) || 0; d.mA = parseFloat(v.ars_myri) || 0;
       d.jU = parseFloat(v.usd_jony) || 0; d.mU = parseFloat(v.usd_myri) || 0;
     }
-    const it = { v, ...d, cub: { jA: 0, mA: 0, jU: 0, mU: 0 } };   // cub: cubierto que CUENTA (pagos > último corte)
+    // cub: cubierto que CUENTA (pagos > último corte). mUars (v4.29) = equivalente EN PESOS de las
+    // golosinas en U$S que se cobraron en una caja de PESOS con TC → la comisión de esas va en pesos,
+    // mismo criterio que la cuenta entre socios ("la comisión sigue dónde entró la plata").
+    const it = { v, ...d, cub: { jA: 0, mA: 0, jU: 0, mU: 0, mUars: 0 } };
     porId[String(v.id)] = it;
     if (d.jA <= 0 && d.mA <= 0 && d.jU <= 0 && d.mU <= 0) return;
     (res[norm(v.cliente)] = res[norm(v.cliente)] || []).push(it);
   });
   Object.values(res).forEach((l: any) => l.sort((a: any, b: any) => _fparMin(a.v.fecha) - _fparMin(b.v.fecha)));
+  // ¿el pago entró en una caja de PESOS con TC? → sus golosinas en U$S cuentan como pesos
+  const enPesos = (p: any) => { const tcp = parseFloat(p.tc) || 0; return tcp > 0 && CAJAS_ARS.indexOf((p.caja || '').toString()) !== -1 ? tcp : 0; };
   const ord = [...(pagos || [])].sort((a, b) => _fparMin(a.fecha) - _fparMin(b.fecha));
   // Atados: consumen la deuda de SU pedido (monto_pitz / monto_pitz_usd dicen cuánto fue Pitzujim)
   ord.filter((p) => p.pedido_id).forEach((p) => {
@@ -126,7 +131,7 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
     const pzU = Math.min(parseFloat(p.monto_pitz_usd) || 0, it.jU);   // Pitzujim en U$S (auto-reparto 2026-07-07)
     const gU = Math.min(Math.max(0, (parseFloat(p.monto_usd) || 0) - (parseFloat(p.monto_pitz_usd) || 0)), it.mU);
     it.jA -= pz; it.mA -= gA; it.mU -= gU; it.jU -= pzU;
-    if (cuenta) { it.cub.jA += pz; it.cub.mA += gA; it.cub.mU += gU; it.cub.jU += pzU; }
+    if (cuenta) { const _tp = enPesos(p); it.cub.jA += pz; it.cub.mA += gA; it.cub.jU += pzU; if (_tp) it.cub.mUars += gU * _tp; else it.cub.mU += gU; }
   });
   // Generales: FIFO por componente. Los pagos NUEVOS con criterio elegido (p.reparto seteado)
   // respetan sus partes YA guardadas (Pitzujim = monto_pitz / monto_pitz_usd); los VIEJOS (sin
@@ -140,7 +145,7 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
       (res[norm(p.cliente)] || []).forEach((it: any) => {
         let a = Math.min(pPz, it.jA); it.jA -= a; pPz -= a; if (cuenta) it.cub.jA += a;
         a = Math.min(pGa, it.mA); it.mA -= a; pGa -= a; if (cuenta) it.cub.mA += a;
-        a = Math.min(pGu, it.mU); it.mU -= a; pGu -= a; if (cuenta) it.cub.mU += a;
+        a = Math.min(pGu, it.mU); it.mU -= a; pGu -= a; if (cuenta) { const _tp = enPesos(p); if (_tp) it.cub.mUars += a * _tp; else it.cub.mU += a; }
         a = Math.min(pPu, it.jU); it.jU -= a; pPu -= a; if (cuenta) it.cub.jU += a;
       });
       return;
@@ -149,7 +154,7 @@ function coberturaPagos(ventas: any[], pagos: any[], msCorte: number) {
     (res[norm(p.cliente)] || []).forEach((it: any) => {
       let a = Math.min(pA, it.jA); it.jA -= a; pA -= a; if (cuenta) it.cub.jA += a;
       a = Math.min(pA, it.mA); it.mA -= a; pA -= a; if (cuenta) it.cub.mA += a;
-      a = Math.min(pU, it.mU); it.mU -= a; pU -= a; if (cuenta) it.cub.mU += a;
+      a = Math.min(pU, it.mU); it.mU -= a; pU -= a; if (cuenta) { const _tp = enPesos(p); if (_tp) it.cub.mUars += a * _tp; else it.cub.mU += a; }
       a = Math.min(pU, it.jU); it.jU -= a; pU -= a; if (cuenta) it.cub.jU += a;
     });
   });
@@ -184,9 +189,11 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
     // Opción A: sin cobro confirmado pero CUBIERTA por pagos a cuenta → cuenta lo cubierto
     const it = cober[String(v.id)]; if (!it) return;
     const c = it.cub;
-    if (c.jA <= 0.5 && c.mA <= 0.5 && c.jU <= 0.005 && c.mU <= 0.005) return;
+    if (c.jA <= 0.5 && c.mA <= 0.5 && c.jU <= 0.005 && c.mU <= 0.005 && (c.mUars || 0) <= 0.5) return;
     if (!sinComi) {
-      out.comisionARS += Math.round(c.mA * 0.15);
+      // v4.29: mUars son golosinas en U$S cobradas en caja de PESOS → su comisión va en PESOS
+      // (criterio elegido por el usuario: la comisión sigue dónde entró la plata).
+      out.comisionARS += Math.round(c.mA * 0.15) + Math.round((c.mUars || 0) * 0.15);
       out.comisionUSD += Math.round(c.mU * 0.15 * 100) / 100;
     }
     const bJ = (parseFloat(v.ars_jony) || 0) + (parseFloat(v.usd_jony) || 0);
