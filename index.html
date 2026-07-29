@@ -424,6 +424,31 @@
   }
   .precio-cartel .producto-precio { margin-top: 0; font-size: 1.22rem; font-weight: 800; letter-spacing: -0.01em; }
   body.dark .precio-cartel { background: #3d3416; }
+  /* 🎗️ Cinta diagonal en la esquina superior izquierda (texto libre por producto).
+     El wrapper recorta lo que sobresale; la cinta va a 45° pegada a la esquina. */
+  .cinta-wrap {
+    position: absolute; top: 0; left: 0;
+    width: 108px; height: 108px; overflow: hidden;
+    pointer-events: none; z-index: 4;
+    border-top-left-radius: inherit;
+  }
+  .cinta-wrap .cinta {
+    position: absolute;
+    top: 26px; left: -34px;
+    width: 160px;
+    transform: rotate(-45deg);
+    background: linear-gradient(135deg, #e3173d, #b0102e);
+    color: #fff;
+    text-align: center;
+    font-size: 0.56rem; font-weight: 800; letter-spacing: 0.03em;
+    line-height: 1.15;
+    padding: 4px 0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    text-transform: uppercase;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Con cinta puesta, el sello redondo de oferta se corre para no taparse */
+  .producto-card.con-cinta .sello-oferta { top: 78px; left: 6px; }
   .sello-oferta {
     position: absolute;
     top: 10px; left: 10px;
@@ -1343,6 +1368,10 @@
           <label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
           <input type="number" id="np-peso" min="0" step="1" placeholder="0" />
         </div>
+        <div class="nombre-campo" style="margin:0">
+          <label>🎗️ Cinta en la tarjeta <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">(ej: POR VENCER — vacío = sin cinta)</span></label>
+          <input type="text" id="np-etiqueta" maxlength="40" placeholder="POR VENCER" />
+        </div>
         <div class="nombre-campo" style="margin:0;flex:1.4;min-width:140px">
           <label>✡️ Hashgajá <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(supervisión)</span></label>
           <input type="text" id="np-hashgaja" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…" />
@@ -1507,6 +1536,10 @@
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
           <input type="number" id="ep-peso" min="0" step="1" placeholder="0" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.25rem">🎗️ Cinta en la tarjeta <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">(ej: POR VENCER — vacío = sin cinta)</span></label>
+          <input type="text" id="ep-etiqueta" maxlength="40" placeholder="POR VENCER" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box;text-transform:uppercase">
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:180px"><label title="Si el MISMO producto existe con stock de los dos dueños, vinculalos: Candy los ve como uno solo y compra primero de Jony (al costo) y después de Miri">🔗 Producto gemelo</label>
           <button type="button" id="ep-vinculo-btn" onclick="abrirVincularGemelo()" style="width:100%;padding:0.6rem;border:1.5px dashed var(--gris-medio);border-radius:8px;background:#fff;cursor:pointer;font-size:0.78rem;color:var(--texto-suave);font-family:'DM Sans',sans-serif">Sin vincular</button>
@@ -2369,7 +2402,7 @@ async function cargarProductos() {
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
   try {
     // Catálogo desde Supabase (columnas públicas; costo/candyCod son privados)
-    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,peso,vinculo,hashgaja,kosher_tipo,jalav&order=id', { headers: SB_ANON_H });
+    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,peso,etiqueta,vinculo,hashgaja,kosher_tipo,jalav&order=id', { headers: SB_ANON_H });
     const data = await r.json();
     productos = data.map(p => ({
       id: parseInt(p.id),
@@ -2384,6 +2417,7 @@ async function cargarProductos() {
       visible: (p.visible_cat || 'Ambos').trim(),
       unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1),
       peso: parseFloat(p.peso) || 0,
+      etiqueta: (p.etiqueta || '').toString().trim(),
       vinculo: (p.vinculo || '').trim(),
       hashgaja: (p.hashgaja || '').trim(),
       kosherTipo: (p.kosher_tipo || '').trim(),
@@ -3157,7 +3191,8 @@ function renderCatalogo() {
     // parejas entre filas (antes "Lácteo · Jalav Israel" + supervisión saltaban a 2 renglones).
     const kosherHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:2px 0 1px;min-height:19px">${kBadges.map(b => `<span style="background:${b[0]};color:${b[1]};font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">${b[2]}</span>`).join('')}</div>`;
     return `
-    <div class="producto-card ${agotado ? 'agotado' : ''}" id="card-${p.id}">
+    <div class="producto-card ${agotado ? 'agotado' : ''}${(p.etiqueta||'').trim() ? ' con-cinta' : ''}" id="card-${p.id}">
+      ${(p.etiqueta||'').trim() ? `<div class="cinta-wrap"><div class="cinta" title="${esc(p.etiqueta)}">${esc(p.etiqueta)}</div></div>` : ''}
       ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
       ${!agotado && ofertaActiva(p) ? '<div class="sello-oferta">¡OFERTA<br>DEL DÍA!</div>' : ''}
       <button class="share-btn" onclick="compartirProducto(${p.id})" title="Compartir">📤</button>
@@ -5600,6 +5635,7 @@ async function abrirMasivo() {
         costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0),
         unidadesPorPaquete: _mDispTxt(p.unidadesPorPaquete || 1),
         peso: _mDispTxt(p.peso || 0),
+        etiqueta: (p.etiqueta || '').toString(),
         hashgaja: _mDispTxt(p.hashgaja || ''), kosherTipo: _mDispTxt(p.kosherTipo || ''), jalav: _mDispTxt(p.jalav || '')
       };
     });
@@ -5698,9 +5734,9 @@ function renderMasivo() {
   } else {
     const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
     const _thSort = (c, lbl, extra) => `<th style="${_mTh}cursor:pointer;user-select:none" ${extra||''} onclick="masivoSort('${c}')" title="Ordenar por ${lbl}">${lbl}${_flecha(c)}</th>`;
-    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th></tr></thead><tbody>`;
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th><th style="${_mTh}" title="Cinta diagonal en la tarjeta de la tienda (texto corto)">🎗️ Cinta</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -6924,6 +6960,7 @@ function cargarProductoEditor(id) {
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
   { const eu = document.getElementById('ep-upp'); if (eu) eu.value = p.unidadesPorPaquete || 1; }
   { const epe = document.getElementById('ep-peso'); if (epe) epe.value = p.peso || ''; }
+  { const epq = document.getElementById('ep-etiqueta'); if (epq) epq.value = p.etiqueta || ''; }
   { const eh = document.getElementById('ep-hashgaja'); if (eh) eh.value = p.hashgaja || ''; }
   { const ek = document.getElementById('ep-kosher'); if (ek) ek.value = p.kosherTipo || ''; }
   { const ej = document.getElementById('ep-jalav'); if (ej) ej.value = p.jalav || ''; kosherChange('ep'); }
@@ -7036,6 +7073,7 @@ async function guardarEdicionProducto() {
     visible: document.getElementById('ep-visible').value,
     unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
     peso: document.getElementById('ep-peso')?.value || '0',
+    etiqueta: (document.getElementById('ep-etiqueta')?.value || '').trim(),
     vinculo: _epVinculo || '__VACIO__',
     hashgaja: (document.getElementById('ep-hashgaja')?.value || '').trim() || '__VACIO__',
     kosherTipo: document.getElementById('ep-kosher')?.value || '__VACIO__',
@@ -7289,6 +7327,7 @@ async function guardarNuevoProducto() {
     if (uppAlta > 1) params.set('unidadesPorPaquete', uppAlta);
     const pesoAlta = parseFloat(document.getElementById('np-peso')?.value) || 0;
     if (pesoAlta > 0) params.set('peso', pesoAlta);
+    { const eq = (document.getElementById('np-etiqueta')?.value || '').trim(); if (eq) params.set('etiqueta', eq); }
     const hashgAlta = (document.getElementById('np-hashgaja')?.value || '').trim();
     if (hashgAlta) params.set('hashgaja', hashgAlta);
     const kosherAlta = document.getElementById('np-kosher')?.value || '';
@@ -7308,6 +7347,7 @@ async function guardarNuevoProducto() {
       ['np-hashgaja', 'np-kosher', 'np-jalav'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
       const _nu = document.getElementById('np-upp'); if (_nu) _nu.value = '1';
       const _npe = document.getElementById('np-peso'); if (_npe) _npe.value = '';
+      const _npq = document.getElementById('np-etiqueta'); if (_npq) _npq.value = '';
       document.getElementById('np-categoria').value = '';
       document.getElementById('np-foto').value = '';
       document.getElementById('np-preview').style.display = 'none';

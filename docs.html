@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shuk Mamtakim — Documentación v4.29</title>
+<title>Shuk Mamtakim — Documentación v4.30</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -666,6 +666,7 @@
   <table>
     <thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
     <tbody>
+      <tr><td>v4.30</td><td>Jul 2026</td><td><strong>🎗️ Cinta diagonal en la tarjeta del producto.</strong> Nuevo campo <strong>"🎗️ Cinta en la tarjeta"</strong> en la ficha del producto (y en el editor masivo): escribís un texto corto —por ejemplo <strong>POR VENCER</strong>, LIQUIDACIÓN, ÚLTIMOS— y aparece una <strong>cinta roja cruzada en la esquina superior izquierda</strong> de la tarjeta en la tienda. Si el campo queda vacío, no se muestra nada. Si el producto además tiene oferta del día, el sello redondo se corre solo para que no se tapen.</td></tr>
       <tr><td>v4.29</td><td>Jul 2026</td><td><strong>💱 La comisión ahora se cuenta donde entró la plata (unifica ganancia y cuenta de socios).</strong> La <strong>cuenta entre socios</strong> ya contaba en pesos la comisión de una venta en U$S que se cobró en una caja de pesos; la <strong>ganancia/maaser</strong> la dejaba en dólares. No faltaba plata (mismo valor económico) pero los números no coincidían y cambiaba en qué moneda correspondía el diezmo. Ahora la ganancia sigue el mismo criterio: <strong>la comisión va en la moneda de la caja donde entró la plata</strong>. Comisión: de $723.616 + U$S 292,73 a <strong>$939.620 + U$S 150,81</strong> (mismo valor, verificado). Maaser: de $178.281 + U$S 129,13 a <strong>$199.881 + U$S 114,94</strong>. El auditor vigila que las dos pantallas midan el mismo valor económico.</td></tr>
       <tr><td>v4.28</td><td>Jul 2026</td><td><strong>🤝 PDF de conciliación entre socios.</strong> Nuevo botón en la Cuenta entre socios (solo en la vista completa): genera un documento imprimible con <strong>el saldo, cada componente y el detalle caso por caso</strong> — comisión, ventas cruzadas, envíos — en pesos y en dólares por separado. Sirve para cruzarlo con Myri al liquidar sin depender de mirar pantallas. Verificado que <strong>los renglones suman exactamente el saldo</strong> en las dos monedas.</td></tr>
       <tr><td>v4.27</td><td>Jul 2026</td><td><strong>🧾 El extracto del cliente también cruza el saldo + "Te deben" ya no sale negativo.</strong> (1) El <strong>estado de cuenta</strong> (el documento que se le manda al cliente) seguía cerrando con el saldo a favor viejo: mostraba "U$S 76,83 a favor" cuando libres había U$S 22,97. Ahora, en vista Miri, se agrega una línea <strong>neutra</strong> "Aplicado a otra compra" que hace cerrar el extracto en el saldo real — <strong>sin decir de quién era la mercadería</strong> (en vista Jony sí se ve el pedido con su detalle). (2) En "Mi resumen", el renglón <strong>"Te deben"</strong> podía dar un número <strong>negativo</strong> ("$ −17") porque mezclaba deudas con saldos a favor. Ahora van separados: "Te deben" solo suma deudas reales y aparece un renglón propio <strong>"💚 Cobrado de más (clientes con saldo a favor)"</strong>. El cuadre de "esa plata, ¿dónde está?" sigue cerrando exacto (verificado en $ y U$S).</td></tr>
@@ -865,7 +866,7 @@
 <hr>
 <div style="text-align:center; color:var(--texto-suave); font-size:0.75rem; padding:1rem 0">
   <strong style="color:var(--dorado); font-family:'Fraunces',serif; font-size:1rem">Shuk Mamtakim</strong><br>
-  Documentación v4.29 · Julio 2026 · Uso interno
+  Documentación v4.30 · Julio 2026 · Uso interno
 </div>
 
 </div>

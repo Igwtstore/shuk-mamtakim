@@ -27,6 +27,7 @@ create table if not exists productos (
   nombres_prev          text,               -- historial de nombres (renombrado seguro)
   unidades_por_paquete  integer default 1,  -- ⭐ NUEVO: circuito Candy↔Shuk (bolsa de N unidades)
   peso                  numeric default 0,  -- peso por bolsa en gramos (interno, orden de compra)
+  etiqueta              text,               -- cinta diagonal en la tarjeta de la tienda (texto corto, vacío = sin cinta)
   creado                timestamptz default now(),
   actualizado           timestamptz default now()
 );
