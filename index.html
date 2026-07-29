@@ -424,6 +424,23 @@
   }
   .precio-cartel .producto-precio { margin-top: 0; font-size: 1.22rem; font-weight: 800; letter-spacing: -0.01em; }
   body.dark .precio-cartel { background: #3d3416; }
+  /* 🔍 Visor de foto grande: se abre tocando la foto, se cierra tocando afuera */
+  .visor-foto { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9600;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    opacity: 0; transition: opacity .18s ease; -webkit-tap-highlight-color: transparent; }
+  .visor-foto.abierto { opacity: 1; }
+  .visor-foto img { max-width: 100%; max-height: 100%; object-fit: contain;
+    border-radius: 10px; box-shadow: 0 10px 50px rgba(0,0,0,0.6);
+    transform: scale(.97); transition: transform .18s ease; }
+  .visor-foto.abierto img { transform: scale(1); }
+  .visor-foto .visor-x { position: absolute; top: 14px; right: 16px; width: 40px; height: 40px;
+    border-radius: 50%; border: none; background: rgba(255,255,255,0.16); color: #fff;
+    font-size: 1.3rem; cursor: pointer; line-height: 1; }
+  .visor-foto .visor-tip { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center;
+    color: rgba(255,255,255,0.65); font-size: 0.76rem; pointer-events: none; }
+  .producto-img { cursor: zoom-in; }
+  @media (prefers-reduced-motion: reduce) { .visor-foto, .visor-foto img { transition: none; } }
+
   /* 🎗️ Cinta diagonal en la esquina superior izquierda (texto libre por producto).
      El wrapper recorta lo que sobresale; la cinta va a 45° pegada a la esquina. */
   .cinta-wrap {
@@ -3426,6 +3443,35 @@ function esVideo(url) {
   return /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url) || url.includes('/video/upload/');
 }
 
+// 🔍 Visor de foto grande (pedido de clientes 2026-07-29): tocás la foto y se abre en alta
+// resolución para ver los detalles del envase; tocás afuera (o Escape / la ✕) y se cierra.
+// Le pide a Cloudinary una versión de 1200px en vez de la de 400 que usa la tarjeta.
+function _urlGrande(u) {
+  if (!u || u.indexOf('res.cloudinary.com') === -1) return u;
+  // Si la URL ya trae un ancho (w_400 de la tarjeta), solo se sube a 1200 y se respeta el resto
+  // de la transformación (p. ej. e_trim:10). Si no trae ninguno, se agrega.
+  if (/w_\d+/.test(u)) return u.replace(/w_\d+/g, 'w_1200');
+  return u.replace('/upload/', '/upload/w_1200,f_auto,q_auto/');
+}
+function abrirFotoGrande(el) {
+  const src = el && (el.currentSrc || el.src);
+  if (!src) return;
+  const ov = document.createElement('div');
+  ov.className = 'visor-foto';
+  ov.innerHTML = `<button class="visor-x" aria-label="Cerrar">✕</button>
+    <img src="${_urlGrande(src)}" alt="${(el.alt || 'Producto').replace(/"/g, '&quot;')}">
+    <div class="visor-tip">Tocá fuera de la foto para cerrar</div>`;
+  const cerrar = () => {
+    ov.classList.remove('abierto');
+    document.removeEventListener('keydown', esc);
+    setTimeout(() => ov.remove(), 180);
+  };
+  const esc = e => { if (e.key === 'Escape') cerrar(); };
+  ov.onclick = e => { if (e.target !== ov.querySelector('img')) cerrar(); };   // cualquier punto afuera
+  document.addEventListener('keydown', esc);
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('abierto'));
+}
 function renderImg(p) {
   const imagenes = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (!imagenes.length) return `<div class="producto-img-wrap"><div class="producto-img-placeholder">🍬</div></div>`;
@@ -3450,6 +3496,7 @@ function renderImg(p) {
     const urls0 = imgUrl(primera);
     mediaEl = `<img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
       data-f1="${urls0[1]}" data-f2="${urls0[2]}" data-f3="${urls0[3]}"
+      onclick="event.stopPropagation();abrirFotoGrande(this)"
       onerror="imgFallbackNext(this)" loading="lazy" alt="${p.nombre}">`;
   }
   return `<div class="producto-img-wrap" id="carousel-${p.id}"
