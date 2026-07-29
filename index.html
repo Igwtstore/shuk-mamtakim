@@ -2566,6 +2566,25 @@ function packActivo(p) {
   return p.cantPack > 0 && p.precioPack > 0;
 }
 
+// 📦 "cuánto sale la unidad": si el producto viene por paquete (unidadesPorPaquete > 1),
+// divide el precio EFECTIVO (oferta / VIP / normal) por las unidades. Pedido del usuario 2026-07-29:
+// "si un paquete de bombones viene por 20 y vale 20.000, costo por unidad 1.000".
+function precioUnidadHtml(p) {
+  const upp = parseInt(p.unidadesPorPaquete) || 1;
+  if (upp <= 1) return '';
+  let val;
+  if (ofertaActiva(p)) val = parseFloat(p.precioOferta) || 0;
+  else if (modo === 'mayorista') val = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0;
+  else val = parseFloat(p.precioMin) || 0;
+  if (!(val > 0)) return '';
+  const u = val / upp;
+  const enPesos = esPesos(p);
+  let txt = enPesos ? '$ ' + Math.round(u).toLocaleString('es-AR') : 'U$S ' + (u < 1 ? u.toFixed(3) : u.toFixed(2));
+  // en mayorista y en dólares, el equivalente en pesos ayuda a comparar con el precio minorista
+  if (!enPesos && _tc > 0) txt += ' <span style="opacity:0.75">(≈ $ ' + Math.round(u * _tc).toLocaleString('es-AR') + ')</span>';
+  return `<div style="display:flex;align-items:center;justify-content:center;gap:5px;background:#eef4fb;border:1px solid #d8e6f5;border-radius:6px;padding:3px 8px;font-size:0.72rem;color:#1a5c8a;font-weight:600;margin-top:4px">
+    <span style="opacity:0.8">📦 trae ${upp}</span><span style="font-weight:800">${txt} c/u</span></div>`;
+}
 function esPesos(p) {
   if (modo === 'minorista') return true;
   return _monedaMay(p) !== 'U$S';   // por MONEDA del producto, no por dueño (Jony también vende en U$S)
@@ -3217,6 +3236,7 @@ function renderCatalogo() {
         <div class="precio-cartel" style="border-color:#1e7a3c">
           <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.8rem;margin-right:0.4rem">${vipAntes}</span><span class="producto-precio" style="color:#1e7a3c">${precio}</span><span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;margin-left:0.35rem;vertical-align:middle">-${p._vipPct}%</span>
         </div>` : `<div class="precio-cartel"><div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div></div>`}
+        ${precioUnidadHtml(p)}
         ${packActivo(p) ? `<div style="background:#fdf3e3;border-radius:6px;padding:3px 8px;font-size:0.75rem;color:var(--dorado);font-weight:600;margin-top:3px">🎁 x${p.cantPack} → ${esPeso ? '$ '+Math.round(p.precioPack).toLocaleString('es-AR') : 'U$S '+p.precioPack.toFixed(2)} c/u</div>` : ''}
       </div>
       ${agotado ? `
