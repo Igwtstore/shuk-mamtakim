@@ -1211,6 +1211,22 @@
     <input type="text" id="estado-tienda-msg" placeholder="Mensaje opcional para el cliente (ej: Volvemos el lunes)" style="width:100%;margin-top:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
     <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.4rem">🟡 Cotización: el cliente arma el pedido pero NO se descuenta stock; lo aceptás vos y ahí baja. 🔴 Cerrada: no puede pedir, ve un aviso con tu WhatsApp.</div>
   </div>
+  <div class="admin-card" data-seccion="inicio" id="card-aviso">
+    <div class="admin-titulo">📣 Aviso en la tienda</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Una franja arriba del catálogo con lo que quieras comunicar. <b>Vacío = no se muestra nada.</b></div>
+    <textarea id="aviso-texto" rows="2" maxlength="220" placeholder="ej: 🚚 Envíos SIN CARGO en compras superiores a $120.000 dentro de CABA"
+      style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;box-sizing:border-box;resize:vertical"></textarea>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.5rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave)">Color:</span>
+      <button type="button" onclick="_avisoColor('verde')" class="aviso-col-btn" data-col="verde" style="padding:0.35rem 0.7rem;border:2px solid #bfe3cb;border-radius:8px;background:#e8f6ec;color:#1a6b35;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Verde</button>
+      <button type="button" onclick="_avisoColor('dorado')" class="aviso-col-btn" data-col="dorado" style="padding:0.35rem 0.7rem;border:2px solid #ecd9b4;border-radius:8px;background:#fdf3e3;color:#8a5a1e;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Dorado</button>
+      <button type="button" onclick="_avisoColor('azul')" class="aviso-col-btn" data-col="azul" style="padding:0.35rem 0.7rem;border:2px solid #cfe0f3;border-radius:8px;background:#eef4fb;color:#1a5c8a;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Azul</button>
+      <button type="button" onclick="_avisoColor('rojo')" class="aviso-col-btn" data-col="rojo" style="padding:0.35rem 0.7rem;border:2px solid #f5c6c0;border-radius:8px;background:#fdecea;color:#b02a1c;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Rojo</button>
+    </div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin:0.6rem 0 0.25rem">Así lo va a ver el cliente:</div>
+    <div id="aviso-preview" style="padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)">(sin aviso)</div>
+    <button class="guardar-stock-btn" onclick="guardarAvisoTienda()" style="margin-top:0.6rem">Guardar aviso</button>
+  </div>
   <div class="admin-card" data-seccion="inicio" id="card-geo">
     <div class="admin-titulo">🌎 Vidriera geográfica</div>
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Interruptor provisorio: limita quién VE la web (el backend no se toca). Actual: <b id="geo-actual">…</b></div>
@@ -2284,14 +2300,82 @@ const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
 
 // Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'
 let _estadoTienda = 'abierta', _tiendaMsg = '';
+let _tiendaAviso = '', _tiendaAvisoColor = 'verde';   // 📣 banner de texto libre de la tienda
 async function cargarEstadoTienda() {
   try {
     const d = await fetch(`${APPS_SCRIPT_URL}?accion=getEstadoTienda&z=${Date.now()}`).then(r => r.json());
     _estadoTienda = d.estado || 'abierta';
     _tiendaMsg = d.mensaje || '';
+    _tiendaAviso = (d.aviso || '').trim();
+    _tiendaAvisoColor = d.avisoColor || 'verde';
   } catch (e) { _estadoTienda = 'abierta'; }
   pintarBannerTienda();
+  pintarAvisoTienda();
   marcarEstadoTiendaBtn();
+}
+
+// 📣 AVISO DE LA TIENDA — franja de texto libre que escribe Jony desde el panel
+// ("Envíos sin cargo en compras superiores a $120.000 dentro de CABA"). Vacío = no se muestra.
+const _AVISO_COLORES = {
+  verde:  { bg: '#e8f6ec', bd: '#bfe3cb', fg: '#1a6b35' },
+  dorado: { bg: '#fdf3e3', bd: '#ecd9b4', fg: '#8a5a1e' },
+  rojo:   { bg: '#fdecea', bd: '#f5c6c0', fg: '#b02a1c' },
+  azul:   { bg: '#eef4fb', bd: '#cfe0f3', fg: '#1a5c8a' },
+};
+// ── Panel: editar el aviso, con vista previa en vivo ──────────────────────────
+let _avisoColorSel = 'verde';
+function _avisoColor(c) { _avisoColorSel = c; _avisoPreview(); }
+function _avisoPreview() {
+  const t = ((document.getElementById('aviso-texto') || {}).value || '').trim();
+  const pv = document.getElementById('aviso-preview');
+  document.querySelectorAll('.aviso-col-btn').forEach(b => {
+    const sel = b.dataset.col === _avisoColorSel;
+    b.style.outline = sel ? '2px solid var(--azul)' : 'none';
+    b.style.outlineOffset = '1px';
+  });
+  if (!pv) return;
+  if (!t) {
+    pv.style.cssText = 'padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)';
+    pv.textContent = '(sin aviso — no se muestra nada en la tienda)';
+    return;
+  }
+  const c = _AVISO_COLORES[_avisoColorSel] || _AVISO_COLORES.verde;
+  pv.style.cssText = `padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:${c.bg};border:1px solid ${c.bd};color:${c.fg}`;
+  pv.textContent = t;
+}
+async function guardarAvisoTienda() {
+  const t = ((document.getElementById('aviso-texto') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+  const r = await apiWrite(new URLSearchParams({ accion: 'setAvisoTienda', aviso: t, color: _avisoColorSel }),
+    t ? '📣 Aviso publicado en la tienda ✓' : '📣 Aviso quitado de la tienda ✓');
+  if (r && r.ok) { _tiendaAviso = t; _tiendaAvisoColor = _avisoColorSel; pintarAvisoTienda(); }
+}
+// Carga el aviso guardado en los campos del panel (se llama al abrir el panel).
+function cargarAvisoEnPanel() {
+  const ta = document.getElementById('aviso-texto');
+  if (!ta) return;
+  ta.value = _tiendaAviso || '';
+  _avisoColorSel = _tiendaAvisoColor || 'verde';
+  if (!ta._lig) { ta.addEventListener('input', _avisoPreview); ta._lig = true; }
+  _avisoPreview();
+}
+
+function pintarAvisoTienda() {
+  let a = document.getElementById('aviso-tienda');
+  const enTienda = modo === 'mayorista' || modo === 'minorista';
+  if (!_tiendaAviso || !enTienda) { if (a) a.remove(); return; }
+  const c = _AVISO_COLORES[_tiendaAvisoColor] || _AVISO_COLORES.verde;
+  if (!a) {
+    a = document.createElement('div');
+    a.id = 'aviso-tienda';
+    const cont = document.getElementById('catalogo-section');
+    if (!cont) return;
+    // Debajo del banner de la marca: primero del catálogo, salvo que ya esté el cartel de estado.
+    const est = document.getElementById('estado-tienda-banner');
+    cont.insertBefore(a, est && est.parentNode === cont ? est.nextSibling : cont.firstChild);
+  }
+  a.style.cssText = `max-width:900px;margin:0.75rem auto 0;padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;`
+    + `font-weight:700;text-align:center;line-height:1.35;background:${c.bg};border:1px solid ${c.bd};color:${c.fg}`;
+  a.textContent = _tiendaAviso;
 }
 function pintarBannerTienda() {
   let b = document.getElementById('estado-tienda-banner');
@@ -2324,6 +2408,7 @@ async function cambiarEstadoTienda(estado) {
 function marcarEstadoTiendaBtn() {
   const lbl = { abierta: '🟢 Abierta', cotizacion: '🟡 Solo cotización', cerrada: '🔴 Cerrada' };
   const el = document.getElementById('estado-tienda-actual'); if (el) el.textContent = lbl[_estadoTienda] || _estadoTienda;
+  cargarAvisoEnPanel();   // 📣 el aviso viaja en la misma respuesta → se refleja acá
   document.querySelectorAll('.estado-t-btn').forEach(b => {
     const activo = b.dataset.est === _estadoTienda;
     b.style.background = activo ? 'var(--azul)' : '#fff';
@@ -2795,6 +2880,14 @@ function _creadoTs(p) { const t = p.creado ? new Date(p.creado).getTime() : NaN;
 // ✡️ KOSHER en el catálogo — Parve/Lácteo (con Jalav) + hashgajá, igual que las chapitas de la tienda.
 // Dos formatos porque el catálogo se exporta por dos caminos: HTML (vista/imagen, admite emojis) y
 // jsPDF nativo (helvetica NO tiene emojis → texto limpio).
+// Chapitas kosher listas para HTML, SIN depender del toggle del armador (las usa el remito).
+function _kosherChipsHtml(p, tam) {
+  const ps = _acKosherPartes(p || {});
+  if (!ps.length) return '';
+  const fs = tam === 'mini' ? '0.56rem' : '0.6rem';
+  return `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px">` + ps.map(x =>
+    `<span style="background:${x.bg};color:${x.fg};font-size:${fs};font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap">${x.emoji} ${esc(x.txt)}</span>`).join('') + `</div>`;
+}
 function _acKosherPartes(p) {
   const t = (p.kosherTipo || '').trim(), j = (p.jalav || '').trim(), h = (p.hashgaja || '').trim();
   const out = [];
@@ -10192,7 +10285,7 @@ function setModo(m) {
     });
     startAdminPolling();
   }
-  else { stopAdminPolling(); renderCatalogo(); pintarBannerTienda(); }
+  else { stopAdminPolling(); renderCatalogo(); pintarBannerTienda(); pintarAvisoTienda(); }
 }
 
 let _categoriaActiva = 'Todos';
@@ -14283,6 +14376,7 @@ function abrirRemitoPDF(v) {
       <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3">
         <div style="font-weight:600;font-size:0.84rem;color:#2d1a0a">${nombre}</div>
         ${desc ? `<div style="font-size:0.7rem;color:#999;margin-top:1px">${desc}</div>` : ''}
+        ${prodLinea ? _kosherChipsHtml(prodLinea, 'mini') : ''}
       </td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-size:0.83rem;color:#555;white-space:nowrap">${qty}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.83rem;color:#555;white-space:nowrap">${moneda} ${precioUnit}</td>

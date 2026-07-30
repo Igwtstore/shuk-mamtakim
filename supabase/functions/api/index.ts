@@ -2790,7 +2790,18 @@ Deno.serve(async (req) => {
       return json((await sbGet('avisos_candy', 'select=*')).map((r: any) => ({ row: r.id, fecha: (r.fecha || '').toString(), hijo: (r.hijo || '').toString(), codigo: (r.codigo || '').toString(), producto: (r.producto || '').toString(), cliente: (r.cliente || '').toString(), telefono: (r.telefono || '').toString(), estado: (r.estado || 'pendiente').toString() })).filter((a: any) => (!hijo || a.hijo === hijo) && a.estado !== 'listo').reverse());
     }
     if (accion === 'notificaciones') return json((await sbGet('notificaciones', 'select=*')).filter((r: any) => r.estado === 'pendiente' || r.estado === 'notificado').map((r: any) => ({ fecha: (r.fecha || '').toString(), productoId: (r.producto_id || '').toString(), producto: r.producto, nombre: r.nombre, telefono: (r.telefono || '').toString(), estado: r.estado, modoCliente: r.modo || 'mayorista' })));
-    if (accion === 'getEstadoTienda') return json({ estado: await getConfig('TIENDA_ESTADO', 'abierta'), mensaje: await getConfig('TIENDA_MSG', '') });
+    // 📣 Va también el AVISO de la tienda (banner de texto libre: "envíos sin cargo…"). Viaja acá
+    // para no sumarle otra llamada a la tienda: esta ya se hace siempre al abrir.
+    if (accion === 'getEstadoTienda') return json({
+      estado: await getConfig('TIENDA_ESTADO', 'abierta'), mensaje: await getConfig('TIENDA_MSG', ''),
+      aviso: await getConfig('TIENDA_AVISO', ''), avisoColor: await getConfig('TIENDA_AVISO_COLOR', 'verde'),
+    });
+    if (accion === 'setAvisoTienda') {
+      await setConfig('TIENDA_AVISO', P(body, 'aviso').trim().slice(0, 220));
+      const colA = P(body, 'color');
+      await setConfig('TIENDA_AVISO_COLOR', ['verde', 'dorado', 'rojo', 'azul'].indexOf(colA) !== -1 ? colA : 'verde');
+      return json({ ok: true });
+    }
     // 🌎 Estado del geo-gate (PÚBLICO, cacheado 30s) — lo lee el middleware de Vercel en cada request.
     // Devuelve el hash del pase (no el pase); el middleware valida ?pase hasheando y comparando.
     if (accion === 'geoGate') {
