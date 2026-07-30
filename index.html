@@ -14653,10 +14653,18 @@ function renderEditLineas() {
   cont.innerHTML = _editLineas.map((l, i) => {
     const max = maxQtyLinea(i);
     const maxAttr = isFinite(max) ? ` max="${max}"` : '';
+    // 📸 Foto del producto: a simple vista se distingue cuál es cuál (hay muchos con nombres
+    // casi iguales). Sale del producto ya matcheado por ID; si no hay foto, va un placeholder.
+    const _pl = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
+    const _im = _pl ? (imgUrl((_pl.imagen || '').split(',')[0].trim())[0] || '') : '';
+    const _foto = _im
+      ? `<img src="${_im}" onclick="event.stopPropagation();abrirFotoGrande(this)" title="Tocá para verla en grande" style="width:40px;height:40px;object-fit:contain;background:#faf8f5;border-radius:6px;border:1px solid #f0ebe3;flex-shrink:0;cursor:zoom-in" onerror="this.style.display='none'">`
+      : `<div style="width:40px;height:40px;border-radius:6px;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🍬</div>`;
     return `
     <div class="edit-row" style="flex-wrap:wrap;gap:6px;position:relative">
-      <div style="display:flex;align-items:center;width:100%;gap:6px">
-        <span class="edit-prod-name" style="flex:1;font-weight:600;font-size:0.85rem">${l.nombre}${l.descripcion ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${l.descripcion}</span>` : ''}</span>
+      <div style="display:flex;align-items:center;width:100%;gap:8px">
+        ${_foto}
+        <span class="edit-prod-name" style="flex:1;font-weight:600;font-size:0.85rem">${l.nombre}${l.descripcion ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${l.descripcion}</span>` : ''}${_pl ? `<span style="display:block;font-size:0.6rem;color:${(_pl.dueno === 'Jony') ? '#8a5a1e' : '#1a5c8a'};font-weight:700;margin-top:1px">${esc(_pl.dueno || '—')}${_pl.stock != null ? ' · stock ' + _pl.stock : ''}</span>` : `<span style="display:block;font-size:0.6rem;color:#c0392b;font-weight:700;margin-top:1px">⚠️ sin producto en el catálogo</span>`}</span>
         <button onclick="eliminarLineaEdit(${i})" style="background:#fde8e8;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:#e05c2a;font-size:1rem;flex-shrink:0" title="Eliminar producto">×</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px;width:100%">
