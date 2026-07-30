@@ -14735,6 +14735,9 @@ async function guardarEditPedido() {
         const _dstr = [data.deudaNueva.ars > 0 ? '$ ' + Math.round(data.deudaNueva.ars).toLocaleString('es-AR') : '', data.deudaNueva.usd > 0 ? 'U$S ' + data.deudaNueva.usd.toFixed(2) : ''].filter(Boolean).join(' + ');
         alert('⚠️ Ojo: este pedido ya estaba COBRADO y con la edición quedó debiendo ' + _dstr + '.\n\nEsa diferencia quedó anotada como deuda del cliente (Cta Cte): la vas a ver en la tarjeta del pedido ("cobro parcial · debe"), en la cuenta corriente, y la cobrás con "Re-confirmar cobro" o un pago a cuenta.');
       }
+      // 💸 Al revés: el pedido estaba cobrado y BAJÓ (devolución) → sobra plata que el cliente ya
+      // pagó. Antes se perdía en silencio y la caja mostraba menos de lo que había.
+      if (data.sobrecobro) await _ofrecerSaldoAFavor(data.sobrecobro);
       showToast('Pedido actualizado ✓');
       document.getElementById('edit-pedido-overlay').classList.remove('open');
       // Refresco INMEDIATO con datos frescos: el backend ya escribió (flush), así re-renderizamos
@@ -14745,6 +14748,52 @@ async function guardarEditPedido() {
     } else { showToast('Error: ' + (data.error || 'desconocido')); }
   } catch { showToast('Error de conexión'); }
   btn.textContent = 'Guardar cambios'; btn.disabled = false;
+}
+
+// 💸 SOBRECOBRO POR DEVOLUCIÓN — el pedido ya estaba cobrado y con la edición bajó de valor, así que
+// el cliente pagó de más. Se ofrece registrarlo como saldo a favor EN LA CAJA ORIGINAL, respetando de
+// quién era cada parte (reparto 'forzado': el auto-reparto no lo puede deducir porque ya no hay deuda
+// viva, y si lo adivina le inventa deuda al socio equivocado).
+async function _ofrecerSaldoAFavor(sc) {
+  const ars = parseFloat(sc.ars) || 0, usd = parseFloat(sc.usd) || 0;
+  if (ars <= 0.5 && usd <= 0.005) return;
+  const fmt = [ars > 0.5 ? '$ ' + Math.round(ars).toLocaleString('es-AR') : '',
+               usd > 0.005 ? 'U$S ' + usd.toFixed(2) : ''].filter(Boolean).join(' + ');
+  const cli = (sc.cliente || '').toString();
+  const ok = confirm('💸 Este pedido ya estaba COBRADO y con la edición bajó de valor.\n\n'
+    + 'Sobran ' + fmt + ' que ' + (cli || 'el cliente') + ' YA te pagó y ahora no debe.\n\n'
+    + '¿Lo registro como SALDO A FAVOR?\n\n'
+    + '• Aceptar → queda a favor de ' + (cli || 'el cliente') + ' (se descuenta de lo que compre) '
+    + 'y tu caja vuelve a mostrar la plata que realmente tenés.\n'
+    + '• Cancelar → no se anota en ningún lado y lo arreglás a mano con el cliente.');
+  if (!ok) { showToast('⚠️ Quedaron ' + fmt + ' sin registrar — arreglalo con el cliente'); return; }
+  // Un pago por caja: el sobrante de cada moneda vuelve a la caja donde había entrado.
+  const grupos = {};
+  const meter = (caja, k, v, kp, vp) => {
+    if (!caja) return;
+    grupos[caja] = grupos[caja] || { ars: 0, usd: 0, pitzARS: 0, pitzUSD: 0 };
+    grupos[caja][k] = v; grupos[caja][kp] = vp;
+  };
+  if (ars > 0.5) meter(sc.cajaARS || sc.cajaUSD, 'ars', ars, 'pitzARS', parseFloat(sc.pitzARS) || 0);
+  if (usd > 0.005) meter(sc.cajaUSD || sc.cajaARS, 'usd', usd, 'pitzUSD', parseFloat(sc.pitzUSD) || 0);
+  const cajas = Object.keys(grupos);
+  if (!cajas.length) { showToast('⚠️ No se pudo saber a qué caja volver — cargalo a mano'); return; }
+  let hechos = 0;
+  for (const caja of cajas) {
+    const g = grupos[caja];
+    const p = new URLSearchParams({
+      accion: 'registrarPagoCuenta', cliente: cli, caja, reparto: 'forzado',
+      nota: 'Devolución/ajuste del pedido #' + (sc.nVenta || '')
+    });
+    if (g.ars > 0.5) { p.set('montoARS', String(Math.round(g.ars))); p.set('montoPitz', String(Math.round(g.pitzARS))); }
+    if (g.usd > 0.005) { p.set('montoUSD', g.usd.toFixed(2)); p.set('montoPitzUsd', g.pitzUSD.toFixed(2)); }
+    if (parseFloat(sc.tc) > 0) p.set('tipoCambio', String(parseFloat(sc.tc)));
+    const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + p.toString()).catch(() => ({}));
+    if (r && r.ok) hechos++;
+  }
+  invalidarCache();
+  if (hechos === cajas.length) showToast('✓ ' + fmt + ' quedaron a favor de ' + (cli || 'el cliente'));
+  else showToast('⚠️ No se pudo registrar todo el saldo a favor — revisalo en la cuenta del cliente');
 }
 
 function cerrarEditPedido() {

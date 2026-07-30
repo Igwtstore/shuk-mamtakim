@@ -239,8 +239,14 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
 // criterio (v4.01): 'auto' = orden histórico (Pitzujim $ primero, golosinas U$S primero) ·
 // 'jony' = Pitzujim (Jony) primero en las DOS monedas · 'prorrata' = proporcional a lo que cada
 // uno tiene de deuda. Si el front manda montoPitzExplicito>0, se respeta (solo modo 'auto').
-async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: number, montoUSD: number, montoPitzExplicito: number, excludePagoId?: string, criterio?: string): Promise<{ pitzARS: number; pitzUSD: number }> {
-  const modo = (criterio === 'jony' || criterio === 'prorrata') ? criterio : 'auto';
+async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: number, montoUSD: number, montoPitzExplicito: number, excludePagoId?: string, criterio?: string, montoPitzUsdExplicito?: number): Promise<{ pitzARS: number; pitzUSD: number }> {
+  const modo = (criterio === 'jony' || criterio === 'prorrata' || criterio === 'forzado') ? criterio : 'auto';
+  // 🔒 Parte en U$S forzada desde el front. Hace falta cuando el reparto NO se puede deducir de la
+  // deuda viva: p. ej. una DEVOLUCIÓN de un pedido ya cobrado (el cliente no debe nada, así que el
+  // auto-reparto dejaría la plata del lado equivocado e inventaría deuda entre socios).
+  const expUSD = Math.max(0, Math.min(montoUSD, montoPitzUsdExplicito || 0));
+  const forzado = modo === 'forzado';   // respeta AMBAS partes tal cual, incluso el cero
+  if (forzado) return { pitzARS: Math.max(0, Math.min(montoARS, montoPitzExplicito || 0)), pitzUSD: expUSD };
   let pitzARS = (modo === 'auto') ? (montoPitzExplicito || 0) : 0, pitzUSD = 0;
   try {
     const cliPago = normCli(cliente);
@@ -278,6 +284,7 @@ async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: 
       pitzUSD = Math.round(autoPitzU * 100) / 100;
     }
   } catch { /* si el reparto falla, queda en 0 (como antes) */ }
+  if (expUSD > 0) pitzUSD = expUSD;   // el forzado manda por encima del auto-reparto
   return { pitzARS, pitzUSD };
 }
 // Fecha del último corte (en ms) — los pagos anteriores ya quedaron liquidados en ese corte.
@@ -1913,8 +1920,9 @@ Deno.serve(async (req) => {
       // cuenta entre socios: en $ Pitzujim primero, en U$S golosinas primero. El reparto queda
       // GUARDADO en el pago (monto_pitz / monto_pitz_usd) → caja, cuenta corriente y vista
       // Miri leen todos lo mismo. Si el front mandó montoPitz explícito (>0), se respeta.
-      const critPago = (P(body, 'reparto') === 'jony' || P(body, 'reparto') === 'prorrata') ? P(body, 'reparto') : '';
-      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'), undefined, critPago);
+      const _rep = P(body, 'reparto');
+      const critPago = (_rep === 'jony' || _rep === 'prorrata' || _rep === 'forzado') ? _rep : '';
+      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'), undefined, critPago, N(body, 'montoPitzUsd'));
       // 📅 v3.95: si el modal manda la fecha real del pago, ESA va (si no, "ahora")
       const fechaPagoElegida = P(body, 'fecha').trim();
       const fechaPago = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fechaPagoElegida) ? fechaPagoElegida : fechaAhora();
@@ -1976,8 +1984,12 @@ Deno.serve(async (req) => {
       const fEd = P(body, 'fecha').trim();
       const fFinal = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fEd) ? fEd : (pgE.fecha || fechaAhora());
       // criterio: el que mande el front, o el que ya tenía guardado el pago (no lo pierde al editar)
-      const critEd = (P(body, 'reparto') === 'jony' || P(body, 'reparto') === 'prorrata') ? P(body, 'reparto') : ((pgE.reparto === 'jony' || pgE.reparto === 'prorrata') ? pgE.reparto : '');
-      const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, 0, pidE, critEd);
+      const _critOk = (x: string) => x === 'jony' || x === 'prorrata' || x === 'forzado';
+      const critEd = _critOk(P(body, 'reparto')) ? P(body, 'reparto') : (_critOk(pgE.reparto) ? pgE.reparto : '');
+      // Un pago 'forzado' (devolución) conserva sus partes al editarse: el auto-reparto no las sabe deducir.
+      const _pzA = critEd === 'forzado' ? (body.montoPitz !== undefined ? N(body, 'montoPitz') : (parseFloat(pgE.monto_pitz) || 0)) : 0;
+      const _pzU = critEd === 'forzado' ? (body.montoPitzUsd !== undefined ? N(body, 'montoPitzUsd') : (parseFloat(pgE.monto_pitz_usd) || 0)) : 0;
+      const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, _pzA, pidE, critEd, _pzU);
       const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: rep.pitzARS, monto_pitz_usd: rep.pitzUSD, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio'), reparto: critEd || null };
       if (body.totalMano !== undefined) patchPago.total_mano = N(body, 'totalMano') || null;   // total en mano (si el front lo recalculó)
       await sbPatch('pagos', 'id=eq.' + encodeURIComponent(pidE), patchPago);
@@ -2081,6 +2093,11 @@ Deno.serve(async (req) => {
       // (no por balde: una redistribución Jony↔Miri del mismo total no genera deuda fantasma).
       // Solo corre si la edición mandó totales (el corrector de splits viejos no los manda).
       let deudaNueva: any = null;
+      // 💸 SOBRECOBRO (v4.41): si el total BAJA en un pedido ya cobrado (típico: devolución), la
+      // plata real que el cliente ya pagó y ahora no debe quedaba en el aire — nadie avisaba y
+      // la caja mostraba menos de lo que había (caso Percy #33, U$S 81). Se informa al front con
+      // el reparto por dueño y la caja original, para ofrecerlo como saldo a favor.
+      let sobrecobro: any = null;
       const realCaja = (c: any) => !!c && !String(c).startsWith('CTA_CTE');
       if ((body.totalARS !== undefined || body.totalUSD !== undefined) && (realCaja(v.caja_jony) || realCaja(v.caja_myri)) && estadoPed !== 'cancelado' && estadoPed !== 'cotizacion') {
         let tram: any[] = [];
@@ -2130,13 +2147,24 @@ Deno.serve(async (req) => {
             if (cur === 'USD') deudaNueva.usd += diff; else deudaNueva.ars += diff;
           } else if (diff < -eps) {
             // El total BAJÓ: se achica primero la deuda Cta Cte; la plata real ya cobrada no se
-            // toca (un sobrecobro se resuelve a mano con el cliente).
+            // toca (el sobrecobro se resuelve con el cliente, pero ahora SE AVISA).
             for (const t of tram) {
               if (diff >= -eps) break;
               if (!deCur(t) || !String(t.caja || '').startsWith('CTA_CTE')) continue;
               const m = parseFloat(t.monto) || 0;
               const quita = Math.min(m, -diff);
               t.monto = rnd(m - quita); diff = rnd(diff + quita);
+            }
+            // Lo que sigue sobrando ya entró a una caja real → es plata del cliente a favor.
+            if (diff < -eps) {
+              const sobra = rnd(-diff);
+              const cubJ2 = tram.reduce((s, t) => s + (deCur(t) && duenoDe(t) === 'J' ? (parseFloat(t.monto) || 0) : 0), 0);
+              const sobraJ = Math.max(0, Math.min(sobra, rnd(cubJ2 - objJ)));   // parte de Jony (Pitzujim)
+              const tReal = tram.filter((t) => deCur(t) && realCaja(t.caja))
+                .sort((a, b) => (parseFloat(b.monto) || 0) - (parseFloat(a.monto) || 0))[0];
+              sobrecobro = sobrecobro || { ars: 0, usd: 0, pitzARS: 0, pitzUSD: 0, cajaARS: '', cajaUSD: '', tc: parseFloat(v.tipo_cambio) || 0, cliente: (v.cliente || '').toString(), nVenta: v.n_venta };
+              if (cur === 'USD') { sobrecobro.usd = sobra; sobrecobro.pitzUSD = sobraJ; if (tReal) sobrecobro.cajaUSD = tReal.caja; }
+              else { sobrecobro.ars = sobra; sobrecobro.pitzARS = sobraJ; if (tReal) sobrecobro.cajaARS = tReal.caja; }
             }
           }
         }
@@ -2150,7 +2178,7 @@ Deno.serve(async (req) => {
         const _uM = body.usdMyri !== undefined ? N(body, 'usdMyri') : (v.usd_myri || 0);
         await upsertEnvio(id, { nVenta: v.n_venta, cliente: (v.cliente || '').toString(), dueno: duenoVenta(_aJ, _uJ, _aM, _uM), cobrado: Math.round(N(body, 'envioCobrado')) });
       }
-      return json({ ok: true, deudaNueva });
+      return json({ ok: true, deudaNueva, sobrecobro });
     }
     if (accion === 'confirmarCobro') return json(await confirmarCobro(body));
     if (accion === 'cargarSaldoCC') {
