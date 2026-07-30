@@ -2728,16 +2728,21 @@ async function generarCatalogoPDF() {
       doc.text(cat.toUpperCase(), margin + 6, y + 3);
       y += 24;
     }
-    nuevaPaginaSiHaceFalta(20);
+    const kTxt = _acKosherTxt(p);                       // ✡️ supervisión + Parve/Lácteo
+    nuevaPaginaSiHaceFalta(kTxt ? 29 : 20);
     const nombre = p.nombre + (p.desc ? '  ·  ' + p.desc : '');
     const linea = doc.splitTextToSize(nombre, anchoTexto)[0];
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...negro);
     doc.text(linea, margin + 4, y);
     doc.setFont('helvetica', 'bold'); doc.setTextColor(...negro);
     doc.text(precioTextoPDF(p), W - margin, y, { align: 'right' });
+    if (kTxt) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(138, 90, 30);
+      doc.text(_sinEmoji(kTxt), margin + 4, y + 10);
+    }
     doc.setDrawColor(235, 235, 235); doc.setLineWidth(0.5);
-    doc.line(margin, y + 6, W - margin, y + 6);
-    y += 19;
+    doc.line(margin, y + (kTxt ? 15 : 6), W - margin, y + (kTxt ? 15 : 6));
+    y += kTxt ? 28 : 19;
   });
 
   const archivo = 'Shuk-Mamtakim-Precios-' + tipoActual + '-' + hoy.replace(/\//g, '-') + '.pdf';
@@ -2747,6 +2752,7 @@ async function generarCatalogoPDF() {
 
 // ─── ARMADOR DE CATÁLOGO (con fotos · PDF + imagen · elegís productos y plantilla) ──────
 let _acProductos = [], _acSel = {}, _acFiltro = 'todos', _acLayout = 'lista', _acVerMin = true, _acVerMay = true, _acOcultarSinStock = false, _acOrden = 'az';
+let _acVerKosher = true;   // ✡️ mostrar supervisión (hashgajá) y Parve/Lácteo en el catálogo
 let _acDueno = 'todos';   // filtro por dueño del catálogo ('todos' | 'Jony' | 'Miri')
 let _acMarca = 'shuk', _acTel = 'jony', _acQrDataUrl = '';
 let _acDescGeneral = 0, _acDescProd = {};   // descuentos del catálogo (general % + por producto %)
@@ -2780,6 +2786,31 @@ const _ordenarProd = (orden, getNombre, getStock, getPrecio, getCreado) => (a, b
 };
 // timestamp de carga del producto (fecha `creado`; respaldo por id creciente).
 function _creadoTs(p) { const t = p.creado ? new Date(p.creado).getTime() : NaN; return isNaN(t) ? (parseInt(p.id) || 0) : t; }
+// ✡️ KOSHER en el catálogo — Parve/Lácteo (con Jalav) + hashgajá, igual que las chapitas de la tienda.
+// Dos formatos porque el catálogo se exporta por dos caminos: HTML (vista/imagen, admite emojis) y
+// jsPDF nativo (helvetica NO tiene emojis → texto limpio).
+function _acKosherPartes(p) {
+  const t = (p.kosherTipo || '').trim(), j = (p.jalav || '').trim(), h = (p.hashgaja || '').trim();
+  const out = [];
+  // txt = para la chapita HTML · txtPdf = para el PDF (paréntesis en vez de un segundo '·', así el
+  // separador entre tipo y supervisión no se confunde con el del Jalav)
+  if (t === 'Parve') out.push({ txt: 'Parve', txtPdf: 'Parve', emoji: '🌿', bg: '#e8f6ec', fg: '#1e7a3c' });
+  else if (t === 'Lácteo') out.push({ txt: j ? 'Lácteo · ' + j : 'Lácteo', txtPdf: j ? 'Lácteo (' + j + ')' : 'Lácteo', emoji: '🥛', bg: '#eef4fb', fg: '#1a5c8a' });
+  else if (j) out.push({ txt: j, txtPdf: j, emoji: '🥛', bg: '#eef4fb', fg: '#1a5c8a' });
+  if (h) out.push({ txt: h, txtPdf: h, emoji: '✡️', bg: '#fdf3e3', fg: '#8a5a1e' });
+  return out;
+}
+function _acKosherHtml(p) {
+  if (!_acVerKosher) return '';
+  const ps = _acKosherPartes(p);
+  if (!ps.length) return '';
+  return `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px">` + ps.map(x =>
+    `<span style="background:${x.bg};color:${x.fg};font-size:0.58rem;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap">${x.emoji} ${esc(x.txt)}</span>`).join('') + `</div>`;
+}
+function _acKosherTxt(p) {   // para el PDF: sin emojis
+  if (!_acVerKosher) return '';
+  return _acKosherPartes(p).map(x => x.txtPdf).join(' · ');
+}
 function _acPrecioMin(p) { const v = parseFloat(String(p.precioMin).replace(',', '.')) || 0; return v > 0 ? '$ ' + Math.round(v).toLocaleString('es-AR') : '—'; }
 function _acPrecioMay(p) { const v = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0; if (v <= 0) return '—'; return p.moneda === 'U$S' ? 'U$S ' + v.toFixed(2) : '$ ' + Math.round(v).toLocaleString('es-AR'); }
 // ── DESCUENTOS del catálogo (solo para el catálogo generado; no toca precios reales) ──
@@ -2924,6 +2955,7 @@ function _acRender() {
         <div id="ac-layout-btns" style="display:flex;gap:5px;flex:1;min-width:150px">${lbtn('lista','📃 Lista')}${lbtn('grilla','🔳 Grilla')}</div>
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMin?'checked':''} onchange="_acVerMin=this.checked"> Minorista</label>
         <label style="font-size:0.76rem;cursor:pointer"><input type="checkbox" ${_acVerMay?'checked':''} onchange="_acVerMay=this.checked"> Mayorista</label>
+        <label style="font-size:0.76rem;cursor:pointer" title="Muestra la supervisión (hashgajá) y si es Parve o Lácteo"><input type="checkbox" ${_acVerKosher?'checked':''} onchange="_acVerKosher=this.checked;_acRender()"> ✡️ Supervisión</label>
       </div>
       <div id="ac-layout-hint">${_acLayoutHint()}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:0.55rem;font-size:0.74rem;background:#eef4fb;border:1px solid #cfe0f3;border-radius:8px;padding:6px 9px">
@@ -3025,6 +3057,7 @@ function _acBuildDoc() {
           <div style="padding:7px 8px;flex:1;text-align:center">
             <div style="font-weight:700;font-size:0.78rem;color:#222;line-height:1.25">${esc(p.nombre)}</div>
             <div style="font-size:0.64rem;color:#999;line-height:1.25;margin-top:1px">${esc(p.desc || '')}</div>
+            <div style="display:flex;justify-content:center">${_acKosherHtml(p)}</div>
             <div style="font-size:0.74rem;color:#5c3d1e;font-weight:600;margin-top:5px">${precio(p)}</div>
           </div>
         </div>`).join('') + `</div>`;
@@ -3032,7 +3065,7 @@ function _acBuildDoc() {
       cuerpo += byCat[c].map(p => `
         <div style="display:flex;align-items:center;gap:11px;padding:7px 0;border-bottom:1px solid #eee">
           <div style="width:48px;height:48px;border-radius:7px;overflow:hidden;flex-shrink:0;border:1px solid #f0f0f0">${foto(p,48)}</div>
-          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:0.86rem;color:#222">${esc(p.nombre)}</div><div style="font-size:0.7rem;color:#999">${esc(p.desc || '')}</div></div>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:0.86rem;color:#222">${esc(p.nombre)}</div><div style="font-size:0.7rem;color:#999">${esc(p.desc || '')}</div>${_acKosherHtml(p)}</div>
           <div style="text-align:right;font-size:0.8rem;color:#5c3d1e;font-weight:600;white-space:nowrap">${precio(p)}</div>
         </div>`).join('');
     }
@@ -3147,7 +3180,8 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
     if (_acLayout === 'grilla') {
       const colW = (W - margin * 2 - 16) / 3, fotoSz = 110;          // foto cuadrada; entran 9 por hoja con precio en 2 líneas
       const fotoX0 = (colW - fotoSz) / 2;                            // centrada en la celda
-      const cellH = fotoSz + 78;                                     // foto + nombre + descripción + precio (2 líneas, centrados)
+      // foto + nombre + descripción + precio (2 líneas, centrados) — +9 si además va la supervisión
+      const cellH = fotoSz + 78 + (items.some(p => _acKosherTxt(p)) ? 9 : 0);
       items.forEach((p, idx) => {
         const col = idx % 3;
         if (col === 0) asegurar(cellH + 8);
@@ -3166,6 +3200,12 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
           pdf.text(dL, cx, ty, { align: 'center' });
           ty += dL.length * 7 + 1;
         }
+        const _kG = _acKosherTxt(p);                                 // ✡️ supervisión + Parve/Lácteo
+        if (_kG) {
+          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(6); pdf.setTextColor(138, 90, 30);
+          pdf.text(pdf.splitTextToSize(_sinEmoji(_kG), colW - 10)[0] || '', cx, ty, { align: 'center' });
+          ty += 8;
+        }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(...cMarca);
         pdf.text(pdf.splitTextToSize(precioTxt(p), colW - 12).slice(0, 3), cx, ty + 3, { align: 'center' });
         if (col === 2 || idx === items.length - 1) y += cellH + 8;
@@ -3175,9 +3215,14 @@ function _acPdfNativo(pdf, sel, fotos, logoData) {
         asegurar(56);
         if (fotos[p.id]) _addImgFit(pdf, fotos[p.id], margin, y, 48, 48);
         else { pdf.setFillColor(245, 245, 245); pdf.rect(margin, y, 48, 48, 'F'); }
+        // Con kosher cargado la fila lleva 3 renglones (nombre / desc / supervisión) → se suben un
+        // poco los dos primeros para que los tres entren sin pisar la línea divisoria.
+        const _kTxt = _acKosherTxt(p);
+        const _yN = _kTxt ? 15 : 18, _yD = _kTxt ? 29 : 36;
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...negro);
-        pdf.text(pdf.splitTextToSize(_sinEmoji(p.nombre), W - margin * 2 - 210).slice(0, 2), margin + 58, y + 18);
-        if (p.desc) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text((pdf.splitTextToSize(_sinEmoji(p.desc), W - margin * 2 - 210)[0] || ''), margin + 58, y + 36); }
+        pdf.text(pdf.splitTextToSize(_sinEmoji(p.nombre), W - margin * 2 - 210).slice(0, _kTxt ? 1 : 2), margin + 58, y + _yN);
+        if (p.desc) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text((pdf.splitTextToSize(_sinEmoji(p.desc), W - margin * 2 - 210)[0] || ''), margin + 58, y + _yD); }
+        if (_kTxt) { pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5); pdf.setTextColor(138, 90, 30); pdf.text(pdf.splitTextToSize(_sinEmoji(_kTxt), W - margin * 2 - 210)[0] || '', margin + 58, y + 43); }
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10.5); pdf.setTextColor(91, 61, 30);
         const _pL = pdf.splitTextToSize(precioTxt(p), 230);
         pdf.text(_pL, W - margin, y + (_pL.length > 1 ? 16 : 24), { align: 'right' });
