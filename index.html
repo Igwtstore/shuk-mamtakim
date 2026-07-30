@@ -1865,6 +1865,25 @@
     <div class="admin-titulo">🔔 Lista de espera — stock agotado</div>
     <div id="notif-lista"><div class="sinpedidos">Cargando...</div></div>
   </div>
+  <div class="admin-card" id="card-avisar" data-seccion="catalogo">
+    <div class="admin-titulo">📢 Avisar a los clientes</div>
+    <div id="push-estado" style="font-size:0.8rem;color:#7a6a55;margin-bottom:0.55rem">Consultando el servicio...</div>
+    <div class="campo">
+      <label>Título</label>
+      <input type="text" id="push-titulo" maxlength="60" placeholder="🛍️ Shuk Mamtakim" value="🛍️ Shuk Mamtakim">
+    </div>
+    <div class="campo">
+      <label>Mensaje</label>
+      <textarea id="push-mensaje" rows="3" maxlength="300" placeholder="¡Llegaron los chocolates Klik! Entrá al catálogo 🍫"
+        oninput="_pushContar()" style="width:100%;font-family:inherit;font-size:0.85rem;padding:0.5rem;border:1px solid #d8c9ae;border-radius:8px;resize:vertical"></textarea>
+      <div id="push-contador" style="font-size:0.72rem;color:#9b8b75;text-align:right;margin-top:0.15rem">0 / 300</div>
+    </div>
+    <button class="guardar-stock-btn" id="push-enviar-btn" onclick="enviarAvisoManual()" style="margin-top:0">📢 Enviar el aviso</button>
+    <div style="font-size:0.72rem;color:#9b8b75;margin-top:0.4rem;line-height:1.35">
+      Le llega a <b>todos</b> los clientes que activaron las notificaciones (la 🔔 de la tienda).
+      Al tocarla se abre el catálogo.
+    </div>
+  </div>
   <div class="admin-card" id="cuenta-socios-card">
     <div class="admin-titulo">🤝 Cuenta entre socios</div>
     <div id="cuenta-socios-contenido"><div class="sinpedidos">Cargando...</div></div>
@@ -10451,7 +10470,8 @@ function aplicarPrivacidadPanel() {
   // La orden de compra es solo de Jony (por ahora) → se oculta su botón en vista Miri.
   const btnOC = document.getElementById('btn-orden-compra'); if (btnOC) btnOC.style.display = ocultar ? 'none' : '';
   // Las cards de IA y bandeja sí tienen sección (las posiciona setPanelSeccion); acá SOLO las ocultamos en Miri.
-  if (ocultar) ['card-ia', 'card-bandeja', 'card-geo'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  // 'card-avisar' manda notificaciones a TODOS los clientes del sitio → es del dueño del sitio, no de Miri.
+  if (ocultar) ['card-ia', 'card-bandeja', 'card-geo', 'card-avisar'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 }
 function setPanelSeccion(s, btn) {
   _panelSeccion = s;
@@ -10466,6 +10486,7 @@ function setPanelSeccion(s, btn) {
   else { const b = document.querySelector(`.psec-btn[onclick*="'${s}'"]`); if (b) b.classList.add('activo'); }
   if (typeof verificarStockBajo === 'function') verificarStockBajo();   // re-evalúa la alerta (solo va en Stock)
   if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
+  if (s === 'catalogo' && typeof cargarEstadoPush === 'function' && !esVistaMiri()) cargarEstadoPush();
   if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí o hablá natural para probar a Shuki 👇 (ej: "hola, qué tenés?")', 'bot'); }
 }
 
@@ -12362,6 +12383,77 @@ function enviarPushAcumulado() {
     .catch(() => showToast('⚠️ No se pudo enviar la notificación (sin conexión)'));
   _pushBuffer = { stock: [], nuevos: [] };
   _pushTimer = null;
+}
+
+// ── 📢 AVISO MANUAL A LOS CLIENTES ─────────────────────────────────────────────
+// Escribir y mandar una notificación a mano desde el panel, sin depender del
+// tablero de OneSignal.
+function _pushContar() {
+  const t = document.getElementById('push-mensaje'), c = document.getElementById('push-contador');
+  if (t && c) c.textContent = t.value.length + ' / 300';
+}
+
+// Muestra si el servicio está listo y cuántos clientes hay suscriptos.
+async function cargarEstadoPush() {
+  const el = document.getElementById('push-estado');
+  const btn = document.getElementById('push-enviar-btn');
+  if (!el) return;
+  try {
+    const d = await apiGet('pushEstado', 60000);
+    if (!d || d.error) throw new Error((d && d.error) || 'sin respuesta');
+    if (!d.configurado) {
+      el.innerHTML = '⚠️ <b>El servicio de notificaciones no está configurado</b> — nadie puede recibirlas todavía.'
+        + (d.motivo ? '<br><span style="font-size:0.72rem">(' + d.motivo + ')</span>' : '');
+      el.style.color = '#c0392b';
+      if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
+      return;
+    }
+    if (d.claveOk === false) {
+      el.innerHTML = '⚠️ <b>La clave del servicio no funciona</b> — hay que generar una nueva.';
+      el.style.color = '#c0392b';
+      if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
+      return;
+    }
+    const n = d.suscriptores;
+    el.innerHTML = n === null ? '✅ Servicio activo.'
+      : (n === 0 ? '✅ Servicio activo, pero <b>todavía no hay nadie suscripto</b> (los clientes se suscriben con la 🔔 de la tienda).'
+                 : '✅ Servicio activo · <b>' + n + '</b> cliente' + (n === 1 ? '' : 's') + ' recibiría' + (n === 1 ? '' : 'n') + ' el aviso.');
+    el.style.color = n ? '#1e7a3c' : '#7a6a55';
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; }
+  } catch (e) {
+    el.textContent = 'No se pudo consultar el servicio de notificaciones.';
+    el.style.color = '#7a6a55';
+  }
+}
+
+async function enviarAvisoManual() {
+  const iT = document.getElementById('push-titulo'), iM = document.getElementById('push-mensaje');
+  const btn = document.getElementById('push-enviar-btn');
+  const titulo = (iT?.value || '').trim() || '🛍️ Shuk Mamtakim';
+  const mensaje = (iM?.value || '').trim();
+  if (!mensaje) { showToast('Escribí el mensaje del aviso'); iM?.focus(); return; }
+  // Va a TODOS los suscriptos y no se puede deshacer → se confirma primero.
+  if (!confirm('Se le va a mandar esta notificación a TODOS los clientes suscriptos:\n\n' + titulo + '\n' + mensaje + '\n\nNo se puede deshacer. ¿Mandarla?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  const params = new URLSearchParams({ accion: 'enviarPush', titulo, mensaje });
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+    const d = await r.json().catch(() => ({}));
+    if (d && d.ok) {
+      const n = d.destinatarios;
+      showToast(n === 0 ? 'Se mandó, pero no hay nadie suscripto todavía'
+                        : '📢 Aviso enviado' + (n ? ' a ' + n + ' cliente' + (n === 1 ? '' : 's') : '') + ' ✓');
+      if (iM) { iM.value = ''; _pushContar(); }
+    } else {
+      showToast('⚠️ No se pudo enviar: ' + ((d && d.mensaje) || 'error desconocido'));
+    }
+  } catch (e) {
+    showToast('⚠️ No se pudo enviar (sin conexión)');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📢 Enviar el aviso'; }
+    delete _apiCache['pushEstado'];
+    cargarEstadoPush();
+  }
 }
 
 function verificarStockBajo() {
