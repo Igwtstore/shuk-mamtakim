@@ -2248,6 +2248,12 @@
       <input type="file" id="pago-comprobante" accept="image/*,application/pdf,.pdf" multiple style="width:100%;font-size:0.8rem" onchange="document.getElementById('pago-comprobante-st').textContent = this.files.length ? '✓ '+this.files.length+' comprobante(s)' : ''" />
       <div id="pago-comprobante-st" style="font-size:0.72rem;color:var(--verde);margin-top:0.2rem"></div>
     </div>
+    <div style="margin-bottom:0.75rem">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">📝 Notas (opcional)</label>
+      <textarea id="pago-nota" rows="2" maxlength="300" placeholder="ej: me lo trajo la mamá · pagó con el vuelto del pedido anterior"
+        style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+      <div style="font-size:0.7rem;color:#9b8b75;margin-top:0.2rem">Queda guardada con el pago y se ve en la cuenta del cliente, en la caja y en el extracto.</div>
+    </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarPagoModal()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
       <button onclick="confirmarPagoCuenta()" style="flex:2;padding:0.75rem;background:#1a1a2e;color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;">Registrar pago</button>
@@ -8126,7 +8132,7 @@ function verDetalleDeudor(i) {
       const acc = (!soloMiri && p.id != null) ? `
         <button onclick="event.stopPropagation();abrirEditarPago('${p.id}')" title="Editar este pago" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">✏️</button>
         <button onclick="event.stopPropagation();anularPago('${p.id}')" title="Anular este pago" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">🗑️</button>` : '';
-      html += `<div style="padding:3px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${_tcTxt(p.tc)}${(p.comprobante || '').trim() ? ' 📎' : ''}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>${soloMiri ? '' : _desgloseBolsillos(p)}</div>`;
+      html += `<div style="padding:3px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${_tcTxt(p.tc)}${(p.comprobante || '').trim() ? ' 📎' : ''}${_notaPagoHtml(p)}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>${soloMiri ? '' : _desgloseBolsillos(p)}</div>`;
     });
   }
   const sARS = items.reduce((s, it) => s + Math.max(0, it.remARS), 0);
@@ -8172,6 +8178,8 @@ function abrirEditarPago(id) {
     <select id="editpago-caja" style="${inp};background:#fff">${_cajasOptionsHTML(p.caja)}</select>
     <label style="${lbl}">💱 TC <span style="font-weight:400;color:var(--texto-suave);font-size:0.68rem">(si pagó U$S en pesos)</span></label>
     <input type="number" id="editpago-tc" value="${p.tc || ''}" min="0" placeholder="0" style="${inp}">
+    <label style="${lbl}">📝 Notas</label>
+    <textarea id="editpago-nota" rows="2" maxlength="300" placeholder="(sin nota)" style="${inp};resize:vertical;font-family:inherit">${esc(((p.nota || '').trim().toLowerCase() === 'pago a cuenta') ? '' : (p.nota || ''))}</textarea>
     <div style="display:flex;gap:6px;margin-top:0.4rem">
       <button onclick="guardarEdicionPago()" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar cambios</button>
       <button onclick="document.getElementById('editpago-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
@@ -8187,7 +8195,9 @@ async function guardarEdicionPago() {
   const caja = document.getElementById('editpago-caja').value;
   const tc = parseFloat(document.getElementById('editpago-tc').value) || 0;
   const pfv = document.getElementById('editpago-fecha').value || '';
-  const params = new URLSearchParams({ accion: 'editarPagoCuenta', pagoId: _editPagoId, montoARS: ars, montoUSD: usd, caja, tipoCambio: tc });
+  // 📝 la nota va SIEMPRE (aunque quede vacía) para poder BORRARLA; vacía vuelve al texto por defecto
+  const _notaEd = ((document.getElementById('editpago-nota') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const params = new URLSearchParams({ accion: 'editarPagoCuenta', pagoId: _editPagoId, montoARS: ars, montoUSD: usd, caja, tipoCambio: tc, nota: _notaEd || 'Pago a cuenta' });
   // total en mano recalculado si sigue habiendo conversión (U$S pagados en pesos); si no, 0 (lo limpia)
   { const _cu = _CAJAS_USD.indexOf(caja) !== -1;
     params.set('totalMano', String((usd > 0 && tc > 0 && !_cu && caja !== 'PERDON') ? Math.round(ars + usd * tc) : 0)); }
@@ -8301,6 +8311,16 @@ async function abrirEstadoCuenta(cliente) {
 // 💱 Transparencia (pedido del usuario 2026-07-21): cuando un cobro/pago tuvo conversión (TC>0),
 // el TC va SIEMPRE a la vista — así se ve a qué cambio se unieron los pesos y los dólares.
 function _tcTxt(tc) { const n = parseFloat(tc) || 0; return n > 0 ? ` · al cambio $${Math.round(n).toLocaleString('es-AR')}` : ''; }
+// 📝 Nota libre del pago. Devuelve '' cuando no hay nada escrito (el texto por defecto NO es una nota).
+// 🔒 REGLA SAGRADA: en vista Miri no se muestra — la nota la escribe Jony para sí mismo y puede
+// mencionar cualquier cosa (otro cliente, un arreglo interno). Centralizado acá para no olvidarlo.
+function _notaPago(p) {
+  const n = ((p && p.nota) || '').trim();
+  if (!n || n.toLowerCase() === 'pago a cuenta') return '';
+  if (typeof esVistaMiri === 'function' && esVistaMiri()) return '';
+  return n;
+}
+function _notaPagoHtml(p) { const n = _notaPago(p); return n ? ` · 📝 ${esc(n)}` : ''; }
 // 🟠🟢 Desglose INTERNO de un pago por bolsillo (Jony/Pitzujim vs Miri/golosinas), en $ y U$S.
 // Solo para el panel (detalle del deudor) — NUNCA se exporta ni se manda al cliente. Reglas del
 // auto-reparto: en $ Pitzujim primero, en U$S golosinas primero (guardado en montoPitz/montoPitzUsd).
@@ -8738,7 +8758,7 @@ async function renderCaja() {
     if (Array.isArray(pagosCuenta)) pagosCuenta.forEach(p => {
       const aRS = parseFloat(p.montoARS)||0, uSD = parseFloat(p.montoUSD)||0;
       const esPerdon = p.caja === 'PERDON';   // perdón/redondeo: baja la deuda, NO entra a ninguna caja
-      const desc = (esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`) + _clipsDe(p.comprobante);
+      const desc = (esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`) + _clipsDe(p.comprobante) + _notaPagoHtml(p);
       if (aRS > 0 && p.caja) {
         if (!esPerdon) {
           // Espejo del caso U$S-en-pesos: si la deuda en PESOS la pagó con DÓLARES FÍSICOS (caja
@@ -13281,6 +13301,7 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   document.getElementById('pago-gol').value = '';
   const pci = document.getElementById('pago-comprobante'); if (pci) pci.value = '';
   const pcs = document.getElementById('pago-comprobante-st'); if (pcs) pcs.textContent = '';
+  const pnt = document.getElementById('pago-nota'); if (pnt) pnt.value = '';   // sin esto la nota del pago anterior se pega al siguiente
   remPitz = Math.round(remPitz||0); remGolARS = Math.round(remGolARS||0); remGolUSD = parseFloat(remGolUSD||0); remPitzUSD = parseFloat(remPitzUSD||0);
   // 💰 Repartidor: guarda la deuda restante y limpia sus campos
   window._pagoRem = { esPedido, pitz: remPitz, arsTotal: esPedido ? remPitz + remGolARS : remGolARS, usd: esPedido ? remPitzUSD + remGolUSD : remGolUSD };
@@ -13487,9 +13508,12 @@ async function confirmarPagoCuenta() {
   if (!_pagoPedidoId && _ps && _ps.value) _pedFinal = _ps.value;
   const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
   const _rep = (document.getElementById('pago-reparto') || {}).value || '';   // ⚖️ criterio de reparto elegido
+  // 📝 Nota libre del modal. Se aplanan los saltos de línea (viaja por query) y si queda vacía se
+  // mantiene el texto por defecto, que es lo que espera el resto del panel para NO mostrar nada.
+  const _nota = ((document.getElementById('pago-nota') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 300) || 'Pago a cuenta';
   const params = fracc
-    ? new URLSearchParams({ accion:'registrarPagoFraccionado', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, cajaMiri, cajaJony, tipoCambio:tcPago, nota:'Pago a cuenta', reparto:_rep })
-    : new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:'Pago a cuenta', reparto:_rep });
+    ? new URLSearchParams({ accion:'registrarPagoFraccionado', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, cajaMiri, cajaJony, tipoCambio:tcPago, nota:_nota, reparto:_rep })
+    : new URLSearchParams({ accion:'registrarPagoCuenta', cliente:_pagoCliente, pedidoId:_pedFinal, montoARS:ars, montoUSD:usd, montoPitz, caja, tipoCambio:tcPago, nota:_nota, reparto:_rep });
   // 💵 v3.99: total en mano (pesos) cuando pagó U$S EN PESOS (caja de pesos + TC) — solo pago único.
   if (!fracc) { const _cajaEsUSD = _CAJAS_USD.indexOf(caja) !== -1;
     if (usd > 0 && tcPago > 0 && !_cajaEsUSD && caja !== 'PERDON') {

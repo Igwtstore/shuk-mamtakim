@@ -1990,8 +1990,21 @@ Deno.serve(async (req) => {
       const _pzA = critEd === 'forzado' ? (body.montoPitz !== undefined ? N(body, 'montoPitz') : (parseFloat(pgE.monto_pitz) || 0)) : 0;
       const _pzU = critEd === 'forzado' ? (body.montoPitzUsd !== undefined ? N(body, 'montoPitzUsd') : (parseFloat(pgE.monto_pitz_usd) || 0)) : 0;
       const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, _pzA, pidE, critEd, _pzU);
-      const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: rep.pitzARS, monto_pitz_usd: rep.pitzUSD, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio'), reparto: critEd || null };
+      // 🛡️ Si los MONTOS no cambiaron (se editó solo la nota, la fecha, la caja o el TC), se
+      // conserva el reparto que ya tenía. Recalcularlo puede DESTRUIRLO: el auto-reparto lo deduce
+      // de la deuda viva del cliente, y si esa deuda ya se cubrió (o el reparto se había forzado a
+      // mano, como en una devolución) devuelve otra cosa y la plata cambia de dueño sola.
+      // Caso real: pago #130 de Percy (U$S 81 todos de Jony) → al editarle solo la nota, el
+      // recálculo lo bajó a 0,03 y los otros 80,97 pasaban a golosinas de Miri.
+      const _mismoMonto = Math.abs(mA - (parseFloat(pgE.monto_ars) || 0)) < 0.5
+                       && Math.abs(mU - (parseFloat(pgE.monto_usd) || 0)) < 0.005;
+      const _pitzARSFinal = _mismoMonto ? (parseFloat(pgE.monto_pitz) || 0) : rep.pitzARS;
+      const _pitzUSDFinal = _mismoMonto ? (parseFloat(pgE.monto_pitz_usd) || 0) : rep.pitzUSD;
+      const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: _pitzARSFinal, monto_pitz_usd: _pitzUSDFinal, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio'), reparto: critEd || null };
       if (body.totalMano !== undefined) patchPago.total_mano = N(body, 'totalMano') || null;   // total en mano (si el front lo recalculó)
+      // 📝 Nota libre editable. Con '!== undefined' (no has()) para poder BORRARLA mandando vacío;
+      // si no viene el campo, la nota queda intacta (PATCH parcial) → las llamadas viejas no la pisan.
+      if (body.nota !== undefined) patchPago.nota = P(body, 'nota').trim().slice(0, 300) || 'Pago a cuenta';
       await sbPatch('pagos', 'id=eq.' + encodeURIComponent(pidE), patchPago);
       return json({ ok: true, reparto: rep });
     }
