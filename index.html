@@ -730,6 +730,8 @@
   .edit-overlay.open { display:flex; }
   /* Editar pedido: en pantalla grande se ensancha (los renglones tienen foto, dueño, cantidad,
      precio y descuento y quedaban muy apretados). En el celu ocupa casi toda la pantalla. */
+  /* En pantalla chica el botón de instalar queda solo con el icono, para no apretar el logo */
+  @media (max-width: 520px) { #install-btn .install-txt { display:none; } #install-btn { padding:0 0.5rem !important; } }
   .edit-modal { background:var(--blanco); border-radius:16px; width:100%; max-width:920px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.2); }
   @media (max-width: 640px) {
     .edit-modal { max-width:100%; max-height:96vh; border-radius:12px; }
@@ -974,7 +976,7 @@
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:0.5rem">
-      <button class="dark-toggle" id="install-btn" style="display:none;font-size:0.78rem;width:auto;padding:0 0.7rem;border-radius:20px" onclick="installPWA()" title="Instalar app">📲 Instalar</button>
+      <button class="dark-toggle" id="install-btn" style="display:none;font-size:0.78rem;width:auto;padding:0 0.7rem;border-radius:20px;white-space:nowrap" onclick="installPWA()" title="Instalar la app en tu celular">📲<span class="install-txt" style="margin-left:4px">Instalar</span></button>
       <button class="dark-toggle" onclick="activarNotificaciones()" title="Activar notificaciones" id="notif-toggle">🔔</button>
       <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-btn" title="Modo oscuro">🌙</button>
       <!-- Herramientas SOLO del panel admin (catálogo/PDF/imagen). El cliente NO las ve. -->
@@ -14098,6 +14100,11 @@ const APP_VERSION = '20260601-1';
 })();
 
 // PWA
+// 🍎 ¿Es un iPhone/iPad? (incluye el iPad que se hace pasar por Mac: Macintosh + touch).
+// Se define ACÁ ARRIBA a propósito: lo usan installPWA, el instructivo y el registro del SW.
+const _esIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+  (/Macintosh/.test(navigator.userAgent) && (navigator.maxTouchPoints || 0) > 1);
+
 let _pwaPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
@@ -14111,18 +14118,68 @@ window.addEventListener('appinstalled', () => {
   _pwaPrompt = null;
 });
 function installPWA() {
-  if (!_pwaPrompt) { showToast('Usá el menú del navegador → Agregar a pantalla de inicio'); return; }
-  _pwaPrompt.prompt();
-  _pwaPrompt.userChoice.then(() => { _pwaPrompt = null; });
+  if (_pwaPrompt) {   // Android/Chrome: instalador nativo
+    _pwaPrompt.prompt();
+    _pwaPrompt.userChoice.then(() => { _pwaPrompt = null; });
+    return;
+  }
+  _instructivoInstalar();   // iPhone (y cualquiera sin instalador): se explica a mano
 }
+
+// 📲 INSTRUCTIVO DE INSTALACIÓN — iPhone NUNCA tiene botón automático (es de Apple, no del sitio):
+// se instala desde Compartir → "Agregar a pantalla de inicio". Como casi nadie lo sabe, se explica
+// con los pasos. Es además el ÚNICO camino para que un iPhone reciba notificaciones (iOS 16.4+ solo
+// las permite con la app agregada a la pantalla de inicio).
+function _instructivoInstalar() {
+  const ios = typeof _esIOS !== 'undefined' && _esIOS;
+  const pasos = ios
+    ? [['1', 'Abajo en el medio, tocá el botón <b>Compartir</b> — el cuadradito con la flecha <b>↑</b> para arriba'],
+       ['2', 'Deslizá y elegí <b>“Agregar a pantalla de inicio”</b>'],
+       ['3', 'Tocá <b>Agregar</b> arriba a la derecha']]
+    : [['1', 'Abrí el menú del navegador <b>⋮</b> (arriba a la derecha)'],
+       ['2', 'Elegí <b>“Instalar aplicación”</b> o <b>“Agregar a pantalla de inicio”</b>'],
+       ['3', 'Confirmá con <b>Instalar</b>']];
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 12px 50px rgba(0,0,0,0.3)">
+    <div style="font-size:2.6rem;line-height:1">📲</div>
+    <div style="font-family:'Fraunces',serif;font-size:1.15rem;font-weight:700;color:#2d1a0a;margin:8px 0 4px">Tené el Shuk a mano</div>
+    <div style="font-size:0.84rem;color:#7a6a55;line-height:1.45;margin-bottom:18px">Se agrega como una app más en tu celular: entrás de una y te avisamos cuando llega mercadería nueva.</div>
+    ${pasos.map(([n, t]) => `<div style="display:flex;gap:11px;align-items:flex-start;text-align:left;margin-bottom:11px">
+      <div style="flex-shrink:0;width:25px;height:25px;border-radius:50%;background:#fdf3e3;color:#8a5a1e;font-weight:800;font-size:0.82rem;display:flex;align-items:center;justify-content:center">${n}</div>
+      <div style="font-size:0.86rem;color:#2d1a0a;line-height:1.4;padding-top:2px">${t}</div></div>`).join('')}
+    <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:14px;width:100%;padding:0.75rem;background:#1a1a2e;color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:700;font-size:0.9rem;cursor:pointer">Entendido</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+// El botón se muestra en iPhone (donde nunca llega 'beforeinstallprompt') salvo que la app YA esté
+// instalada — ahí correría en modo standalone y no tiene sentido ofrecerlo.
+(function _mostrarInstalarIOS() {
+  const ver = () => {
+    const ios = typeof _esIOS !== 'undefined' && _esIOS;
+    const yaInstalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const btn = document.getElementById('install-btn');
+    if (btn && ios && !yaInstalada) btn.style.display = 'flex';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ver);
+  else ver();
+})();
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // ⚰️ SERVICE WORKER RETIRADO (2026-07-05): bug de WebKit/iOS — con CUALQUIER service worker
-    // controlando la página, los <video> fallan con ERROR 4 aunque el SW los deje pasar de largo
-    // (comprobado con el debug del usuario: SW v5 'skip' activo → ERR4; sin SW → el video anduvo).
-    // Se pierde solo el caché offline; la instalación (manifest) y las notificaciones (OneSignal,
-    // worker propio) siguen intactas. Acá: desregistrar TODO sw.js, borrar sus cachés y, si esta
-    // carga todavía estaba controlada, recargar UNA vez (guardia en sessionStorage).
+    // ⚰️ SERVICE WORKER: RETIRADO EN iOS, activo en el resto (revisado 2026-07-30).
+    // Historia: 2026-07-05, bug de WebKit/iOS — con CUALQUIER service worker controlando la
+    // página los <video> fallan con ERROR 4 aunque el SW los deje pasar de largo. Se retiró de
+    // TODOS lados, y con eso también se perdió el botón "Instalar app" de Android (Chrome lo
+    // exige para ofrecer la instalación) — algo que no habíamos notado.
+    // Ahora: en iOS se sigue desregistrando TODO (los videos quedan igual que hoy); en Android y
+    // computadora se registra, así vuelve el instalador. iOS instala por Compartir → Agregar a
+    // pantalla de inicio, que NO necesita service worker.
+    if (!_esIOS) {
+      navigator.serviceWorker.register('/sw.js?v=6').catch(() => {});
+      return;
+    }
     const controlado = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.indexOf('OneSignal') === -1;
     navigator.serviceWorker.getRegistrations().then(async regs => {
       let habia = false;
