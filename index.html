@@ -11413,13 +11413,48 @@ function cerrarNpDesdeRecep() {
   window._npDesdeRecep = false;
 }
 function agregarRecep(id) {
-  if (!_recepSel[id]) _recepSel[id] = { cantidad: '', costo: '' };
+  // Los precios de venta arrancan con los ACTUALES del catálogo: si no se tocan, no se cambia nada.
+  // Guardamos también los originales para mandar al backend SOLO lo que de verdad se modificó.
+  const _pr = productos.find(x => String(x.id) === String(id)) || {};
+  const _pm0 = (_pr.precioMay ?? '').toString().replace(',', '.');
+  const _pn0 = (_pr.precioMin ?? '').toString();
+  if (!_recepSel[id]) _recepSel[id] = { cantidad: '', costo: '', pMay: _pm0, pMin: _pn0, pMay0: _pm0, pMin0: _pn0 };
   document.getElementById('recep-buscar').value = '';
   document.getElementById('recep-resultados').style.display = 'none';
   renderRecepSel();
 }
 function setRecep(id, campo, val) { if (_recepSel[id]) { _recepSel[id][campo] = val; renderRecepSel(true); } }
 function quitarRecep(id) { delete _recepSel[id]; renderRecepSel(); }
+
+// 💰 Precios de venta editables EN la recepción (pedido 2026-08-12: "si llega más caro tengo que
+// poder subir el precio ahí mismo, no ir después al catálogo"). Con la rentabilidad en vivo, como
+// en el editor masivo — pero calculada contra el costo NUEVO (el PPP que va a quedar), que es el
+// dato que importa para decidir si el precio aguanta.
+function _recepMargenHtml(precio, costo, etiqueta) {
+  if (!(precio > 0) || !(costo > 0)) return '';
+  const m = Math.round((precio - costo) / precio * 100);
+  const color = m >= 15 ? 'var(--verde)' : (m >= 0 ? '#b8860b' : '#c0392b');
+  return `<span style="color:${color};font-weight:800;font-size:0.72rem" title="${etiqueta}">${m >= 0 ? '+' : ''}${m}%</span>`;
+}
+function _recepPreciosHtml(p, sel, ppp) {
+  const esUSD = p.moneda === 'U$S';
+  const sym = esUSD ? 'U$S' : '$';
+  // costo de referencia para el margen: el que va a QUEDAR (PPP en vivo); si aún no cargó nada, el actual
+  const costoRef = (ppp != null) ? ppp : (parseFloat(p.costo) || 0);
+  const pMay = parseFloat((sel.pMay || '').toString().replace(',', '.')) || 0;
+  const pMin = parseFloat(sel.pMin) || 0;
+  const mgMay = _recepMargenHtml(pMay, costoRef, 'rentabilidad mayorista sobre el costo nuevo');
+  // Minorista SIEMPRE en pesos → si el costo es U$S se convierte con el TC de la tienda (_tc, blue)
+  const costoMinArs = esUSD ? (window._tc > 0 ? costoRef * window._tc : 0) : costoRef;
+  const mgMin = _recepMargenHtml(pMin, costoMinArs, esUSD ? `rentabilidad minorista al TC $${Math.round(window._tc || 0).toLocaleString('es-AR')} (dólar de la tienda)` : 'rentabilidad minorista sobre el costo nuevo');
+  const tcNota = (esUSD && pMin > 0) ? `<span style="font-size:0.62rem;color:var(--texto-suave)">${window._tc > 0 ? 'TC $' + Math.round(window._tc).toLocaleString('es-AR') : 'sin TC — margen min. no calculable'}</span>` : '';
+  const cambio = (String(sel.pMay) !== String(sel.pMay0)) || (String(sel.pMin) !== String(sel.pMin0));
+  return `<div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.35rem;flex-wrap:wrap;padding-top:0.35rem;border-top:1px dashed #d8ecdf">
+    <label style="font-size:0.72rem;color:var(--texto-suave)">Venta may. ${sym} <input type="text" inputmode="decimal" value="${esc(String(sel.pMay ?? ''))}" onchange="setRecep(${p.id},'pMay',this.value)" style="width:82px;padding:0.35rem;border:1.5px solid ${cambio ? 'var(--dorado)' : '#d8ecdf'};border-radius:6px;font-weight:700;text-align:right"></label>${mgMay}
+    <label style="font-size:0.72rem;color:var(--texto-suave)">Venta min. $ <input type="text" inputmode="decimal" value="${esc(String(sel.pMin ?? ''))}" onchange="setRecep(${p.id},'pMin',this.value)" style="width:82px;padding:0.35rem;border:1.5px solid ${cambio ? 'var(--dorado)' : '#d8ecdf'};border-radius:6px;font-weight:700;text-align:right"></label>${mgMin}
+    ${tcNota}${cambio ? '<span style="font-size:0.64rem;color:var(--dorado);font-weight:700">precio modificado — se guarda al registrar</span>' : ''}
+  </div>`;
+}
 // PPP en vivo por línea (misma cuenta que hace el motor al registrar).
 function _pppPreview(p, cant, costoU) {
   if (!(costoU > 0)) return null;
@@ -11458,6 +11493,7 @@ function renderRecepSel(soloTotales) {
         <label style="font-size:0.72rem;color:var(--texto-suave)">Costo unit. ${sym} <input type="number" min="0" step="any" value="${sel.costo}" onchange="setRecep(${p.id},'costo',this.value)" style="width:90px;padding:0.35rem;border:1.5px solid #d8ecdf;border-radius:6px;font-weight:700;text-align:right"></label>
         <span style="font-size:0.74rem">${pppStr}</span>
       </div>
+      ${_recepPreciosHtml(p, sel, ppp)}
     </div>`;
   }).join('');
   cont.innerHTML = html;
@@ -11470,10 +11506,17 @@ let _enviandoRecep = false;
 async function registrarRecepcion(btn) {
   if (_enviandoRecep) return;
   const items = Object.keys(_recepSel)
-    .map(id => ({ id, cantidad: parseFloat(_recepSel[id].cantidad) || 0, costoUnit: parseFloat(_recepSel[id].costo) || 0 }))
-    .filter(it => it.cantidad > 0);
-  if (!items.length) { showToast('Cargá la cantidad de al menos un producto'); return; }
-  const sinCosto = items.filter(it => !(it.costoUnit > 0));
+    .map(id => {
+      const s = _recepSel[id];
+      const it = { id, cantidad: parseFloat(s.cantidad) || 0, costoUnit: parseFloat(s.costo) || 0 };
+      // Precios de venta: viajan SOLO si se tocaron (así una recepción normal no pisa nada).
+      if (String(s.pMay) !== String(s.pMay0)) { const v = parseFloat((s.pMay || '').toString().replace(',', '.')); if (v > 0) it.precioMay = v; }
+      if (String(s.pMin) !== String(s.pMin0)) { const v = parseFloat(s.pMin); if (v > 0) it.precioMin = v; }
+      return it;
+    })
+    .filter(it => it.cantidad > 0 || it.precioMay !== undefined || it.precioMin !== undefined);
+  if (!items.some(it => it.cantidad > 0)) { showToast('Cargá la cantidad de al menos un producto'); return; }
+  const sinCosto = items.filter(it => it.cantidad > 0 && !(it.costoUnit > 0));
   if (sinCosto.length && !confirm('Hay ' + sinCosto.length + ' producto(s) sin costo cargado: se suma el stock pero NO se toca su costo. ¿Seguir?')) return;
   _enviandoRecep = true;
   if (btn) { btn.disabled = true; btn.textContent = 'Registrando…'; }
@@ -11489,11 +11532,26 @@ async function registrarRecepcion(btn) {
       const mon = pl.moneda === 'U$S' ? 'U$S' : '$';
       const fm = (v2) => mon === 'U$S' ? mon + ' ' + (+v2).toFixed(2) : '$ ' + Math.round(+v2).toLocaleString('es-AR');
       const antes = Math.max(0, (parseFloat(x.stock) || 0) - (loc.cantidad || 0));
-      if (!(loc.costoUnit > 0)) return `• ${x.nombre}: +${loc.cantidad} unidades (sin costo cargado — el costo no se tocó)`;
-      if (antes > 0 && x.costoAnterior > 0) return `• ${x.nombre}: tenías ${antes} a ${fm(x.costoAnterior)} + entraron ${loc.cantidad} a ${fm(loc.costoUnit)} → nuevo costo ${fm(x.costoNuevo)} (promedio ponderado)`;
-      return `• ${x.nombre}: entraron ${loc.cantidad} a ${fm(loc.costoUnit)} → costo ${fm(x.costoNuevo)}${antes <= 0 ? ' (no había stock: el costo nuevo manda)' : ''}`;
+      // Si además cambió precios de venta, se confirma en el mismo renglón.
+      const _pcs = [];
+      if (x.precioMayNuevo != null) _pcs.push(`may. ${fm(x.precioMayAnterior)} → ${fm(x.precioMayNuevo)}`);
+      if (x.precioMinNuevo != null) _pcs.push(`min. $ ${Math.round(x.precioMinAnterior).toLocaleString('es-AR')} → $ ${Math.round(x.precioMinNuevo).toLocaleString('es-AR')}`);
+      const _pTxt = _pcs.length ? `\n   💰 precio de venta: ${_pcs.join(' · ')}` : '';
+      if (!(loc.cantidad > 0)) return `• ${x.nombre}: (sin unidades — solo precio)${_pTxt}`;
+      if (!(loc.costoUnit > 0)) return `• ${x.nombre}: +${loc.cantidad} unidades (sin costo cargado — el costo no se tocó)${_pTxt}`;
+      if (antes > 0 && x.costoAnterior > 0) return `• ${x.nombre}: tenías ${antes} a ${fm(x.costoAnterior)} + entraron ${loc.cantidad} a ${fm(loc.costoUnit)} → nuevo costo ${fm(x.costoNuevo)} (promedio ponderado)${_pTxt}`;
+      return `• ${x.nombre}: entraron ${loc.cantidad} a ${fm(loc.costoUnit)} → costo ${fm(x.costoNuevo)}${antes <= 0 ? ' (no había stock: el costo nuevo manda)' : ''}${_pTxt}`;
     });
-    if (_conCosto.length && items.some(it => it.costoUnit > 0)) alert('📥 Recepción registrada ✓\n\n' + _conCosto.join('\n'));
+    // 🛡️ Guarda: si se mandaron precios nuevos y el servidor NO confirmó ninguno, es que todavía
+    // no tiene la versión que los acepta. Se avisa FUERTE en vez de dejar creer que se guardaron.
+    const _pedidos = items.filter(it => it.precioMay !== undefined || it.precioMin !== undefined);
+    const _confirm = (r.items || []).filter(x => x.precioMayNuevo != null || x.precioMinNuevo != null);
+    if (_pedidos.length && !_confirm.length) {
+      alert('⚠️ El stock y el costo SÍ se registraron, pero los PRECIOS DE VENTA no se guardaron.\n\n'
+        + 'El servidor todavía no tiene la versión que los acepta. Cambialos por ahora desde el catálogo '
+        + 'o el editor masivo, y avisame para terminar de actualizarlo.');
+    }
+    else if (_conCosto.length && items.some(it => it.costoUnit > 0 || it.precioMay !== undefined || it.precioMin !== undefined)) alert('📥 Recepción registrada ✓\n\n' + _conCosto.join('\n'));
     else showToast('📥 Recepción registrada ✓ stock y costos actualizados');
     _recepSel = {};
     renderRecepSel();

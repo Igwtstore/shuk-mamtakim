@@ -3241,7 +3241,9 @@ Deno.serve(async (req) => {
       // Suma stock (respetando depósito compartido), deja huella en movimientos_stock y
       // registro auditable en `recepciones`. Dedup por compraId (reintento de red no duplica).
       let itemsR: any[]; try { itemsR = JSON.parse(P(body, 'items') || '[]'); } catch { return json({ error: 'items inválido' }); }
-      itemsR = itemsR.filter((it) => it && it.id && (parseFloat(it.cantidad) || 0) > 0);
+      // v4.48: un item también puede traer precioMay/precioMin (editados en la misma recepción).
+      // Se acepta incluso con cantidad 0 (cambió el precio pero esa línea no recibió unidades).
+      itemsR = itemsR.filter((it) => it && it.id && ((parseFloat(it.cantidad) || 0) > 0 || (parseFloat(it.precioMay) || 0) > 0 || (parseFloat(it.precioMin) || 0) > 0));
       if (!itemsR.length) return json({ error: 'sin items' });
       const compraId = P(body, 'compraId') || 'RC' + Date.now();
       const kR = 'rc_' + compraId;
@@ -3253,19 +3255,30 @@ Deno.serve(async (req) => {
         const pid = String(it.id);
         const cant = parseFloat(it.cantidad) || 0;
         const costoU = parseFloat(it.costoUnit) || 0;
-        const pr = await sbGet('productos', 'select=nombre,costo,moneda,dueno&id=eq.' + encodeURIComponent(pid));
+        const pr = await sbGet('productos', 'select=nombre,costo,moneda,dueno,precio_may,precio_min&id=eq.' + encodeURIComponent(pid));
         if (!pr.length) { resumen.push({ id: pid, error: 'no existe' }); continue; }
         const p = pr[0];
-        const mv = await moverStockShuk(pid, cant, '📥 Recepción — compra ' + compraId);
+        const mv = cant > 0 ? await moverStockShuk(pid, cant, '📥 Recepción — compra ' + compraId) : null;
         const antes = mv ? mv.antes : 0;
         const costoAnt = parseFloat(p.costo) || 0;
         let costoNuevo = costoU;
         if (antes > 0 && costoAnt > 0 && costoU > 0) costoNuevo = Math.round(((antes * costoAnt + cant * costoU) / (antes + cant)) * 100) / 100;
-        if (costoU > 0) await sbPatch('productos', 'id=eq.' + encodeURIComponent(pid), { costo: costoNuevo });
-        await sbInsert('recepciones', { fecha: fechaAhora(), compra_id: compraId, producto_id: pid, producto: p.nombre, cantidad: cant, costo_unit: costoU, costo_anterior: costoAnt || null, costo_nuevo: costoU > 0 ? costoNuevo : null, stock_antes: antes, stock_despues: mv ? mv.despues : antes + cant, moneda: (p.moneda || '$').toString(), dueno: (p.dueno || '').toString() });
+        const patchP: any = {};
+        if (cant > 0 && costoU > 0) patchP.costo = costoNuevo;
+        // 💰 Precios de venta editados desde la recepción (v4.48). SIEMPRE números (regla gviz:
+        // un precio como texto desaparece de la tienda). Se registra el cambio en el resumen.
+        const nMay = parseFloat(it.precioMay) || 0, nMin = parseFloat(it.precioMin) || 0;
+        const vMayAnt = parseFloat(String(p.precio_may ?? '').replace(',', '.')) || 0;
+        const vMinAnt = parseFloat(p.precio_min) || 0;
+        if (nMay > 0 && Math.abs(nMay - vMayAnt) > 0.001) patchP.precio_may = nMay;
+        if (nMin > 0 && Math.abs(nMin - vMinAnt) > 0.001) patchP.precio_min = nMin;
+        if (Object.keys(patchP).length) await sbPatch('productos', 'id=eq.' + encodeURIComponent(pid), patchP);
+        if (cant > 0) await sbInsert('recepciones', { fecha: fechaAhora(), compra_id: compraId, producto_id: pid, producto: p.nombre, cantidad: cant, costo_unit: costoU, costo_anterior: costoAnt || null, costo_nuevo: costoU > 0 ? costoNuevo : null, stock_antes: antes, stock_despues: mv ? mv.despues : antes + cant, moneda: (p.moneda || '$').toString(), dueno: (p.dueno || '').toString() });
         // Compat: las compras de productos de Jony también quedan en su log histórico (costos_jony).
-        if ((p.dueno || '') === 'Jony' && costoU > 0) await sbInsert('costos_jony', { fecha: fechaAhora(), producto_id: pid, producto: p.nombre, cantidad: cant, costo_total: Math.round(cant * costoU * 100) / 100, costo_unitario: costoU });
-        resumen.push({ id: pid, nombre: p.nombre, stock: (mv ? mv.despues : null), costoAnterior: costoAnt, costoNuevo: costoU > 0 ? costoNuevo : costoAnt });
+        if ((p.dueno || '') === 'Jony' && cant > 0 && costoU > 0) await sbInsert('costos_jony', { fecha: fechaAhora(), producto_id: pid, producto: p.nombre, cantidad: cant, costo_total: Math.round(cant * costoU * 100) / 100, costo_unitario: costoU });
+        resumen.push({ id: pid, nombre: p.nombre, stock: (mv ? mv.despues : null), costoAnterior: costoAnt, costoNuevo: (cant > 0 && costoU > 0) ? costoNuevo : costoAnt,
+          precioMayNuevo: patchP.precio_may ?? null, precioMayAnterior: patchP.precio_may != null ? vMayAnt : null,
+          precioMinNuevo: patchP.precio_min ?? null, precioMinAnterior: patchP.precio_min != null ? vMinAnt : null });
       }
       return json({ ok: true, compraId, items: resumen });
     }
