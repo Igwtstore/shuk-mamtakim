@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/*.js": { "maxDuration": 300 }
+  },
   "rewrites": [
     { "source": "/tienda", "destination": "/index.html" },
     { "source": "/mayorista", "destination": "/index.html" },

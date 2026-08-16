@@ -1,4 +1,4 @@
-const CACHE = 'shuk-v5';
+const CACHE = 'shuk-v6';
 const STATIC = ['/', '/index.html', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -30,6 +30,18 @@ self.addEventListener('fetch', e => {
       url.hostname.includes('script.google') || url.hostname.includes('googleapis')) {
     return;
   }
+
+  // NUESTRAS APIs y Supabase → que el SW no se meta. La lectura de un ticket tarda ~3 minutos
+  // y devuelve varios MB: si el SW la intercepta, la clona y trata de guardarla, no gana nada
+  // y puede colgarla. Nada de esto se cachea nunca.
+  if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase.co') ||
+      url.hostname.includes('anthropic.com')) {
+    return;
+  }
+
+  // La calculadora empotrada se sirve de su propia carpeta: se deja pasar de largo para que
+  // una versión nueva no quede pegada en el cache de un service worker viejo.
+  if (url.pathname.startsWith('/ci-k7m2x9/')) return;
 
   // Imágenes Cloudinary → cache con revalidación
   if (url.hostname.includes('cloudinary') || url.hostname.includes('githubusercontent')) {
