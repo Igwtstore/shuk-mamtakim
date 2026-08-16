@@ -261,3 +261,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'No se pudo leer la factura: ' + (e && e.message ? e.message : String(e)) });
   }
 }
+# Redeploy 16/08/2026 12:57 — para que Vercel tome ANTHROPIC_API_KEY (las variables nuevas solo se aplican en el build siguiente).
