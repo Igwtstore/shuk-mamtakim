@@ -665,6 +665,19 @@
   }
   .admin-section.visible { display: block; }
 
+  /* 🇮🇱 La calculadora necesita ancho: son tablas de 8 columnas. El panel está limitado a
+     900 px —bien para las tarjetas normales— así que ESTA sola se escapa de ese límite y se
+     centra sobre la pantalla. En un monitor grande gana casi el doble de ancho; en el celu
+     queda igual que antes, porque el mínimo manda. */
+  #card-israel {
+    width: min(1680px, calc(100vw - 2rem));
+    max-width: none;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  #card-israel iframe { height: calc(100vh - 200px); min-height: 560px; }
+
   .admin-card {
     background: var(--blanco);
     border-radius: var(--radio);
