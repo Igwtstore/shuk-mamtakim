@@ -549,6 +549,23 @@ async function sesionValida(token: string): Promise<boolean> {
   if (!token) return false;
   try { const r = await fetch(SB_URL + '/auth/v1/user', { headers: { Authorization: 'Bearer ' + token, apikey: ANON } }); return r.ok; } catch { return false; }
 }
+// ── IDENTIDAD (v4.49) ───────────────────────────────────────────────────────────
+// sesionValida() solo contesta "¿es un usuario válido?" — nunca CUÁL. Con eso, el token
+// de Miri pasaba todos los controles y la regla sagrada de privacidad quedaba sostenida
+// únicamente por el front (que no dibuja las cosas). Para el historial de compras, que
+// trae proveedores y costos reales de Jony, eso no alcanza: la barrera va en el servidor.
+const MAIL_JONY = 'admin@shukmamtakim.com';
+type Usuario = { email: string; id: string };
+async function usuarioSesion(token: string): Promise<Usuario | null> {
+  if (!token) return null;
+  try {
+    const r = await fetch(SB_URL + '/auth/v1/user', { headers: { Authorization: 'Bearer ' + token, apikey: ANON } });
+    if (!r.ok) return null;
+    const u = await r.json();
+    return { email: String(u?.email || '').trim().toLowerCase(), id: String(u?.id || '') };
+  } catch { return null; }
+}
+const esJony = (u: Usuario | null) => !!u && u.email === MAIL_JONY;
 async function sbGet(tabla: string, query: string) {
   const r = await fetch(SB_URL + '/rest/v1/' + tabla + '?' + query, { headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE } });
   if (!r.ok) throw new Error(tabla + ' ' + r.status);
@@ -1507,7 +1524,14 @@ async function cierreDiario() {
   return { ok: true };
 }
 // Backup de TODAS las tablas como un JSON en Storage (bucket 'backups') + retención 30 días.
-const TABLAS_BACKUP = ['productos', 'ventas', 'pagos', 'clientes', 'movs_socios', 'envios', 'liquidacion_socios', 'cortes', 'gastos', 'rendiciones', 'notificaciones', 'movimientos_stock', 'ganancias_jony', 'costos_jony', 'visitas', 'trafico', 'avisos_candy', 'shuk_en_candy', 'borrados', 'config', 'candy_productos', 'candy_ventas', 'candy_cc', 'candy_consumo', 'candy_deposito', 'candy_compras', 'candy_proveedores', 'candy_pedidos', 'candy_deudores', 'stock_diario', 'cierres_hijos', 'bandeja_fotos', 'flyers_hijos', 'bot_sesiones', 'sms_log'];
+// v4.49: se auditó la lista contra information_schema y faltaban 9 tablas que SÍ tienen datos
+// o van a tenerlos. Las más graves: `recepciones` (el historial de compras, 123 filas desde
+// julio) y `ordenes_compra`. Las `costeo_*` son de Costos Israel — comparten proyecto y sbGet
+// usa la SERVICE key, así que las lee aunque tengan RLS.
+// Queda AFUERA a propósito: pagos_backup_20260707 (backup manual puntual, no es dato vivo).
+const TABLAS_BACKUP = ['productos', 'ventas', 'pagos', 'clientes', 'movs_socios', 'envios', 'liquidacion_socios', 'cortes', 'gastos', 'rendiciones', 'notificaciones', 'movimientos_stock', 'ganancias_jony', 'costos_jony', 'visitas', 'trafico', 'avisos_candy', 'shuk_en_candy', 'borrados', 'config', 'candy_productos', 'candy_ventas', 'candy_cc', 'candy_consumo', 'candy_deposito', 'candy_compras', 'candy_proveedores', 'candy_pedidos', 'candy_deudores', 'stock_diario', 'cierres_hijos', 'bandeja_fotos', 'flyers_hijos', 'bot_sesiones', 'sms_log',
+  'recepciones', 'ordenes_compra', 'costos_importaciones',
+  'costeo_productos', 'costeo_compras', 'costeo_facturas', 'costeo_items', 'costeo_envios', 'costeo_recepciones'];
 async function backupAhora(etiqueta: string) {
   const dump: any = {}; let filas = 0;
   for (const t of TABLAS_BACKUP) {
@@ -1568,9 +1592,17 @@ Deno.serve(async (req) => {
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
+  // ── Acciones que SOLO puede pedir Jony (v4.48). Miri tiene su propio usuario y su token
+  //    es válido, así que sin esta lista vería el historial de compras de Jony con solo
+  //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
-  if (PUBLICAS.indexOf(accion) === -1 && !conSecreto && !(await sesionValida(token))) return json({ error: 'no autorizado' });
+  const esPublica = PUBLICAS.indexOf(accion) !== -1;
+  // Una sola consulta de identidad por request: sirve para el portero Y para saber quién es.
+  const usuario = (esPublica || conSecreto) ? null : await usuarioSesion(token);
+  if (!esPublica && !conSecreto && !usuario) return json({ error: 'no autorizado' });
+  if (SOLO_JONY.indexOf(accion) !== -1 && !conSecreto && !esJony(usuario)) return json({ error: 'no autorizado' });
 
   try {
     // ═══ TIENDA PÚBLICA (sin login) ═══════════════════════════════════════════
@@ -2838,7 +2870,16 @@ Deno.serve(async (req) => {
       const detalle = cc.sort((a: any, b: any) => ts(a.fecha) - ts(b.fecha)).slice(-30).map((r: any) => ({ fecha: (r.fecha || '').toString().slice(0, 5), tipo: (r.tipo || '').toString(), producto: (r.detalle || r.tipo || '').toString(), monto: parseFloat(r.monto) || 0 }));
       return json({ saldo, detalle });
     }
-    if (accion === 'getProductosShukAdmin' || accion === 'getProductosAdmin') return json((await sbGet('productos', 'select=*&order=nombre')).map(prodAdmin));
+    if (accion === 'getProductosShukAdmin' || accion === 'getProductosAdmin') {
+      const filasP = (await sbGet('productos', 'select=*&order=nombre')).map(prodAdmin);
+      // 🔒 Privacidad Jony/Miri (v4.49): hasta acá el backend mandaba TODOS los costos a
+      // CUALQUIER sesión válida y lo único que los tapaba era que el front no los dibujara.
+      // O sea: el costo de Jony ya estaba en la memoria del navegador de Miri. Ahora el costo
+      // de lo ajeno no sale del servidor. Ojo: se decide por el USUARIO del token, no por
+      // vistaSocio — así Jony simulando la vista de Miri sigue viendo todo, que es lo correcto.
+      if (!esJony(usuario)) return json(filasP.map((p: any) => (p.dueno === 'Jony' ? { ...p, costo: 0 } : p)));
+      return json(filasP);
+    }
     if (accion === 'getUltimoStockDia') {
       const rows = await sbGet('stock_diario', 'select=*&hijo=eq.' + encodeURIComponent(url.searchParams.get('hijo') || ''));
       const hoy = fechaAhora().slice(0, 10);
@@ -3246,6 +3287,11 @@ Deno.serve(async (req) => {
       itemsR = itemsR.filter((it) => it && it.id && ((parseFloat(it.cantidad) || 0) > 0 || (parseFloat(it.precioMay) || 0) > 0 || (parseFloat(it.precioMin) || 0) > 0));
       if (!itemsR.length) return json({ error: 'sin items' });
       const compraId = P(body, 'compraId') || 'RC' + Date.now();
+      // v4.49: a QUIÉN se le compró y una nota libre (vino roto, abierto, faltó, etc.).
+      // Van como CABECERA: son de la compra entera, no de cada renglón. Es el dato que le
+      // faltaba a `recepciones` para poder contestar "¿a quién le compré esto y cuándo?".
+      const proveedorR = (P(body, 'proveedor') || '').toString().trim().slice(0, 120);
+      const notaR = (P(body, 'nota') || '').toString().trim().slice(0, 500);
       const kR = 'rc_' + compraId;
       const exR = await sbGet('config', 'select=clave&clave=eq.' + encodeURIComponent(kR));
       if (exR.length) return json({ ok: true, dup: true, compraId });
@@ -3273,7 +3319,7 @@ Deno.serve(async (req) => {
         if (nMay > 0 && Math.abs(nMay - vMayAnt) > 0.001) patchP.precio_may = nMay;
         if (nMin > 0 && Math.abs(nMin - vMinAnt) > 0.001) patchP.precio_min = nMin;
         if (Object.keys(patchP).length) await sbPatch('productos', 'id=eq.' + encodeURIComponent(pid), patchP);
-        if (cant > 0) await sbInsert('recepciones', { fecha: fechaAhora(), compra_id: compraId, producto_id: pid, producto: p.nombre, cantidad: cant, costo_unit: costoU, costo_anterior: costoAnt || null, costo_nuevo: costoU > 0 ? costoNuevo : null, stock_antes: antes, stock_despues: mv ? mv.despues : antes + cant, moneda: (p.moneda || '$').toString(), dueno: (p.dueno || '').toString() });
+        if (cant > 0) await sbInsert('recepciones', { fecha: fechaAhora(), compra_id: compraId, producto_id: pid, producto: p.nombre, cantidad: cant, costo_unit: costoU, costo_anterior: costoAnt || null, costo_nuevo: costoU > 0 ? costoNuevo : null, stock_antes: antes, stock_despues: mv ? mv.despues : antes + cant, moneda: (p.moneda || '$').toString(), dueno: (p.dueno || '').toString(), proveedor: proveedorR, nota: notaR });
         // Compat: las compras de productos de Jony también quedan en su log histórico (costos_jony).
         if ((p.dueno || '') === 'Jony' && cant > 0 && costoU > 0) await sbInsert('costos_jony', { fecha: fechaAhora(), producto_id: pid, producto: p.nombre, cantidad: cant, costo_total: Math.round(cant * costoU * 100) / 100, costo_unitario: costoU });
         resumen.push({ id: pid, nombre: p.nombre, stock: (mv ? mv.despues : null), costoAnterior: costoAnt, costoNuevo: (cant > 0 && costoU > 0) ? costoNuevo : costoAnt,
@@ -3281,6 +3327,52 @@ Deno.serve(async (req) => {
           precioMinNuevo: patchP.precio_min ?? null, precioMinAnterior: patchP.precio_min != null ? vMinAnt : null });
       }
       return json({ ok: true, compraId, items: resumen });
+    }
+    // 📜 Historial de compras de UN producto: a quién se le compró, cuándo, cuánto y a qué costo.
+    // La tabla `recepciones` venía guardando todo esto desde v3.05 y NADIE la leía nunca.
+    // 🔒 Está en SOLO_JONY (el portero de arriba ya rebotó a cualquier otro), pero además se
+    //    revalida acá el dueño del producto: defensa en profundidad, no una sola puerta.
+    if (accion === 'historialCompras') {
+      const pidH = Q('id');
+      if (!pidH) return json({ error: 'sin id' });
+      const prH = await sbGet('productos', 'select=nombre,dueno,moneda,costo,unidades_por_paquete&id=eq.' + encodeURIComponent(pidH));
+      if (!prH.length) return json({ error: 'no existe' });
+      const pH = prH[0];
+      if (!esJony(usuario)) return json({ error: 'no autorizado' });
+      const filasH = await sbGet('recepciones', 'select=*&producto_id=eq.' + encodeURIComponent(pidH) + '&order=id.desc&limit=' + Math.min(100, parseInt(Q('limite')) || 30));
+      // fechaAhora() escribe "dd/MM/yyyy HH:mm": se manda tal cual y también en ISO, para ordenar.
+      const isoDe = (f: string) => { const m = String(f || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/); return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4] || '00'}:${m[5] || '00'}` : ''; };
+      const compras = filasH.map((r: any) => ({
+        fecha: r.fecha || '', iso: isoDe(r.fecha), proveedor: (r.proveedor || '').toString(), nota: (r.nota || '').toString(),
+        cantidad: parseFloat(r.cantidad) || 0, costoUnit: parseFloat(r.costo_unit) || 0,
+        costoAnterior: r.costo_anterior == null ? null : parseFloat(r.costo_anterior),
+        costoNuevo: r.costo_nuevo == null ? null : parseFloat(r.costo_nuevo),
+        stockAntes: parseFloat(r.stock_antes) || 0, stockDespues: parseFloat(r.stock_despues) || 0,
+        moneda: (r.moneda || '$').toString(), compraId: (r.compra_id || '').toString(),
+      }));
+      // Resumen útil para decidir una recompra: qué proveedores, a qué precio, cuánto se lleva comprado.
+      const porProveedor: Record<string, { veces: number; unidades: number; ultimo: number; min: number; max: number }> = {};
+      compras.filter((c) => c.costoUnit > 0).forEach((c) => {
+        const k = c.proveedor || '(sin proveedor)';
+        const a = porProveedor[k] || (porProveedor[k] = { veces: 0, unidades: 0, ultimo: c.costoUnit, min: c.costoUnit, max: c.costoUnit });
+        a.veces++; a.unidades += c.cantidad; a.min = Math.min(a.min, c.costoUnit); a.max = Math.max(a.max, c.costoUnit);
+      });
+      return json({ ok: true, producto: { id: pidH, nombre: pH.nombre || '', dueno: pH.dueno || '', moneda: pH.moneda || '$', costo: parseFloat(pH.costo) || 0, upp: Math.max(1, parseInt(pH.unidades_por_paquete) || 1) }, compras, porProveedor });
+    }
+    // 📜 La ÚLTIMA compra de CADA producto, en una sola llamada. Es lo que necesita la orden
+    // de compra para poner "última: KI TOV · 12/07 · U$S 1,80" en cada renglón: pedirlo de a
+    // uno para 63 artículos serían 63 requests. Trae solo lo de Jony (misma barrera).
+    if (accion === 'ultimasCompras') {
+      if (!esJony(usuario)) return json({ error: 'no autorizado' });
+      // Orden ascendente + pisar: la última que queda por producto es la más nueva.
+      const todasU = await sbGet('recepciones', 'select=producto_id,fecha,proveedor,costo_unit,cantidad,moneda&order=id.asc&limit=100000');
+      const ultima: Record<string, any> = {};
+      for (const r of todasU) {
+        const pid = String(r.producto_id || '');
+        if (!pid || !(parseFloat(r.costo_unit) > 0)) continue;
+        ultima[pid] = { fecha: (r.fecha || '').toString().slice(0, 10), proveedor: (r.proveedor || '').toString(), costoUnit: parseFloat(r.costo_unit) || 0, cantidad: parseFloat(r.cantidad) || 0, moneda: (r.moneda || '$').toString() };
+      }
+      return json({ ok: true, ultima });
     }
     // ═══ DIAGNÓSTICO + BACKUP + CRON ═══
     if (accion === 'leerStockRaw') {

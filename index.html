@@ -1481,6 +1481,21 @@
     <div id="recep-resultados" style="display:none;max-height:220px;overflow-y:auto;border:1.5px solid var(--gris-medio);border-radius:10px;margin-bottom:0.6rem"></div>
     <div id="recep-lineas"></div>
     <div id="recep-pie" style="display:none">
+      <!-- 🏷️ Proveedor + nota de la compra entera (v4.49). Es lo que le faltaba al historial
+           para poder contestar después "¿a quién le compré esto y cuándo?". -->
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin:0.6rem 0 0.2rem">
+        <div style="flex:1 1 190px;min-width:0">
+          <label for="recep-proveedor" style="display:block;font-size:0.7rem;font-weight:700;color:var(--texto-suave);margin-bottom:0.2rem">🏷️ ¿A quién le compraste?</label>
+          <input type="text" id="recep-proveedor" list="recep-proveedores-previos" placeholder="Ej: KI TOV, Rami Levy…" autocomplete="off"
+            style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none" />
+          <datalist id="recep-proveedores-previos"></datalist>
+        </div>
+        <div style="flex:2 1 260px;min-width:0">
+          <label for="recep-nota" style="display:block;font-size:0.7rem;font-weight:700;color:var(--texto-suave);margin-bottom:0.2rem">📝 Nota (opcional)</label>
+          <input type="text" id="recep-nota" placeholder="Vino algo roto, abierto, faltó…" autocomplete="off"
+            style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none" />
+        </div>
+      </div>
       <div id="recep-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul);margin:0.5rem 0"></div>
       <button class="guardar-stock-btn" onclick="registrarRecepcion(this)" style="margin-top:0">📥 Registrar recepción</button>
     </div>
@@ -1620,6 +1635,9 @@
       <button class="guardar-stock-btn" type="button" style="margin-top:0.5rem;background:#eef7ee;color:#1e7a3c" onclick="abrirClonarProducto()">👯 Clonar para el otro dueño (no toca el historial)</button>
       <button class="guardar-stock-btn" style="margin-top:0.5rem;background:#fff3e0;color:#b8860b" onclick="eliminarProductoEditor()">🙈 Ocultar producto (se conserva el historial)</button>
       <button class="guardar-stock-btn" style="margin-top:0.4rem;background:#fde8e8;color:#c0392b" onclick="borrarProductoEditor()">🗑️ Borrar definitivamente (se va del catálogo)</button>
+      <!-- 📜 Compras anteriores de este producto (v4.49). Lo llena cargarHistorialCompras();
+           en vista Miri no se pide ni se pinta. -->
+      <div id="ep-historial" style="display:none"></div>
     </div>
   </div>
   <div class="admin-card" id="card-bandeja">
@@ -4627,7 +4645,7 @@ async function renderCuentaCorriente() {
         _tU > 0.009 ? 'U$S ' + _tU.toFixed(2) : ''
       ].filter(Boolean).join(' + ');
       const _color = _af ? '#1a7a3c' : '#c0392b';
-      const cliEsc = cliente.replace(/'/g, "\\'");
+      const cliEsc = jsAttr(cliente);
       const btnPago = soloMiri ? '' :
         `<button onclick="abrirPagoCuenta('${cliEsc}','',0,${Math.max(0, Math.round(data.totalARS))},${Math.max(0, data.totalUSD).toFixed(2)},${i})"
           style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;margin-top:2px;margin-right:4px">💵 Pago a cuenta</button>`;
@@ -4884,7 +4902,7 @@ async function renderPedidos() {
             // Si hubo pagos a cuenta, el cobro precarga SOLO el resto (deuda viva por dueño),
             // no el total del pedido (caso Moshe #47: pagó U$S 320 a cuenta y el modal ofrecía
             // los 432,50 completos → habría cobrado dos veces). Mismo mecanismo que "Revisar".
-            const _uJ = parseFloat(v.usdJONY || 0), _cli = (v.cliente || '').replace(/'/g, "\\'");
+            const _uJ = parseFloat(v.usdJONY || 0), _cli = jsAttr(v.cliente || '');
             const _dv = deudaViva[v.id];
             if (!cobrado && _dv && _dv.jA !== undefined) {
               const rJ = Math.max(0, Math.round(_dv.jA)), rM = Math.max(0, Math.round(_dv.mA));
@@ -4905,7 +4923,7 @@ async function renderPedidos() {
             const remGolARS = Math.max(0, Math.round(arsM - pg.golARS));
             const remGolUSD = Math.max(0, (usdM - pg.golUSD));
             const remPitzUSD = Math.max(0, (parseFloat(v.usdJONY || 0) - (pg.pitzUSD||0)));
-            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${(v.cliente||'').replace(/'/g,"\\'")}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)},null,${remPitzUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
+            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${jsAttr(v.cliente||'')}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)},null,${remPitzUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
           })() : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaPedido('${v.id}')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
           <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
@@ -6589,7 +6607,7 @@ function _renderCopiarLista() {
   const filas = lista.map(p => {
     const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
     const src = imgUrl(foto)[0];
-    return `<div onclick="_copiarFotoElegir('${(foto).replace(/'/g,"\\'")}', this)" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--gris);cursor:pointer">
+    return `<div onclick="_copiarFotoElegir('${jsAttr(foto)}', this)" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--gris);cursor:pointer">
       <img src="${src}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">
       <div style="flex:1;min-width:0;font-size:0.82rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_duenoBadge ? _duenoBadge(p) : ''}${esc(p.nombre)}</div>
       <span style="font-size:0.7rem;color:var(--azul);font-weight:700">copiar →</span>
@@ -7267,6 +7285,81 @@ function cargarProductoEditor(id) {
   document.getElementById('ep-status').textContent = '';
   renderFotosEditor();
   form.style.display = 'block';
+  cargarHistorialCompras(p.id);   // 📜 a quién se le compró, cuándo y a cuánto
+}
+
+// ── 📜 HISTORIAL DE COMPRAS DEL PRODUCTO ────────────────────────────────────────
+// La tabla `recepciones` venía guardando desde julio el cuándo, el cuánto y a qué costo
+// entró cada producto, y nadie la leía nunca. Acá se vuelve visible, que es lo que sirve
+// para decidir una recompra: a quién le compré, cuánto pagué, y si el precio se movió.
+// 🔒 En vista Miri no se pide ni se pinta (y el backend igual la rebota).
+async function cargarHistorialCompras(pid) {
+  const caja = document.getElementById('ep-historial');
+  if (!caja) return;
+  if (esVistaMiri()) { caja.style.display = 'none'; caja.innerHTML = ''; return; }
+  caja.style.display = '';
+  caja.innerHTML = '<div style="font-size:0.78rem;color:var(--texto-suave);padding:0.5rem 0">📜 Buscando compras anteriores…</div>';
+  let r;
+  try { r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'historialCompras', id: String(pid) })); }
+  catch { r = null; }
+  // Si el editor ya se movió a otro producto mientras llegaba la respuesta, no pisar nada.
+  if (String(_epId) !== String(pid)) return;
+  if (!r || r.error || !Array.isArray(r.compras)) {
+    caja.innerHTML = `<div style="font-size:0.75rem;color:var(--texto-suave);padding:0.4rem 0">📜 No pude traer el historial de compras${r && r.error ? ' (' + esc(r.error) + ')' : ''}.</div>`;
+    return;
+  }
+  caja.innerHTML = _historialComprasHtml(r);
+}
+
+function _historialComprasHtml(r) {
+  const mon = (r.producto && r.producto.moneda === 'U$S') ? 'U$S' : '$';
+  const fm = (v) => mon === 'U$S' ? 'U$S ' + (+v || 0).toFixed(2) : '$ ' + Math.round(+v || 0).toLocaleString('es-AR');
+  const compras = r.compras || [];
+  if (!compras.length) {
+    return `<div style="border-top:1px solid var(--gris-medio);margin-top:0.8rem;padding-top:0.7rem">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--texto-suave);margin-bottom:0.3rem">📜 Compras anteriores</div>
+      <div style="font-size:0.75rem;color:var(--texto-suave)">Todavía no hay ninguna recepción registrada de este producto.<br>
+      Se van a ir cargando solas cada vez que uses <b>📥 Recibir mercadería</b>.</div></div>`;
+  }
+  const provs = Object.entries(r.porProveedor || {});
+  // Resumen por proveedor: es lo que contesta "¿a quién le convenía comprarle?".
+  const resumen = provs.length ? `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem">` + provs.map(([nom, a]) => {
+    const rango = a.min === a.max ? fm(a.min) : `${fm(a.min)} – ${fm(a.max)}`;
+    return `<div style="background:var(--gris);border-radius:8px;padding:0.35rem 0.6rem;font-size:0.72rem">
+      <b style="color:var(--azul)">${esc(nom)}</b> · ${a.veces} ${a.veces === 1 ? 'compra' : 'compras'} · ${a.unidades} u. · ${esc(rango)}</div>`;
+  }).join('') + `</div>` : '';
+
+  const filas = compras.map(c => {
+    // La flecha del costo: si el ponderado lo movió, se ve de dónde a dónde.
+    const movio = c.costoAnterior != null && c.costoNuevo != null && Math.abs(c.costoNuevo - c.costoAnterior) > 0.005;
+    const flecha = movio
+      ? `<span style="color:var(--texto-suave)">${fm(c.costoAnterior)}</span> <span style="color:${c.costoNuevo > c.costoAnterior ? '#c0392b' : '#1a7a3a'}">→ ${fm(c.costoNuevo)}</span>`
+      : `<span style="color:var(--texto-suave)">costo sin cambios</span>`;
+    return `<tr style="border-top:1px solid var(--gris-medio)">
+      <td style="padding:0.35rem 0.4rem;white-space:nowrap">${esc(c.fecha.slice(0, 10))}</td>
+      <td style="padding:0.35rem 0.4rem"><b>${esc(c.proveedor || '—')}</b>${c.nota ? `<div style="font-size:0.68rem;color:var(--texto-suave)">📝 ${esc(c.nota)}</div>` : ''}</td>
+      <td style="padding:0.35rem 0.4rem;text-align:right;white-space:nowrap">${c.cantidad}</td>
+      <td style="padding:0.35rem 0.4rem;text-align:right;white-space:nowrap;font-weight:700">${fm(c.costoUnit)}</td>
+      <td style="padding:0.35rem 0.4rem;text-align:right;white-space:nowrap;font-size:0.7rem">${flecha}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div style="border-top:1px solid var(--gris-medio);margin-top:0.8rem;padding-top:0.7rem">
+    <div style="font-size:0.8rem;font-weight:700;color:var(--texto-suave);margin-bottom:0.45rem">📜 Compras anteriores <span style="font-weight:400">· ${compras.length}</span></div>
+    ${resumen}
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table style="width:100%;border-collapse:collapse;font-size:0.75rem;min-width:420px">
+        <thead><tr style="color:var(--texto-suave);font-size:0.68rem;text-align:left">
+          <th style="padding:0.2rem 0.4rem;font-weight:600">Fecha</th>
+          <th style="padding:0.2rem 0.4rem;font-weight:600">Proveedor</th>
+          <th style="padding:0.2rem 0.4rem;font-weight:600;text-align:right">Cant.</th>
+          <th style="padding:0.2rem 0.4rem;font-weight:600;text-align:right">Costo u.</th>
+          <th style="padding:0.2rem 0.4rem;font-weight:600;text-align:right">Costo del producto</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 function renderFotosEditor() {
@@ -8243,7 +8336,7 @@ function verDetalleDeudor(i) {
   const sUSD = items.reduce((s, it) => s + Math.max(0, it.remUSD), 0);
   const sTxt = [sARS > 1 ? money(sARS) : '', sUSD > 0.01 ? 'U$S ' + sUSD.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
   html += `<div style="display:flex;justify-content:space-between;margin-top:0.5rem;padding:0.5rem 0.7rem;background:#fdecea;border-radius:8px;font-weight:800;color:#c0392b"><span>Saldo que debe</span><span>${sTxt}</span></div>`;
-  const cliEsc2 = (d.nombre || '').replace(/'/g, "\\'");
+  const cliEsc2 = jsAttr(d.nombre || '');
   html += `<button onclick="abrirEstadoCuenta('${cliEsc2}')" style="margin-top:0.6rem;width:100%;padding:0.6rem;background:var(--azul);color:#fff;border:none;border-radius:8px;font-family:inherit;font-weight:700;font-size:0.85rem;cursor:pointer">📄 Estado de cuenta completo (con saldos)</button>`;
   _mostrarOverlayDetalle(html);
 }
@@ -9655,8 +9748,8 @@ async function renderCuentaSocios() {
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed #e0d4b8">
         <span style="font-size:0.7rem;color:#7a5a1a">${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${(v.formaPago||'').trim()} · ${tot}${parcial?' <span style="color:#b8860b">(resto — lo demás ya entró por pagos a cuenta)</span>':''}</span></span>
         <button onclick="${parcial
-          ? `abrirConfirmarCobroResidual('${v.id}',${aJ},${aM},${uM},'${(v.cliente||'').replace(/'/g,"\\'")}',${uJ},${Math.max(0,baseJ-aJ)},${Math.max(0,baseM-aM)},${Math.max(0,Math.round((baseUM-uM)*100)/100)},${Math.max(0,Math.round((baseUJ-uJ)*100)/100)})`
-          : `abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM},'${(v.cliente||'').replace(/'/g,"\\'")}',${uJ})`}" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
+          ? `abrirConfirmarCobroResidual('${v.id}',${aJ},${aM},${uM},'${jsAttr(v.cliente||'')}',${uJ},${Math.max(0,baseJ-aJ)},${Math.max(0,baseM-aM)},${Math.max(0,Math.round((baseUM-uM)*100)/100)},${Math.max(0,Math.round((baseUJ-uJ)*100)/100)})`
+          : `abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM},'${jsAttr(v.cliente||'')}',${uJ})`}" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
       </div>`;
     };
     html += _comiBox(false, _revisar.length ? `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #e0e8f2">
@@ -10472,7 +10565,7 @@ async function verLinksVip() {
     ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span>${(l.desc > 0 || l.nDescProd > 0) ? ` <span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:1px 6px;border-radius:6px">🏷️ ${l.desc > 0 && !l.nDescProd ? '-' + l.desc + '%' : 'con dto.'}</span>` : ''}</div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
       <button onclick="navigator.clipboard.writeText(SITIO + '/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
-      <button onclick="editarLinkVip('${l.token}','${esc(l.nombre).replace(/'/g,"\\'")}','${l.canal}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
+      <button onclick="editarLinkVip('${l.token}','${jsAttr(l.nombre)}','${l.canal}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
       <button onclick="borrarLinkVip('${l.token}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.6rem 0">No hay links creados.</div>'}
     <button onclick="document.getElementById('viplink-overlay').remove()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>
@@ -10837,6 +10930,7 @@ async function abrirOrdenCompra() {
   const ov = _ocAsegurarOverlay();
   ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:1.2rem;max-width:560px;width:100%"><div class="sinpedidos">Cargando productos… 🛒</div></div>';
   await _ocCargarProductos(true);
+  await _ocCargarUltimas();   // 📜 a quién y a cuánto se le compró cada cosa la última vez
   _ocQuery = '';   // buscador limpio al abrir
   _ocFiltro = Object.keys(_ocSel).length ? 'todos' : 'reponer';   // si venís sumando, que se vean
   _ocRender();
@@ -10984,9 +11078,30 @@ function _ocFilaHtml(p) {
       <div style="font-size:0.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}${chipDueno}</div>
       ${p.desc ? `<div style="font-size:0.66rem;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.desc)}">${esc(p.desc)}</div>` : ''}
       <div>${stockChip} · ${pesoInfo}</div>
+      ${_ocUltimaHtml(p)}
     </div>
     <input type="number" min="0" value="${_ocCant[p.id]||''}" placeholder="cant" oninput="_ocSetCant('${p.id}', this.value)" style="width:56px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:8px;text-align:center;font-family:inherit;flex-shrink:0">
   </div>`;
+}
+// 📜 "última: KI TOV · 12/07 · U$S 1,80" debajo de cada renglón de la orden.
+// Es el dato que estabas por necesitar justo cuando decidís cuánto reponer y a quién pedírselo.
+// 🔒 Nunca en vista Miri (trae proveedores y costos).
+let _ocUltima = {};   // producto_id → { fecha, proveedor, costoUnit, cantidad, moneda }
+function _ocUltimaHtml(p) {
+  if (esVistaMiri()) return '';
+  const u = _ocUltima[String(p.id)];
+  if (!u) return '';
+  const fm = u.moneda === 'U$S' ? 'U$S ' + (+u.costoUnit).toFixed(2) : '$ ' + Math.round(+u.costoUnit).toLocaleString('es-AR');
+  const quien = u.proveedor ? esc(u.proveedor) + ' · ' : '';
+  return `<div style="font-size:0.63rem;color:var(--texto-suave)">📜 última: ${quien}${esc(u.fecha)} · <b>${fm}</b>${u.cantidad ? ' · ' + u.cantidad + ' u.' : ''}</div>`;
+}
+// Se trae UNA vez al abrir la orden: pedirlo por producto serían 60+ llamadas.
+async function _ocCargarUltimas() {
+  if (esVistaMiri()) { _ocUltima = {}; return; }
+  try {
+    const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'ultimasCompras' }));
+    _ocUltima = (r && r.ultima) ? r.ultima : {};
+  } catch { _ocUltima = {}; }
 }
 function _ocToggle(id, el) {
   if (_ocSel[id]) { delete _ocSel[id]; delete _ocCant[id]; } else _ocSel[id] = true;
@@ -11004,7 +11119,8 @@ function _ocSetCant(id, val) {
 function _ocItems() {
   return _ocProductos.filter(p => _ocSel[p.id] && (_ocCant[p.id]||0) > 0).map(p => {
     const cant = _ocCant[p.id], peso = parseFloat(p.peso)||0, costo = parseFloat(p.costo)||0;
-    return { id: String(p.id), nombre: p.nombre, desc: p.desc||'', dueno: p.dueno||'', stock: p.stock||0, cantidad: cant, peso, pesoTotal: peso*cant, costo, costoTotal: costo*cant, moneda: p.moneda||'$', imagen: p.imagen||'' };
+    const u = esVistaMiri() ? null : _ocUltima[String(p.id)];   // 🔒 el proveedor nunca en vista Miri
+    return { id: String(p.id), nombre: p.nombre, desc: p.desc||'', dueno: p.dueno||'', stock: p.stock||0, cantidad: cant, peso, pesoTotal: peso*cant, costo, costoTotal: costo*cant, moneda: p.moneda||'$', imagen: p.imagen||'', ultima: u || null };
   });
 }
 function _ocActualizarTotales() {
@@ -11053,9 +11169,13 @@ function _ordenCompraHTML(items, id, fecha) {
     const url = _ocFotoUrl(i.imagen);
     const img = url ? `<img src="${url}" style="width:64px;height:64px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.display='none'">` : '🍬';
     const pesoT = i.peso>0 ? `${(i.pesoTotal/1000).toFixed(2)} kg` : '<span style="color:#c0392b">⚠️ s/peso</span>';
+    // 📜 Última compra: a quién y a cuánto. Va debajo del nombre, en chiquito, para que al
+    // pedir el presupuesto tengas a mano con quién comparás. Nunca sale en vista Miri.
+    const u = i.ultima;
+    const ultTxt = u ? `<div style="font-size:0.68rem;color:#8a7a66;margin-top:2px">📜 última: ${u.proveedor ? esc(u.proveedor) + ' · ' : ''}${esc(u.fecha || '')} · <b>${u.moneda === 'U$S' ? 'U$S ' + (+u.costoUnit).toFixed(2) : '$ ' + Math.round(+u.costoUnit).toLocaleString('es-AR')}</b></div>` : '';
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:76px">${img}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3"><div style="font-weight:600;font-size:0.9rem">${esc(i.nombre)}</div>${i.desc?`<div style="font-size:0.74rem;color:#999">${esc(i.desc)}</div>`:''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3"><div style="font-weight:600;font-size:0.9rem">${esc(i.nombre)}</div>${i.desc?`<div style="font-size:0.74rem;color:#999">${esc(i.desc)}</div>`:''}${ultTxt}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-weight:800;font-size:1.1rem">${i.cantidad}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.78rem;color:#666">${i.peso>0?i.peso+' g':'—'}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-weight:700">${pesoT}</td>
@@ -11467,6 +11587,7 @@ function renderRecepSel(soloTotales) {
   if (!cont) return;
   const ids = Object.keys(_recepSel);
   pie.style.display = ids.length ? '' : 'none';
+  if (ids.length) _pintarProveedores();   // el autocompletar del campo de proveedor
   if (!ids.length) { cont.innerHTML = ''; return; }
   let totARS = 0, totUSD = 0, totU = 0;
   const html = ids.map(id => {
@@ -11520,7 +11641,10 @@ async function registrarRecepcion(btn) {
   if (sinCosto.length && !confirm('Hay ' + sinCosto.length + ' producto(s) sin costo cargado: se suma el stock pero NO se toca su costo. ¿Seguir?')) return;
   _enviandoRecep = true;
   if (btn) { btn.disabled = true; btn.textContent = 'Registrando…'; }
-  const r = await _postSesion({ accion: 'recibirMercaderia', items: JSON.stringify(items), compraId: 'RC' + Date.now() });
+  // 🏷️ Proveedor y nota de la compra entera: van como cabecera, no por renglón.
+  const _prov = (document.getElementById('recep-proveedor')?.value || '').trim();
+  const _notaR = (document.getElementById('recep-nota')?.value || '').trim();
+  const r = await _postSesion({ accion: 'recibirMercaderia', items: JSON.stringify(items), compraId: 'RC' + Date.now(), proveedor: _prov, nota: _notaR });
   _enviandoRecep = false;
   if (btn) { btn.disabled = false; btn.textContent = '📥 Registrar recepción'; }
   if (r && r.ok) {
@@ -11554,11 +11678,35 @@ async function registrarRecepcion(btn) {
     else if (_conCosto.length && items.some(it => it.costoUnit > 0 || it.precioMay !== undefined || it.precioMin !== undefined)) alert('📥 Recepción registrada ✓\n\n' + _conCosto.join('\n'));
     else showToast('📥 Recepción registrada ✓ stock y costos actualizados');
     _recepSel = {};
+    // El proveedor se conserva: casi siempre se cargan varias tandas del mismo. La nota NO,
+    // porque es de esta entrega puntual y arrastrarla mentiría en la siguiente.
+    const _nEl = document.getElementById('recep-nota'); if (_nEl) _nEl.value = '';
+    if (_prov) _recordarProveedor(_prov);
     renderRecepSel();
     await cargarProductos();
   } else {
     showToast('⚠️ ' + ((r && r.error) || 'No se pudo registrar — reintentá'));
   }
+}
+
+// 🏷️ Proveedores ya usados, para el autocompletar del campo. Se guardan en este navegador:
+// evita tipear "KI TOV" distinto cada vez y que después el historial los cuente separados.
+function _recordarProveedor(nombre) {
+  try {
+    const previos = JSON.parse(localStorage.getItem('shuk_proveedores') || '[]');
+    const limpio = String(nombre || '').trim();
+    if (!limpio) return;
+    const sinRepetir = [limpio, ...previos.filter(p => p.toLowerCase() !== limpio.toLowerCase())].slice(0, 40);
+    localStorage.setItem('shuk_proveedores', JSON.stringify(sinRepetir));
+    _pintarProveedores();
+  } catch { /* si el navegador no deja guardar, el campo sigue siendo texto libre */ }
+}
+function _pintarProveedores() {
+  const dl = document.getElementById('recep-proveedores-previos');
+  if (!dl) return;
+  let previos = [];
+  try { previos = JSON.parse(localStorage.getItem('shuk_proveedores') || '[]'); } catch { /**/ }
+  dl.innerHTML = previos.map(p => `<option value="${esc(p)}"></option>`).join('');
 }
 
 let _trazarDueno = '';   // '' = todos · 'Miri' · 'Jony' (el filtro solo existe en vista Jony)
@@ -11976,7 +12124,7 @@ function mostrarClientes(arr) {
     const tipoBadge = c.tipo === 'Mayorista'
       ? `<span style="background:#e8eeff;color:#2c6fad;font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:20px">Mayorista</span>`
       : `<span style="background:#e8f5ee;color:var(--verde);font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:20px">Minorista</span>`;
-    const nombre = c.nombre.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const nombre = jsAttr(c.nombre);
     return `
     <div style="border:1.5px solid var(--gris-medio);border-radius:12px;margin-bottom:0.6rem;overflow:hidden">
       <div style="padding:0.75rem;display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;cursor:pointer" onclick="toggleClienteHistorial('ch-${c.nombre.replace(/[^a-z0-9]/gi,'_')}')">
@@ -11997,7 +12145,7 @@ function mostrarClientes(arr) {
         <div style="display:flex;gap:0.3rem;flex-shrink:0">
           <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${c.tipo}','${c.telefono||''}')">💬</button>
           ${c.telefono ? `<button class="btn-accion" style="background:#f0f4ff;color:#2c6fad;font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirEditarClienteModal('${nombre}','${c.telefono}','${c.tipo}')">✏️</button>` : ''}
-          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirNotaModal('cliente','${nombre}','${(_notasClientes[c.nombre]||'').replace(/'/g,"\\'")}','Nota — ${nombre}')">📝</button>
+          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirNotaModal('cliente','${nombre}','${jsAttr(_notasClientes[c.nombre]||'')}','Nota — ${nombre}')">📝</button>
         </div>
       </div>
       <div id="ch-${c.nombre.replace(/[^a-z0-9]/gi,'_')}" style="display:none;border-top:1px solid var(--gris-medio);background:var(--gris);padding:0.6rem 0.75rem">
@@ -13011,7 +13159,7 @@ async function renderNotificaciones() {
             <div style="font-size:0.68rem;color:${esViejo?'var(--rojo)':'var(--texto-suave)'}">🕐 pidió el ${c.fecha || 's/fecha'} · hace ${dias} día${dias!==1?'s':''}</div>
           </div>
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-            ${esViejo ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-size:0.72rem" onclick="window.open('https://wa.me/${c.telefono}?text='+encodeURIComponent('${msgRecordatorio.replace(/'/g,"\\'")}'),'_blank')">🔔 Recordatorio</button>` : ''}
+            ${esViejo ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-size:0.72rem" onclick="window.open('https://wa.me/${c.telefono}?text='+encodeURIComponent('${jsAttr(msgRecordatorio)}'),'_blank')">🔔 Recordatorio</button>` : ''}
             <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="marcarComprado('${pid}','${c.telefono}')">✓ Compró</button>
             <button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕ Eliminar</button>
           </div>
@@ -13793,6 +13941,16 @@ function showToast(msg) {
 // Escapa HTML para evitar XSS al mostrar datos que vienen de la tienda pública (nombres, notas).
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+// Texto que va DENTRO de comillas simples de JS, que a su vez están DENTRO de un atributo
+// HTML con comillas dobles:   onclick="fn('ACÁ')"
+// Son DOS capas y hay que escapar las dos, en este orden. Escapar solo la comilla simple
+// —como se venía haciendo— dejaba pasar la comilla DOBLE, que cierra el atributo: un nombre
+// de cliente con " se salía del onclick y podía colgar otro atributo con código adentro.
+// Y el nombre lo elige quien hace el pedido, que es una acción PÚBLICA de la tienda.
+// El navegador decodifica las entidades ANTES de leerlo como JS, así que \&#39; llega como \'.
+function jsAttr(s) {
+  return esc(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n\u2028\u2029]/g, ' '));
 }
 
 // Días transcurridos desde la fecha de un pedido ("dd/MM/yyyy HH:mm").
