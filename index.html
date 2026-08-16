@@ -1190,6 +1190,7 @@
     <button class="psec-btn" onclick="setPanelSeccion('stock',this)">📦 Stock</button>
     <button class="psec-btn" onclick="setPanelSeccion('catalogo',this)">🛍️ Catálogo</button>
     <button class="psec-btn" onclick="setPanelSeccion('bot',this)">📱 Bot</button>
+    <button class="psec-btn" id="btn-sec-israel" onclick="setPanelSeccion('israel',this)">🇮🇱 Compras Israel</button>
     <button class="psec-btn" onclick="setPanelSeccion('inicio',this)">🏠 Inicio</button>
   </div>
   <div class="admin-card" data-seccion="bot">
@@ -1968,6 +1969,16 @@
     </div>
     <div id="caja-contenido"><div class="sinpedidos">Cargando movimientos...</div></div>
   </div>
+
+  <!-- 🇮🇱 COSTOS ISRAEL — la calculadora, empotrada. Mismo mecanismo que la pestaña de Docs:
+       vive en su propia carpeta y se muestra acá adentro. El src se setea recién al abrir la
+       sección (setPanelSeccion), así no se descarga si nunca entrás.
+       🔒 El botón Y esta tarjeta se ocultan en vista Miri desde aplicarPrivacidadPanel(). -->
+  <div class="admin-card" data-seccion="israel" id="card-israel">
+    <div class="admin-titulo">🇮🇱 Compras en Israel <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· del ticket en hebreo al costo real, y de ahí a tus precios</span></div>
+    <iframe id="iframe-israel" allow="camera" loading="lazy" title="Costos Israel"
+      style="width:100%;height:calc(100vh - 230px);min-height:520px;border:none;border-radius:12px;background:#fff"></iframe>
+  </div>
   </div><!-- cierre admin-tab-panel -->
 
   <!-- DOCS TAB -->
@@ -2488,6 +2499,11 @@ async function aceptarCotizacion(id) {
   if (r.ok) refreshAdmin();
 }
 const _sb = supabase.createClient('https://soarkknjewgcewryxqac.supabase.co','sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2');
+// La calculadora de Costos Israel corre empotrada (sección "Compras Israel") y necesita ESTE
+// cliente, no uno propio: los dos guardan la sesión en la misma llave del navegador, y dos
+// clientes peleándose el refresco del token terminan invalidándolo. `_sb` es const, así que
+// no está en window por sí solo — hay que colgarlo a mano.
+window._sb = _sb;
 // Token de sesión para autenticar las llamadas del admin contra el backend. Se mantiene fresco solo.
 let _authToken = '';
 _sb.auth.getSession().then(r => { _authToken = r.data.session?.access_token || ''; }).catch(() => {});
@@ -10754,7 +10770,14 @@ function aplicarPrivacidadPanel() {
   const btnOC = document.getElementById('btn-orden-compra'); if (btnOC) btnOC.style.display = ocultar ? 'none' : '';
   // Las cards de IA y bandeja sí tienen sección (las posiciona setPanelSeccion); acá SOLO las ocultamos en Miri.
   // 'card-avisar' manda notificaciones a TODOS los clientes del sitio → es del dueño del sitio, no de Miri.
-  if (ocultar) ['card-ia', 'card-bandeja', 'card-geo', 'card-avisar'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  if (ocultar) ['card-ia', 'card-bandeja', 'card-geo', 'card-avisar', 'card-israel'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  // 🔒 Compras Israel: no alcanza con ocultar la card, hay que ocultar TAMBIÉN el botón de la
+  // botonera — si no, Miri lo ve, lo aprieta y se queda mirando una sección vacía. Esta función
+  // no manejaba botones de #panel-secnav hasta ahora.
+  const btnIsrael = document.getElementById('btn-sec-israel');
+  if (btnIsrael) btnIsrael.style.display = ocultar ? 'none' : '';
+  // Y si estaba parada ahí cuando cambió la vista, se la saca de encima.
+  if (ocultar && _panelSeccion === 'israel') setPanelSeccion('ventas');
 }
 function setPanelSeccion(s, btn) {
   _panelSeccion = s;
@@ -10771,6 +10794,12 @@ function setPanelSeccion(s, btn) {
   if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
   if (s === 'catalogo' && typeof cargarEstadoPush === 'function' && !esVistaMiri()) cargarEstadoPush();
   if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí o hablá natural para probar a Shuki 👇 (ej: "hola, qué tenés?")', 'bot'); }
+  // 🇮🇱 La calculadora se carga recién al abrir la sección: es medio mega y no tiene por qué
+  // bajarlo quien nunca entra. Se setea una sola vez; después queda viva con su estado.
+  if (s === 'israel' && !esVistaMiri()) {
+    const fr = document.getElementById('iframe-israel');
+    if (fr && !fr.src) fr.src = '/ci-k7m2x9/index.html';
+  }
 }
 
 // ─── PROBADOR DEL BOT (simulador SMS/voz, modo prueba: no carga pedidos) ──────
