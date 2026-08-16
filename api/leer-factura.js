@@ -49,6 +49,31 @@ const ESQUEMA = {
       description:
         'Cuántas líneas de producto aparecían en más de una foto por el solapamiento y se contaron una sola vez.',
     },
+    total_unidades: {
+      type: 'integer',
+      description:
+        'Total de artículos que el ticket declara al pie ("סה"כ פריטים"). 0 si no lo declara. Es el número impreso, no la suma de las líneas.',
+    },
+    descuentos_de_grupo: {
+      type: 'array',
+      description:
+        'Renglones de descuento ("הנחה עבור …") que se aplican a MÁS DE UNA línea de producto. Los que se aplican a una sola línea NO van acá: esos van en el descuento_linea_ils de esa línea.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          texto_he: { type: 'string', description: 'El renglón del descuento tal cual figura, en hebreo.' },
+          importe_ils: { type: 'number', description: 'Importe del descuento, en positivo.' },
+          codigos_barras: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Códigos de barras de TODAS las líneas a las que se aplica este descuento, en el orden en que aparecen.',
+          },
+        },
+        required: ['texto_he', 'importe_ils', 'codigos_barras'],
+      },
+    },
     items: {
       type: 'array',
       items: {
@@ -123,6 +148,8 @@ const ESQUEMA = {
     'total_ils',
     'ahorro_total_ils',
     'lineas_repetidas_omitidas',
+    'total_unidades',
+    'descuentos_de_grupo',
     'items',
   ],
 };
@@ -144,7 +171,21 @@ LÍNEAS POR PESO: cuando dice ק"ג la cantidad son kilos y el precio es por kil
 
 COPIAR, NO CALCULAR: importe_linea_ils, precio_unitario_ils, cantidad y los totales son los números IMPRESOS, tal cual. No los recalcules ni los corrijas aunque no cierren: la app los verifica después y necesita ver lo que realmente dice el papel.
 
-DESCUENTOS: el descuento que aparece debajo de una línea pertenece a esa línea, es el TOTAL de la línea (no por unidad) y se anota en positivo. Un descuento que se aplica a toda la compra va en descuento_general_ils.
+DESCUENTOS — LEER CON CUIDADO, ACÁ SE DECIDE EL COSTO DE CADA PRODUCTO:
+
+Un renglón "הנחה עבור <nombre del producto>" es un descuento por promoción. El nombre que trae DICE a qué producto pertenece, y eso es lo que manda — NO su posición en el ticket.
+
+Muy importante: cuando el mismo producto aparece en VARIAS líneas seguidas (por ejemplo cinco sabores del mismo caramelo, cada uno con su código de barras), el ticket imprime UN SOLO renglón de descuento —normalmente después de la primera línea— y ese descuento cubre TODAS esas líneas juntas. Ponerlo entero en la primera línea es un error grave: esa línea queda baratísima y las otras cuatro carísimas, aunque el total de la compra siga cerrando.
+
+Cómo decidir:
+- Si el nombre del descuento se corresponde con UNA SOLA línea de producto → va en el descuento_linea_ils de esa línea.
+- Si se corresponde con VARIAS líneas → NO lo pongas en ninguna. Va en descuentos_de_grupo, con su importe y la lista de códigos de barras de TODAS las líneas que cubre. La app lo reparte después.
+
+Para saber cuántas líneas cubre, compará el nombre del descuento con el nombre de los productos: los que coinciden (aunque el ticket los abrevie o corte) son los que entran. Fijate también en el precio unitario: las líneas de un mismo grupo suelen tener el mismo precio de lista.
+
+Un descuento que se aplica a toda la compra —no a un producto— va en descuento_general_ils.
+
+TOTAL DE ARTÍCULOS: el pie suele traer "סה"כ פריטים <N>", el total de unidades compradas. Copialo en total_unidades tal como está impreso. Sirve de control: si no coincide con la suma de las cantidades, faltó o sobró una línea.
 
 CRÉDITO DE ENVASE: el renglón "הנחת זיכוי אריזה" es la devolución del depósito del envase. Pertenece a la línea del producto que está encima y va en su credito_envase_ils. NO es una línea de producto: no le crees una entrada propia en items, y no lo sumes a descuento_linea_ils.
 
