@@ -270,6 +270,7 @@ CÓMO TRABAJAR
 - Si falta plata para llegar al total impreso, lo más probable es que haya un renglón que no se leyó (mirá especialmente los bordes de las fotos y donde se doblaba el papel) o un importe leído de menos. Buscá una línea que explique la diferencia exacta.
 - Si sobra plata, puede haber un renglón contado dos veces por el solapamiento entre fotos.
 - Los pesos por kilo (unidad kg) llevan tres decimales: 0.274 no es 0.27.
+- ATENCIÓN con los descuentos que en el ticket cubren VARIAS líneas (un solo renglón "הנחה עבור …" para un grupo de productos): en la lista que te paso YA vienen repartidos proporcionalmente entre todas las líneas que cubren, que es como corresponde para saber cuánto costó cada producto. NO los devuelvas a una sola línea: en el ticket están impresos una sola vez, pero acá están bien así. Sólo tocá un descuento si el IMPORTE TOTAL repartido no coincide con el que imprime el ticket.
 - No inventes: si mirás y no lo podés resolver, devolvelo sin corrección y decilo en la explicación.`;
 
 const SB_URL = 'https://soarkknjewgcewryxqac.supabase.co';
