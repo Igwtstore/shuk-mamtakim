@@ -1420,6 +1420,13 @@
           <label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
           <input type="number" id="np-peso" min="0" step="1" placeholder="0" />
         </div>
+        <div class="nombre-campo" style="margin:0;flex:1.2;min-width:160px">
+          <label title="Código de barras del envase. Sirve para reconocer el producto al recibir mercadería de Israel y para escanear en el depósito. Interno.">🔢 Código de barras</label>
+          <div style="display:flex;gap:4px">
+            <input type="text" id="np-ean" inputmode="numeric" placeholder="7290000123456" style="flex:1;min-width:0" />
+            <button type="button" onclick="escanearAEste('np-ean')" title="Escanear con la cámara" style="flex:none;padding:0 0.7rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-size:1rem;cursor:pointer">📷</button>
+          </div>
+        </div>
         <div class="nombre-campo" style="margin:0">
           <label>🎗️ Cinta en la tarjeta <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">(ej: POR VENCER — vacío = sin cinta)</span></label>
           <input type="text" id="np-etiqueta" maxlength="40" placeholder="POR VENCER" />
@@ -1603,6 +1610,13 @@
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
           <input type="number" id="ep-peso" min="0" step="1" placeholder="0" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+        </div>
+        <div class="nombre-campo" style="margin:0;flex:1.2;min-width:180px"><label title="Código de barras del envase. Reconoce el producto al recibir mercadería de Israel y sirve para escanear en el depósito. Interno.">🔢 Código de barras</label>
+          <div style="display:flex;gap:4px">
+            <input type="text" id="ep-ean" inputmode="numeric" placeholder="7290000123456" style="flex:1;min-width:0;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+            <button type="button" onclick="escanearAEste('ep-ean')" title="Escanear con la cámara" style="flex:none;padding:0 0.7rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-size:1rem;cursor:pointer">📷</button>
+          </div>
+          <div id="ep-ean-aviso" style="font-size:0.68rem;margin-top:0.2rem"></div>
         </div>
         <div>
           <label style="font-size:0.8rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.25rem">🎗️ Cinta en la tarjeta <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">(ej: POR VENCER — vacío = sin cinta)</span></label>
@@ -2615,7 +2629,8 @@ async function cargarProductos() {
       moneda: ((p.moneda || '$').trim() === 'U$S') ? 'U$S' : '$',
       candyCod: '',             // privado → se completa abajo con sesión
       costo: 0,                 // privado → se completa abajo con sesión
-      nombresPrev: ''           // privado → se completa abajo con sesión
+      nombresPrev: '',          // privado → se completa abajo con sesión
+      ean: ''                   // privado → se completa abajo con sesión (interno, no viaja a la tienda)
     })).filter(p => p.activo && p.id);
     _refrescarHashgajaList();   // desplegable de supervisiones: se arma solo desde el catálogo
     // Con sesión de admin, completar los campos privados desde el backend
@@ -2628,7 +2643,7 @@ async function cargarProductos() {
         (Array.isArray(full) ? full : []).forEach(f => porId[String(f.id)] = f);
         productos.forEach(p => {
           const f = porId[String(p.id)];
-          if (f) { p.costo = parseFloat(f.costo) || 0; p.descBot = f.descBot || ''; p.nombresPrev = f.nombresPrev || ''; p.candyCod = (f.candyCod || '').trim(); p.creado = f.creado || ''; }
+          if (f) { p.costo = parseFloat(f.costo) || 0; p.descBot = f.descBot || ''; p.nombresPrev = f.nombresPrev || ''; p.candyCod = (f.candyCod || '').trim(); p.creado = f.creado || ''; p.ean = (f.ean || '').trim(); }
         });
         // La fecha de carga recién llegó (endpoint admin) → refrescar el Stock si está en "últimos cargados".
         if (typeof renderStockTotal === 'function') renderStockTotal();
@@ -5950,6 +5965,7 @@ async function abrirMasivo() {
         costo: _mDispNum(p.costo), stock: _mDispTxt(p.stock || 0),
         unidadesPorPaquete: _mDispTxt(p.unidadesPorPaquete || 1),
         peso: _mDispTxt(p.peso || 0),
+        ean: (p.ean || '').toString(),
         etiqueta: (p.etiqueta || '').toString(),
         hashgaja: _mDispTxt(p.hashgaja || ''), kosherTipo: _mDispTxt(p.kosherTipo || ''), jalav: _mDispTxt(p.jalav || '')
       };
@@ -6049,9 +6065,9 @@ function renderMasivo() {
   } else {
     const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
     const _thSort = (c, lbl, extra) => `<th style="${_mTh}cursor:pointer;user-select:none" ${extra||''} onclick="masivoSort('${c}')" title="Ordenar por ${lbl}">${lbl}${_flecha(c)}</th>`;
-    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th><th style="${_mTh}" title="Cinta diagonal en la tarjeta de la tienda (texto corto)">🎗️ Cinta</th></tr></thead><tbody>`;
+    html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th><th style="${_mTh}" title="Código de barras — sugiere el producto al recibir mercadería de Israel">🔢 EAN</th><th style="${_mTh}" title="Cinta diagonal en la tarjeta de la tienda (texto corto)">🎗️ Cinta</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
+      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:118px">${inp(p.id, 'ean', 'type="text" inputmode="numeric" maxlength="14"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -7275,6 +7291,8 @@ function cargarProductoEditor(id) {
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
   { const eu = document.getElementById('ep-upp'); if (eu) eu.value = p.unidadesPorPaquete || 1; }
   { const epe = document.getElementById('ep-peso'); if (epe) epe.value = p.peso || ''; }
+  { const epn = document.getElementById('ep-ean'); if (epn) epn.value = p.ean || ''; }
+  { const epa = document.getElementById('ep-ean-aviso'); if (epa) epa.innerHTML = ''; }
   { const epq = document.getElementById('ep-etiqueta'); if (epq) epq.value = p.etiqueta || ''; }
   { const eh = document.getElementById('ep-hashgaja'); if (eh) eh.value = p.hashgaja || ''; }
   { const ek = document.getElementById('ep-kosher'); if (ek) ek.value = p.kosherTipo || ''; }
@@ -7538,6 +7556,7 @@ async function guardarEdicionProducto() {
     visible: document.getElementById('ep-visible').value,
     unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
     peso: document.getElementById('ep-peso')?.value || '0',
+    ean: normEANFront(document.getElementById('ep-ean')?.value || ''),
     etiqueta: (document.getElementById('ep-etiqueta')?.value || '').trim(),
     vinculo: _epVinculo || '__VACIO__',
     hashgaja: (document.getElementById('ep-hashgaja')?.value || '').trim() || '__VACIO__',
@@ -7792,6 +7811,7 @@ async function guardarNuevoProducto() {
     if (uppAlta > 1) params.set('unidadesPorPaquete', uppAlta);
     const pesoAlta = parseFloat(document.getElementById('np-peso')?.value) || 0;
     if (pesoAlta > 0) params.set('peso', pesoAlta);
+    { const eanAlta = normEANFront(document.getElementById('np-ean')?.value || ''); if (eanAlta) params.set('ean', eanAlta); }
     { const eq = (document.getElementById('np-etiqueta')?.value || '').trim(); if (eq) params.set('etiqueta', eq); }
     const hashgAlta = (document.getElementById('np-hashgaja')?.value || '').trim();
     if (hashgAlta) params.set('hashgaja', hashgAlta);
@@ -7812,6 +7832,7 @@ async function guardarNuevoProducto() {
       ['np-hashgaja', 'np-kosher', 'np-jalav'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
       const _nu = document.getElementById('np-upp'); if (_nu) _nu.value = '1';
       const _npe = document.getElementById('np-peso'); if (_npe) _npe.value = '';
+      const _npn = document.getElementById('np-ean'); if (_npn) _npn.value = '';
       const _npq = document.getElementById('np-etiqueta'); if (_npq) _npq.value = '';
       document.getElementById('np-categoria').value = '';
       document.getElementById('np-foto').value = '';
@@ -11687,6 +11708,87 @@ async function registrarRecepcion(btn) {
   } else {
     showToast('⚠️ ' + ((r && r.error) || 'No se pudo registrar — reintentá'));
   }
+}
+
+// ── 📷 ESCÁNER DE CÓDIGO DE BARRAS ──────────────────────────────────────────────
+// Lee EAN-13/8, UPC-A/E, CODE-128 e ITF con la cámara trasera. La librería (ZXing, medio
+// mega) se baja SOLO al apretar el botón: si nunca escaneás, no la descargás nunca — y los
+// clientes de la tienda tampoco.
+let _zxingListo = null;
+function _cargarZXing() {
+  if (_zxingListo) return _zxingListo;
+  _zxingListo = new Promise((ok, fallo) => {
+    if (window.ZXingBrowser) return ok(window.ZXingBrowser);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
+    s.onload = () => window.ZXingBrowser ? ok(window.ZXingBrowser) : fallo(new Error('ZXing no quedó disponible'));
+    s.onerror = () => { _zxingListo = null; fallo(new Error('no se pudo bajar el escáner')); };
+    document.head.appendChild(s);
+  });
+  return _zxingListo;
+}
+// Normalización IDÉNTICA a la del backend (normEAN) y a la de Costos Israel: si no coinciden,
+// el mismo producto no matchea entre lo que escaneás y lo que dice el ticket.
+function normEANFront(v) {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  if (!d) return '';
+  return d.length === 12 ? '0' + d : d.slice(0, 14);
+}
+let _escControls = null;
+async function escanearCodigo(alLeer) {
+  const ov = document.createElement('div');
+  ov.id = 'esc-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.8rem';
+  ov.innerHTML = `
+    <div style="color:#fff;font-weight:700;font-size:0.95rem">📷 Apuntá al código de barras</div>
+    <video id="esc-video" playsinline muted style="width:min(92vw,460px);max-height:60vh;border-radius:12px;background:#000"></video>
+    <div id="esc-msg" style="color:#cfd8dc;font-size:0.8rem;min-height:1.2em">Encendiendo la cámara…</div>
+    <button onclick="cerrarEscaner()" style="padding:0.6rem 1.6rem;background:#fff;border:none;border-radius:10px;font-weight:700;font-family:inherit;cursor:pointer">Cerrar</button>`;
+  document.body.appendChild(ov);
+  const msg = (t) => { const m = document.getElementById('esc-msg'); if (m) m.textContent = t; };
+  try {
+    const Z = await _cargarZXing();
+    const lector = new Z.BrowserMultiFormatReader();
+    msg('Buscando el código…');
+    _escControls = await lector.decodeFromVideoDevice(undefined, document.getElementById('esc-video'), (res) => {
+      if (!res) return;
+      const cod = normEANFront(res.getText());
+      if (!cod) return;
+      try { navigator.vibrate && navigator.vibrate(60); } catch { /**/ }
+      cerrarEscaner();
+      alLeer(cod);
+    });
+  } catch (e) {
+    // Sin permiso de cámara, sin HTTPS o sin señal para bajar la librería: se puede tipear igual.
+    msg('No pude abrir la cámara: ' + (e && e.message ? e.message : 'error') + '. Escribí el código a mano.');
+  }
+}
+function cerrarEscaner() {
+  try { _escControls && _escControls.stop(); } catch { /**/ }
+  _escControls = null;
+  document.getElementById('esc-overlay')?.remove();
+}
+// Escanea y escribe el resultado en un input. Si el código ya lo tiene OTRO producto, avisa
+// (no bloquea: los gemelos comparten envase, y eso es legítimo).
+async function escanearAEste(idInput) {
+  escanearCodigo(async (cod) => {
+    const el = document.getElementById(idInput);
+    if (!el) return;
+    el.value = cod;
+    showToast('📷 Código leído: ' + cod);
+    await avisarEANRepetido(idInput);
+  });
+}
+async function avisarEANRepetido(idInput) {
+  const avisoEl = document.getElementById('ep-ean-aviso');
+  if (!avisoEl || idInput !== 'ep-ean') return;
+  const cod = normEANFront(document.getElementById('ep-ean')?.value || '');
+  if (!cod) { avisoEl.innerHTML = ''; return; }
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'buscarPorEAN', ean: cod })).catch(() => null);
+  const otros = ((r && r.candidatos) || []).filter(p => String(p.id) !== String(_epId));
+  avisoEl.innerHTML = otros.length
+    ? `<span style="color:#8a5a1e">⚠️ Este código ya lo tiene: ${otros.map(p => esc(p.nombre) + (p.dueno ? ' (' + esc(p.dueno) + ')' : '')).join(', ')}. Está bien si son el mismo producto de distinto dueño.</span>`
+    : `<span style="color:#1a7a3a">✓ Código libre</span>`;
 }
 
 // 🏷️ Proveedores ya usados, para el autocompletar del campo. Se guardan en este navegador:

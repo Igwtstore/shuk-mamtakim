@@ -450,7 +450,7 @@ const ventaFront = (v: any) => ({
 const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString(), totalMano: parseFloat(p.total_mano) || 0, reparto: (p.reparto || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
-const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), peso: parseFloat(p.peso) || 0, etiqueta: (p.etiqueta || '').toString(), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
+const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), peso: parseFloat(p.peso) || 0, ean: (p.ean || '').toString(), etiqueta: (p.etiqueta || '').toString(), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
 const rendFront = (r: any) => ({ fecha: r.fecha, desc: r.descripcion, monto: r.monto, moneda: r.moneda, columna: r.columna || '', comprobante: (r.comprobante || '').toString() });
 
 // _enviosData: saldo y deuda derivada de la caja de envíos (idempotente).
@@ -566,6 +566,17 @@ async function usuarioSesion(token: string): Promise<Usuario | null> {
   } catch { return null; }
 }
 const esJony = (u: Usuario | null) => !!u && u.email === MAIL_JONY;
+// ── EAN (v4.50) ─────────────────────────────────────────────────────────────────
+// Deja el código comparable: solo dígitos, y el UPC-A de 12 se lleva a EAN-13 con el 0
+// de adelante (si no, el mismo producto no matchea entre un ticket y un escaneo).
+// Misma normalización que usa Costos Israel, para que los dos lados coincidan.
+// ⚠️ El EAN NO decide: SUGIERE. Puede repetirse entre gemelos (mismo producto de dos
+//    dueños), y la regla del proyecto es que la plata y el stock se resuelven por ID.
+function normEAN(v: any): string {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  if (!d) return '';
+  return d.length === 12 ? '0' + d : d.slice(0, 14);
+}
 async function sbGet(tabla: string, query: string) {
   const r = await fetch(SB_URL + '/rest/v1/' + tabla + '?' + query, { headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE } });
   if (!r.ok) throw new Error(tabla + ' ' + r.status);
@@ -1852,6 +1863,7 @@ Deno.serve(async (req) => {
       if (has('unidadesPorPaquete')) patch.unidades_por_paquete = Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1);   // Circuito Candy↔Shuk: cuántas unidades trae el paquete/bolsa
       if (body.etiqueta !== undefined) patch.etiqueta = P(body, 'etiqueta').trim().slice(0, 40);   // cinta de la tarjeta (texto corto)
       if (has('peso')) patch.peso = parseFloat(String(P(body, 'peso')).replace(',', '.')) || 0;   // peso por bolsa (g), interno — para orden de compra
+      if (body.ean !== undefined) patch.ean = normEAN(P(body, 'ean'));   // código de barras: SUGIERE el producto al recibir, nunca decide solo (regla de gemelos)
       if (body.vinculo !== undefined) patch.vinculo = PV('vinculo');   // gemelos: mismo producto con stock de los dos dueños ('' / '__VACIO__' = desvincular)
       if (has('stock')) { const antes = parseInt(pr[0].stock) || 0, nsx = parseInt(P(body, 'stock')) || 0; patch.stock = nsx; if (nsx !== antes) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: id, producto: pr[0].nombre, cambio: nsx - antes, antes, despues: nsx, origen: 'Edición manual (editor de producto)' }); }
       await sbPatch('productos', 'id=eq.' + encodeURIComponent(id), patch);
@@ -1903,6 +1915,7 @@ Deno.serve(async (req) => {
           if (k === 'unidadesPorPaquete') { patch.unidades_por_paquete = Math.max(1, parseInt(v) || 1); return; }
           if (k === 'etiqueta') { patch.etiqueta = String(v == null ? '' : v).trim().slice(0, 40); return; }
       if (k === 'peso') { patch.peso = parseFloat(String(v).replace(',', '.')) || 0; return; }
+          if (k === 'ean') { patch.ean = normEAN(v); return; }
           if (k === 'vinculo') { patch.vinculo = (v === '__VACIO__' ? '' : v); return; }
           if (map[k]) patch[map[k]] = (v === '__VACIO__' ? '' : v);
         });
@@ -1938,7 +1951,7 @@ Deno.serve(async (req) => {
       const all = await sbGet('productos', 'select=id');
       let maxId = 0; all.forEach((p: any) => { const n = parseInt(p.id) || 0; if (n > maxId) maxId = n; });
       const nid = String(maxId + 1); const stockIni = parseInt(P(body, 'stock')) || 0;
-      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), peso: parseFloat(String(P(body, 'peso') || '').replace(',', '.')) || 0, etiqueta: P(body, 'etiqueta').trim().slice(0, 40), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
+      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), peso: parseFloat(String(P(body, 'peso') || '').replace(',', '.')) || 0, ean: normEAN(P(body, 'ean')), etiqueta: P(body, 'etiqueta').trim().slice(0, 40), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
       if (stockIni > 0) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: nid, producto: P(body, 'nombre'), cambio: stockIni, antes: 0, despues: stockIni, origen: 'Alta de producto' });
       return json({ ok: true, id: nid });
     }
@@ -3358,6 +3371,17 @@ Deno.serve(async (req) => {
         a.veces++; a.unidades += c.cantidad; a.min = Math.min(a.min, c.costoUnit); a.max = Math.max(a.max, c.costoUnit);
       });
       return json({ ok: true, producto: { id: pidH, nombre: pH.nombre || '', dueno: pH.dueno || '', moneda: pH.moneda || '$', costo: parseFloat(pH.costo) || 0, upp: Math.max(1, parseInt(pH.unidades_por_paquete) || 1) }, compras, porProveedor });
+    }
+    // 🔎 Buscar productos por código de barras (v4.50). Devuelve TODOS los candidatos, nunca
+    // uno solo: un mismo código puede caer en dos productos (gemelos = mismo producto clonado
+    // para cada dueño) y la regla del proyecto es que eso lo decide el ID, no el nombre ni el
+    // código. Quien llama muestra los candidatos y el usuario elige.
+    if (accion === 'buscarPorEAN') {
+      const cod = normEAN(Q('ean'));
+      if (!cod) return json({ ok: true, ean: '', candidatos: [] });
+      const filas = await sbGet('productos', 'select=*&ean=eq.' + encodeURIComponent(cod));
+      const cands = filas.map(prodAdmin).filter((p: any) => p.activo);
+      return json({ ok: true, ean: cod, candidatos: cands, ambiguo: cands.length > 1 });
     }
     // 📜 La ÚLTIMA compra de CADA producto, en una sola llamada. Es lo que necesita la orden
     // de compra para poner "última: KI TOV · 12/07 · U$S 1,80" en cada renglón: pedirlo de a
