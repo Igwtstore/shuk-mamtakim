@@ -152,7 +152,9 @@ PIE DEL TICKET: total_ils es lo que dice לתשלום (a pagar). redondeo_ils es
 
 PESO: si el nombre del producto incluye un gramaje — "100 גרם", "במבה 150", "רפאלו 240 גרם" — ponelo en peso_unit_g. Si no figura, 0.
 
-Lo que no está impreso se deja en 0 o en "": no completes con estimaciones.`;
+Lo que no está impreso se deja en 0 o en "": no completes con estimaciones.
+
+SI EN VEZ DE FOTOS VIENE UNA PLANILLA (Excel o CSV, marcada como "Planilla del ticket"): son las mismas líneas del ticket pero ya en columnas, así que no hay nada que descifrar. Los encabezados pueden estar en hebreo, en español o no estar. Identificá qué columna es cada cosa por su contenido, no por su nombre: el código de barras es el número largo, la cantidad es el número chico que multiplica, el importe de la línea es cantidad por precio unitario. Los totales del pie suelen ir en las últimas filas, a veces sin encabezado. Si la planilla tiene varias hojas van todas, cada una con su nombre adelante: puede que el ticket esté en la segunda. Con una planilla NO hay solapamiento de fotos, así que lineas_repetidas_omitidas va en 0 — salvo que la MISMA línea aparezca dos veces de verdad, que ahí sí son dos compras del mismo producto y van las dos.`;
 
 const SB_URL = 'https://soarkknjewgcewryxqac.supabase.co';
 const SB_ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
@@ -214,9 +216,12 @@ export default async function handler(req, res) {
   }
 
   const contenido = adjuntos.map((a) =>
-    a.mediaType === 'application/pdf'
-      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 } }
-      : { type: 'image', source: { type: 'base64', media_type: a.mediaType || 'image/jpeg', data: a.base64 } },
+    // Una planilla (Excel/CSV) ya viene pasada a texto por el navegador.
+    a.texto
+      ? { type: 'text', text: '--- Planilla del ticket ---\n' + a.texto }
+      : a.mediaType === 'application/pdf'
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 } }
+        : { type: 'image', source: { type: 'base64', media_type: a.mediaType || 'image/jpeg', data: a.base64 } },
   );
   contenido.push({ type: 'text', text: INSTRUCCIONES });
 
