@@ -197,6 +197,81 @@ Lo que no está impreso se deja en 0 o en "": no completes con estimaciones.
 
 SI EN VEZ DE FOTOS VIENE UNA PLANILLA (Excel o CSV, marcada como "Planilla del ticket"): son las mismas líneas del ticket pero ya en columnas, así que no hay nada que descifrar. Los encabezados pueden estar en hebreo, en español o no estar. Identificá qué columna es cada cosa por su contenido, no por su nombre: el código de barras es el número largo, la cantidad es el número chico que multiplica, el importe de la línea es cantidad por precio unitario. Los totales del pie suelen ir en las últimas filas, a veces sin encabezado. Si la planilla tiene varias hojas van todas, cada una con su nombre adelante: puede que el ticket esté en la segunda. Con una planilla NO hay solapamiento de fotos, así que lineas_repetidas_omitidas va en 0 — salvo que la MISMA línea aparezca dos veces de verdad, que ahí sí son dos compras del mismo producto y van las dos.`;
 
+// ── El repaso dirigido ──────────────────────────────────────────────────────
+// Segunda pasada, sólo cuando los controles encontraron algo grave. No relee el ticket entero:
+// le llega la lista de problemas concretos ("falta ₪9,40", "este código es imposible") y
+// devuelve nada más que las correcciones. Va en una llamada aparte porque Vercel corta a los
+// 300 s: dos de ~200 s entran, una de 400 s no.
+const ESQUEMA_REPASO = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    correcciones: {
+      type: 'array',
+      description: 'Sólo lo que está MAL. Si un dato está bien, no lo devuelvas.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          linea: { type: 'integer', description: 'El número de línea de la lista que te pasé (empieza en 1).' },
+          campo: {
+            type: 'string',
+            enum: ['codigo_barras', 'cantidad', 'precio_unitario_ils', 'importe_linea_ils', 'descuento_linea_ils', 'credito_envase_ils'],
+          },
+          valor: { type: 'string', description: 'El valor correcto según la foto. Los números con punto decimal, sin símbolo de moneda.' },
+          por_que: { type: 'string', description: 'En una frase corta y en español: qué se ve en la foto.' },
+        },
+        required: ['linea', 'campo', 'valor', 'por_que'],
+      },
+    },
+    lineas_faltantes: {
+      type: 'array',
+      description: 'Renglones de producto que están en la foto y NO están en la lista que te pasé. Vacío si no falta ninguno.',
+      items: ESQUEMA.properties.items.items,
+    },
+    lineas_sobrantes: {
+      type: 'array',
+      description: 'Números de línea de la lista que NO existen en la foto (se leyeron dos veces o se inventaron). Vacío si no sobra ninguna.',
+      items: { type: 'integer' },
+    },
+    explicacion: {
+      type: 'string',
+      description: 'Una o dos frases en español: qué encontraste y si con eso el ticket cierra.',
+    },
+  },
+  required: ['correcciones', 'lineas_faltantes', 'lineas_sobrantes', 'explicacion'],
+};
+
+const promptRepaso = (items, problemas) => `Este ticket ya se leyó una vez y los controles automáticos encontraron problemas. Tu trabajo NO es volver a leerlo entero: es mirar la foto y resolver ESTOS problemas concretos.
+
+PROBLEMAS DETECTADOS
+${problemas.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+LO QUE SE LEYÓ (línea, código, nombre, cantidad, unitario, importe, descuento, envase)
+${items
+  .map((l, i) =>
+    [
+      `${i + 1}`,
+      l.codigo_barras || '(sin código)',
+      String(l.nombre_he || '').slice(0, 30),
+      `${Number(l.cantidad) || 0}${l.unidad === 'kg' ? 'kg' : ''}`,
+      `x${(Number(l.precio_unitario_ils) || 0).toFixed(2)}`,
+      `=${(Number(l.importe_linea_ils) || 0).toFixed(2)}`,
+      `desc ${(Number(l.descuento_linea_ils) || 0).toFixed(2)}`,
+      `envase ${(Number(l.credito_envase_ils) || 0).toFixed(2)}`,
+    ].join('\t'),
+  )
+  .join('\n')}
+
+CÓMO TRABAJAR
+- Ubicá en la foto cada línea señalada y leé de nuevo SÓLO esos renglones, con cuidado, dígito por dígito.
+- Devolvé únicamente lo que esté MAL. Si mirás una línea y está bien, no la devuelvas.
+- Si un problema dice que un código de barras es imposible: ese código tiene un dígito verificador que no cierra, así que hay al menos un dígito mal leído. Mirá el renglón en la foto y leé el código entero de nuevo. Los códigos israelíes casi siempre arrancan en 729.
+- Si falta plata para llegar al total impreso, lo más probable es que haya un renglón que no se leyó (mirá especialmente los bordes de las fotos y donde se doblaba el papel) o un importe leído de menos. Buscá una línea que explique la diferencia exacta.
+- Si sobra plata, puede haber un renglón contado dos veces por el solapamiento entre fotos.
+- Los pesos por kilo (unidad kg) llevan tres decimales: 0.274 no es 0.27.
+- No inventes: si mirás y no lo podés resolver, devolvelo sin corrección y decilo en la explicación.`;
+
 const SB_URL = 'https://soarkknjewgcewryxqac.supabase.co';
 const SB_ANON = 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';
 const MAIL_JONY = 'admin@shukmamtakim.com';
@@ -264,7 +339,14 @@ export default async function handler(req, res) {
         ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 } }
         : { type: 'image', source: { type: 'base64', media_type: a.mediaType || 'image/jpeg', data: a.base64 } },
   );
-  contenido.push({ type: 'text', text: INSTRUCCIONES });
+
+  // ¿Lectura o repaso? El repaso llega con lo que ya se leyó y con los problemas a resolver.
+  const rep = (req.body && req.body.repaso) || null;
+  const esRepaso = !!(rep && Array.isArray(rep.items) && rep.items.length);
+  contenido.push({
+    type: 'text',
+    text: esRepaso ? promptRepaso(rep.items, rep.problemas || []) : INSTRUCCIONES,
+  });
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -276,9 +358,14 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-opus-5',
-        max_tokens: 32000,
+        // El repaso devuelve sólo correcciones: mucha menos salida, y esfuerzo ALTO, que es
+        // cuando de verdad hay que mirar fino. La primera pasada es la larga; ésta es la fina.
+        max_tokens: esRepaso ? 16000 : 32000,
         stream: true,
-        output_config: { effort: 'medium', format: { type: 'json_schema', schema: ESQUEMA } },
+        output_config: {
+          effort: esRepaso ? 'high' : 'medium',
+          format: { type: 'json_schema', schema: esRepaso ? ESQUEMA_REPASO : ESQUEMA },
+        },
         messages: [{ role: 'user', content: contenido }],
       }),
     });
