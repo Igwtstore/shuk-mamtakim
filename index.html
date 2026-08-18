@@ -7882,6 +7882,15 @@ async function guardarNuevoProducto() {
           if (rb) { rb.value = nombre; filtrarRecep(); rb.scrollIntoView({ block: 'center' }); }
         });
       }
+      // Alta pedida por la calculadora de Israel: cerrar el modal y avisarle al iframe para
+      // que refresque su catálogo — el producto nuevo se empareja solo por su código.
+      if (window._npDesdeIsrael) {
+        Promise.resolve(_promCat).then(() => {
+          cerrarNpDesdeRecep();
+          const fr = document.getElementById('iframe-israel');
+          if (fr && fr.contentWindow) fr.contentWindow.postMessage({ tipo: 'ci-producto-creado' }, location.origin);
+        });
+      }
     } else showToast('Error al guardar');
   } catch (e) {
     showToast('Error de conexión');
@@ -11583,6 +11592,56 @@ function abrirNpDesdeRecep() {
   const res = document.getElementById('recep-resultados');
   if (res) res.style.display = 'none';
 }
+// ── Alta de producto pedida por la calculadora de Israel (iframe) ──
+// Mismo mecanismo que Recibir mercadería: se MUDA el card real de "Agregar nuevo producto"
+// (con fotos, IA, hashgajá, todo) a un modal sobre la sección Israel, precargado con lo que
+// la calculadora ya sabe. El usuario lo pidió así, textual: "debería abrir acceso directo a
+// esta pantalla, así creamos de manera habitual" — nada de mini-formularios paralelos.
+function abrirNpDesdeIsrael(d) {
+  if (esVistaMiri()) return;   // 🔒 jamás en vista Miri
+  const card = document.getElementById('card-nuevo-producto');
+  if (!card || document.getElementById('np-modal-recep')) return;
+  const wPanel = Math.round(card.parentNode.getBoundingClientRect().width || 0) || 560;
+  const ov = document.createElement('div');
+  ov.id = 'np-modal-recep';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:700;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:1.2rem 0.8rem';
+  const caja = document.createElement('div');
+  caja.style.cssText = 'background:var(--crema,#faf8f4);border-radius:16px;max-width:' + Math.min(wPanel, window.innerWidth - 24) + 'px;width:100%;padding:0.4rem;position:relative;margin:auto 0;display:flex;flex-direction:column;gap:0.75rem';
+  caja.innerHTML = '<button onclick="cerrarNpDesdeRecep()" style="position:absolute;top:10px;right:12px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--texto-suave);z-index:1">✕</button>';
+  const aMudar = [card];
+  const bandeja = document.getElementById('card-bandeja');
+  if (bandeja) aMudar.push(bandeja);
+  _npMudados = aMudar.map(c => {
+    const ph = document.createComment('np-card-lugar');
+    c.parentNode.insertBefore(ph, c);
+    caja.appendChild(c);
+    c.style.display = '';
+    return { card: c, ph };
+  });
+  ov.appendChild(caja);
+  document.body.appendChild(ov);
+  window._npDesdeIsrael = true;
+  if (bandeja && typeof cargarBandeja === 'function') cargarBandeja();
+  // Precarga: lo que la calculadora ya sabe. Stock SIEMPRE 0 — el stock lo suma la recepción,
+  // una sola puerta (si el alta también lo cargara, quedaría contado dos veces).
+  const pon = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+  pon('np-nombre', d.nombre); pon('np-desc', d.desc); pon('np-categoria', d.categoria);
+  pon('np-pMay', d.precioMay); pon('np-costo', d.costo); pon('np-peso', d.peso); pon('np-ean', d.ean);
+  const st = document.getElementById('np-stock'); if (st) st.value = '0';
+  const du = document.getElementById('np-dueno'); if (du) { du.value = 'Jony'; if (typeof duenoAltaChange === 'function') duenoAltaChange(); }
+  const mo = document.getElementById('np-moneda'); if (mo) { mo.value = 'U$S'; if (typeof actualizarLabelPmay === 'function') actualizarLabelPmay(); }
+  const up = document.getElementById('np-upp'); if (up) up.value = String(d.upp || 1);
+  const nom = document.getElementById('np-nombre'); if (nom) nom.focus();
+}
+// La calculadora (mismo origen, adentro del iframe) pide el alta por postMessage.
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin) return;
+  const fr = document.getElementById('iframe-israel');
+  if (!fr || ev.source !== fr.contentWindow) return;
+  const d = ev.data || {};
+  if (d.tipo === 'ci-alta-producto' && d.datos) abrirNpDesdeIsrael(d.datos);
+});
+
 function cerrarNpDesdeRecep() {
   const ov = document.getElementById('np-modal-recep');
   _npMudados.forEach(({ card, ph }) => {
@@ -11594,6 +11653,7 @@ function cerrarNpDesdeRecep() {
   if (typeof aplicarPrivacidadPanel === 'function') aplicarPrivacidadPanel();   // re-oculta la bandeja en vista Miri
   if (ov) ov.remove();
   window._npDesdeRecep = false;
+  window._npDesdeIsrael = false;
 }
 function agregarRecep(id) {
   // Los precios de venta arrancan con los ACTUALES del catálogo: si no se tocan, no se cambia nada.
