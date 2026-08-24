@@ -566,6 +566,9 @@ async function usuarioSesion(token: string): Promise<Usuario | null> {
   } catch { return null; }
 }
 const esJony = (u: Usuario | null) => !!u && u.email === MAIL_JONY;
+// 🎚️ INTERRUPTOR (v4.52): el mail de Miri identifica a quién le corta el paso el interruptor
+// de acceso (config ACCESO_MIRI, lo maneja Jony desde el panel). Ver portero del dispatcher.
+const MAIL_MIRI = 'myri@shukmamtakim.com';
 // ── EAN (v4.50) ─────────────────────────────────────────────────────────────────
 // Deja el código comparable: solo dígitos, y el UPC-A de 12 se lleva a EAN-13 con el 0
 // de adelante (si no, el mismo producto no matchea entre un ticket y un escaneo).
@@ -1606,7 +1609,7 @@ Deno.serve(async (req) => {
   // ── Acciones que SOLO puede pedir Jony (v4.48). Miri tiene su propio usuario y su token
   //    es válido, así que sin esta lista vería el historial de compras de Jony con solo
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -1614,6 +1617,12 @@ Deno.serve(async (req) => {
   const usuario = (esPublica || conSecreto) ? null : await usuarioSesion(token);
   if (!esPublica && !conSecreto && !usuario) return json({ error: 'no autorizado' });
   if (SOLO_JONY.indexOf(accion) !== -1 && !conSecreto && !esJony(usuario)) return json({ error: 'no autorizado' });
+  // 🎚️ INTERRUPTOR DE ACCESO DE MIRI (v4.52): Jony lo prende/apaga desde el panel (ACCESO_MIRI).
+  // Apagado ⇒ el token de Miri no puede pedir NINGUNA acción protegida — ni siquiera con una
+  // sesión que le quedó abierta en el navegador: la barrera es del servidor, no de la pantalla.
+  // El texto NO es 'no autorizado' a propósito: ese texto exacto dispara el auto-refresh de token
+  // del front (bug #15 del playón) y acá el token es VÁLIDO — lo apagado es el acceso.
+  if (usuario && usuario.email === MAIL_MIRI && (await getConfig('ACCESO_MIRI', '1')) === '0') return json({ error: 'acceso pausado' });
 
   try {
     // ═══ TIENDA PÚBLICA (sin login) ═══════════════════════════════════════════
@@ -2847,6 +2856,17 @@ Deno.serve(async (req) => {
       await setConfig('TIENDA_AVISO_COLOR', ['verde', 'dorado', 'rojo', 'azul'].indexOf(colA) !== -1 ? colA : 'verde');
       return json({ ok: true });
     }
+    // 🎚️ Interruptor del acceso de Miri (v4.52) — los dos están en SOLO_JONY: Miri no puede ni
+    // leerlo ni tocarlo. Apagado ⇒ el portero de arriba contesta 'acceso pausado' a su token.
+    if (accion === 'accesoMiri') return json({ acceso: await getConfig('ACCESO_MIRI', '1') });
+    if (accion === 'setAccesoMiri') {
+      const vAcc = P(body, 'acceso') === '0' ? '0' : '1';
+      await setConfig('ACCESO_MIRI', vAcc);
+      return json({ ok: true, acceso: vAcc });
+    }
+    // Sonda del login (cualquier usuario logueado): no devuelve nada sensible. Si el acceso de
+    // Miri está apagado, su token NO llega acá — el portero ya contestó 'acceso pausado'.
+    if (accion === 'accesoSocio') return json({ ok: true });
     // 🌎 Estado del geo-gate (PÚBLICO, cacheado 30s) — lo lee el middleware de Vercel en cada request.
     // Devuelve el hash del pase (no el pase); el middleware valida ?pase hasheando y comparando.
     if (accion === 'geoGate') {

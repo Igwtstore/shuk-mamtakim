@@ -1252,6 +1252,16 @@
     <div id="aviso-preview" style="padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)">(sin aviso)</div>
     <button class="guardar-stock-btn" onclick="guardarAvisoTienda()" style="margin-top:0.6rem">Guardar aviso</button>
   </div>
+  <!-- 🎚️ Interruptor del acceso de Miri (v4.52). SOLO la ve Jony: cargarAccesoMiri() la muestra
+       únicamente si socioActual==='jony' (en la sesión de Miri ni se dibuja ni se consulta). -->
+  <div class="admin-card" data-seccion="inicio" id="card-acceso-miri" style="display:none">
+    <div class="admin-titulo">🎚️ Acceso de Miri</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem"><b>Apagado</b>: su clave no entra más — y si le quedó una sesión abierta, tampoco puede ver ni tocar nada (el corte lo hace el servidor, no la pantalla). <b>Encendido</b>: entra normal, con su vista de siempre. Prendés y apagás cuando quieras, sin tocar usuarios ni claves.</div>
+    <div style="display:flex;gap:0.7rem;align-items:center;flex-wrap:wrap">
+      <button id="btn-acceso-miri" onclick="toggleAccesoMiri()" style="padding:0.7rem 1.3rem;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;background:#eee;color:#666">…</button>
+      <span id="acceso-miri-estado" style="font-size:0.85rem;font-weight:700;color:var(--texto-suave)">consultando…</span>
+    </div>
+  </div>
   <div class="admin-card" data-seccion="inicio" id="card-geo">
     <div class="admin-titulo">🌎 Vidriera geográfica</div>
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Interruptor provisorio: limita quién VE la web (el backend no se toca). Actual: <b id="geo-actual">…</b></div>
@@ -2482,6 +2492,40 @@ function marcarEstadoTiendaBtn() {
     b.style.color = activo ? '#fff' : 'var(--texto)';
   });
   const inp = document.getElementById('estado-tienda-msg'); if (inp && _tiendaMsg && !inp.value) inp.value = _tiendaMsg;
+}
+
+// 🎚️ ACCESO DE MIRI (v4.52): interruptor ON/OFF de su entrada al panel. Solo lo ve Jony.
+// El corte real lo hace el SERVIDOR (portero por identidad, v4.49): apagado ⇒ cualquier pedido
+// con el token de Miri vuelve 'acceso pausado' — aunque su navegador tenga la sesión abierta.
+let _accesoMiri = null;   // true=encendido, false=apagado, null=sin dato todavía
+async function cargarAccesoMiri() {
+  if (typeof socioActual !== 'undefined' && socioActual !== 'jony') return;   // en sesión de Miri: nada
+  const card = document.getElementById('card-acceso-miri'); if (card) card.style.display = '';
+  try {
+    const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=accesoMiri');
+    if (d && d.acceso !== undefined) _accesoMiri = String(d.acceso) !== '0';
+  } catch (e) { /* sin dato: el botón reintenta al tocarlo */ }
+  _pintarAccesoMiri();
+}
+function _pintarAccesoMiri() {
+  const btn = document.getElementById('btn-acceso-miri'), est = document.getElementById('acceso-miri-estado');
+  if (!btn || !est) return;
+  if (_accesoMiri === null) { btn.textContent = 'Reintentar'; btn.style.background = '#eee'; btn.style.color = '#666'; est.textContent = 'sin conexión — tocá para reintentar'; return; }
+  if (_accesoMiri) {
+    btn.textContent = 'Apagar acceso'; btn.style.background = '#fdecea'; btn.style.color = '#b02a1c';
+    est.innerHTML = '🟢 <span style="color:#1a6b35">ENCENDIDO</span> — Miri puede entrar';
+  } else {
+    btn.textContent = 'Encender acceso'; btn.style.background = '#e8f6ec'; btn.style.color = '#1a6b35';
+    est.innerHTML = '🔴 <span style="color:#b02a1c">APAGADO</span> — Miri no puede entrar';
+  }
+}
+async function toggleAccesoMiri() {
+  if (_accesoMiri === null) { cargarAccesoMiri(); return; }   // sin dato: reintenta la consulta
+  const apagar = _accesoMiri === true;
+  if (apagar && !confirm('¿Apagar el acceso de Miri?\n\nNo va a poder entrar al panel (ni seguir usando una sesión abierta) hasta que lo enciendas de nuevo.')) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'setAccesoMiri', acceso: apagar ? '0' : '1' }),
+    apagar ? '🔴 Acceso de Miri APAGADO' : '🟢 Acceso de Miri encendido');
+  if (r && r.ok) { _accesoMiri = !apagar; _pintarAccesoMiri(); }
 }
 
 // 🌎 Vidriera geográfica: interruptor provisorio (Todos / Solo Mercosur).
@@ -14303,6 +14347,22 @@ async function verificarAdmin() {
     if (!r2.error) { socio = 'miri'; _authToken = r2.data.session?.access_token || _authToken; }
   }
   if (btnEl) { btnEl.textContent = 'Entrar'; btnEl.disabled = false; }
+  // 🎚️ Interruptor de acceso (v4.52): si Jony lo apagó, Miri no pasa aunque la clave sea correcta.
+  // Solo corta ante el 'acceso pausado' explícito del servidor; un error de red NO bloquea acá
+  // (fail-open seguro: el portero del servidor manda igual y no le contesta nada protegido).
+  if (socio === 'miri') {
+    try {
+      const chk = await fetchConSesion(APPS_SCRIPT_URL + '?accion=accesoSocio');
+      if (chk && chk.error && String(chk.error).indexOf('acceso pausado') !== -1) {
+        try { await _sb.auth.signOut(); } catch (e) {}
+        const errEl = document.getElementById('admin-error');
+        errEl.textContent = '🚫 El acceso está pausado por el administrador.';
+        errEl.style.display = 'block';
+        document.getElementById('admin-pass-input').value = '';
+        return;
+      }
+    } catch (e) { /* red o backend viejo → seguir: el servidor corta solo */ }
+  }
   if (socio) {
     adminAuth = true;
     sessionStorage.setItem('adminAuth', '1');
@@ -14312,8 +14372,11 @@ async function verificarAdmin() {
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('modo-bar').style.display = '';
     setModo('admin');
+    cargarAccesoMiri();   // 🎚️ estado del interruptor (solo se dibuja para Jony)
   } else {
-    document.getElementById('admin-error').style.display = 'block';
+    const errEl = document.getElementById('admin-error');
+    errEl.textContent = 'Contraseña incorrecta';   // restaurar (pudo quedar el texto del interruptor)
+    errEl.style.display = 'block';
     document.getElementById('admin-pass-input').value = '';
     document.getElementById('admin-pass-input').focus();
   }
@@ -14361,7 +14424,7 @@ function init() {
       // Esperar a que el token de sesión esté listo antes de los primeros renders (clave para Etapa B)
       _sb.auth.getSession()
         .then(r => { _authToken = r.data.session?.access_token || ''; })
-        .finally(() => setModo('admin'));
+        .finally(() => { setModo('admin'); cargarAccesoMiri(); });   // 🎚️ interruptor (solo Jony)
     } else {
       document.getElementById('admin-login').style.display = 'flex';
     }
