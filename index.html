@@ -1730,6 +1730,10 @@
           <label>📦 Envío $ <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(opcional)</span></label>
           <input type="number" id="manual-envio" min="0" step="any" placeholder="0" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;box-sizing:border-box" />
         </div>
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:135px">
+          <label>🏷️ Desc. global %</label>
+          <input type="number" id="manual-descuento" min="0" max="100" step="any" placeholder="0" oninput="actualizarTotalManual()" title="Descuento sobre TODO el pedido (además del que pongas por producto)" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;box-sizing:border-box" />
+        </div>
       </div>
       <div>
         <label style="font-size:0.85rem;font-weight:600;color:var(--azul)">Productos</label>
@@ -1741,6 +1745,10 @@
         <label style="font-size:0.85rem;font-weight:600;color:var(--verde)">🧺 Pedido armado</label>
         <div id="manual-seleccion-lista" style="margin-top:0.4rem;border:1.5px solid var(--verde);border-radius:8px;background:#f4faf6"></div>
         <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.3rem">Seguí buscando arriba para agregar más productos.</div>
+      </div>
+      <div class="nombre-campo" style="margin:0">
+        <label>📝 Nota del pedido <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(opcional — se ve en el pedido y en el remito)</span></label>
+        <input type="text" id="manual-nota" placeholder="Ej: entregar el jueves, dejó seña, no tiene el timbre..." autocomplete="off" />
       </div>
       <div id="manual-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul)">Total: $ 0</div>
       <button class="guardar-stock-btn" onclick="cargarPedidoManual()" style="margin-top:0">Registrar pedido</button>
@@ -6265,7 +6273,27 @@ async function guardarStock() {
 }
 
 let _manualQtys = {};   // cantidades del pedido manual (sobreviven al buscador)
+let _manualDescs = {};  // id → % de descuento de ESA línea (el global va en #manual-descuento)
 function setManualQty(id, v) { _manualQtys[id] = parseInt(v) || 0; actualizarTotalManual(); }
+// 📸 Miniatura del producto: con tantos nombres casi iguales (Milka Oreo / Oreo White /
+// Oreo Sandwich) la foto es lo único que distingue rápido cuál es cuál. Se toca y se ve grande.
+function _manualFoto(p, px) {
+  const arch = (p.imagen || '').split(',')[0].trim();
+  if (!arch) return `<div style="width:${px}px;height:${px}px;border-radius:6px;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:${Math.round(px * 0.5)}px;flex-shrink:0">🍬</div>`;
+  const url = imgUrl(arch)[0] || '';
+  return `<img src="${url}" loading="lazy" onclick="event.stopPropagation();abrirFotoGrande(this)" title="Tocá para verla en grande"
+    style="width:${px}px;height:${px}px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid #f0ebe3;flex-shrink:0;cursor:zoom-in"
+    onerror="this.style.display='none'">`;
+}
+// % de descuento válido de una línea (0 si no hay) y del pedido entero.
+function _descManual(p) { const d = parseFloat(_manualDescs[p.id]) || 0; return (d > 0 && d <= 100) ? d : 0; }
+function _descGlobalManual() { const d = parseFloat(document.getElementById('manual-descuento')?.value) || 0; return (d > 0 && d <= 100) ? d : 0; }
+function setManualDesc(id, val) {
+  let d = parseFloat(val) || 0;
+  if (d < 0) d = 0; if (d > 100) d = 100;
+  if (d > 0) _manualDescs[id] = d; else delete _manualDescs[id];
+  actualizarTotalManual();
+}
 function _manualElegibles() {
   const _tipoM = document.getElementById('manual-tipo')?.value || 'Mayorista';
   return productosVisibles().filter(p => {
@@ -6291,6 +6319,7 @@ function renderManualProductos() {
       <input type="number" id="mq-${p.id}" min="0" max="${p.stock}" value="${_manualQtys[p.id] || 0}"
         style="width:55px;padding:0.3rem 0.4rem;border:1.5px solid #e8e6e0;border-radius:6px;text-align:center;font-size:0.85rem;${(_manualQtys[p.id]||0) > 0 ? 'border-color:var(--verde);background:#e8f5ee;font-weight:700;' : ''}"
         onchange="setManualQty(${p.id}, this.value)" oninput="setManualQty(${p.id}, this.value)" />
+      ${_manualFoto(p, 38)}
       <div style="flex:1;min-width:0">
         <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
         <div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,60)}</div>
@@ -6320,7 +6349,8 @@ function cargarComoPedido(i) {
   setAdminTab('panel'); setPanelSeccion('ventas');
   const tipoSel = document.getElementById('manual-tipo'); if (tipoSel) tipoSel.value = 'Minorista';
   const cli = document.getElementById('manual-cliente'); if (cli) cli.value = a.nombre || '';
-  _manualQtys = {};
+  _manualQtys = {}; _manualPrecios = {}; _manualDescs = {};
+  ['manual-descuento', 'manual-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const noMatch = [];
   a.items.forEach(it => {
     const n = (it.n || '').trim().toLowerCase();
@@ -6334,24 +6364,52 @@ function cargarComoPedido(i) {
   setTimeout(() => { document.getElementById('manual-cliente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
   showToast(noMatch.length ? `📋 Cargado. Faltan (cargá a mano): ${noMatch.join(', ')}` : '📋 Pedido cargado — revisá y confirmá ↓');
 }
-function actualizarTotalManual() {
+// Plata del pedido manual en un solo lugar (lo usan el total de pantalla Y el registro):
+// bruto (precio de lista o el editado) → menos el Desc% de cada línea → menos el descuento
+// global. La comisión de Myri sale del NETO, igual que en el editor de pedidos.
+function _plataManual() {
   const tipo = document.getElementById('manual-tipo').value;
-  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0, totalU = 0;
+  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0, totalU = 0, brutoARS = 0, brutoUSD = 0;
   _manualElegibles().forEach(p => {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
     totalU += qty;
     const esJ = p.dueno === 'Jony';
     const { precioUnit, moneda } = _precioManual(p, tipo);
-    const monto = precioUnit * qty;
-    if (moneda === 'U$S') { if (esJ) usdJ += monto; else usdM += monto; }
-    else { if (esJ) arsJ += monto; else arsM += monto; }
+    const bruto = precioUnit * qty;
+    const monto = bruto * (1 - _descManual(p) / 100);
+    if (moneda === 'U$S') { brutoUSD += bruto; if (esJ) usdJ += monto; else usdM += monto; }
+    else { brutoARS += bruto; if (esJ) arsJ += monto; else arsM += monto; }
   });
+  const descGlobal = _descGlobalManual();
+  const preARS = arsJ + arsM, preUSD = usdM + usdJ;
+  if (descGlobal > 0) { const f = 1 - descGlobal / 100; arsJ *= f; arsM *= f; usdM *= f; usdJ *= f; }
+  return {
+    arsJ, arsM, usdM, usdJ, totalU, brutoARS, brutoUSD, descGlobal,
+    descLineaARS: brutoARS - preARS, descLineaUSD: brutoUSD - preUSD,
+    descGlobalARS: preARS - (arsJ + arsM), descGlobalUSD: preUSD - (usdM + usdJ),
+    netoARS: arsJ + arsM, netoUSD: usdM + usdJ
+  };
+}
+function _montoManualTxt(ars, usd) {
   const parts = [];
-  if (arsJ + arsM > 0) parts.push(`$ ${Math.round(arsJ + arsM).toLocaleString('es-AR')}`);
-  if (usdM + usdJ > 0) parts.push(`U$S ${(usdM + usdJ).toFixed(2)}`);
-  const _uTxt = totalU > 0 ? ` · ${totalU} u.` : '';
-  document.getElementById('manual-total').textContent = 'Total: ' + (parts.join(' + ') || '$ 0') + _uTxt;
+  if (ars > 0.5) parts.push(`$ ${Math.round(ars).toLocaleString('es-AR')}`);
+  if (usd > 0.005) parts.push(`U$S ${usd.toFixed(2)}`);
+  return parts.join(' + ') || '$ 0';
+}
+function actualizarTotalManual() {
+  const t = _plataManual();
+  const _uTxt = t.totalU > 0 ? ` · ${t.totalU} u.` : '';
+  const hayDescLinea = t.descLineaARS > 0.5 || t.descLineaUSD > 0.005;
+  const filas = [];
+  const fila = (izq, der, color) => `<div style="display:flex;justify-content:space-between;gap:0.5rem;${color ? 'color:' + color + ';' : ''}"><span>${izq}</span><span>${der}</span></div>`;
+  if (hayDescLinea || t.descGlobal > 0) {
+    filas.push(fila('Subtotal', _montoManualTxt(t.brutoARS, t.brutoUSD), 'var(--texto-suave)'));
+    if (hayDescLinea) filas.push(fila('🏷️ Descuento por producto', '− ' + _montoManualTxt(t.descLineaARS, t.descLineaUSD), '#c0392b'));
+    if (t.descGlobal > 0) filas.push(fila(`🏷️ Descuento global −${t.descGlobal}%`, '− ' + _montoManualTxt(t.descGlobalARS, t.descGlobalUSD), '#c0392b'));
+  }
+  filas.push(fila('Total' + _uTxt, _montoManualTxt(t.netoARS, t.netoUSD)));
+  document.getElementById('manual-total').innerHTML = filas.join('');
   renderManualSeleccion();
 }
 
@@ -6380,13 +6438,20 @@ function renderManualSeleccion() {
     const qty = _manualQtys[p.id];
     const { precioUnit, moneda, custom } = _precioManual(p, tipo);
     const base = _precioMoneda(p, tipo);
-    const sub = precioUnit * qty;
+    const dl = _descManual(p);                    // 🏷️ descuento de ESTA línea
+    const precioEf = precioUnit * (1 - dl / 100);  // lo que de verdad se le cobra por unidad
+    const sub = precioEf * qty;
     const subStr = moneda === 'U$S' ? `U$S ${sub.toFixed(2)}` : `$ ${Math.round(sub).toLocaleString('es-AR')}`;
     const sym = moneda === 'U$S' ? 'U$S' : '$';
-    const listaHint = custom ? `<div style="font-size:0.62rem;color:var(--texto-suave);text-align:right">lista: ${sym} ${moneda === 'U$S' ? base.precioUnit.toFixed(2) : Math.round(base.precioUnit).toLocaleString('es-AR')}</div>` : '';
-    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;border-bottom:1px solid #d8ecdf">
-      <span style="font-weight:800;color:var(--verde);min-width:34px;text-align:center">${qty}×</span>
-      <div style="flex:1;min-width:0">
+    const _fmtU = v => moneda === 'U$S' ? v.toFixed(2) : Math.round(v).toLocaleString('es-AR');
+    const hints = [];
+    if (custom) hints.push(`lista: ${sym} ${_fmtU(base.precioUnit)}`);
+    if (dl > 0) hints.push(`queda ${sym} ${_fmtU(precioEf)} c/u`);
+    const listaHint = hints.length ? `<div style="font-size:0.62rem;color:var(--texto-suave);text-align:right">${hints.join(' · ')}</div>` : '';
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;border-bottom:1px solid #d8ecdf;flex-wrap:wrap">
+      <span style="font-weight:800;color:var(--verde);min-width:30px;text-align:center">${qty}×</span>
+      ${_manualFoto(p, 34)}
+      <div style="flex:1;min-width:120px">
         <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
         ${p.desc ? `<div style="font-size:0.68rem;color:var(--texto-suave)">${p.desc.substring(0,45)}</div>` : ''}
       </div>
@@ -6396,6 +6461,10 @@ function renderManualSeleccion() {
           <input type="number" min="0" step="any" value="${custom ? _manualPrecios[p.id] : (moneda === 'U$S' ? base.precioUnit : Math.round(base.precioUnit))}"
             onchange="setManualPrecio(${p.id}, this.value)" title="Precio unitario (editalo si acordaste otro)"
             style="width:84px;padding:0.3rem 0.4rem;border:1.5px solid ${custom ? 'var(--dorado)' : '#d8ecdf'};border-radius:6px;font-size:0.8rem;font-weight:700;text-align:right;box-sizing:border-box" />
+          <input type="number" id="md-${p.id}" min="0" max="100" step="any" value="${dl || ''}" placeholder="0"
+            onchange="setManualDesc(${p.id}, this.value)" oninput="setManualDesc(${p.id}, this.value)" title="Descuento SOLO de este producto (%)"
+            style="width:52px;padding:0.3rem 0.3rem;border:1.5px solid ${dl > 0 ? '#e0a2a2' : '#d8ecdf'};border-radius:6px;font-size:0.8rem;font-weight:700;text-align:right;box-sizing:border-box;${dl > 0 ? 'background:#fdeeee;color:#c0392b;' : ''}" />
+          <span style="font-size:0.7rem;color:var(--texto-suave)">%</span>
         </div>
         ${listaHint}
       </div>
@@ -6409,6 +6478,7 @@ function renderManualSeleccion() {
 function quitarManualItem(id) {
   _manualQtys[id] = 0;
   delete _manualPrecios[id];
+  delete _manualDescs[id];
   renderManualProductos();   // refresca lista (input en 0), total y canasta
 }
 
@@ -6428,12 +6498,18 @@ function cargarPedidoManual() {
     const precio = _precioManual(p, tipo).precioUnit;
     return !(precio > 0);
   });
+  // 🏷️ Un descuento del 100% deja el producto GRATIS: se puede, pero se avisa antes.
+  const _gratis = _manualElegibles().filter(p => (_manualQtys[p.id] || 0) > 0 && _descManual(p) >= 100);
+  if (!_aCero.length && _gratis.length &&
+      !confirm('⚠️ Con ese descuento estos productos quedan en $ 0 (regalados):\n• ' + _gratis.map(p => p.nombre).join('\n• ') + '\n\n¿Registrar igual?')) {
+    _enviandoManual = false;
+    return;
+  }
   if (_aCero.length) {
     showToast('⚠️ Sin precio ' + tipo.toLowerCase() + ': ' + _aCero.map(p => p.nombre).join(', ') + ' — cargalo en ✏️ Editar producto');
     _enviandoManual = false;
     return;
   }
-  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0;
   const selectedItems = [];
   const lineas = [];
   const stockUpdates = [];
@@ -6441,30 +6517,38 @@ function cargarPedidoManual() {
   _manualElegibles().forEach(p => {
     const qty = _manualQtys[p.id] || 0;
     if (!qty) return;
-    const esJ = p.dueno === 'Jony';
     const { precioUnit, moneda } = _precioManual(p, tipo);
-    const monto = precioUnit * qty;
-    if (moneda === 'U$S') { if (esJ) usdJ += monto; else usdM += monto; }
-    else { if (esJ) arsJ += monto; else arsM += monto; }
-    const subtotal = moneda === 'U$S' ? (precioUnit * qty).toFixed(2) : Math.round(precioUnit * qty).toLocaleString('es-AR');
-    const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
+    // 🏷️ El renglón guarda el precio YA REBAJADO + la marca [-N%], igual que el editor de
+    // pedidos → al reabrir el pedido, el Desc% vuelve al campo (no se pierde ni se duplica).
+    const descL = _descManual(p);
+    const precioEf = precioUnit * (1 - descL / 100);
+    const _fmt = v => moneda === 'U$S' ? v.toFixed(2) : Math.round(v).toLocaleString('es-AR');
     const descCorta = p.desc ? ` · ${p.desc.substring(0, 45)}` : '';
-    lineas.push(`• ${qty}x ${p.nombre}${descCorta} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`);
+    const descTag = descL > 0 ? ` [-${descL}%]` : '';
+    lineas.push(`• ${qty}x ${p.nombre}${descCorta}${descTag} — ${moneda} ${_fmt(precioEf)} c/u = ${moneda} ${_fmt(precioEf * qty)}`);
     stockUpdates.push(`${p.id}:${qty}`);
     selectedItems.push(p);
   });
 
-  if (!lineas.length) { showToast('Seleccioná al menos un producto'); return; }
+  if (!lineas.length) { showToast('Seleccioná al menos un producto'); _enviandoManual = false; return; }
+
+  // La plata sale de _plataManual(): descuento por línea + descuento global ya aplicados,
+  // y el split 2×2 (dueño × moneda) escalado → la comisión de Myri se calcula sobre el NETO.
+  const _t = _plataManual();
+  const arsJ = _t.arsJ, arsM = _t.arsM, usdM = _t.usdM, usdJ = _t.usdJ;
+  if (_t.descGlobal > 0) lineas.push(`🏷️ Descuento global: ${_t.descGlobal}%`);
 
   const comiARS = Math.round(arsM * 0.15);
   const comiUSD = parseFloat((usdM * 0.15).toFixed(2));
-  const totalARS = arsJ + arsM;
-  const totalUSD = usdM + usdJ;
+  const nota = (document.getElementById('manual-nota')?.value || '').trim();
 
   const params = new URLSearchParams({
-    accion: 'venta', cliente, tipo, formaPago: pago, notas: 'Manual',
+    accion: 'venta', cliente, tipo, formaPago: pago, notas: nota || 'Manual',
     productos: lineas.join(' || '),
-    totalARS: Math.round(totalARS), totalUSD: totalUSD.toFixed(2),
+    // El total se arma SUMANDO las partes ya redondeadas → nunca queda $1 de diferencia
+    // entre total_ars y (ars_jony + ars_myri), que es lo que miran deuda y cajas.
+    totalARS: Math.round(arsJ) + Math.round(arsM),
+    totalUSD: (parseFloat(usdM.toFixed(2)) + parseFloat(usdJ.toFixed(2))).toFixed(2),
     arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM),
     usdMyri: usdM.toFixed(2), usdJONY: usdJ.toFixed(2), comiARS, comiUSD,
     stockUpdates: stockUpdates.join(',')
@@ -6477,9 +6561,9 @@ function cargarPedidoManual() {
     .then(data => {
       if (data.ok) {
         showToast('Pedido registrado ✓');
-        _manualPrecios = {};
+        _manualPrecios = {}; _manualDescs = {};
         document.getElementById('manual-cliente').value = '';
-        const _me = document.getElementById('manual-envio'); if (_me) _me.value = '';
+        ['manual-envio', 'manual-descuento', 'manual-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         renderManualProductos();
         renderCatalogo();
         renderStockAdmin();
@@ -6506,7 +6590,8 @@ function cargarPedidoManual() {
     const qty = _manualQtys[p.id] || 0;
     p.stock = Math.max(0, p.stock - qty);
   });
-  _manualQtys = {};
+  _manualQtys = {}; _manualPrecios = {}; _manualDescs = {};
+  ['manual-descuento', 'manual-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const mb = document.getElementById('manual-buscar'); if (mb) mb.value = '';
   renderManualProductos();
 
@@ -15048,10 +15133,15 @@ function exportarPedido(v) {
 let _editPedidoActual = null;
 let _editLineas = [];
 let _editQtysOrig = {};   // cantidades por producto al abrir la edición (para ajustar stock)
+let _editNotas = [];      // renglones del pedido que no son productos (notas sueltas): se respetan al guardar
 
 function abrirEditarPedido(v) {
   _editPedidoActual = v;
   _editLineas = parsearLineasPedido(v.productos);
+  const _sep = _separarNotasPedido(_editLineas);
+  _editLineas = _sep.lineas;
+  _editNotas = _sep.notas;
+  const _descGuardado = _sep.desc;
   // IDs EXACTOS que esta venta descontó (stock_updates "id:cant"): es la verdad de qué productos
   // se vendieron. Ante GEMELOS de distinto dueño con nombre Y descripción idénticos (Kukiman
   // #68 Miri / #153 Jony), el match por nombre+desc empataba y podía elegir el del dueño
@@ -15148,7 +15238,7 @@ function abrirEditarPedido(v) {
   document.getElementById('ep-cliente').value = v.cliente || '';
   document.getElementById('ep-tipo').value = v.tipo || 'Minorista';
   poblarSelectorProductos();
-  document.getElementById('ep-descuento').value = '';
+  document.getElementById('ep-descuento').value = _descGuardado > 0 ? _descGuardado : '';
   const _epe = document.getElementById('ep-envio'); if (_epe) { const en = _enviosPorVenta[v.id]; _epe.value = (en && en.cobrado) ? en.cobrado : ''; }
   const _eptc = document.getElementById('ep-tc'); if (_eptc) _eptc.value = (parseFloat(v.tipoCambio) > 0) ? v.tipoCambio : '';
 
@@ -15157,10 +15247,35 @@ function abrirEditarPedido(v) {
   document.getElementById('edit-pedido-overlay').classList.add('open');
 }
 
+// 🏷️ DESCUENTO GLOBAL AL REABRIR EL EDITOR (bug 24/08/2026): el "🏷️ Descuento global: 15%" que
+// este mismo editor escribe al final del pedido volvía a entrar como un RENGLÓN DE PRODUCTO
+// fantasma ("sin producto en el catálogo", $ 0) y el campo Descuento global arrancaba VACÍO →
+// al guardar se perdía el 15% (el total subía) y la nota quedaba pegada como un producto más.
+// Separa los renglones que no son productos: devuelve las líneas reales, el % de descuento
+// global recuperado y las demás notas (se vuelven a escribir tal cual al guardar).
+function _separarNotasPedido(lineas) {
+  const notas = [];
+  let desc = 0;
+  const soloProds = (lineas || []).filter(l => {
+    // Rescate: si el pedido ya se guardó con el bug, la nota quedó escrita COMO producto
+    // ("• 1x 🏷️ Descuento global: 15% — $ 0 c/u = $ 0"). Se la recupera igual.
+    const esDescPegado = !l.esNota && !(parseFloat(l.precio) > 0) && /Descuento global:/i.test(l.nombre || '');
+    if (!l.esNota && !esDescPegado) return true;
+    const mg = (l.raw || '').match(/Descuento global:\s*([\d.,]+)\s*%/i);
+    if (mg) { desc = parseFloat(mg[1].replace(',', '.')) || 0; return false; }
+    if (l.esNota) notas.push(l.raw);
+    return false;
+  });
+  if (!(desc > 0 && desc <= 100)) desc = 0;
+  return { lineas: soloProds, notas, desc };
+}
+
 function parsearLineasPedido(productosStr) {
   return (productosStr || '').split(' || ').map(linea => {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u/);
-    if (!m) return { nombre: linea, qty: 1, moneda: '$', precio: 0, raw: linea };
+    // 🏷️ Renglón que NO es un producto (el "Descuento global: N%" que escribe el editor, o una
+    // nota suelta): se marca con esNota para que el editor no lo muestre como producto fantasma.
+    if (!m) return { nombre: linea, qty: 1, moneda: '$', precio: 0, raw: linea, esNota: !linea.trim().startsWith('•') };
     const qty = parseInt(m[1]);
     // 🏷️ Descuento por producto "[-N%]": el precio guardado es el YA REBAJADO. Recuperamos el %
     // y el precio ORIGINAL (rebajado ÷ (1−N/100)) para que el editor lo muestre y se pueda tocar
@@ -15393,6 +15508,7 @@ async function guardarEditPedido() {
     const descProducto = l.descripcion ? ` · ${l.descripcion}` : '';
     return `• ${l.qty}x ${l.nombre}${descProducto}${descTag} — ${l.moneda} ${unitStr} c/u = ${l.moneda} ${subStr}`;
   });
+  _editNotas.forEach(n => nuevasLineas.push(n));   // notas del pedido que no son productos: se conservan
   if (desc > 0) nuevasLineas.push(`🏷️ Descuento global: ${desc}%`);
 
   // Ajuste de stock por diferencia con lo que había al abrir (agregados, quitados, cantidades)
