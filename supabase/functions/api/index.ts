@@ -611,6 +611,36 @@ const primeraFoto = (imagen: any) => ((imagen || '').toString().split(',').map((
 const fotosShukLista = (imagen: any) => ((imagen || '').toString().split(',').map((x: string) => x.trim()).filter(Boolean)
   .filter((x: string) => !/\.(mp4|webm|mov)(\?|$)/i.test(x) && x.indexOf('/video/') === -1).slice(0, 5).map(fotoShukUrl));
 async function getConfig(clave: string, def: string) { const r = await sbGet('config', 'select=valor&clave=eq.' + encodeURIComponent(clave)); return r.length ? (r[0].valor ?? def) : def; }
+// ── 📣 AVISO DE LA TIENDA (v4.53): normalización con LISTA BLANCA ───────────────
+// Todo campo enumerado cae a su default si viene fuera de lista. El front usa estos
+// valores como sufijo de clase CSS: si acá pasara basura, se podría inyectar CSS en
+// la tienda. Por eso la puerta está de este lado, no solo en el navegador.
+const AV_L: Record<string, string[]> = {
+  estilo: ['plano', 'neon'],
+  color:  ['verde', 'dorado', 'rojo', 'azul'],
+  neon:   ['rosa', 'cyan', 'lima', 'ambar'],
+  anim:   ['ninguna', 'clasico', 'respiracion', 'arranque', 'marquesina'],
+  tam:    ['S', 'M', 'L'],
+  modo:   ['ambos', 'mayorista', 'minorista'],
+};
+const avUno = (v: any, campo: string, def: string) => (AV_L[campo].indexOf(String(v ?? '')) !== -1 ? String(v) : def);
+function avNorm(raw: any) {
+  const c = (raw && typeof raw === 'object') ? raw : {};
+  return {
+    // Saca invisibles (zero-width/blando) que se pegan desde WhatsApp: sin esto un aviso
+    // "vacío" de puros invisibles publicaba un cartel de neón negro sin texto.
+    txt: String(c.txt ?? '').replace(/[​-‍﻿­]/g, '').replace(/\s+/g, ' ').trim().slice(0, 220),
+    estilo: avUno(c.estilo, 'estilo', 'plano'),
+    color:  avUno(c.color,  'color',  'verde'),
+    neon:   avUno(c.neon,   'neon',   'rosa'),
+    anim:   avUno(c.anim,   'anim',   'respiracion'),
+    tam:    avUno(c.tam,    'tam',    'M'),
+    modo:   avUno(c.modo,   'modo',   'ambos'),
+    // SIEMPRE ISO yyyy-MM-dd, que se compara como string y ordena solo. (El campo
+    // fecha_oferta tiene hoy dos formatos conviviendo y uno nunca vence: no se repite.)
+    hasta: /^\d{4}-\d{2}-\d{2}$/.test(String(c.hasta ?? '')) ? String(c.hasta) : '',
+  };
+}
 async function setConfig(clave: string, valor: string) {
   await fetch(SB_URL + '/rest/v1/config?on_conflict=clave', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ clave, valor }) });
 }
@@ -1609,7 +1639,9 @@ Deno.serve(async (req) => {
   // ── Acciones que SOLO puede pedir Jony (v4.48). Miri tiene su propio usuario y su token
   //    es válido, así que sin esta lista vería el historial de compras de Jony con solo
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri'];
+  // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
+  // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -2846,15 +2878,35 @@ Deno.serve(async (req) => {
     if (accion === 'notificaciones') return json((await sbGet('notificaciones', 'select=*')).filter((r: any) => r.estado === 'pendiente' || r.estado === 'notificado').map((r: any) => ({ fecha: (r.fecha || '').toString(), productoId: (r.producto_id || '').toString(), producto: r.producto, nombre: r.nombre, telefono: (r.telefono || '').toString(), estado: r.estado, modoCliente: r.modo || 'mayorista' })));
     // 📣 Va también el AVISO de la tienda (banner de texto libre: "envíos sin cargo…"). Viaja acá
     // para no sumarle otra llamada a la tienda: esta ya se hace siempre al abrir.
-    if (accion === 'getEstadoTienda') return json({
-      estado: await getConfig('TIENDA_ESTADO', 'abierta'), mensaje: await getConfig('TIENDA_MSG', ''),
-      aviso: await getConfig('TIENDA_AVISO', ''), avisoColor: await getConfig('TIENDA_AVISO_COLOR', 'verde'),
-    });
+    if (accion === 'getEstadoTienda') {
+      // Una sola consulta para las 5 claves (antes eran 4 SELECT secuenciales en la ruta
+      // que abre la tienda: sumar campos de a uno la hacía más lenta a cada release).
+      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG)');
+      const C: any = {};
+      filasCfg.forEach((f: any) => { C[f.clave] = f.valor; });
+      const avisoTxt = C.TIENDA_AVISO || '';
+      const avisoCol = C.TIENDA_AVISO_COLOR || 'verde';
+      // avisoCfg = formato nuevo (v4.53). Si todavía no existe, se arma desde el viejo:
+      // un aviso guardado antes de esta versión se sigue viendo igual, sin migrar nada.
+      let avisoCfg: any = null;
+      try { avisoCfg = C.TIENDA_AVISO_CFG ? JSON.parse(C.TIENDA_AVISO_CFG) : null; } catch { avisoCfg = null; }
+      return json({
+        estado: C.TIENDA_ESTADO || 'abierta', mensaje: C.TIENDA_MSG || '',
+        aviso: avisoTxt, avisoColor: avisoCol,                                  // ← compat: front viejo en la calle
+        avisoCfg: avNorm(avisoCfg || { txt: avisoTxt, color: avisoCol }),
+      });
+    }
     if (accion === 'setAvisoTienda') {
-      await setConfig('TIENDA_AVISO', P(body, 'aviso').trim().slice(0, 220));
-      const colA = P(body, 'color');
-      await setConfig('TIENDA_AVISO_COLOR', ['verde', 'dorado', 'rojo', 'azul'].indexOf(colA) !== -1 ? colA : 'verde');
-      return json({ ok: true });
+      // Lista blanca en TODO campo enumerado: un payload raro cae a su default y el
+      // aviso se publica igual, prolijo — nunca rompe la tienda ni inyecta CSS.
+      const cfgAv = avNorm({
+        txt: P(body, 'aviso'), estilo: P(body, 'estilo'), color: P(body, 'color'), neon: P(body, 'neon'),
+        anim: P(body, 'anim'), tam: P(body, 'tam'), modo: P(body, 'modo'), hasta: P(body, 'hasta'),
+      });
+      await setConfig('TIENDA_AVISO_CFG', JSON.stringify(cfgAv));
+      await setConfig('TIENDA_AVISO', cfgAv.txt);              // espejo para el front viejo
+      await setConfig('TIENDA_AVISO_COLOR', cfgAv.color);
+      return json({ ok: true, avisoCfg: cfgAv });
     }
     // 🎚️ Interruptor del acceso de Miri (v4.52) — los dos están en SOLO_JONY: Miri no puede ni
     // leerlo ni tocarlo. Apagado ⇒ el portero de arriba contesta 'acceso pausado' a su token.

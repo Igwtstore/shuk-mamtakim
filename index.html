@@ -975,6 +975,84 @@
   .empty { color:#ccc; font-size:0.88rem; text-align:center; padding:20px 0; }
   #flyer-overlay .btn-add { width:100%; padding:14px; background:linear-gradient(135deg,#1a1a2e,#3d3d77); color:#fff; border:none; border-radius:12px; font-size:0.95rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; }
 
+  /* ═══ 📣 AVISO DE LA TIENDA (v4.53) ═══════════════════════════════════════════
+     Antes se pintaba con style.cssText inline: no se podía animar, no seguía el
+     modo oscuro y obligaba a interpolar el color guardado dentro de una string de
+     CSS. Ahora TODO sale de clases con lista blanca (av-e-* estilo, av-c-*/av-n-*
+     color, av-a-* movimiento, av-tam-* tamaño): lo guardado NUNCA se concatena
+     dentro de CSS, solo se usa como sufijo de una clase validada.
+     El MISMO CSS pinta la tienda y la vista previa del panel, así la previa no miente.
+     ⚡ RENDIMIENTO: el glow (text-shadow de 5 capas) es FIJO — animarlo obliga a
+     re-rasterizar el texto con 5 blurs en cada frame y tironea el scroll en un
+     celular modesto. Todo el movimiento va por opacity, que sí compone en GPU. */
+  .aviso-t {
+    max-width: 900px; margin: 0.75rem auto 0; padding: 0.7rem 1rem; border-radius: 10px;
+    font-weight: 700; text-align: center; overflow-wrap: break-word; text-wrap: balance;
+    font-size: clamp(0.88rem, 3.4vw, 1.05rem); line-height: 1.55;
+  }
+  /* av-tam-M es el tamaño normal: no lleva regla propia, usa el font-size de .aviso-t */
+  .aviso-t.av-tam-S { font-size: clamp(0.8rem, 3vw, 0.92rem); }
+  .aviso-t.av-tam-L { font-size: clamp(1rem, 4.2vw, 1.35rem); }
+  /* Texto largo: el neón deja de leerse — se achica solo antes que quedar ilegible */
+  .aviso-t.av-largo { font-size: clamp(0.8rem, 2.9vw, 0.95rem); letter-spacing: 0; line-height: 1.5; }
+
+  /* ── Estilo FRANJA (el clásico, ahora con modo oscuro de verdad) ── */
+  .aviso-t.av-e-plano { background: var(--av-bg); border: 1px solid var(--av-bd); color: var(--av-fg); }
+  .av-c-verde  { --av-bg:#e8f6ec; --av-bd:#bfe3cb; --av-fg:#1a6b35; --av-bg-d:#16281c; --av-bd-d:#2c5138; --av-fg-d:#8fd8a6; }
+  .av-c-dorado { --av-bg:#fdf3e3; --av-bd:#ecd9b4; --av-fg:#8a5a1e; --av-bg-d:#2c2312; --av-bd-d:#584a2a; --av-fg-d:#e5bd76; }
+  .av-c-rojo   { --av-bg:#fdecea; --av-bd:#f5c6c0; --av-fg:#b02a1c; --av-bg-d:#2f1815; --av-bd-d:#5d302a; --av-fg-d:#f0958a; }
+  .av-c-azul   { --av-bg:#eef4fb; --av-bd:#cfe0f3; --av-fg:#1a5c8a; --av-bg-d:#141f2b; --av-bd-d:#2b4459; --av-fg-d:#8cc0e6; }
+  body.dark .aviso-t.av-e-plano { background: var(--av-bg-d); border-color: var(--av-bd-d); color: var(--av-fg-d); }
+
+  /* ── Estilo NEÓN: el cartel trae su propia caja oscura, así brilla igual sobre
+        el fondo claro de la tienda y sobre el oscuro. El glow es fijo. ── */
+  .aviso-t.av-e-neon {
+    background: #0b0808; border: 2px solid #2b2320; color: #fff;
+    padding: 1rem 1.15rem; letter-spacing: 0.02em;
+    text-shadow: 0 0 4px #fff, 0 0 9px #fff, 0 0 18px var(--av-n), 0 0 38px var(--av-n), 0 0 70px var(--av-n);
+    box-shadow: inset 0 0 22px -6px var(--av-n), 0 0 24px -8px var(--av-n);
+    border-color: var(--av-n);
+    position: relative;
+  }
+  .av-n-rosa  { --av-n:#ff2d95; }
+  .av-n-cyan  { --av-n:#00e5ff; }
+  .av-n-lima  { --av-n:#9dff3d; }
+  .av-n-ambar { --av-n:#ffb62e; }
+
+  /* Movimiento — SOLO opacity (compositor). Nunca text-shadow ni filter. */
+  @keyframes av-flicker  { 0%,18%,20.5%,22.5%,53%,57%,100% { opacity:1 } 19%,21%,54%,55.5% { opacity:.32 } }
+  @keyframes av-respirar { from { opacity:.82 } to { opacity:1 } }
+  @keyframes av-arranque { 0%,3%,7%,12% { opacity:.15 } 2%,5%,10%,16%,100% { opacity:1 } }
+  .aviso-t.av-a-clasico     { animation: av-flicker 6s linear infinite; }
+  .aviso-t.av-a-respiracion { animation: av-respirar 1.9s ease-in-out infinite alternate; }
+  .aviso-t.av-a-arranque    { animation: av-arranque 7s linear infinite; }
+  /* Marquesina: el movimiento va en el MARCO (4px), el texto queda quieto y se lee perfecto */
+  .aviso-t.av-a-marquesina { border-color: transparent; }
+  .aviso-t.av-a-marquesina::before {
+    content: ""; position: absolute; inset: 0; border-radius: 10px; pointer-events: none;
+    background:
+      repeating-linear-gradient(90deg, var(--av-n) 0 9px, transparent 9px 22px) top/100% 4px no-repeat,
+      repeating-linear-gradient(90deg, var(--av-n) 0 9px, transparent 9px 22px) bottom/100% 4px no-repeat,
+      repeating-linear-gradient(0deg, var(--av-n) 0 9px, transparent 9px 22px) left/4px 100% no-repeat,
+      repeating-linear-gradient(0deg, var(--av-n) 0 9px, transparent 9px 22px) right/4px 100% no-repeat;
+    animation: av-correr .7s linear infinite;
+  }
+  @keyframes av-correr { to { background-position: top 0 left 22px, bottom 0 left 22px, left 0 top 22px, right 0 top 22px; } }
+
+  /* Accesibilidad: quien pidió menos movimiento ve el cartel encendido y quieto.
+     Los parpadeos rápidos pueden marear y en casos raros dañar a una persona
+     fotosensible — el brillo se conserva, el titileo no. */
+  @media (prefers-reduced-motion: reduce) {
+    .aviso-t.av-a-clasico, .aviso-t.av-a-respiracion, .aviso-t.av-a-arranque { animation: none; opacity: 1; }
+    .aviso-t.av-a-marquesina::before { animation: none; }
+  }
+  /* Al imprimir el catálogo, el cartel sale como texto plano (la caja negra se comía el tóner) */
+  @media print {
+    .aviso-t { background:#fff !important; color:#000 !important; border:1px solid #ccc !important;
+      text-shadow:none !important; box-shadow:none !important; animation:none !important; }
+    .aviso-t.av-a-marquesina::before { display:none !important; }
+  }
+
 </style>
 </head>
 <body>
@@ -1241,14 +1319,53 @@
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Una franja arriba del catálogo con lo que quieras comunicar. <b>Vacío = no se muestra nada.</b></div>
     <textarea id="aviso-texto" rows="2" maxlength="220" placeholder="ej: 🚚 Envíos SIN CARGO en compras superiores a $120.000 dentro de CABA"
       style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;box-sizing:border-box;resize:vertical"></textarea>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.5rem">
-      <span style="font-size:0.76rem;color:var(--texto-suave)">Color:</span>
-      <button type="button" onclick="_avisoColor('verde')" class="aviso-col-btn" data-col="verde" style="padding:0.35rem 0.7rem;border:2px solid #bfe3cb;border-radius:8px;background:#e8f6ec;color:#1a6b35;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Verde</button>
-      <button type="button" onclick="_avisoColor('dorado')" class="aviso-col-btn" data-col="dorado" style="padding:0.35rem 0.7rem;border:2px solid #ecd9b4;border-radius:8px;background:#fdf3e3;color:#8a5a1e;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Dorado</button>
-      <button type="button" onclick="_avisoColor('azul')" class="aviso-col-btn" data-col="azul" style="padding:0.35rem 0.7rem;border:2px solid #cfe0f3;border-radius:8px;background:#eef4fb;color:#1a5c8a;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Azul</button>
-      <button type="button" onclick="_avisoColor('rojo')" class="aviso-col-btn" data-col="rojo" style="padding:0.35rem 0.7rem;border:2px solid #f5c6c0;border-radius:8px;background:#fdecea;color:#b02a1c;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Rojo</button>
+    <!-- 🎨 Estilo (v4.53): Franja = la de siempre · Neón = cartel titilante -->
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.6rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Estilo:</span>
+      <button type="button" onclick="_avSet('estilo','plano')" data-av="estilo" data-val="plano" style="padding:0.35rem 0.8rem;border:2px solid var(--gris-medio);border-radius:8px;background:#fff;color:var(--texto);font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Franja</button>
+      <button type="button" onclick="_avSet('estilo','neon')" data-av="estilo" data-val="neon" style="padding:0.35rem 0.8rem;border:2px solid #2b2320;border-radius:8px;background:#0b0808;color:#fff;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer;text-shadow:0 0 6px #ff2d95">💡 Neón</button>
     </div>
-    <div style="font-size:0.72rem;color:var(--texto-suave);margin:0.6rem 0 0.25rem">Así lo va a ver el cliente:</div>
+    <div id="aviso-paleta-plano" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Color:</span>
+      <button type="button" onclick="_avSet('color','verde')" data-av="color" data-val="verde" style="padding:0.35rem 0.7rem;border:2px solid #bfe3cb;border-radius:8px;background:#e8f6ec;color:#1a6b35;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Verde</button>
+      <button type="button" onclick="_avSet('color','dorado')" data-av="color" data-val="dorado" style="padding:0.35rem 0.7rem;border:2px solid #ecd9b4;border-radius:8px;background:#fdf3e3;color:#8a5a1e;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Dorado</button>
+      <button type="button" onclick="_avSet('color','azul')" data-av="color" data-val="azul" style="padding:0.35rem 0.7rem;border:2px solid #cfe0f3;border-radius:8px;background:#eef4fb;color:#1a5c8a;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Azul</button>
+      <button type="button" onclick="_avSet('color','rojo')" data-av="color" data-val="rojo" style="padding:0.35rem 0.7rem;border:2px solid #f5c6c0;border-radius:8px;background:#fdecea;color:#b02a1c;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer">Rojo</button>
+    </div>
+    <div id="aviso-paleta-neon" style="display:none;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Color:</span>
+      <button type="button" onclick="_avSet('neon','rosa')" data-av="neon" data-val="rosa" style="padding:0.35rem 0.7rem;border:2px solid #ff2d95;border-radius:8px;background:#0b0808;color:#ff2d95;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer;text-shadow:0 0 8px #ff2d95">Rosa</button>
+      <button type="button" onclick="_avSet('neon','cyan')" data-av="neon" data-val="cyan" style="padding:0.35rem 0.7rem;border:2px solid #00e5ff;border-radius:8px;background:#0b0808;color:#00e5ff;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer;text-shadow:0 0 8px #00e5ff">Cyan</button>
+      <button type="button" onclick="_avSet('neon','lima')" data-av="neon" data-val="lima" style="padding:0.35rem 0.7rem;border:2px solid #9dff3d;border-radius:8px;background:#0b0808;color:#9dff3d;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer;text-shadow:0 0 8px #9dff3d">Lima</button>
+      <button type="button" onclick="_avSet('neon','ambar')" data-av="neon" data-val="ambar" style="padding:0.35rem 0.7rem;border:2px solid #ffb62e;border-radius:8px;background:#0b0808;color:#ffb62e;font-family:inherit;font-weight:700;font-size:0.76rem;cursor:pointer;text-shadow:0 0 8px #ffb62e">Ámbar</button>
+    </div>
+    <div id="aviso-fila-mov" style="display:none;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Titila:</span>
+      <button type="button" onclick="_avSet('anim','respiracion')" data-av="anim" data-val="respiracion" class="av-mov-btn" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">Respiración ⭐</button>
+      <button type="button" onclick="_avSet('anim','clasico')" data-av="anim" data-val="clasico" class="av-mov-btn" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">Clásico</button>
+      <button type="button" onclick="_avSet('anim','arranque')" data-av="anim" data-val="arranque" class="av-mov-btn" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">Arranque</button>
+      <button type="button" onclick="_avSet('anim','marquesina')" data-av="anim" data-val="marquesina" class="av-mov-btn" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">Marquesina</button>
+      <button type="button" onclick="_avSet('anim','ninguna')" data-av="anim" data-val="ninguna" class="av-mov-btn" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">Quieto</button>
+    </div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Tamaño:</span>
+      <button type="button" onclick="_avSet('tam','S')" data-av="tam" data-val="S" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.72rem;cursor:pointer">Chico</button>
+      <button type="button" onclick="_avSet('tam','M')" data-av="tam" data-val="M" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.78rem;cursor:pointer">Normal</button>
+      <button type="button" onclick="_avSet('tam','L')" data-av="tam" data-val="L" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.86rem;cursor:pointer">Grande</button>
+    </div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Lo ve:</span>
+      <button type="button" onclick="_avSet('modo','ambos')" data-av="modo" data-val="ambos" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">🏪 Todos</button>
+      <button type="button" onclick="_avSet('modo','mayorista')" data-av="modo" data-val="mayorista" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">📦 Solo mayorista</button>
+      <button type="button" onclick="_avSet('modo','minorista')" data-av="modo" data-val="minorista" style="padding:0.35rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer">🛍️ Solo minorista</button>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <span style="font-size:0.76rem;color:var(--texto-suave);min-width:52px">Hasta:</span>
+      <input type="date" id="aviso-hasta" style="padding:0.4rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.8rem">
+      <span style="font-size:0.72rem;color:var(--texto-suave)">vacío = sin vencimiento · se apaga solo esa noche</span>
+    </div>
+    <div id="aviso-info" style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.5rem">0/220 caracteres</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin:0.5rem 0 0.25rem">Así lo va a ver el cliente:</div>
     <div id="aviso-preview" style="padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)">(sin aviso)</div>
     <button class="guardar-stock-btn" onclick="guardarAvisoTienda()" style="margin-top:0.6rem">Guardar aviso</button>
   </div>
@@ -2387,7 +2504,8 @@ const TOKENS = { minorista: 'min-pL3q7', admin: 'adm-wR7j4' };
 
 // Estado de la tienda: 'abierta' | 'cotizacion' | 'cerrada'
 let _estadoTienda = 'abierta', _tiendaMsg = '';
-let _tiendaAviso = '', _tiendaAvisoColor = 'verde';   // 📣 banner de texto libre de la tienda
+let _tiendaAviso = '', _tiendaAvisoColor = 'verde';   // 📣 espejo del formato viejo (compat)
+let _avisoCfg = { txt: '', estilo: 'plano', color: 'verde', neon: 'rosa', anim: 'respiracion', tam: 'M', modo: 'ambos', hasta: '' };
 async function cargarEstadoTienda() {
   try {
     const d = await fetch(`${APPS_SCRIPT_URL}?accion=getEstadoTienda&z=${Date.now()}`).then(r => r.json());
@@ -2395,62 +2513,150 @@ async function cargarEstadoTienda() {
     _tiendaMsg = d.mensaje || '';
     _tiendaAviso = (d.aviso || '').trim();
     _tiendaAvisoColor = d.avisoColor || 'verde';
+    // 📣 Config nueva del aviso (v4.53). Si el backend todavía no la manda (o quedó un
+    // aviso guardado con el formato viejo), se arma desde aviso+avisoColor: la tienda
+    // sigue mostrando exactamente lo mismo que antes. Nunca se rompe por versión.
+    _avisoCfg = _avNormalizar(d.avisoCfg && d.avisoCfg.txt !== undefined
+      ? d.avisoCfg
+      : { txt: _tiendaAviso, color: _tiendaAvisoColor });
   } catch (e) { _estadoTienda = 'abierta'; }
   pintarBannerTienda();
   pintarAvisoTienda();
   marcarEstadoTiendaBtn();
 }
 
-// 📣 AVISO DE LA TIENDA — franja de texto libre que escribe Jony desde el panel
-// ("Envíos sin cargo en compras superiores a $120.000 dentro de CABA"). Vacío = no se muestra.
-const _AVISO_COLORES = {
-  verde:  { bg: '#e8f6ec', bd: '#bfe3cb', fg: '#1a6b35' },
-  dorado: { bg: '#fdf3e3', bd: '#ecd9b4', fg: '#8a5a1e' },
-  rojo:   { bg: '#fdecea', bd: '#f5c6c0', fg: '#b02a1c' },
-  azul:   { bg: '#eef4fb', bd: '#cfe0f3', fg: '#1a5c8a' },
+// 📣 AVISO DE LA TIENDA (v4.53) — franja/cartel de texto libre que escribe Jony.
+// De un color fijo pasó a ser configurable: estilo (franja o NEÓN titilante), color,
+// movimiento, tamaño, a qué canal se le muestra y hasta cuándo vive.
+//
+// 🔒 REGLA DE SEGURIDAD: lo guardado NUNCA se interpola dentro de CSS. Cada valor se
+//    usa SOLO como clave de un mapa de lista blanca o sufijo de una clase validada
+//    (av-e-*, av-c-*, av-n-*, av-a-*, av-tam-*), y el texto siempre por textContent.
+//    Un color inventado tipo `verde;background:url(...)` no puede inyectar nada.
+const _AV_LISTAS = {
+  estilo: ['plano', 'neon'],
+  color:  ['verde', 'dorado', 'rojo', 'azul'],
+  neon:   ['rosa', 'cyan', 'lima', 'ambar'],
+  anim:   ['ninguna', 'clasico', 'respiracion', 'arranque', 'marquesina'],
+  tam:    ['S', 'M', 'L'],
+  modo:   ['ambos', 'mayorista', 'minorista'],
 };
-// ── Panel: editar el aviso, con vista previa en vivo ──────────────────────────
-let _avisoColorSel = 'verde';
-function _avisoColor(c) { _avisoColorSel = c; _avisoPreview(); }
+const _AV_DEF = { txt: '', estilo: 'plano', color: 'verde', neon: 'rosa', anim: 'respiracion', tam: 'M', modo: 'ambos', hasta: '' };
+const _avUno = (v, lista, def) => (lista.indexOf(String(v == null ? '' : v)) !== -1 ? String(v) : def);
+// Limpia invisibles (zero-width / blando) que se cuelan al pegar de WhatsApp: sin esto,
+// un aviso "vacío" de puros invisibles publicaba una caja de neón negra sin texto.
+const _avTexto = (v) => String(v == null ? '' : v).replace(/[​-‍﻿­]/g, '').replace(/\s+/g, ' ').trim().slice(0, 220);
+// Fecha de hoy en Argentina como 'yyyy-MM-dd'. Se usa SIEMPRE ISO y se compara como
+// STRING: es el formato que ordena solo. (Acá está el bug de fecha_oferta —dos formatos
+// conviviendo, uno que nunca vence— y no se repite.)
+const _hoyAR = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+function _avNormalizar(raw) {
+  const c = (raw && typeof raw === 'object') ? raw : {};
+  return {
+    txt: _avTexto(c.txt),
+    estilo: _avUno(c.estilo, _AV_LISTAS.estilo, _AV_DEF.estilo),
+    color:  _avUno(c.color,  _AV_LISTAS.color,  _AV_DEF.color),
+    neon:   _avUno(c.neon,   _AV_LISTAS.neon,   _AV_DEF.neon),
+    anim:   _avUno(c.anim,   _AV_LISTAS.anim,   _AV_DEF.anim),
+    tam:    _avUno(c.tam,    _AV_LISTAS.tam,    _AV_DEF.tam),
+    modo:   _avUno(c.modo,   _AV_LISTAS.modo,   _AV_DEF.modo),
+    hasta:  /^\d{4}-\d{2}-\d{2}$/.test(String(c.hasta || '')) ? String(c.hasta) : '',
+  };
+}
+// Vence al TERMINAR el día elegido (inclusive), como en la tienda Candy.
+const _avVigente = (c) => !c.hasta || _hoyAR() <= c.hasta;
+const _avAplicaAlModo = (c, m) => c.modo === 'ambos' || c.modo === m;
+// El className completo, armado solo con piezas de lista blanca.
+function _avClases(c) {
+  const cls = ['aviso-t', 'av-e-' + c.estilo, 'av-tam-' + c.tam];
+  cls.push(c.estilo === 'neon' ? 'av-n-' + c.neon : 'av-c-' + c.color);
+  if (c.estilo === 'neon' && c.anim !== 'ninguna') cls.push('av-a-' + c.anim);
+  if (c.txt.length > 110) cls.push('av-largo');   // texto largo: achica antes que quedar ilegible
+  return cls.join(' ');
+}
+
+// ── Panel: editar el aviso, con vista previa REAL (mismo CSS que la tienda) ────
+let _avEdit = Object.assign({}, _AV_DEF);
+function _avSet(campo, valor) {
+  if (!_AV_LISTAS[campo] || _AV_LISTAS[campo].indexOf(valor) === -1) return;
+  _avEdit[campo] = valor;
+  _avisoPreview();
+}
+function _avisoColor(c) { _avSet(_avEdit.estilo === 'neon' ? 'neon' : 'color', c); }   // compat con los onclick viejos
 function _avisoPreview() {
-  const t = ((document.getElementById('aviso-texto') || {}).value || '').trim();
-  const pv = document.getElementById('aviso-preview');
-  document.querySelectorAll('.aviso-col-btn').forEach(b => {
-    const sel = b.dataset.col === _avisoColorSel;
-    b.style.outline = sel ? '2px solid var(--azul)' : 'none';
+  const ta = document.getElementById('aviso-texto');
+  _avEdit.txt = _avTexto(ta ? ta.value : '');
+  const fh = document.getElementById('aviso-hasta');
+  _avEdit.hasta = (fh && /^\d{4}-\d{2}-\d{2}$/.test(fh.value)) ? fh.value : '';
+  const esNeon = _avEdit.estilo === 'neon';
+  // Mostrar los controles que corresponden al estilo elegido
+  const paleta = document.getElementById('aviso-paleta-plano'), paletaN = document.getElementById('aviso-paleta-neon'),
+        filaMov = document.getElementById('aviso-fila-mov');
+  if (paleta)  paleta.style.display  = esNeon ? 'none' : '';
+  if (paletaN) paletaN.style.display = esNeon ? '' : 'none';
+  if (filaMov) filaMov.style.display = esNeon ? '' : 'none';
+  // Marcar el botón activo de cada grupo (data-av="campo" data-val="valor")
+  document.querySelectorAll('[data-av]').forEach(b => {
+    const on = _avEdit[b.dataset.av] === b.dataset.val;
+    b.style.outline = on ? '2px solid var(--azul)' : 'none';
     b.style.outlineOffset = '1px';
+    b.style.opacity = on ? '1' : '0.72';
   });
+  // Contador + avisos honestos
+  const info = document.getElementById('aviso-info');
+  if (info) {
+    const n = _avEdit.txt.length;
+    let msg = n + '/220 caracteres';
+    if (esNeon && n > 90) msg += ' · ⚠️ arriba de 90 el neón se lee peor — probá el estilo Franja o achicá el texto';
+    if (_avEdit.hasta && !_avVigente(_avEdit)) msg += ' · ⚠️ esa fecha ya pasó: no se va a mostrar';
+    else if (_avEdit.hasta) msg += ' · se apaga solo después del ' + _avEdit.hasta.split('-').reverse().join('/');
+    if (_avEdit.modo !== 'ambos') msg += ' · solo lo ve el canal ' + _avEdit.modo;
+    info.textContent = msg;
+  }
+  const pv = document.getElementById('aviso-preview');
   if (!pv) return;
-  if (!t) {
-    pv.style.cssText = 'padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)';
+  if (!_avEdit.txt) {
+    pv.className = '';
+    pv.style.cssText = 'padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)';
     pv.textContent = '(sin aviso — no se muestra nada en la tienda)';
     return;
   }
-  const c = _AVISO_COLORES[_avisoColorSel] || _AVISO_COLORES.verde;
-  pv.style.cssText = `padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:${c.bg};border:1px solid ${c.bd};color:${c.fg}`;
-  pv.textContent = t;
+  pv.style.cssText = 'margin:0 auto';        // el resto lo pone el CSS de .aviso-t
+  pv.className = _avClases(_avEdit);
+  pv.textContent = _avEdit.txt;
 }
 async function guardarAvisoTienda() {
-  const t = ((document.getElementById('aviso-texto') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 220);
-  const r = await apiWrite(new URLSearchParams({ accion: 'setAvisoTienda', aviso: t, color: _avisoColorSel }),
-    t ? '📣 Aviso publicado en la tienda ✓' : '📣 Aviso quitado de la tienda ✓');
-  if (r && r.ok) { _tiendaAviso = t; _tiendaAvisoColor = _avisoColorSel; pintarAvisoTienda(); }
+  _avisoPreview();                            // sincroniza texto/fecha antes de mandar
+  const cfg = _avNormalizar(_avEdit);
+  const r = await apiWrite(new URLSearchParams({
+    accion: 'setAvisoTienda', aviso: cfg.txt, color: cfg.color,   // ← compat con el formato viejo
+    estilo: cfg.estilo, neon: cfg.neon, anim: cfg.anim, tam: cfg.tam, modo: cfg.modo, hasta: cfg.hasta,
+  }), cfg.txt ? '📣 Aviso publicado en la tienda ✓' : '📣 Aviso quitado de la tienda ✓');
+  if (r && r.ok) {
+    _avisoCfg = cfg;
+    _tiendaAviso = cfg.txt; _tiendaAvisoColor = cfg.color;   // espejo para código viejo
+    pintarAvisoTienda();
+  }
 }
 // Carga el aviso guardado en los campos del panel (se llama al abrir el panel).
 function cargarAvisoEnPanel() {
   const ta = document.getElementById('aviso-texto');
   if (!ta) return;
-  ta.value = _tiendaAviso || '';
-  _avisoColorSel = _tiendaAvisoColor || 'verde';
+  _avEdit = Object.assign({}, _avisoCfg);
+  ta.value = _avEdit.txt || '';
+  const fh = document.getElementById('aviso-hasta');
+  if (fh) fh.value = _avEdit.hasta || '';
   if (!ta._lig) { ta.addEventListener('input', _avisoPreview); ta._lig = true; }
+  if (fh && !fh._lig) { fh.addEventListener('change', _avisoPreview); fh._lig = true; }
   _avisoPreview();
 }
 
 function pintarAvisoTienda() {
   let a = document.getElementById('aviso-tienda');
   const enTienda = modo === 'mayorista' || modo === 'minorista';
-  if (!_tiendaAviso || !enTienda) { if (a) a.remove(); return; }
-  const c = _AVISO_COLORES[_tiendaAvisoColor] || _AVISO_COLORES.verde;
+  const c = _avisoCfg;
+  const mostrar = c.txt && enTienda && _avVigente(c) && _avAplicaAlModo(c, modo);
+  if (!mostrar) { if (a) a.remove(); return; }
   if (!a) {
     a = document.createElement('div');
     a.id = 'aviso-tienda';
@@ -2460,9 +2666,9 @@ function pintarAvisoTienda() {
     const est = document.getElementById('estado-tienda-banner');
     cont.insertBefore(a, est && est.parentNode === cont ? est.nextSibling : cont.firstChild);
   }
-  a.style.cssText = `max-width:900px;margin:0.75rem auto 0;padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;`
-    + `font-weight:700;text-align:center;line-height:1.35;background:${c.bg};border:1px solid ${c.bd};color:${c.fg}`;
-  a.textContent = _tiendaAviso;
+  a.className = _avClases(c);
+  a.style.cssText = '';                        // todo el estilo vive en el CSS, nada inline
+  a.textContent = c.txt;
 }
 function pintarBannerTienda() {
   let b = document.getElementById('estado-tienda-banner');
