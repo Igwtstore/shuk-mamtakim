@@ -1704,13 +1704,13 @@
   <div class="admin-card">
     <div class="admin-titulo">✏️ Cargar pedido manual</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
-      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-        <div class="nombre-campo" style="margin:0;flex:2;min-width:150px">
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+        <div class="nombre-campo" style="margin:0;flex:2;min-width:170px">
           <label>Cliente</label>
           <input type="text" id="manual-cliente" placeholder="Nombre del cliente" list="clientes-datalist" autocomplete="off" />
           <datalist id="clientes-datalist"></datalist>
         </div>
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
+        <div class="nombre-campo" style="margin:0;flex:1;min-width:145px">
           <label>Tipo</label>
           <select id="manual-tipo" onchange="renderManualProductos()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="Mayorista">Mayorista</option>
@@ -1726,11 +1726,13 @@
             <option value="Cuenta corriente">Cuenta corriente</option>
           </select>
         </div>
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:110px">
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+        <div class="nombre-campo" style="margin:0;flex:1 1 130px;max-width:210px">
           <label>📦 Envío $ <span style="font-weight:400;color:var(--texto-suave);font-size:0.75rem">(opcional)</span></label>
           <input type="number" id="manual-envio" min="0" step="any" placeholder="0" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;box-sizing:border-box" />
         </div>
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:135px">
+        <div class="nombre-campo" style="margin:0;flex:1 1 130px;max-width:210px">
           <label>🏷️ Desc. global %</label>
           <input type="number" id="manual-descuento" min="0" max="100" step="any" placeholder="0" oninput="actualizarTotalManual()" title="Descuento sobre TODO el pedido (además del que pongas por producto)" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;box-sizing:border-box" />
         </div>
