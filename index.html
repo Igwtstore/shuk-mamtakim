@@ -15342,6 +15342,9 @@ let _editPedidoActual = null;
 let _editLineas = [];
 let _editQtysOrig = {};   // cantidades por producto al abrir la edición (para ajustar stock)
 let _editNotas = [];      // renglones del pedido que no son productos (notas sueltas): se respetan al guardar
+// 📝 Nota del pedido tal como se abrió (para saber si cambió) y el prefijo '🟡 COTIZACIÓN · ',
+// que se guarda aparte para no borrarlo al editar el texto libre.
+let _editNotaOrig = '', _editNotaPrefijo = '';
 
 function abrirEditarPedido(v) {
   _editPedidoActual = v;
@@ -15449,6 +15452,18 @@ function abrirEditarPedido(v) {
   document.getElementById('ep-descuento').value = _descGuardado > 0 ? _descGuardado : '';
   const _epe = document.getElementById('ep-envio'); if (_epe) { const en = _enviosPorVenta[v.id]; _epe.value = (en && en.cobrado) ? en.cobrado : ''; }
   const _eptc = document.getElementById('ep-tc'); if (_eptc) _eptc.value = (parseFloat(v.tipoCambio) > 0) ? v.tipoCambio : '';
+  // 📝 Nota del pedido: se edita acá adentro (antes había que salir al botón 📝 de la tarjeta).
+  // 'Manual' es el marcador interno del pedido cargado a mano, no es una nota → no se muestra.
+  const _epn = document.getElementById('ep-nota');
+  if (_epn) {
+    let _n = (v.notas || '').toString();
+    if (_n.trim() === 'Manual') _n = '';
+    const _pfx = '🟡 COTIZACIÓN · ';
+    _editNotaPrefijo = (_n.indexOf(_pfx) === 0) ? _pfx : '';
+    if (_editNotaPrefijo) _n = _n.slice(_pfx.length);
+    _epn.value = _n;
+    _editNotaOrig = _n.trim();
+  }
 
   renderEditLineas();
   recalcularEditTotal();
@@ -15795,6 +15810,22 @@ async function guardarEditPedido() {
   try {
     const data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString());
     if (data.ok) {
+      // 📝 La nota va en su propia escritura: 'actualizarPedido' no toca la columna notas.
+      // Solo si cambió, conservando el prefijo de cotización. Va ANTES de los avisos que
+      // frenan con alert/confirm, para que no dependa de que el usuario los conteste.
+      const _epnEl = document.getElementById('ep-nota');
+      if (_epnEl) {
+        const _notaNueva = (_epnEl.value || '').replace(/\s+$/, '').trim().slice(0, 500);
+        if (_notaNueva !== _editNotaOrig) {
+          const _pn = new URLSearchParams({ accion: 'editarNotaPedido', id: _editPedidoActual.id, nota: _editNotaPrefijo + _notaNueva });
+          const _rn = await fetchConSesion(APPS_SCRIPT_URL + '?' + _pn.toString()).catch(() => ({}));
+          if (_rn && _rn.ok) {
+            _editPedidoActual.notas = _editNotaPrefijo + _notaNueva;
+            if (window._notaPorId) window._notaPorId[_editPedidoActual.id] = _editPedidoActual.notas;
+            _editNotaOrig = _notaNueva;
+          } else showToast('⚠️ El pedido se guardó, pero la nota NO — reintentala con el botón 📝');
+        }
+      }
       // Si el pedido ya estaba cobrado y la edición subió el total, el faltante quedó
       // como deuda en Cta Cte — avisarlo fuerte para que no pase desapercibido.
       if (data.deudaNueva && (data.deudaNueva.ars > 0 || data.deudaNueva.usd > 0)) {
@@ -16023,6 +16054,10 @@ function cerrarEditPedido() {
       <div class="edit-section-label">💱 Tipo de cambio <span style="font-weight:400;color:var(--texto-suave)">(U$S 1 = $ — necesario para la ganancia de golosinas vendidas en pesos)</span></div>
       <input type="number" id="ep-tc" min="0" step="any" placeholder="ej: 1500"
         style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.92rem;box-sizing:border-box;outline:none;margin-bottom:0.6rem" />
+
+      <div class="edit-section-label">📝 Nota del pedido <span style="font-weight:400;color:var(--texto-suave)">(sale en el remito y en el mensaje del pedido)</span></div>
+      <textarea id="ep-nota" rows="2" maxlength="500" placeholder="Ej: entregar el jueves, dejó seña, no tiene timbre..."
+        style="width:100%;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.92rem;box-sizing:border-box;outline:none;resize:vertical;margin-bottom:0.6rem"></textarea>
 
       <div class="edit-total-box">
         <span class="edit-total-label">Nuevo total</span>
