@@ -6009,8 +6009,11 @@ function _gridDims(n, areaW, areaH, gap, aspectMax) {
     ch = Math.min(ch, cw * aspectMax);
     // Penalizar la fila incompleta: con 3 productos, 3×1 se ve armado y 2+1
     // se ve descolgado. Un hueco al 40% del ancho cuesta un 12% del puntaje.
+    // Penalizar la fila incompleta: con 3 productos, 3×1 se ve armado y 2+1 deja
+    // una tarjeta huérfana con medio flyer vacío al lado (el defecto que más se
+    // nota en Historia, que es angosto y muy alto).
     const huecos = cols * filas - n;
-    const castigo = 1 - Math.min(0.3, (huecos / cols) * 0.3);
+    const castigo = 1 - Math.min(0.5, (huecos / cols) * 0.5);
     const score = Math.min(cw, ch) * castigo;
     if (score > bestScore + 0.5) { best = { cols, filas, cw, ch }; bestScore = score; }
   }
@@ -6200,16 +6203,19 @@ function _cardProd(ctx, p, im, x, y, w, h, tema, FT, estilo) {
   let priceFs = estilo === 'oferta'
     ? Math.max(19, Math.min(44, Math.round(w * 0.15)))
     : Math.max(15, Math.min(34, Math.round(w * 0.115)));
-  let nLineas = (chica || w < 150) ? 1 : 2;
+  // Antes de cortar un nombre largo se le da una línea más (los nombres del
+  // catálogo son largos: "Caramelos Masticables Toffee Double sabores frutales")
+  let nLineas = chica ? 1 : w < 150 ? 2 : 3;
   let nombreH = chica ? 0 : Math.round(nameFs0 * 1.18 * nLineas);
   let precioH = fMostrarPrecios ? Math.round(priceFs * (estilo === 'oferta' ? 1.9 : 1.75)) : 0;
   // Antes de resignar la 2ª línea (que es lo que TRUNCA el nombre con "…"),
   // se achica la letra: más vale un nombre chico y entero que cortado.
-  if (!chica && nLineas === 2 && nombreH + precioH > budget) {
-    const permitido = budget - precioH;
-    const fsCabe = Math.floor(permitido / (1.18 * 2));
-    if (fsCabe >= 14) { nameFs0 = fsCabe; nombreH = Math.round(nameFs0 * 1.18 * 2); }
-    else { nLineas = 1; nombreH = Math.round(nameFs0 * 1.18); }
+  // Se van resignando líneas de a una, achicando la letra primero: más vale un
+  // nombre chico y ENTERO que uno grande cortado con "…".
+  while (!chica && nLineas > 1 && nombreH + precioH > budget) {
+    const fsCabe = Math.floor((budget - precioH) / (1.18 * nLineas));
+    if (fsCabe >= 14) { nameFs0 = fsCabe; nombreH = Math.round(nameFs0 * 1.18 * nLineas); break; }
+    nLineas -= 1; nombreH = Math.round(nameFs0 * 1.18 * nLineas);
   }
   if (nombreH + precioH > budget) {
     const k = budget / (nombreH + precioH);
@@ -6417,7 +6423,12 @@ function _plantillaHeroe(ctx, prods, imgs, tema, FT, W, areaTop, areaBottom) {
 
 // Golosinas espolvoreadas por los bordes (según el tema). Es lo que saca al
 // flyer de la sobriedad: marco festivo sin taparle nada al contenido.
-function _decoTema(ctx, W, H, lista, soloBandas, corteTop, corteBottom) {
+// yTop/yBot acotan la franja visible (en Historia, lo que no tapa la interfaz
+// de WhatsApp/Instagram): la decoración se repliega ahí en vez de quedar
+// cortada por la barra de respuesta.
+function _decoTema(ctx, W, H, lista, soloBandas, corteTop, corteBottom, yTop, yBot) {
+  const y0 = yTop || 0, y1 = yBot || H;
+  const alto = y1 - y0;
   const spots = [
     [0.055, 0.048, 84, -0.30], [0.940, 0.042, 70, 0.25], [0.135, 0.150, 46, 0.40],
     [0.875, 0.145, 54, -0.35], [0.040, 0.300, 56, 0.20], [0.963, 0.320, 50, -0.20],
@@ -6425,7 +6436,7 @@ function _decoTema(ctx, W, H, lista, soloBandas, corteTop, corteBottom) {
     [0.085, 0.795, 50, -0.40]
   ];
   spots.forEach((s, i) => {
-    const y = s[1] * H;
+    const y = y0 + s[1] * alto;
     if (soloBandas && y > corteTop && y < corteBottom) return;
     ctx.save();
     ctx.translate(s[0] * W, y); ctx.rotate(s[3]);
@@ -6560,7 +6571,16 @@ async function dibujarFlyer(prods, t) {
   const compacto = H <= 1080;
   const headerH = compacto ? 362 : 406;   // logo + título + frase
   const conQR = fLink !== 'no';
-  const areaTop = headerH + 18, areaBottom = H - (conQR ? 306 : 236), areaH = areaBottom - areaTop;
+  // 📱 ZONA SEGURA (formato Historia): WhatsApp e Instagram tapan una franja
+  // arriba (nombre de quien publica) y otra abajo (caja de respuesta y
+  // reacciones). Sin este margen el QR y el teléfono —el llamado a la acción—
+  // quedan debajo de la interfaz y NO SE VEN.
+  const esHistoria = fFormato === 'historia';
+  const safeTop = esHistoria ? Math.round(H * 0.075) : 0;
+  const safeBot = esHistoria ? Math.round(H * 0.14) : 0;
+  const Hb = H - safeBot;   // borde inferior efectivo (donde termina lo visible)
+  const areaTop = safeTop + headerH + 18;
+  const areaBottom = Hb - (conQR ? 306 : 236), areaH = areaBottom - areaTop;
 
   // Fondo: Catálogo pinta papel con bandas del tema (el dibujo de IA, si hay,
   // viste la banda de arriba); el resto, dibujo de IA o degradé como siempre.
@@ -6576,7 +6596,7 @@ async function dibujarFlyer(prods, t) {
     }
     ctx.fillStyle = tema.accent; ctx.fillRect(0, headerH, W, 7);
     ctx.fillStyle = tema.a; ctx.fillRect(0, H - 224, W, 224);
-    _decoTema(ctx, W, H, DECO, true, headerH - 30, H - 200);
+    _decoTema(ctx, W, H, DECO, true, safeTop + headerH - 30, Hb - 200, safeTop, Hb);
   } else if (fFondoImg) {
     _coverImg(ctx, fFondoImg, 0, 0, W, H);
     ctx.fillStyle = 'rgba(15,20,40,0.30)'; ctx.fillRect(0, 0, W, H);
@@ -6599,9 +6619,9 @@ async function dibujarFlyer(prods, t) {
       ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
     });
     ctx.globalAlpha = 1;
-    _decoTema(ctx, W, H, DECO);
+    _decoTema(ctx, W, H, DECO, false, 0, 0, safeTop, Hb);
   }
-  if (fFondoImg && !esCatalogo) _decoTema(ctx, W, H, DECO);
+  if (fFondoImg && !esCatalogo) _decoTema(ctx, W, H, DECO, false, 0, 0, safeTop, Hb);
 
   // El sello de la marca
   // El sello de la marca: el LOGO REAL; si no cargó, el sello dibujado de siempre
@@ -6609,7 +6629,7 @@ async function dibujarFlyer(prods, t) {
   if (logoIm) {
     const lh = compacto ? 148 : 180;
     const lw = Math.round(lh * (logoIm.width / logoIm.height));
-    const lx = (W - lw) / 2, ly = compacto ? 18 : 22, lr = Math.round(lh * 0.16);
+    const lx = (W - lw) / 2, ly = safeTop + (compacto ? 18 : 22), lr = Math.round(lh * 0.16);
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.32)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 5;
     ctx.fillStyle = '#fdf3e3'; _rr(ctx, lx, ly, lw, lh, lr); ctx.fill();
@@ -6618,13 +6638,13 @@ async function dibujarFlyer(prods, t) {
     ctx.drawImage(logoIm, lx, ly, lw, lh);
     ctx.restore();
   } else {
-    _logoShuk(ctx, W / 2, compacto ? 98 : 116, compacto ? 66 : 80, FT);
+    _logoShuk(ctx, W / 2, safeTop + (compacto ? 98 : 116), compacto ? 66 : 80, FT);
   }
 
   // Título con contorno + destellos a los costados
   ctx.textAlign = 'center';
   let fs = compacto ? 76 : 88;
-  const titY = compacto ? 252 : 282;
+  const titY = safeTop + (compacto ? 252 : 282);
   do { ctx.font = '800 ' + fs + 'px ' + FT; fs -= 4; }
   while (ctx.measureText(t.titulo).width > 860 && fs > 40);
   const tw = ctx.measureText(t.titulo).width;
@@ -6641,7 +6661,7 @@ async function dibujarFlyer(prods, t) {
   ctx.font = '700 ' + (compacto ? 34 : 38) + 'px ' + FT;
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
-  _wrap(ctx, t.frase, 900, 2).forEach((l, i) => ctx.fillText(l, W / 2, (compacto ? 314 : 348) + i * (compacto ? 46 : 50)));
+  _wrap(ctx, t.frase, 900, 2).forEach((l, i) => ctx.fillText(l, W / 2, safeTop + (compacto ? 314 : 348) + i * (compacto ? 46 : 50)));
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
   // Área de productos
@@ -6662,14 +6682,14 @@ async function dibujarFlyer(prods, t) {
     : (fMotor === 'arte' && fFondoImg) ? 'vidrio' : 'card');
 
   // Cierre (pill grande) + banda de contacto (con QR si se eligió link)
-  const yC = H - (conQR ? 278 : 208);
+  const yC = Hb - (conQR ? 278 : 208);
   ctx.font = '800 46px ' + FT;
   const cw2 = Math.min(ctx.measureText(t.cierre).width + 80, W - 80);
   ctx.fillStyle = tema.accent;
   _rr(ctx, (W - cw2) / 2, yC, cw2, 78, 39); ctx.fill();
   ctx.fillStyle = '#2d1a0a';
   ctx.fillText(t.cierre, W / 2, yC + 54);
-  _pieBanner(ctx, W, H, tema, FT, qrIm);
+  _pieBanner(ctx, W, Hb, tema, FT, qrIm);
 }
 
 // Etiqueta tipo cinta ("🔥 OFERTA") inclinada sobre la tarjeta
