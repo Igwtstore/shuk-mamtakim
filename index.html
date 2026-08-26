@@ -965,7 +965,7 @@
   .wizard-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5e0d8; transition: background 0.2s; }
   .wizard-dot.active { background: #5c3d1e; }
   .wizard-dot.done { background: #2e8b57; }
-  .wizard-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .wizard-body { flex: 1; overflow-y: auto; padding: 20px 20px 34px; }
   .wizard-footer { padding: 16px 20px 32px; background: white; box-shadow: 0 -2px 8px rgba(0,0,0,0.06); flex-shrink: 0; }
   .wizard-step { display: none; }
   .wizard-step.active { display: block; }
@@ -5465,7 +5465,7 @@ function _syncCatalogoFlyer() {
     .sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre))
     .map(p => {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
-    const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/e_trim:10/w_800,') : '';
+    const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/e_trim:10/w_1400,') : '';
     return {
       codigo: String(p.id), nombre: p.nombre,
       precioVenta: fPrecioModo === 'may'
@@ -5481,7 +5481,8 @@ function fmtFlyer(n) {
     : '$' + (parseFloat(n) || 0).toLocaleString('es-AR');
 }
 
-let fStep = 0, fSel = {}, fTextos = null, fFondoImg = null;
+let fStep = 0, fSel = {}, fTextos = null, fFondoImg = null, fMotor = 'canvas';
+let fMostrarPrecios = true, fLink = 'no';   // link a la tienda: 'no' | 'may' | 'min'
 let fFormato = 'post', fTema = 'clasico', fPlantilla = 'grilla', fExtras = {};
 let fUltimaURL = '', fGuardando = null;
 const esIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -5491,24 +5492,27 @@ const FORMATOS = { post: { W: 1080, H: 1350, label: '📄 Clásico' }, cuadrado:
 const TEMAS = {
   clasico:  { label: '🎨 Clásico', prompt: '' },
   acorde:   { label: '🍬 Según productos', prompt: '' },
-  cumple:   { label: '🎂 Cumple',   a: '#7b2ff7', b: '#f107a3', accent: '#ffd24a', prompt: 'birthday party with balloons and confetti' },
-  invierno: { label: '❄️ Invierno', a: '#0f3057', b: '#1d9bd1', accent: '#ffd24a', prompt: 'cozy winter, snowflakes and hot chocolate' },
-  januca:   { label: '🕎 Janucá',   a: '#0d2b6b', b: '#2e6fd8', accent: '#ffd24a', prompt: 'Hanukkah festive glow, dreidels and golden sparkles' },
-  purim:    { label: '🎭 Purim',    a: '#d81b60', b: '#8e24aa', accent: '#ffe082', prompt: 'Purim carnival, masks and confetti' },
-  pesaj:    { label: '🍷 Pésaj',    a: '#1a7a3c', b: '#66bb6a', accent: '#ffe082', prompt: 'Passover spring festive abstract' },
-  verano:   { label: '☀️ Verano',   a: '#ff8f00', b: '#f4511e', accent: '#fff59d', prompt: 'summer beach popsicle vibes' }
+  cumple:   { label: '🎂 Cumple',   a: '#7b2ff7', b: '#f107a3', accent: '#ffd24a', prompt: 'birthday party with balloons and confetti', deco: ['🎈','🎉','🎂','🍭','✨','🎁'] },
+  invierno: { label: '❄️ Invierno', a: '#0f3057', b: '#1d9bd1', accent: '#ffd24a', prompt: 'cozy winter, snowflakes and hot chocolate', deco: ['❄️','⛄','🧣','☕','🍫','✨'] },
+  januca:   { label: '🕎 Janucá',   a: '#0d2b6b', b: '#2e6fd8', accent: '#ffd24a', prompt: 'Hanukkah festive glow, dreidels and golden sparkles', deco: ['🕎','✨','🕯️','🍩','⭐','💙'] },
+  purim:    { label: '🎭 Purim',    a: '#d81b60', b: '#8e24aa', accent: '#ffe082', prompt: 'Purim carnival, masks and confetti', deco: ['🎭','🎉','🍬','🥳','✨','🍭'] },
+  pesaj:    { label: '🍷 Pésaj',    a: '#1a7a3c', b: '#66bb6a', accent: '#ffe082', prompt: 'Passover spring festive abstract', deco: ['🍷','🌿','🌸','✨','🍇','🕊️'] },
+  verano:   { label: '☀️ Verano',   a: '#ff8f00', b: '#f4511e', accent: '#fff59d', prompt: 'summer beach popsicle vibes', deco: ['☀️','🍉','🍦','🌴','🍭','😎'] }
 };
-const PLANTILLAS = { grilla: '🧇 Grilla', heroe: '⭐ Héroe', lista: '📋 Lista' };
+const PLANTILLAS = { grilla: '🧇 Grilla', heroe: '⭐ Héroe', lista: '📋 Lista', oferta: '💥 Oferta', catalogo: '🗂️ Catálogo', aire: '✨ Aire' };
 const BADGES = ['', '🔥 OFERTA', '✨ NUEVO', '⏳ ÚLTIMOS'];
 
 function abrirFlyer(prefill) {
   _syncCatalogoFlyer();
   if (!catalogoCache.length) { alert('No hay productos en el catálogo'); return; }
   fStep = 0; fSel = {}; fTextos = null; fFondoImg = null; fExtras = {};
-  fFormato = 'post'; fTema = 'clasico'; fPlantilla = 'grilla';
+  fFormato = 'post'; fTema = 'clasico'; fPlantilla = 'grilla'; fMotor = 'canvas';
+  fMostrarPrecios = true; fLink = 'no';
   fUltimaURL = ''; fGuardando = null;
   document.getElementById('flyer-idea').value = '';
   document.getElementById('flyer-fondo').checked = false;
+  document.getElementById('flyer-buscar').value = '';
+  document.getElementById('flyer-caption').style.display = 'none';
   if (prefill) {
     (prefill.codigos || '').split(',').forEach(c => {
       if (catalogoCache.find(p => p.codigo === c)) fSel[c] = true;
@@ -5518,6 +5522,9 @@ function abrirFlyer(prefill) {
     if (prefill.config) {
       try {
         const cfg = JSON.parse(prefill.config);
+        fMotor = ['ia', 'arte'].indexOf(cfg.motor) !== -1 ? cfg.motor : 'canvas';
+        fMostrarPrecios = cfg.precios !== false;
+        fLink = ['may', 'min'].indexOf(cfg.link) !== -1 ? cfg.link : 'no';
         if (FORMATOS[cfg.formato]) fFormato = cfg.formato;
         if (TEMAS[cfg.tema]) fTema = cfg.tema;
         if (PLANTILLAS[cfg.plantilla]) fPlantilla = cfg.plantilla;
@@ -5531,8 +5538,15 @@ function abrirFlyer(prefill) {
 }
 function cerrarFlyer() { document.getElementById('flyer-overlay').classList.remove('open'); }
 
+function _flyerFiltrados() {
+  const q = (document.getElementById('flyer-buscar').value || '').trim().toLowerCase();
+  return q ? catalogoCache.filter(p => p.nombre.toLowerCase().includes(q)) : catalogoCache;
+}
+
 function renderFlyerGrid() {
-  document.getElementById('flyer-prod-grid').innerHTML = catalogoCache.map(p => {
+  const cuantos = Object.keys(fSel).length;
+  document.getElementById('flyer-cont').textContent = cuantos === 0 ? 'ninguno todavía' : cuantos === 1 ? '1 elegido' : cuantos + ' elegidos';
+  document.getElementById('flyer-prod-grid').innerHTML = (_flyerFiltrados().map(p => {
     const sel = !!fSel[p.codigo];
     const img = p.foto
       ? `<img src="${p.foto}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
@@ -5543,15 +5557,20 @@ function renderFlyerGrid() {
       <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${p.nombre}</div>
       <div style="font-size:0.68rem;color:#8b5e3c;font-weight:700">${fmtFlyer(p.precioVenta)}</div>
     </div>`;
-  }).join('');
+  }).join('')) || '<div class="empty">Nada con ese nombre 🤷</div>';
 }
 
 function toggleFlyerProd(codigo) {
   if (fSel[codigo]) delete fSel[codigo];
-  else {
-    if (Object.keys(fSel).length >= 6) { showToast('Máximo 6 productos 🙏'); return; }
-    fSel[codigo] = true;
-  }
+  else fSel[codigo] = true;
+  renderFlyerGrid();
+}
+
+// Selección masiva: "Todos" agarra lo que está a la vista (si buscaste
+// "elite", marca todos los Elite); "Ninguno" limpia todo.
+function flyerSelTodos(si) {
+  if (si) _flyerFiltrados().forEach(p => fSel[p.codigo] = true);
+  else fSel = {};
   renderFlyerGrid();
 }
 
@@ -5637,15 +5656,51 @@ function _chip(activo) {
     ';font-weight:700;font-size:0.82rem;cursor:pointer';
 }
 
+function elegirMotorFlyer(m) {
+  if (m === 'ia' && Object.keys(fSel).length > 8) { showToast('El Diseño IA acepta hasta 8 productos 🙏'); return; }
+  fMotor = m;
+  // 🎨 Arte IA = híbrido: la IA pinta la escenografía, el motor pega TUS fotos,
+  // TU logo y los precios exactos encima. Por eso el fondo va sí o sí.
+  if (m === 'arte') {
+    document.getElementById('flyer-fondo').checked = true;
+    if (fPlantilla !== 'aire' && fPlantilla !== 'heroe') fPlantilla = 'aire';
+  }
+  renderFlyerOpciones();
+}
+
 function renderFlyerOpciones() {
+  document.getElementById('flyer-motor').innerHTML = [
+    ['canvas', '⚡ Al toque (gratis)'],
+    ['arte', '🎨 Arte IA (~1 min)'],
+    ['ia', '🪄 IA total (~2 min)']
+  ].map(par => `<button style="${_chip(fMotor === par[0])}" onclick="elegirMotorFlyer('${par[0]}')">${par[1]}</button>`).join('');
+  const esIA = fMotor === 'ia', esArte = fMotor === 'arte';
+  // En IA total no aplican ni la plantilla ni el fondo (el diseño ES de la IA).
+  // En Arte IA el fondo es obligatorio, así que la casilla no se muestra.
+  document.getElementById('flyer-plantillas-label').style.display = esIA ? 'none' : '';
+  document.getElementById('flyer-plantillas').style.display = esIA ? 'none' : 'flex';
+  document.getElementById('flyer-fondo-wrap').style.display = (esIA || esArte) ? 'none' : 'flex';
+  document.getElementById('flyer-motor-ayuda').textContent = esIA
+    ? 'Gemini dibuja el flyer entero. Queda espectacular, pero puede reinterpretar un envase o un número: revisalo antes de mandarlo.'
+    : esArte
+    ? 'La IA pinta la escenografía; encima van TU logo, TUS fotos y los precios exactos. Lo más lindo sin riesgo en los datos.'
+    : 'El motor de siempre: al toque, gratis y sin tope de productos.';
   document.getElementById('flyer-formatos').innerHTML = Object.keys(FORMATOS).map(k =>
     `<button style="${_chip(fFormato === k)}" onclick="fFormato='${k}';renderFlyerOpciones()">${FORMATOS[k].label}</button>`).join('');
   document.getElementById('flyer-temas').innerHTML = Object.keys(TEMAS).map(k =>
     `<button style="${_chip(fTema === k)}" onclick="fTema='${k}';fFondoImg=null;renderFlyerOpciones()">${TEMAS[k].label}</button>`).join('');
   document.getElementById('flyer-plantillas').innerHTML = Object.keys(PLANTILLAS).map(k =>
     `<button style="${_chip(fPlantilla === k)}" onclick="fPlantilla='${k}';renderFlyerOpciones()">${PLANTILLAS[k]}</button>`).join('');
+  document.getElementById('flyer-ver-precios').checked = fMostrarPrecios;
+  document.getElementById('flyer-precios').style.display = fMostrarPrecios ? 'flex' : 'none';
   document.getElementById('flyer-precios').innerHTML = [['min', '🛍️ Minorista ($)'], ['may', '📦 Mayorista (U$S)']].map(par =>
     `<button style="${_chip(fPrecioModo === par[0])}" onclick="fPrecioModo='${par[0]}';_syncCatalogoFlyer();renderFlyerOpciones()">${par[1]}</button>`).join('');
+  document.getElementById('flyer-links').innerHTML = [
+    ['no', '🚫 Sin link'], ['may', '📦 Mayorista'], ['min', '🛍️ Minorista']
+  ].map(par => `<button style="${_chip(fLink === par[0])}" onclick="fLink='${par[0]}';renderFlyerOpciones()">${par[1]}</button>`).join('');
+  document.getElementById('flyer-link-ayuda').textContent = fLink === 'no'
+    ? 'Sin dirección web en el flyer.'
+    : 'Va con código QR: ' + _linkTiendaTexto() + (fLink === 'min' ? ' — el QR abre el link privado de minorista' : '');
   const prods = catalogoCache.filter(p => fSel[p.codigo]);
   document.getElementById('flyer-extras').innerHTML = prods.map(p => {
     const ex = fExtras[p.codigo] || {};
@@ -5662,29 +5717,45 @@ function renderFlyerOpciones() {
 async function generarTextoFlyer() {
   const prods = catalogoCache.filter(p => fSel[p.codigo]);
   const status = document.getElementById('flyer-status');
-  const quiereFondo = document.getElementById('flyer-fondo').checked;
+  const quiereFondo = fMotor === 'arte' || document.getElementById('flyer-fondo').checked;
   status.textContent = quiereFondo && !fFondoImg
     ? '🪄 La IA está pintando el fondo y escribiendo (~30 seg)...'
     : '✨ La IA está escribiendo tu flyer...';
   document.getElementById('flyer-canvas').style.display = 'none';
   document.getElementById('flyer-acciones').style.display = 'none';
-  const lista = prods.map(p => `${p.nombre} (${fmtFlyer(p.precioVenta)})`).join(', ');
+  const lista = prods.slice(0, 30).map(p => `${p.nombre} (${fmtFlyer(p.precioVenta)})`).join(', ')
+    + (prods.length > 30 ? ` …y ${prods.length - 30} productos más` : '');
   const idea = document.getElementById('flyer-idea').value.trim();
 
   // Texto y fondo en paralelo. El fondo se reusa al pedir "otro texto" (no se re-paga).
   fUltimaURL = ''; fGuardando = null;
   try { await document.fonts.load('800 90px "Baloo 2"'); } catch (e) {}
   // 1) Claude escribe los textos Y el prompt del fondo (dirección de arte)
-  const d = await flyerApi('flyerTexto', { negocio: 'shuk', hijo: 'Shuk', productos: lista, idea, ocasion: TEMAS[fTema]?.prompt || '' });
+  const d = await flyerApi('flyerTexto', { negocio: 'shuk', hijo: 'Shuk', productos: lista, idea,
+    ocasion: TEMAS[fTema]?.prompt || '', conPrecios: fMostrarPrecios ? '1' : '0', conWeb: fLink !== 'no' ? '1' : '0' });
   if (!d || d.error) {
     status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
     return;
   }
   fTextos = d;
+  // 🪄 Modo Diseño IA: Gemini compone el flyer ENTERO. Si falla, cae al clásico.
+  if (fMotor === 'ia') {
+    const ria = await _flyerIA(prods, d);
+    if (ria.sinClave) return;
+    if (ria.ok) {
+      status.textContent = ria.aviso ? '⚠️ ' + ria.aviso : '¡Listo! 🪄 Si no te convence, pedile otro.';
+      document.getElementById('flyer-canvas').style.display = 'block';
+      document.getElementById('flyer-acciones').style.display = 'flex';
+      _pintarCaption();
+      guardarFlyerHistorial(d, false);
+      return;
+    }
+    showToast('No salió el Diseño IA, va el clásico 🎨');
+  }
   // 2) Con esa dirección de arte se pinta el fondo (calidad alta)
   if (quiereFondo && !fFondoImg) {
     status.textContent = '🪄 La IA está pintando el fondo (~30 seg)...';
-    const f = await flyerApi('fondoFlyer', { prompt: d.fondoPrompt || '', tema: lista });
+    const f = await flyerApi('fondoFlyer', { prompt: _promptEscenografia(d.fondoPrompt), tema: lista });
     if (f?.b64) {
       fFondoImg = await new Promise(res => {
         const im = new Image();
@@ -5701,10 +5772,100 @@ async function generarTextoFlyer() {
     status.textContent = '¡Listo! 🎉 Si no te convence, pedile otro texto.';
     document.getElementById('flyer-canvas').style.display = 'block';
     document.getElementById('flyer-acciones').style.display = 'flex';
+    _pintarCaption();
     guardarFlyerHistorial(d, quiereFondo);   // guardado silencioso en segundo plano
   } catch (e) {
     status.textContent = '😕 No pude dibujar el flyer: ' + e.message;
   }
+}
+
+// ── 🪄 DISEÑO IA TOTAL (v4.58): Gemini diseña el flyer entero — logo real +
+//    fotos + textos exactos. El backend VERIFICA los precios leyendo la imagen
+//    generada antes de entregarla (la plata no se negocia).
+// Envuelve la dirección de arte que escribió Claude con las reglas de
+// composición que ganaron el duelo de fondos: borde rico, CENTRO DESPEJADO
+// (ahí van las fotos reales) y contraste alto para el texto blanco.
+// Las DOS puertas de la tienda. La minorista es un link privado (con código),
+// así que el QR lleva la dirección exacta y abajo se muestra solo el dominio.
+function _linkTienda() {
+  return fLink === 'may' ? SITIO + '/mayorista' : fLink === 'min' ? SITIO + '/#min-pL3q7' : '';
+}
+function _linkTiendaTexto() {
+  return fLink === 'may' ? SITIO_DOM + '/mayorista' : fLink === 'min' ? SITIO_DOM : '';
+}
+function _qrUrl() {
+  const u = _linkTienda();
+  return u ? 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=1&data=' + encodeURIComponent(u) : '';
+}
+
+function _promptEscenografia(base) {
+  return (base || 'Premium candy shop promotional backdrop, deep jewel-tone gradient') +
+    '. COMPOSITION RULES (critical): place the rich decorative elements — glossy 3D wrapped candies, ' +
+    'lollipops, chocolate shards, nuts, satin ribbons, confetti and bokeh sparkles — around the OUTER ' +
+    'EDGES ONLY, as a lush festive border with elegant gold foil accents. The entire CENTER of the image ' +
+    'must stay clean, empty, uncluttered and deep-toned: a calm surface with no objects at all, because ' +
+    'product photos and price labels will be placed on top of it. Keep the upper area dark enough for ' +
+    'large white display type to read clearly. Cinematic studio lighting, high-end advertising quality, ' +
+    'rich saturated color, sharp render. Absolutely NO text, NO letters, NO words, NO numbers, NO logos, ' +
+    'NO people, NO readable packaging.';
+}
+
+async function _flyerIA(prods, t) {
+  const status = document.getElementById('flyer-status');
+  status.textContent = '🪄 Gemini está diseñando tu flyer (~1 min)...';
+  let r = null;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        accion: 'disenoFlyerIA', token: _authToken,
+        titulo: t.titulo || '', frase: t.frase || '', cierre: t.cierre || '',
+        estilo: t.fondoPrompt || '', formato: fFormato,
+        precios: fMostrarPrecios ? '1' : '0', web: _linkTiendaTexto(),
+        productos: JSON.stringify(prods.slice(0, 8).map(p => {
+          const ex = fExtras[p.codigo] || {};
+          return { nombre: p.nombre, precio: fmtFlyer(p.precioVenta),
+                   promo: ex.promo > 0 ? fmtFlyer(ex.promo) : '', badge: ex.badge || '', foto: p.foto };
+        }))
+      })
+    });
+    r = await res.json();
+  } catch (e) { r = { error: String(e) }; }
+  if (r && r.error === 'sin_clave_gemini') { _formClaveGemini(); return { sinClave: true }; }
+  if (!r || !r.b64) { console.warn('disenoFlyerIA:', r && r.error); return { ok: false }; }
+  try { await _pintarFlyerIA(r.b64, r.mime || 'image/png'); } catch (e) { return { ok: false }; }
+  return { ok: true, aviso: r.aviso || '' };
+}
+
+// Pinta la imagen que diseñó la IA en el MISMO canvas del flyer: así compartir,
+// descargar, WhatsApp y el historial siguen funcionando sin tocar nada.
+function _pintarFlyerIA(b64, mime) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.getElementById('flyer-canvas');
+      cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+      cv.getContext('2d').drawImage(im, 0, 0);
+      res();
+    };
+    im.onerror = () => rej(new Error('imagen IA inválida'));
+    im.src = 'data:' + mime + ';base64,' + b64;
+  });
+}
+
+function _formClaveGemini() {
+  const status = document.getElementById('flyer-status');
+  status.innerHTML = '🔑 Para el Diseño IA falta la clave de Gemini (se carga una sola vez).<br>' +
+    '<span style="font-size:0.78rem;color:#8a7a68">Se crea gratis en aistudio.google.com → “Get API key”</span>' +
+    '<div style="display:flex;gap:8px;margin-top:10px;justify-content:center">' +
+    '<input type="password" id="gemini-clave" placeholder="AIza..." style="flex:1;max-width:280px;padding:10px;border:2px solid #e0d5c9;border-radius:10px;font-family:inherit;box-sizing:border-box">' +
+    '<button class="btn-add" style="margin:0;width:auto;padding:10px 16px" onclick="_guardarClaveGemini()">Guardar</button></div>';
+}
+async function _guardarClaveGemini() {
+  const clave = (document.getElementById('gemini-clave').value || '').trim();
+  if (!clave) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'guardarClaveGemini', clave }), '🔑 Clave de Gemini guardada ✓');
+  if (r && r.ok) generarTextoFlyer();
 }
 
 // Sube el flyer terminado a Cloudinary y lo registra en el historial.
@@ -5725,7 +5886,7 @@ function guardarFlyerHistorial(t, conFondo) {
         codigos: Object.keys(fSel).join(','),
         idea: document.getElementById('flyer-idea').value.trim(),
         fondo: conFondo ? '1' : '0',
-        config: JSON.stringify({ formato: fFormato, tema: fTema, plantilla: fPlantilla, extras: fExtras })
+        config: JSON.stringify({ formato: fFormato, tema: fTema, plantilla: fPlantilla, extras: fExtras, motor: fMotor, precios: fMostrarPrecios, link: fLink })
       });
       flyersCargados = false;   // para que el historial se refresque
     } catch (e) {}
@@ -5789,12 +5950,600 @@ function _wrap(ctx, texto, maxW, maxLineas) {
   return lineas;
 }
 
+// ═══ MOTOR DE DIBUJO v2 (v4.57) ═══════════════════════════════════════════
+// Rediseño completo: sin tope de productos (la grilla elige sola columnas y
+// tamaño), logo de la marca arriba, golosinas decorando los bordes, banda de
+// contacto al pie, y 3 estilos nuevos (Oferta / Catálogo / Aire). El nombre
+// NUNCA se desborda de la tarjeta y el precio tachado se lee de verdad.
+
+// Como _wrap pero sin tope de líneas: devuelve el corte natural del texto.
+function _wrapAll(ctx, texto, maxW) {
+  const palabras = String(texto || '').split(/\s+/).filter(Boolean);
+  const lineas = [];
+  let actual = '';
+  palabras.forEach(p => {
+    const prueba = actual ? actual + ' ' + p : p;
+    if (ctx.measureText(prueba).width <= maxW) actual = prueba;
+    else { if (actual) lineas.push(actual); actual = p; }
+  });
+  if (actual) lineas.push(actual);
+  return lineas;
+}
+
+// El nombre del producto, GARANTIZADO adentro del ancho: se achica hasta un
+// piso, si aún no entra se corta con …, y ninguna línea se pasa del maxW.
+function _nombreLineas(ctx, texto, fs0, maxW, maxL, FT) {
+  let nf = fs0, lineas;
+  const piso = Math.max(13, Math.round(fs0 * 0.68));
+  for (;;) {
+    ctx.font = '800 ' + nf + 'px ' + FT;
+    lineas = _wrapAll(ctx, texto, maxW);
+    if (lineas.length <= maxL || nf <= piso) break;
+    nf -= 1;
+  }
+  if (lineas.length > maxL) {
+    lineas = lineas.slice(0, maxL);
+    lineas[maxL - 1] = lineas[maxL - 1].replace(/\s+\S*$/, '') + '…';
+  }
+  ctx.font = '800 ' + nf + 'px ' + FT;
+  lineas = lineas.map(l => {
+    while (ctx.measureText(l).width > maxW && l.length > 3) l = l.slice(0, -2).replace(/\s+$/, '') + '…';
+    return l;
+  });
+  return { nf, lineas };
+}
+
+// Elige columnas y tamaño de tarjeta maximizando el tamaño efectivo de la
+// foto (el lado menor), probando de 1 a 8 columnas. aspectMax evita
+// tarjetas chicle (muy altas) que dejaban huecos.
+function _gridDims(n, areaW, areaH, gap, aspectMax) {
+  // Con pocos productos las tarjetas pueden crecer más sin verse deformes:
+  // así llenan el flyer en vez de flotar en el medio con huecos alrededor.
+  aspectMax = aspectMax || (n <= 4 ? 1.75 : 1.5);
+  let best = null, bestScore = -1;
+  for (let cols = 1; cols <= Math.min(8, n); cols++) {
+    const filas = Math.ceil(n / cols);
+    const cw = (areaW - gap * (cols - 1)) / cols;
+    let ch = (areaH - gap * (filas - 1)) / filas;
+    if (cw <= 0 || ch <= 0) continue;
+    ch = Math.min(ch, cw * aspectMax);
+    // Penalizar la fila incompleta: con 3 productos, 3×1 se ve armado y 2+1
+    // se ve descolgado. Un hueco al 40% del ancho cuesta un 12% del puntaje.
+    const huecos = cols * filas - n;
+    const castigo = 1 - Math.min(0.3, (huecos / cols) * 0.3);
+    const score = Math.min(cw, ch) * castigo;
+    if (score > bestScore + 0.5) { best = { cols, filas, cw, ch }; bestScore = score; }
+  }
+  return best;
+}
+
+// Pinta una grilla de tarjetas centrada en el área (la última fila,
+// centrada también). estilo: card | papel | aire | oferta
+function _pintarGrid(ctx, prods, imgs, tema, FT, W, top, areaH, gap, estilo, aspectMax) {
+  const n = prods.length;
+  const g = _gridDims(n, W - 112, areaH, gap, aspectMax);
+  const offY = top + Math.max(0, (areaH - (g.ch * g.filas + gap * (g.filas - 1))) / 2);
+  prods.forEach((p, i) => {
+    const col = i % g.cols, fila = Math.floor(i / g.cols);
+    const enFila = fila === g.filas - 1 ? n - fila * g.cols : g.cols;
+    const xB = 56 + (W - 112 - (g.cw * enFila + gap * (enFila - 1))) / 2;
+    _cardProd(ctx, p, imgs[i], xB + col * (g.cw + gap), offY + fila * (g.ch + gap), g.cw, g.ch, tema, FT, estilo);
+  });
+}
+
+// ── RECORTE DEL PACKSHOT ────────────────────────────────────────────────────
+// Las fotos del catálogo vienen con fondo blanco de estudio. Sobre una
+// escenografía oscura eso deja un HALO blanco que delata el "pegado con
+// Photoshop". Esto lo borra de verdad: relleno por inundación desde los
+// BORDES (así el blanco de adentro del envoltorio —un chocolate blanco, una
+// etiqueta— se conserva; solo se va el fondo que rodea al producto) más una
+// pasada de desfleco que suaviza el filo.
+const _recorteCache = new Map();
+function _recortarFondo(im) {
+  const clave = im.src || '';
+  if (_recorteCache.has(clave)) return _recorteCache.get(clave);
+  let salida = im;
+  try {
+    const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+    if (!W || !H || W * H > 4200000) return im;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(im, 0, 0);
+    const d = cx.getImageData(0, 0, W, H);   // tira si el canvas quedó "sucio" por CORS
+    const px = d.data, n = W * H;
+    // El fondo NO siempre es blanco puro (hay packshots sobre gris o crema):
+    // se toma el color de las esquinas como referencia y se borra por parecido.
+    const esquinas = [0, W - 1, (H - 1) * W, n - 1];
+    let sr = 0, sg = 0, sb = 0, val = 0;
+    esquinas.forEach(p => {
+      const i = p << 2;
+      if (px[i + 3] > 40) { sr += px[i]; sg += px[i + 1]; sb += px[i + 2]; val++; }
+    });
+    const fr = val ? sr / val : 255, fg = val ? sg / val : 255, fb = val ? sb / val : 255;
+    const fondoClaro = (fr + fg + fb) / 3 > 200;
+    const TOL = 46 * 46 * 3;
+    const esFondo = i => {
+      if (px[i + 3] < 26) return true;                 // ya venía transparente
+      if (!fondoClaro) return false;                   // packshot sin fondo claro: no tocar
+      const dr = px[i] - fr, dg = px[i + 1] - fg, db = px[i + 2] - fb;
+      return dr * dr + dg * dg + db * db <= TOL;
+    };
+    const visto = new Uint8Array(n);
+    const cola = new Int32Array(n);
+    let fin = 0;
+    const sembrar = p => { if (!visto[p]) cola[fin++] = p; };
+    for (let x = 0; x < W; x++) { sembrar(x); sembrar((H - 1) * W + x); }
+    for (let y = 0; y < H; y++) { sembrar(y * W); sembrar(y * W + W - 1); }
+    let ini = 0;
+    while (ini < fin) {
+      const p = cola[ini++];
+      if (visto[p]) continue;
+      const i = p << 2;
+      if (!esFondo(i)) continue;
+      visto[p] = 1;
+      px[i + 3] = 0;
+      const x = p % W, y = (p / W) | 0;
+      if (x > 0 && !visto[p - 1] && fin < n) cola[fin++] = p - 1;
+      if (x < W - 1 && !visto[p + 1] && fin < n) cola[fin++] = p + 1;
+      if (y > 0 && !visto[p - W] && fin < n) cola[fin++] = p - W;
+      if (y < H - 1 && !visto[p + W] && fin < n) cola[fin++] = p + W;
+    }
+    // Desfleco (2 pasadas): al píxel claro que toca el vacío se le baja el alpha
+    // y se lo oscurece. Cuenta como vacío tanto lo que borramos como lo que YA
+    // venía transparente — el halo del antialiasing original está justo ahí.
+    const vacio = p => visto[p] || px[(p << 2) + 3] < 26;
+    for (let pasada = 0; pasada < 2; pasada++) {
+      const bajar = [];
+      for (let p = 0; p < n; p++) {
+        if (vacio(p)) continue;
+        const i = p << 2;
+        const x = p % W, y = (p / W) | 0;
+        const borde = (x > 0 && vacio(p - 1)) || (x < W - 1 && vacio(p + 1)) ||
+                      (y > 0 && vacio(p - W)) || (y < H - 1 && vacio(p + W));
+        if (!borde) continue;
+        const luz = (px[i] + px[i + 1] + px[i + 2]) / 3;
+        if (luz > 186) bajar.push(i);
+      }
+      bajar.forEach(i => {
+        px[i + 3] = Math.round(px[i + 3] * (pasada === 0 ? 0.28 : 0.55));
+        px[i] = Math.round(px[i] * 0.82); px[i + 1] = Math.round(px[i + 1] * 0.82); px[i + 2] = Math.round(px[i + 2] * 0.82);
+      });
+    }
+    cx.putImageData(d, 0, 0);
+    salida = c;
+  } catch (e) { salida = im; }   // sin permiso de lectura: va la foto tal cual
+  _recorteCache.set(clave, salida);
+  return salida;
+}
+
+// Copia DESENFOCADA del fondo, para las tarjetas de vidrio esmerilado. Se
+// prepara una sola vez por flyer: es lo que integra la tarjeta con la
+// escenografía en vez de dejar un rectángulo blanco pegado encima.
+let _bgBlur = null;
+function _prepararBlur(W, H) {
+  _bgBlur = null;
+  if (!fFondoImg) return;
+  try {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    x.filter = 'blur(26px)';
+    _coverImg(x, fFondoImg, -40, -40, W + 80, H + 80);
+    x.filter = 'none';
+    _bgBlur = c;
+  } catch (e) { _bgBlur = null; }
+}
+
+// Tarjeta de vidrio: el fondo desenfocado se ve a través, con un velo oscuro
+// y filo dorado. Sobre una escenografía pintada queda integrada, no pegoteada.
+function _cardVidrio(ctx, x, y, w, h, r) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.01)'; _rr(ctx, x, y, w, h, r); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  _rr(ctx, x, y, w, h, r); ctx.clip();
+  // el fondo desenfocado se ve A TRAVÉS del cristal, con MENOS velo que antes
+  if (_bgBlur) ctx.drawImage(_bgBlur, x, y, w, h, x, y, w, h);
+  else { ctx.fillStyle = 'rgba(24,15,7,0.6)'; ctx.fillRect(x, y, w, h); }
+  const velo = ctx.createLinearGradient(x, y, x + w * 0.5, y + h);
+  velo.addColorStop(0, 'rgba(30,18,9,0.30)'); velo.addColorStop(1, 'rgba(14,8,4,0.52)');
+  ctx.fillStyle = velo; ctx.fillRect(x, y, w, h);
+  // reflejo del cristal: banda clara arriba y destello diagonal en la esquina
+  const luz = ctx.createLinearGradient(x, y, x, y + h * 0.42);
+  luz.addColorStop(0, 'rgba(255,255,255,0.22)'); luz.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = luz; ctx.fillRect(x, y, w, h * 0.42);
+  ctx.globalAlpha = 0.10; ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x + w * 0.52, y); ctx.lineTo(x, y + h * 0.62); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  // filo: dorado en todo el contorno + un hilo blanco arriba (canto del vidrio)
+  ctx.strokeStyle = 'rgba(255,208,128,0.55)'; ctx.lineWidth = 2;
+  _rr(ctx, x + 1, y + 1, w - 2, h - 2, r); ctx.stroke();
+  ctx.save();
+  _rr(ctx, x + 1, y + 1, w - 2, h - 2, r); ctx.clip();
+  ctx.strokeStyle = 'rgba(255,255,255,0.42)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x + r * 0.7, y + 1.5); ctx.lineTo(x + w - r * 0.7, y + 1.5); ctx.stroke();
+  ctx.restore();
+}
+
+// Sombra de contacto: elipse achatada bajo el producto, corrida hacia la
+// derecha porque la luz de la escenografía viene de arriba a la izquierda.
+// Es lo que hace que la foto se APOYE en la escena en vez de flotar recortada.
+function _sombraContacto(ctx, cx, baseY, ancho) {
+  const rx = Math.max(20, ancho * 0.42);
+  ctx.save();
+  ctx.translate(cx + rx * 0.10, baseY);
+  ctx.scale(1, 0.20);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  g.addColorStop(0, 'rgba(0,0,0,0.55)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.22)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, rx, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+// Una tarjeta de producto: foto + nombre (hasta 2 líneas, sin desborde) +
+// precio. En tarjetas chicas el nombre se omite (foto + precio se leen mejor
+// que un nombre microscópico).
+function _cardProd(ctx, p, im, x, y, w, h, tema, FT, estilo) {
+  const chica = h < 165 || w < 130;
+  const pad = estilo === 'aire' ? 4 : Math.max(9, Math.round(w * 0.05));
+  // Presupuesto: nombre+precio nunca le comen a la foto más del ~46% de la
+  // tarjeta (una tarjeta ancha y baja quedaba casi sin foto). Primero se
+  // sacrifica la 2ª línea del nombre; si no alcanza, se achica la letra.
+  const budget = (h - pad * 2) * 0.54;
+  let nameFs0 = Math.max(16, Math.min(32, Math.round(w * 0.1)));
+  let priceFs = estilo === 'oferta'
+    ? Math.max(19, Math.min(44, Math.round(w * 0.15)))
+    : Math.max(15, Math.min(34, Math.round(w * 0.115)));
+  let nLineas = (chica || w < 150) ? 1 : 2;
+  let nombreH = chica ? 0 : Math.round(nameFs0 * 1.18 * nLineas);
+  let precioH = fMostrarPrecios ? Math.round(priceFs * (estilo === 'oferta' ? 1.9 : 1.75)) : 0;
+  // Antes de resignar la 2ª línea (que es lo que TRUNCA el nombre con "…"),
+  // se achica la letra: más vale un nombre chico y entero que cortado.
+  if (!chica && nLineas === 2 && nombreH + precioH > budget) {
+    const permitido = budget - precioH;
+    const fsCabe = Math.floor(permitido / (1.18 * 2));
+    if (fsCabe >= 14) { nameFs0 = fsCabe; nombreH = Math.round(nameFs0 * 1.18 * 2); }
+    else { nLineas = 1; nombreH = Math.round(nameFs0 * 1.18); }
+  }
+  if (nombreH + precioH > budget) {
+    const k = budget / (nombreH + precioH);
+    nameFs0 = Math.max(13, Math.floor(nameFs0 * k));
+    priceFs = Math.max(14, Math.floor(priceFs * k));
+    nombreH = chica ? 0 : Math.round(nameFs0 * 1.18 * nLineas);
+    precioH = fMostrarPrecios ? Math.round(priceFs * (estilo === 'oferta' ? 1.9 : 1.75)) : 0;
+  }
+  const r = Math.max(10, Math.min(24, w * 0.08));
+
+  const claro = estilo !== 'vidrio' && estilo !== 'aire';   // ¿el texto va oscuro sobre blanco?
+  if (estilo === 'vidrio') {
+    _cardVidrio(ctx, x, y, w, h, r);
+  } else if (estilo === 'card' || estilo === 'oferta') {
+    ctx.save();
+    ctx.shadowColor = 'rgba(30,15,0,0.18)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5;
+    ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, w, h, r); ctx.fill();
+    ctx.restore();
+  } else if (estilo === 'papel') {
+    ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, w, h, r); ctx.fill();
+    ctx.strokeStyle = '#e6dbc6'; ctx.lineWidth = 2; _rr(ctx, x + 1, y + 1, w - 2, h - 2, r); ctx.stroke();
+  }
+
+  const fotoH = h - pad * 2 - nombreH - precioH;
+  // _containImg centra la foto en su caja sin deformarla, así que una foto
+  // apaisada deja aire arriba y abajo. Ese aire se reparte (en vez de quedar
+  // todo junto entre la foto y el nombre, que es el "hueco raro" clásico —
+  // se nota sobre todo con los precios apagados).
+  let fotoTop = y + pad, fotoCaja = fotoH;
+  if (im && fotoH > 0) {
+    const escFoto = Math.min((w - pad * 2) / im.width, fotoH / im.height);
+    const altoReal = im.height * escFoto;
+    const sobra = fotoH - altoReal;
+    if (sobra > 6) { fotoTop = y + pad + sobra / 2; fotoCaja = altoReal; }
+  }
+  if (im) {
+    // Sombra de contacto bajo la foto: la apoya en la escena (solo donde el
+    // fondo se ve, o sea sin tarjeta blanca abajo).
+    if (estilo === 'aire' || estilo === 'vidrio') {
+      const esc = Math.min((w - pad * 2) / im.width, fotoH / im.height);
+      _sombraContacto(ctx, x + w / 2, fotoTop + fotoCaja - 2, im.width * esc);
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 10;
+    }
+    _containImg(ctx, im, x + pad, fotoTop, w - pad * 2, fotoCaja);
+    if (estilo === 'aire' || estilo === 'vidrio') ctx.restore();
+  } else {
+    const fe = Math.round(Math.min(fotoH, w) * 0.5);
+    ctx.font = fe + 'px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('🍬', x + w / 2, fotoTop + fotoCaja / 2 + fe * 0.36);
+  }
+
+  // En "aire" no hay tarjeta: sin esto, el nombre y el precio pelean contra la
+  // textura del fondo. Un velo degradado detrás del bloque de texto los asienta
+  // sin encerrarlos en un rectángulo (que sería volver a la tarjeta).
+  if (estilo === 'aire' && (nombreH + precioH) > 0) {
+    const sy = fotoTop + fotoCaja - 6, sh = nombreH + precioH + 14;
+    const sc = ctx.createLinearGradient(0, sy, 0, sy + sh);
+    sc.addColorStop(0, 'rgba(12,7,3,0)');
+    sc.addColorStop(0.42, 'rgba(12,7,3,0.52)');
+    sc.addColorStop(1, 'rgba(12,7,3,0)');
+    ctx.save();
+    ctx.filter = 'blur(9px)';
+    ctx.fillStyle = sc;
+    _rr(ctx, x + 2, sy, w - 4, sh, Math.min(26, sh / 2)); ctx.fill();
+    ctx.filter = 'none';
+    ctx.restore();
+  }
+
+  ctx.textAlign = 'center';
+  if (!chica) {
+    const nl = _nombreLineas(ctx, p.nombre, nameFs0, w - pad * 2 - 4, nLineas, FT);
+    const esAire = !claro;
+    ctx.fillStyle = esAire ? '#ffffff' : '#2d1a0a';
+    if (esAire) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 6; }
+    ctx.font = '800 ' + nl.nf + 'px ' + FT;
+    const bloqueH = nl.lineas.length * nl.nf * 1.12;
+    let by = fotoTop + fotoCaja + (nombreH - bloqueH) / 2 + nl.nf * 0.88;
+    nl.lineas.forEach(l => { ctx.fillText(l, x + w / 2, by); by += nl.nf * 1.12; });
+    if (esAire) ctx.restore();
+  }
+
+  if (!fMostrarPrecios) {
+    /* interruptor del armador: el flyer va sin ningún precio */
+  } else if (estilo === 'oferta') {
+    // franja de color al pie: acá el precio es el protagonista
+    const stripH = precioH + pad;
+    ctx.save(); _rr(ctx, x, y, w, h, r); ctx.clip();
+    ctx.fillStyle = tema.accent; ctx.fillRect(x, y + h - stripH, w, stripH);
+    ctx.restore();
+    _precioGrupo(ctx, p, x + w / 2, y + h - stripH / 2, tema, FT, priceFs, w - 14, 'sobreAccent');
+  } else {
+    _precioGrupo(ctx, p, x + w / 2, y + h - pad - precioH / 2, tema, FT, priceFs, w - 10,
+      claro ? 'carta' : 'fondo');
+  }
+  const ex = fExtras[p.codigo];
+  if (ex && ex.badge) _badge(ctx, x + 4, y + Math.max(14, r * 0.8), ex.badge, FT, Math.max(0.55, Math.min(1, w / 300)));
+}
+
+// Precio nuevo + (si hay promo) el viejo tachado AL LADO, como grupo.
+// Si no entra, primero se achica; si aún así no entra, el tachado se omite.
+// sobre: carta (fondo blanco) | fondo (oscuro) | sobreAccent (franja de color)
+// alinear: 'c' centrado en cx | 'der' terminando en cx
+function _precioGrupo(ctx, p, cx, cy, tema, FT, fs, maxW, sobre, alinear) {
+  const ex = fExtras[p.codigo] || {};
+  const principal = ex.promo > 0 ? fmtFlyer(ex.promo) : fmtFlyer(p.precioVenta);
+  const conTacha = ex.promo > 0 && ex.promo < p.precioVenta;
+  const viejo = conTacha ? fmtFlyer(p.precioVenta) : '';
+  let f = fs, pw, vfs, vw = 0, total;
+  for (;;) {
+    ctx.font = '800 ' + f + 'px ' + FT;
+    pw = ctx.measureText(principal).width + (sobre === 'sobreAccent' ? 8 : f * 0.9);
+    vfs = Math.max(12, Math.round(f * 0.6));
+    if (conTacha) { ctx.font = '700 ' + vfs + 'px ' + FT; vw = ctx.measureText(viejo).width; }
+    total = pw + (conTacha ? vw + 10 : 0);
+    if (total <= maxW || f <= Math.max(13, fs * 0.72)) break;
+    f -= 2;
+  }
+  const muestraTacha = conTacha && total <= maxW;
+  if (!muestraTacha) total = pw;
+  const left = (alinear === 'der' ? cx - total : cx - total / 2);
+  const pillX = left + (muestraTacha ? vw + 10 : 0);
+  const ph = f * 1.42;
+  if (sobre !== 'sobreAccent') {
+    ctx.fillStyle = tema.accent;
+    _rr(ctx, pillX, cy - ph / 2, pw, ph, ph / 2); ctx.fill();
+  }
+  ctx.fillStyle = '#2d1a0a'; ctx.textAlign = 'center';
+  ctx.font = '800 ' + f + 'px ' + FT;
+  ctx.fillText(principal, pillX + pw / 2, cy + f * 0.34);
+  if (muestraTacha) {
+    ctx.font = '700 ' + vfs + 'px ' + FT;
+    ctx.fillStyle = sobre === 'carta' ? '#a08d75'
+      : sobre === 'sobreAccent' ? 'rgba(45,26,10,0.62)' : 'rgba(255,255,255,0.92)';
+    const vcx = left + vw / 2;
+    ctx.fillText(viejo, vcx, cy + vfs * 0.32);
+    ctx.strokeStyle = '#e3173d'; ctx.lineWidth = Math.max(2.5, vfs * 0.13); ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vcx - vw / 2 - 2, cy - vfs * 0.08);
+    ctx.lineTo(vcx + vw / 2 + 2, cy - vfs * 0.08);
+    ctx.stroke();
+  }
+}
+
+// Renglón de la plantilla Lista: foto | nombre | precio a la derecha.
+function _filaProd(ctx, p, im, x, y, w, rh, tema, FT) {
+  ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, w, rh, Math.min(18, rh * 0.22)); ctx.fill();
+  const fw = rh - 12;
+  if (im) _containImg(ctx, im, x + 7, y + 6, fw, rh - 12);
+  else { ctx.font = Math.round(fw * 0.55) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🍬', x + 7 + fw / 2, y + rh / 2 + fw * 0.2); }
+  const priceFs = Math.max(15, Math.min(30, Math.round(rh * 0.3)));
+  const precioMaxW = fMostrarPrecios ? Math.min(w * 0.38, 300) : 0;
+  const nl = _nombreLineas(ctx, p.nombre, Math.max(15, Math.min(30, Math.round(rh * 0.26))),
+    w - fw - 30 - precioMaxW - 10, rh >= 100 ? 2 : 1, FT);
+  ctx.textAlign = 'left'; ctx.fillStyle = '#2d1a0a';
+  ctx.font = '800 ' + nl.nf + 'px ' + FT;
+  const bh = nl.lineas.length * nl.nf * 1.12;
+  let by = y + rh / 2 - bh / 2 + nl.nf * 0.85;
+  nl.lineas.forEach(l => { ctx.fillText(l, x + fw + 22, by); by += nl.nf * 1.12; });
+  if (fMostrarPrecios) _precioGrupo(ctx, p, x + w - 12, y + rh / 2, tema, FT, priceFs, precioMaxW, 'carta', 'der');
+  const ex = fExtras[p.codigo];
+  if (ex && ex.badge) _badge(ctx, x + 2, y + 12, ex.badge, FT, Math.max(0.5, Math.min(0.85, rh / 170)));
+}
+
+// Lista: 1 columna; si los renglones quedarían enanos, pasa sola a 2, 3 o 4
+// columnas (se lee de arriba a abajo, como una lista de precios).
+function _plantillaLista(ctx, prods, imgs, tema, FT, W, areaTop, areaH) {
+  const n = prods.length, gap = 14;
+  let cols = 1;
+  for (; cols < 4; cols++) {
+    const filas = Math.ceil(n / cols);
+    if (Math.min(170, (areaH - gap * (filas - 1)) / filas) >= 62) break;
+  }
+  const filas = Math.ceil(n / cols);
+  const rh = Math.min(170, Math.max(44, (areaH - gap * (filas - 1)) / filas));
+  const cw = (W - 112 - gap * (cols - 1)) / cols;
+  const y0 = areaTop + Math.max(0, (areaH - (rh * filas + gap * (filas - 1))) / 2);
+  prods.forEach((p, i) => {
+    const col = Math.floor(i / filas), fila = i % filas;
+    _filaProd(ctx, p, imgs[i], 56 + col * (cw + gap), y0 + fila * (rh + gap), cw, rh, tema, FT);
+  });
+}
+
+// Héroe: el primero bien grande + el resto en una mini-grilla abajo que
+// absorbe la cantidad que sea.
+function _plantillaHeroe(ctx, prods, imgs, tema, FT, W, areaTop, areaBottom) {
+  const areaH = areaBottom - areaTop;
+  const k = prods.length - 1;
+  if (k <= 0) {
+    const hw = Math.min(W - 112, 820);
+    const hh = Math.min(areaH - 10, hw * 1.25);
+    _cardProd(ctx, prods[0], imgs[0], (W - hw) / 2, areaTop + (areaH - hh) / 2, hw, hh, tema, FT, 'card');
+    return;
+  }
+  const estiloH = (fMotor === 'arte' && fFondoImg) ? 'vidrio' : 'card';
+  const frac = k <= 3 ? 0.54 : k <= 8 ? 0.48 : 0.38;
+  const heroH = Math.max(300, Math.round(areaH * frac));
+  // El héroe usa casi todo el ancho: centrarlo angosto dejaba dos huecos
+  // enormes a los costados (lo más amateur de la pieza).
+  const hw = Math.min(W - 112, Math.round(heroH * 1.25));
+  _cardProd(ctx, prods[0], imgs[0], (W - hw) / 2, areaTop, hw, heroH, tema, FT, estiloH);
+  const miniTop = areaTop + heroH + 20;
+  _pintarGrid(ctx, prods.slice(1), imgs.slice(1), tema, FT, W, miniTop,
+    areaBottom - miniTop, k > 10 ? 12 : 18, estiloH, 1.5);
+}
+
+// Golosinas espolvoreadas por los bordes (según el tema). Es lo que saca al
+// flyer de la sobriedad: marco festivo sin taparle nada al contenido.
+function _decoTema(ctx, W, H, lista, soloBandas, corteTop, corteBottom) {
+  const spots = [
+    [0.055, 0.048, 84, -0.30], [0.940, 0.042, 70, 0.25], [0.135, 0.150, 46, 0.40],
+    [0.875, 0.145, 54, -0.35], [0.040, 0.300, 56, 0.20], [0.963, 0.320, 50, -0.20],
+    [0.050, 0.915, 78, 0.30], [0.950, 0.925, 86, -0.25], [0.893, 0.812, 46, 0.45],
+    [0.085, 0.795, 50, -0.40]
+  ];
+  spots.forEach((s, i) => {
+    const y = s[1] * H;
+    if (soloBandas && y > corteTop && y < corteBottom) return;
+    ctx.save();
+    ctx.translate(s[0] * W, y); ctx.rotate(s[3]);
+    ctx.font = s[2] + 'px sans-serif'; ctx.textAlign = 'center';
+    ctx.globalAlpha = 0.95;
+    ctx.fillText(lista[i % lista.length], 0, s[2] * 0.36);
+    ctx.restore();
+  });
+  ctx.globalAlpha = 1; ctx.textAlign = 'center';
+}
+
+// El sello de la marca: círculo blanco con anillo dorado, como un logo de
+// verdad (antes el flyer salía sin marca y parecía de otro).
+function _logoShuk(ctx, cx, cy, r, FT) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.30)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
+  ctx.fillStyle = '#fffdf8'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = '#d9a441';
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(cx, cy, r - 5, 0, 7); ctx.stroke();
+  ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, r - 12, 0, 7); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.font = Math.round(r * 0.28) + 'px sans-serif';
+  ctx.fillText('🍬', cx, cy - r * 0.36);
+  ctx.font = 'italic 800 ' + Math.round(r * 0.40) + 'px ' + FT;
+  ctx.fillStyle = '#e3568c';
+  ctx.fillText('Shuk', cx, cy + r * 0.04);
+  ctx.font = 'italic 800 ' + Math.round(r * 0.32) + 'px ' + FT;
+  ctx.fillStyle = '#2e9db0';
+  ctx.fillText('Mamtakim', cx, cy + r * 0.40);
+  ctx.font = '700 ' + Math.round(r * 0.125) + 'px ' + FT;
+  ctx.fillStyle = '#b08a3e';
+  ctx.fillText('DULZURAS DE ISRAEL', cx, cy + r * 0.62);
+}
+
+// Banda de contacto al pie, estilo "para pedidos al…" con circulito verde.
+function _pieBanner(ctx, W, H, tema, FT, qrIm) {
+  const tel = '11 3175-4540', web = _linkTiendaTexto();
+  const bh = 76;
+  ctx.font = '800 40px ' + FT; const wTel = ctx.measureText(tel).width;
+  ctx.font = '700 27px ' + FT; const wWeb = web ? ctx.measureText(web).width : 0;
+  const marca = 'Shuk Mamtakim';
+  ctx.font = '700 30px ' + FT; const wMarca = ctx.measureText(marca).width;
+  // Sin QR: la píldora de siempre. Con QR: el código a la izquierda y, al lado,
+  // teléfono arriba y dirección web abajo.
+  if (!qrIm) {
+    const bw = 62 + wTel + 26 + wMarca + 34;
+    const bx = (W - bw) / 2, by = H - 114;
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; _rr(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.strokeStyle = tema.accent; ctx.lineWidth = 2.5; _rr(ctx, bx, by, bw, bh, bh / 2); ctx.stroke();
+    ctx.fillStyle = '#1faa59';
+    ctx.beginPath(); ctx.arc(bx + 40, by + bh / 2, 24, 0, 7); ctx.fill();
+    ctx.font = '27px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('📞', bx + 40, by + bh / 2 + 9);
+    ctx.textAlign = 'left';
+    ctx.font = '800 40px ' + FT; ctx.fillStyle = '#ffffff';
+    ctx.fillText(tel, bx + 76, by + bh / 2 + 14);
+    ctx.font = '700 30px ' + FT; ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText(marca, bx + 76 + wTel + 26, by + bh / 2 + 12);
+    ctx.textAlign = 'center';
+    return;
+  }
+  // qz = zona de silencio: el marco blanco alrededor del QR. Sin esto los
+  // lectores fallan (sobre todo impreso); el estándar pide ~4 módulos.
+  const qs = 118, pad = 16, qz = 17;
+  const anchoTxt = Math.max(wTel + 52, wWeb);
+  const bw = pad + qs + qz * 2 + 20 + anchoTxt + pad + 8;
+  const bh2 = qs + qz * 2 + pad * 2;
+  const bx = (W - bw) / 2, by = H - bh2 - 26;
+  ctx.fillStyle = 'rgba(255,255,255,0.13)'; _rr(ctx, bx, by, bw, bh2, 26); ctx.fill();
+  ctx.strokeStyle = tema.accent; ctx.lineWidth = 2.5; _rr(ctx, bx, by, bw, bh2, 26); ctx.stroke();
+  // el QR va sobre blanco sí o sí, si no los lectores no lo agarran
+  const qx = bx + pad + qz, qy = by + pad + qz;
+  ctx.fillStyle = '#ffffff';
+  _rr(ctx, qx - qz, qy - qz, qs + qz * 2, qs + qz * 2, 12); ctx.fill();
+  ctx.drawImage(qrIm, qx, qy, qs, qs);
+  const tx = qx + qs + qz + 20;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#1faa59';
+  ctx.beginPath(); ctx.arc(tx + 18, by + bh2 * 0.34, 18, 0, 7); ctx.fill();
+  ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('📞', tx + 18, by + bh2 * 0.34 + 7);
+  ctx.textAlign = 'left';
+  ctx.font = '800 38px ' + FT; ctx.fillStyle = '#ffffff';
+  ctx.fillText(tel, tx + 44, by + bh2 * 0.34 + 13);
+  ctx.font = '700 27px ' + FT; ctx.fillStyle = tema.accent;
+  ctx.fillText(web, tx, by + bh2 * 0.76 + 9);
+  ctx.font = '600 19px ' + FT; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText('Escaneá y comprá online', tx, by + bh2 * 0.76 + 36);
+  ctx.textAlign = 'center';
+}
+
+// El LOGO REAL (árbol de golosinas) para el encabezado del flyer canvas.
+// Se carga una vez y queda cacheado; si falla (sin red), cae al sello dibujado.
+let _logoRealProm = null;
+function _cargarLogoReal() {
+  if (!_logoRealProm) _logoRealProm = new Promise(res => {
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => res(im);
+    im.onerror = () => { _logoRealProm = null; res(null); };
+    im.src = 'https://res.cloudinary.com/dq2boloyp/image/upload/e_trim:10/w_760/app_icon_rmbyhb.png';
+  });
+  return _logoRealProm;
+}
+
 async function dibujarFlyer(prods, t) {
   const cv = document.getElementById('flyer-canvas');
   const ctx = cv.getContext('2d');
   const F = FORMATOS[fFormato] || FORMATOS.post;
   const W = F.W, H = F.H;
-  cv.width = W; cv.height = H;
+  // Se dibuja al DOBLE de resolución (2160×2700 en el formato clásico) y todo
+  // el código sigue usando las mismas coordenadas: lo escala la transformación.
+  // El texto y los bordes salen nítidos incluso al recomprimir WhatsApp.
+  const ESC = 2;
+  cv.width = W * ESC; cv.height = H * ESC;
+  ctx.setTransform(ESC, 0, 0, ESC, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
   const temaSel = TEMAS[fTema];
   const esHex = c => /^#[0-9a-fA-F]{6}$/.test(c || '');
   const tema = (fTema === 'acorde' && esHex(t.paletaA) && esHex(t.paletaB) && esHex(t.paletaAccent))
@@ -5803,14 +6552,37 @@ async function dibujarFlyer(prods, t) {
     ? { a: temaSel.a, b: temaSel.b, accent: temaSel.accent }
     : { a: '#141432', b: '#3d3d77', accent: '#e8c97a' };
   const FT = '"Baloo 2", -apple-system, system-ui, sans-serif';
+  const esCatalogo = fPlantilla === 'catalogo';
+  const DECO = temaSel.deco || ['🍭', '🍬', '🍫', '🧁', '🍩', '🍪'];
 
-  // Fondo: dibujo de IA (con velo para que el texto se lea) o degradé del tema
-  if (fFondoImg) {
+  // Geometría vertical: en el formato cuadrado el encabezado se compacta
+  // (si no, entre el logo y el título se comían medio flyer)
+  const compacto = H <= 1080;
+  const headerH = compacto ? 362 : 406;   // logo + título + frase
+  const conQR = fLink !== 'no';
+  const areaTop = headerH + 18, areaBottom = H - (conQR ? 306 : 236), areaH = areaBottom - areaTop;
+
+  // Fondo: Catálogo pinta papel con bandas del tema (el dibujo de IA, si hay,
+  // viste la banda de arriba); el resto, dibujo de IA o degradé como siempre.
+  if (esCatalogo) {
+    ctx.fillStyle = '#f8f3ea'; ctx.fillRect(0, 0, W, H);
+    if (fFondoImg) {
+      _coverImg(ctx, fFondoImg, 0, 0, W, headerH);
+      ctx.fillStyle = 'rgba(15,20,40,0.42)'; ctx.fillRect(0, 0, W, headerH);
+    } else {
+      const gh = ctx.createLinearGradient(0, 0, 0, headerH);
+      gh.addColorStop(0, tema.a); gh.addColorStop(1, tema.b);
+      ctx.fillStyle = gh; ctx.fillRect(0, 0, W, headerH);
+    }
+    ctx.fillStyle = tema.accent; ctx.fillRect(0, headerH, W, 7);
+    ctx.fillStyle = tema.a; ctx.fillRect(0, H - 224, W, 224);
+    _decoTema(ctx, W, H, DECO, true, headerH - 30, H - 200);
+  } else if (fFondoImg) {
     _coverImg(ctx, fFondoImg, 0, 0, W, H);
     ctx.fillStyle = 'rgba(15,20,40,0.30)'; ctx.fillRect(0, 0, W, H);
-    const gt = ctx.createLinearGradient(0, 0, 0, 330);
+    const gt = ctx.createLinearGradient(0, 0, 0, headerH);
     gt.addColorStop(0, 'rgba(0,0,0,0.45)'); gt.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, 330);
+    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, headerH);
     const gb = ctx.createLinearGradient(0, H - 240, 0, H);
     gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,0.45)');
     ctx.fillStyle = gb; ctx.fillRect(0, H - 240, W, 240);
@@ -5822,152 +6594,82 @@ async function dibujarFlyer(prods, t) {
     [[100, 160, 130], [W - 100, 90, 90], [60, H - 110, 110], [W - 70, H - 70, 140], [W - 150, H * 0.5, 70]].forEach(c => {
       ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
     });
+    ctx.globalAlpha = 0.10; ctx.fillStyle = tema.accent;
+    [[W * 0.2, H * 0.45, 90], [W * 0.85, H * 0.62, 70], [W * 0.12, H * 0.7, 60]].forEach(c => {
+      ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
+    });
     ctx.globalAlpha = 1;
+    _decoTema(ctx, W, H, DECO);
+  }
+  if (fFondoImg && !esCatalogo) _decoTema(ctx, W, H, DECO);
+
+  // El sello de la marca
+  // El sello de la marca: el LOGO REAL; si no cargó, el sello dibujado de siempre
+  const logoIm = await _cargarLogoReal();
+  if (logoIm) {
+    const lh = compacto ? 148 : 180;
+    const lw = Math.round(lh * (logoIm.width / logoIm.height));
+    const lx = (W - lw) / 2, ly = compacto ? 18 : 22, lr = Math.round(lh * 0.16);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.32)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 5;
+    ctx.fillStyle = '#fdf3e3'; _rr(ctx, lx, ly, lw, lh, lr); ctx.fill();
+    ctx.restore();
+    ctx.save(); _rr(ctx, lx, ly, lw, lh, lr); ctx.clip();
+    ctx.drawImage(logoIm, lx, ly, lw, lh);
+    ctx.restore();
+  } else {
+    _logoShuk(ctx, W / 2, compacto ? 98 : 116, compacto ? 66 : 80, FT);
   }
 
-  // Título con contorno (tipografía con onda)
+  // Título con contorno + destellos a los costados
   ctx.textAlign = 'center';
-  let fs = 96;
+  let fs = compacto ? 76 : 88;
+  const titY = compacto ? 252 : 282;
   do { ctx.font = '800 ' + fs + 'px ' + FT; fs -= 4; }
-  while (ctx.measureText(t.titulo).width > 950 && fs > 40);
+  while (ctx.measureText(t.titulo).width > 860 && fs > 40);
+  const tw = ctx.measureText(t.titulo).width;
   ctx.lineJoin = 'round';
   ctx.lineWidth = 14; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.strokeText(t.titulo, W / 2, 150);
+  ctx.strokeText(t.titulo, W / 2, titY);
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(t.titulo, W / 2, 150);
+  ctx.fillText(t.titulo, W / 2, titY);
+  ctx.font = '44px sans-serif';
+  ctx.fillText('✨', W / 2 - tw / 2 - 52, titY - 14);
+  ctx.fillText('✨', W / 2 + tw / 2 + 52, titY - 14);
 
   // Frase
-  ctx.font = '700 40px ' + FT;
+  ctx.font = '700 ' + (compacto ? 34 : 38) + 'px ' + FT;
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
-  _wrap(ctx, t.frase, 920, 2).forEach((l, i) => ctx.fillText(l, W / 2, 222 + i * 52));
+  _wrap(ctx, t.frase, 900, 2).forEach((l, i) => ctx.fillText(l, W / 2, (compacto ? 314 : 348) + i * (compacto ? 46 : 50)));
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
   // Área de productos
-  const areaTop = 330, areaBottom = H - 230, areaH = areaBottom - areaTop;
-  const imgs = await Promise.all(prods.map(p => _cargarImgFlyer(p.foto)));
+  const [imgsRaw, qrIm] = await Promise.all([
+    Promise.all(prods.map(p => _cargarImgFlyer(p.foto))),
+    conQR ? _cargarImgFlyer(_qrUrl()) : Promise.resolve(null)
+  ]);
+  let imgs = imgsRaw;
+  const gap = prods.length > 12 ? 14 : 24;
+  _prepararBlur(W, H);
+  // Con escenografía, el fondo blanco de estudio de la foto se nota: se recorta.
+  if (fFondoImg) imgs = imgs.map(im => im ? _recortarFondo(im) : im);
 
-  if (fPlantilla === 'lista') {
-    const n = prods.length;
-    const gap = 16;
-    const rh = Math.min(180, (areaH - gap * (n - 1)) / n);
-    const y0 = areaTop + (areaH - (rh * n + gap * (n - 1))) / 2;
-    prods.forEach((p, i) => {
-      const y = y0 + i * (rh + gap), x = 56, w = W - 112;
-      ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, w, rh, 22); ctx.fill();
-      const fw = rh - 20;
-      if (imgs[i]) _containImg(ctx, imgs[i], x + 12, y + 10, fw, rh - 20);
-      else { ctx.font = (fw * 0.5) + 'px sans-serif'; ctx.fillText('🍬', x + 12 + fw / 2, y + rh / 2 + fw * 0.18); }
-      ctx.textAlign = 'left'; ctx.fillStyle = '#2d1a0a';
-      let nf = 36;
-      do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
-      while (ctx.measureText(p.nombre).width > w - fw - 280 && nf > 18);
-      ctx.fillText(p.nombre, x + fw + 30, y + rh / 2 + 12);
-      _precio(ctx, p, x + w - 24, y + rh / 2, tema, FT, 'der');
-      ctx.textAlign = 'center';
-      const ex = fExtras[p.codigo];
-      if (ex?.badge) _badge(ctx, x + 6, y + 14, ex.badge, FT);
-    });
-  } else if (fPlantilla === 'heroe') {
-    const heroe = prods[0];
-    const resto = prods.slice(1, 5);
-    const heroH = resto.length ? Math.min(areaH * 0.62, 640) : Math.min(areaH, 760);
-    const hw = Math.min(W - 200, 720), hx = (W - hw) / 2, hy = areaTop + 6;
-    ctx.fillStyle = '#ffffff'; _rr(ctx, hx, hy, hw, heroH, 28); ctx.fill();
-    if (imgs[0]) _containImg(ctx, imgs[0], hx + 20, hy + 16, hw - 40, heroH - 130);
-    ctx.fillStyle = '#2d1a0a';
-    let nf = 42;
-    do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
-    while (ctx.measureText(heroe.nombre).width > hw - 60 && nf > 22);
-    ctx.fillText(heroe.nombre, hx + hw / 2, hy + heroH - 72);
-    _precio(ctx, heroe, hx + hw / 2, hy + heroH - 36, tema, FT, 'centro');
-    const exH = fExtras[heroe.codigo];
-    if (exH?.badge) _badge(ctx, hx + 8, hy + 22, exH.badge, FT);
-    if (resto.length) {
-      const gap = 18, k = resto.length;
-      const mw = Math.min((W - 112 - gap * (k - 1)) / k, 250);
-      const x0 = (W - (mw * k + gap * (k - 1))) / 2;
-      const my = hy + heroH + 22;
-      const mh = Math.min(areaBottom - my, mw + 70);
-      resto.forEach((p, j) => {
-        const x = x0 + j * (mw + gap);
-        ctx.fillStyle = '#ffffff'; _rr(ctx, x, my, mw, mh, 18); ctx.fill();
-        if (imgs[j + 1]) _containImg(ctx, imgs[j + 1], x + 10, my + 8, mw - 20, mh - 60);
-        _precio(ctx, p, x + mw / 2, my + mh - 22, tema, FT, 'centro-chico');
-        const ex = fExtras[p.codigo];
-        if (ex?.badge) _badge(ctx, x + 2, my + 14, ex.badge, FT, 0.8);
-      });
-    }
-  } else {
-    // GRILLA (clásica)
-    const n = prods.length;
-    const cols = n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 2 : 3;
-    const filas = Math.ceil(n / cols);
-    const margen = 56, gap = 26;
-    const cw = (W - margen * 2 - gap * (cols - 1)) / cols;
-    const chMax = (areaH - gap * (filas - 1)) / filas;
-    const ch = Math.min(chMax, cw + 120);
-    const offsetY = areaTop + (areaH - (ch * filas + gap * (filas - 1))) / 2;
-    prods.forEach((p, i) => {
-      const col = i % cols, fila = Math.floor(i / cols);
-      const enFila = (fila === filas - 1) ? (n - fila * cols) : cols;
-      const xBase = margen + (W - margen * 2 - (cw * enFila + gap * (enFila - 1))) / 2;
-      const x = xBase + col * (cw + gap);
-      const y = offsetY + fila * (ch + gap);
-      ctx.fillStyle = '#ffffff'; _rr(ctx, x, y, cw, ch, 24); ctx.fill();
-      const imgH = ch - 96;
-      if (imgs[i]) _containImg(ctx, imgs[i], x + 16, y + 14, cw - 32, imgH - 22);
-      else { ctx.font = (imgH * 0.45) + 'px sans-serif'; ctx.fillText('🍬', x + cw / 2, y + imgH / 2 + imgH * 0.15); }
-      ctx.fillStyle = '#2d1a0a';
-      let nf = 30;
-      do { ctx.font = '800 ' + nf + 'px ' + FT; nf -= 2; }
-      while (ctx.measureText(p.nombre).width > cw - 30 && nf > 16);
-      ctx.fillText(p.nombre, x + cw / 2, y + imgH + 34);
-      _precio(ctx, p, x + cw / 2, y + imgH + 76, tema, FT, 'centro');
-      const ex = fExtras[p.codigo];
-      if (ex?.badge) _badge(ctx, x + 4, y + 18, ex.badge, FT);
-    });
-  }
+  if (fPlantilla === 'lista') _plantillaLista(ctx, prods, imgs, tema, FT, W, areaTop, areaH);
+  else if (fPlantilla === 'heroe') _plantillaHeroe(ctx, prods, imgs, tema, FT, W, areaTop, areaBottom);
+  else _pintarGrid(ctx, prods, imgs, tema, FT, W, areaTop, areaH, gap,
+    esCatalogo ? 'papel' : fPlantilla === 'aire' ? 'aire' : fPlantilla === 'oferta' ? 'oferta'
+    : (fMotor === 'arte' && fFondoImg) ? 'vidrio' : 'card');
 
-  // Cierre (pill grande) y pie
+  // Cierre (pill grande) + banda de contacto (con QR si se eligió link)
+  const yC = H - (conQR ? 278 : 208);
   ctx.font = '800 46px ' + FT;
   const cw2 = Math.min(ctx.measureText(t.cierre).width + 80, W - 80);
   ctx.fillStyle = tema.accent;
-  _rr(ctx, (W - cw2) / 2, H - 192, cw2, 78, 39); ctx.fill();
+  _rr(ctx, (W - cw2) / 2, yC, cw2, 78, 39); ctx.fill();
   ctx.fillStyle = '#2d1a0a';
-  ctx.fillText(t.cierre, W / 2, H - 138);
-  ctx.font = '700 34px ' + FT;
-  ctx.fillStyle = 'rgba(255,255,255,0.94)';
-  ctx.fillText('📲 11 3175-4540 · Shuk Mamtakim 🍬', W / 2, H - 54);
-}
-
-// Precio: pill con el valor (y si hay promo, el precio viejo tachado al lado)
-function _precio(ctx, p, x, yCentro, tema, FT, modo) {
-  const ex = fExtras[p.codigo] || {};
-  const principal = ex.promo > 0 ? fmtFlyer(ex.promo) : fmtFlyer(p.precioVenta);
-  const fsPill = modo === 'centro-chico' ? 26 : 34;
-  ctx.font = '800 ' + fsPill + 'px ' + FT;
-  const pw = ctx.measureText(principal).width + 34;
-  let px;
-  if (modo === 'der') { ctx.textAlign = 'left'; px = x - pw; }
-  else px = x - pw / 2;
-  ctx.fillStyle = tema.accent;
-  _rr(ctx, px, yCentro - fsPill * 0.72, pw, fsPill * 1.42, fsPill * 0.71); ctx.fill();
-  ctx.fillStyle = '#2d1a0a'; ctx.textAlign = 'center';
-  ctx.fillText(principal, px + pw / 2, yCentro + fsPill * 0.36);
-  if (ex.promo > 0) {
-    const viejo = fmtFlyer(p.precioVenta);
-    ctx.font = '700 ' + Math.round(fsPill * 0.72) + 'px ' + FT;
-    const vw = ctx.measureText(viejo).width;
-    const vx = px - vw / 2 - 16, vy = yCentro + fsPill * 0.2;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 5;
-    ctx.fillText(viejo, vx, vy);
-    ctx.restore();
-    ctx.strokeStyle = '#e3173d'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(vx - vw / 2 - 4, vy - fsPill * 0.22); ctx.lineTo(vx + vw / 2 + 4, vy - fsPill * 0.22 + 6); ctx.stroke();
-  }
+  ctx.fillText(t.cierre, W / 2, yC + 54);
+  _pieBanner(ctx, W, H, tema, FT, qrIm);
 }
 
 // Etiqueta tipo cinta ("🔥 OFERTA") inclinada sobre la tarjeta
@@ -5986,18 +6688,64 @@ function _badge(ctx, x, y, texto, FT, escala) {
 }
 
 function _flyerBlob() {
-  return new Promise(r => document.getElementById('flyer-canvas').toBlob(r, 'image/jpeg', 0.92));
+  return new Promise(r => document.getElementById('flyer-canvas').toBlob(r, 'image/jpeg', 0.95));
+}
+
+// El link NO puede vivir adentro de la imagen: WhatsApp, Instagram y los
+// estados no hacen clickeable nada de un JPG. Lo que SÍ es clickeable es el
+// TEXTO que acompaña a la foto (el epígrafe). Así que el flyer viaja con su
+// texto, y ahí va el link para tocar y entrar.
+function _textoCompartir() {
+  const t = fTextos || {};
+  const link = _linkTienda();
+  const partes = [];
+  if (t.titulo) partes.push('🍬 ' + t.titulo);
+  if (t.frase) partes.push(t.frase);
+  if (link) partes.push('👉 Mirá todo y pedí acá: ' + link);
+  partes.push('📲 11 3175-4540 · Shuk Mamtakim');
+  return partes.join('\n');
 }
 
 async function compartirFlyer() {
   const blob = await _flyerBlob();
   if (!blob) { showToast('Generá el flyer primero'); return; }
   const file = new File([blob], 'flyer-shuk.jpg', { type: 'image/jpeg' });
+  const texto = _textoCompartir();
+  // Con texto: WhatsApp lo pone de epígrafe y el link queda tocable.
+  if (navigator.canShare && navigator.canShare({ files: [file], text: texto })) {
+    try { await navigator.share({ files: [file], text: texto, title: 'Shuk Mamtakim' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  // Si el celular no deja mandar los dos juntos, va la imagen y el texto
+  // queda copiado para pegarlo abajo.
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Shuk Mamtakim' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    await _copiarTexto(texto, '');
+    try { await navigator.share({ files: [file], title: 'Shuk Mamtakim' }); showToast('Pegá el texto (ya lo copié) para que el link sea tocable 📋'); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
   }
   await descargarFlyer();
   showToast('Se descargó la imagen: compartila desde tu galería 📤');
+}
+
+async function _copiarTexto(txt, msgOk) {
+  try { await navigator.clipboard.writeText(txt); }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+  }
+  if (msgOk) showToast(msgOk);
+}
+
+function _pintarCaption() {
+  const caja = document.getElementById('flyer-caption');
+  document.getElementById('flyer-caption-txt').textContent = _textoCompartir();
+  caja.style.display = 'block';
+}
+
+function copiarTextoFlyer() {
+  _copiarTexto(_textoCompartir(), '📋 Texto copiado — pegalo con la foto y el link se toca');
 }
 
 // En iPhone el <a download> manda el archivo a Archivos/Drive; el menú nativo
@@ -6094,7 +6842,7 @@ async function enviarFlyerWAUI() {
   showToast('Enviando a tu WhatsApp...');
   if (fGuardando) await fGuardando;
   if (!fUltimaURL) { showToast('Esperá un segundo y probá de nuevo'); return; }
-  const r = await flyerApi('enviarFlyerWA', { hijo: 'papa', url: fUltimaURL });
+  const r = await flyerApi('enviarFlyerWA', { hijo: 'papa', url: fUltimaURL, texto: _textoCompartir() });
   showToast(r?.ok ? '📲 ¡Te llegó a tu WhatsApp!' : '😕 No se pudo enviar');
 }
 
@@ -16086,7 +16834,12 @@ function cerrarEditPedido() {
   <div class="wizard-body">
     <!-- PASO 1: PRODUCTOS -->
     <div class="wizard-step active" id="fs-0">
-      <div class="wizard-label">¿Qué productos van en el flyer? (hasta 6)</div>
+      <div class="wizard-label">¿Qué productos van en el flyer? · <span id="flyer-cont" style="color:#7b2ff7">ninguno todavía</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="flyer-buscar" oninput="renderFlyerGrid()" placeholder="🔍 Buscar producto..." style="flex:1;min-width:0;padding:10px 12px;border:2px solid #e0d5c9;border-radius:12px;font-family:inherit;font-size:0.9rem;box-sizing:border-box">
+        <button onclick="flyerSelTodos(true)" style="padding:0 12px;border:2px solid #d9c2f7;border-radius:12px;background:#fff;font-weight:700;font-size:0.78rem;cursor:pointer;color:#5a1ec0;font-family:inherit">Todos</button>
+        <button onclick="flyerSelTodos(false)" style="padding:0 12px;border:2px solid #e0d5c9;border-radius:12px;background:#fff;font-weight:700;font-size:0.78rem;cursor:pointer;color:#8a7a68;font-family:inherit">Ninguno</button>
+      </div>
       <div id="flyer-prod-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px"></div>
     </div>
     <!-- PASO 2: IDEA -->
@@ -16095,17 +16848,27 @@ function cerrarEditPedido() {
       <textarea id="flyer-idea" placeholder="Ej: vendo chocolates riquísimos, precios de amigo, traigo al cole" style="width:100%;min-height:110px;padding:14px;border:2px solid #e0d5c9;border-radius:14px;font-family:inherit;font-size:1rem;resize:vertical;box-sizing:border-box"></textarea>
       <button id="flyer-mic" onclick="grabarIdea()" style="width:100%;margin-top:10px;padding:13px;background:#fff;border:2px dashed #d9c2f7;border-radius:14px;color:#7b2ff7;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit">🎙️ O contala con tu voz</button>
       <div style="font-size:0.8rem;color:#aaa;margin-top:8px">Si lo dejás vacío, la IA inventa algo con onda.</div>
-      <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;background:#f6efff;border:2px solid #d9c2f7;border-radius:14px;cursor:pointer">
+      <label id="flyer-fondo-wrap" style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;background:#f6efff;border:2px solid #d9c2f7;border-radius:14px;cursor:pointer">
         <input type="checkbox" id="flyer-fondo" style="width:20px;height:20px;accent-color:#7b2ff7">
         <span style="font-size:0.92rem;font-weight:700;color:#5a1ec0">🪄 Crear fondo con IA <span style="font-weight:500;color:#9a7ac9">(un dibujo único para tu flyer, tarda ~30 seg más)</span></span>
       </label>
+      <div class="wizard-label" style="margin-top:18px">¿Quién lo diseña?</div>
+      <div id="flyer-motor" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div id="flyer-motor-ayuda" style="font-size:0.76rem;color:#8a7a68;margin-top:6px;line-height:1.45"></div>
       <div class="wizard-label" style="margin-top:18px">Precios</div>
+      <label style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:#fff;border:2px solid #e0d5c9;border-radius:12px;cursor:pointer;margin-bottom:8px">
+        <input type="checkbox" id="flyer-ver-precios" checked onchange="fMostrarPrecios=this.checked;renderFlyerOpciones()" style="width:20px;height:20px;accent-color:#7b2ff7">
+        <span style="font-size:0.9rem;font-weight:700;color:#2d1a0a">Mostrar los precios en el flyer</span>
+      </label>
       <div id="flyer-precios" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="wizard-label" style="margin-top:14px">Link a la tienda</div>
+      <div id="flyer-links" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div id="flyer-link-ayuda" style="font-size:0.76rem;color:#8a7a68;margin-top:6px"></div>
       <div class="wizard-label" style="margin-top:14px">Formato</div>
       <div id="flyer-formatos" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       <div class="wizard-label" style="margin-top:14px">Tema</div>
       <div id="flyer-temas" style="display:flex;gap:8px;flex-wrap:wrap"></div>
-      <div class="wizard-label" style="margin-top:14px">Diseño</div>
+      <div class="wizard-label" style="margin-top:14px" id="flyer-plantillas-label">Diseño</div>
       <div id="flyer-plantillas" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       <div class="wizard-label" style="margin-top:14px">Etiquetas y precio promo (opcional)</div>
       <div id="flyer-extras"></div>
@@ -16114,6 +16877,12 @@ function cerrarEditPedido() {
     <div class="wizard-step" id="fs-2" style="text-align:center">
       <div id="flyer-status" class="wizard-label" style="text-align:center">Armando tu flyer...</div>
       <canvas id="flyer-canvas" width="1080" height="1350" style="width:100%;max-width:320px;margin:0 auto;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,0.25);display:none"></canvas>
+      <div id="flyer-caption" style="display:none;margin-top:14px;text-align:left;background:#fffdf7;border:2px solid #e8dcc4;border-radius:12px;padding:11px 13px">
+        <div style="font-size:0.7rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#a89170;margin-bottom:5px">Texto para pegar con la foto</div>
+        <div id="flyer-caption-txt" style="font-size:0.84rem;color:#2d1a0a;white-space:pre-wrap;line-height:1.5"></div>
+        <button onclick="copiarTextoFlyer()" style="margin-top:9px;width:100%;padding:9px;border:2px solid #d9c2f7;border-radius:10px;background:#fff;color:#5a1ec0;font-weight:800;font-size:0.82rem;cursor:pointer;font-family:inherit">📋 Copiar texto con el link</button>
+        <div style="font-size:0.72rem;color:#a89170;margin-top:6px;line-height:1.45">En la imagen el link no se puede tocar (ni en WhatsApp ni en un estado). Pegá este texto junto a la foto: ahí sí se toca y entra.</div>
+      </div>
       <div id="flyer-acciones" style="display:none;flex-direction:column;gap:8px;margin-top:14px">
         <button class="btn-add" style="margin:0" onclick="compartirFlyer()">📤 Compartir</button>
         <button class="btn-add" style="margin:0;background:#1faa59" onclick="enviarFlyerWAUI()">📲 Mandarlo a mi WhatsApp</button>

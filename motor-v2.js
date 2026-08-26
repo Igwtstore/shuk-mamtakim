@@ -17,7 +17,7 @@ const PROTECTED_ACTIONS = [
   'eliminarNotificacion','marcarNotificado','getAnalitica','getProductosDormidos','preguntarIA','editarProducto',
   'setEstadoTienda','aceptarCotizacion','eliminarProducto',
   'analizarFotoProducto','bandejaSubir','bandejaListar','bandejaUsar','procesarBandeja','bandejaReintentar','bandejaEliminar','bandejaVaciar',
-  'guardarClaveIA','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV','editarProductosLote','blindarColumnasPrecios'
+  'guardarClaveIA', 'guardarClaveGemini','movimientosStock','auditoriaStock','leerStockRaw','getProductosAdmin','setVisibilidadMasiva','setCategoriaMasiva','limpiarTestData','panelAdmin','getCajaEnvios','migrarPreciosCSV','editarProductosLote','blindarColumnasPrecios','exportarHoja'
 ];
 
 // ─── AUTH candyshop (panel de los chicos + bot) ───────────────────────────────
@@ -31,7 +31,7 @@ const PROTECTED_HIJOS = [
   'eliminarProductoHijo','eliminarVentaHijos','editarVentaHijos','marcarComprado','auditarHijos',
   'getProveedoresHijos','agregarProveedorHijos','editarProveedorHijos','eliminarProveedorHijos',
   'registrarCompraHijos','eliminarCompraHijos','getComprasHijos','getDepositoHijos','panelHijos','comprasTabHijos',
-  'flyerTexto','fondoFlyer','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA',
+  'flyerTexto','fondoFlyer','disenoFlyerIA','guardarFlyer','getFlyersHijos','archivarFlyer','eliminarFlyer','enviarFlyerWA',
   'getAvisosCandy','resolverAvisoCandy',   // avisarmeCandy queda PÚBLICO (lo usa la tienda de clientes)
   'getProductosShukAdmin','getShukEnCandy','toggleShukEnCandy',   // importar productos de Shuk al catálogo de Candy
   'setCategoriaHijosLote',   // asignar categoría a varios productos de Candy de una
@@ -1130,6 +1130,18 @@ function doGet(e) {
       const rows = h.getRange(2, 1, h.getLastRow() - 1, 4).getValues();
       return json(rows.map(r => ({ fecha: (r[0] || '').toString(), tipo: (r[1] || '').toString(), detalle: (r[2] || '').toString(), por: (r[3] || '').toString() })).reverse());
     }
+    // Exportador genérico de una hoja CRUDA (headers + filas), para la migración a Supabase.
+    // Solo lectura, protegido. Fechas como texto 'dd/MM/yyyy HH:mm:ss' (con segundos: preserva la
+    // precisión para analítica; los parseos que solo miran dd/MM o HH:mm ignoran los segundos, no rompe).
+    if (accion === 'exportarHoja') {
+      const nombre = (e.parameter.hoja || '').toString();
+      const h = ss.getSheetByName(nombre);
+      if (!h || h.getLastRow() < 1) return json({ hoja: nombre, headers: [], filas: [] });
+      const vals = h.getRange(1, 1, h.getLastRow(), h.getLastColumn()).getValues();
+      const headers = (vals[0] || []).map(x => (x == null ? '' : x).toString());
+      const filas = vals.slice(1).map(row => row.map(c => c instanceof Date ? Utilities.formatDate(c, TZ, 'dd/MM/yyyy HH:mm:ss') : c));
+      return json({ hoja: nombre, headers, filas });
+    }
     // Pago a cuenta: pago parcial de un cliente con deuda en cuenta corriente.
     if (accion === 'registrarPagoCuenta') {
       const h = getOrCreate(ss, 'Pagos', ['Fecha','Cliente','PedidoId','MontoARS','MontoUSD','Caja','Nota','MontoPitz']);
@@ -1666,6 +1678,14 @@ function doGet(e) {
       PropertiesService.getScriptProperties().setProperty('ANTHROPIC_API_KEY', clave);
       return ok();
     }
+    if (accion === 'guardarClaveGemini') {
+      const claveG = dec(e.parameter.clave || '').trim();
+      // Google tiene DOS formatos vivos: el clásico 'AIza…' y el nuevo 'AQ.…'
+      // (el que usa hoy AI Studio). Validar solo el viejo rechazaba la clave buena.
+      if (!/^(AIza|AQ\.)/.test(claveG) || claveG.length < 30) return json({ error: 'Esa no parece una clave de Gemini (empiezan con AIza… o AQ.…)' });
+      PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', claveG);
+      return ok();
+    }
     if (accion === 'visitas') {
       const h = ss.getSheetByName('Visitas');
       if (!h || h.getLastRow() < 2) return json([]);
@@ -1791,6 +1811,7 @@ function doGet(e) {
     if (accion === 'comprasTabHijos')      { return json({ proveedores: getProveedoresHijos(ss), compras: getComprasHijos(ss), deposito: getDepositoHijos(ss) }); }
     if (accion === 'flyerTexto')           { return json(flyerTexto(e.parameter)); }
     if (accion === 'fondoFlyer')           { return json(fondoFlyer(e.parameter)); }
+    if (accion === 'disenoFlyerIA')        { return json(disenoFlyerIA(e.parameter)); }
     if (accion === 'guardarFlyer')         { return json(guardarFlyer(ss, e.parameter)); }
     if (accion === 'getFlyersHijos')       { return json(getFlyersHijos(ss, e.parameter)); }
     if (accion === 'archivarFlyer')        { return json(archivarFlyer(ss, e.parameter)); }
@@ -1810,7 +1831,7 @@ function doPost(e) {
     const body = JSON.parse(e.postData.contents);
     // Editor masivo: batch grande → POST con JSON (evita el límite de largo del GET). Delega al
     // handler general (doGet), que valida la sesión con body.token.
-    if (body.accion === 'editarProductosLote') { e.parameter = Object.assign({}, e.parameter, body); return doGet(e); }
+    if (body.accion === 'editarProductosLote' || body.accion === 'disenoFlyerIA') { e.parameter = Object.assign({}, e.parameter, body); return doGet(e); }
     // Tool de Retell (custom function): POST con {args:{cliente,direccion,items}} y secret/accion en la URL.
     if (e.parameter && e.parameter.accion === 'pedidoVoz') {
       if (e.parameter.secret !== BOT_SECRET) return json({ error: 'no autorizado' });
@@ -3549,6 +3570,12 @@ function flyerTexto(p) {
       'golosinas a amigos, compañeros y vecinos. Escribís textos para flyers: cortos, divertidos, vendedores, ' +
       'en español rioplatense, con onda pero sin grosería. ';
   const system = intro + 'Respetá los límites de caracteres a rajatabla. ' +
+    'EL TÍTULO ES LO QUE FRENA EL SCROLL: que tenga gancho comercial de verdad — un beneficio, una novedad, ' +
+    'una urgencia o un guiño al producto ("Recién llegado de Israel", "Se van volando", "El chocolate que no se consigue"). ' +
+    'NADA de títulos genéricos tipo "Nuestros productos" u "Ofertas". La frase suma el motivo de compra concreto ' +
+    '(sabor, origen, kosher, precio, temporada) y el cierre es una orden simpática que empuja a escribir HOY. ' +
+    (p.conPrecios === '0' ? 'OJO: este flyer NO lleva precios, así que el texto tiene que vender por deseo y el cierre invitar a consultar. ' : '') +
+    (p.conWeb === '1' ? 'El flyer lleva un código QR a la tienda online: el cierre puede invitar a escanear y pedir. ' : '') +
     'Además escribís el prompt (en inglés) para generar el FONDO del flyer con un modelo de imágenes: ' +
     'tiene que ser detallado y profesional — estilo visual concreto (ej: vibrant candy-pop 3D render, soft gradient studio backdrop, ' +
     'playful flat illustration), motivos inspirados en los productos (vapor de sopa, trozos de chocolate, caramelos flotando), ' +
@@ -3615,6 +3642,161 @@ function fondoFlyer(p) {
   } catch (err) { return { error: 'fondo: ' + err }; }
 }
 
+// ═══ 🪄 DISEÑO IA TOTAL DEL FLYER (v4.58) — espejo del endpoint Supabase ═════
+// Gemini compone el flyer entero (logo real + fotos + textos exactos) y Claude
+// VERIFICA los importes leyendo la imagen generada antes de entregarla.
+
+function b64DeUrl_(url) {
+  const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('img ' + r.getResponseCode());
+  const blob = r.getBlob();
+  return { mime: blob.getContentType() || 'image/png', data: Utilities.base64Encode(blob.getBytes()) };
+}
+
+function promptFlyerIA_(t, prods, estilo, aspecto, conPrecios, web) {
+  const lineas = prods.map(function (p, i) {
+    return (i + 1) + ') ' + p.nombre + (conPrecios ? ' → "' + (p.promo || p.precio) + '"' : '') +
+      (conPrecios && p.promo ? ' (al lado, el precio viejo "' + p.precio + '" tachado)' : '') +
+      (p.badge ? ' [cinta "' + p.badge + '"]' : '');
+  }).join('\n');
+  return 'Sos un diseñador gráfico senior. Diseñá un flyer promocional ' +
+    (aspecto === '1:1' ? 'cuadrado' : 'vertical') +
+    ' de calidad profesional para "Shuk Mamtakim", tienda argentina de golosinas kosher importadas de Israel.\n' +
+    'LA PRIMERA IMAGEN ADJUNTA ES EL LOGO OFICIAL: integralo arriba, prominente, EXACTAMENTE como es (no lo redibujes ni cambies sus colores ni su texto).\n' +
+    'LAS SIGUIENTES IMÁGENES SON LAS FOTOS REALES DE LOS PRODUCTOS: usalas SIN deformar ni redibujar, recortadas prolijas con sombra suave; son las protagonistas.\n' +
+    'TEXTOS OBLIGATORIOS — copialos EXACTOS, letra por letra y número por número:\n' +
+    '• Título: "' + t.titulo + '"\n• Frase: "' + t.frase + '"\n' +
+    (conPrecios
+      ? '• Precio de cada producto, en una etiqueta bien grande y legible pegada a SU producto:\n' + lineas + '\n'
+      : '• Productos que aparecen (SIN ningún precio: este flyer no lleva precios, no inventes ninguno):\n' + lineas + '\n') +
+    '• Cierre (botón o cinta): "' + t.cierre + '"\n• Pie: "📲 11 3175-4540"' +
+    (web ? '\n• Dirección web al pie, junto al teléfono: "' + web + '"' : '') + '\n' +
+    'PROHIBIDO: cualquier otro texto, palabra, número, marca de agua o logo inventado. Nada de texto en el fondo.\n' +
+    'Estilo de arte: ' + (estilo || 'candy-pop 3D festivo, colores vibrantes, golosinas flotando, cintas y destellos') +
+    '. Composición aireada y jerárquica, tipografía display redondeada con contorno, contraste alto para leerse en el celular.';
+}
+
+function geminiImagen_(key, prompt, imgs, aspecto) {
+  const MODELOS = ['gemini-3-pro-image', 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image'];
+  let ultimo = '';
+  for (let m = 0; m < MODELOS.length; m++) {
+    const modelo = MODELOS[m];
+    try {
+      const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelo + ':generateContent', {
+        method: 'post', contentType: 'application/json',
+        headers: { 'x-goog-api-key': key },
+        payload: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }].concat(imgs.map(function (i) { return { inline_data: { mime_type: i.mime, data: i.data } }; })) }],
+          generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspecto } }
+        }),
+        muteHttpExceptions: true
+      });
+      const j = JSON.parse(r.getContentText() || '{}');
+      if (r.getResponseCode() === 200) {
+        const im = cazarImagenB64_(j, 0);
+        if (im) return { b64: im.data, mime: im.mime || 'image/png' };
+      }
+      ultimo = 'gc ' + modelo + ' HTTP ' + r.getResponseCode() + ' ' + String((j.error && j.error.message) || '').slice(0, 140);
+    } catch (e) { ultimo = 'gc ' + modelo + ': ' + e; }
+    try {
+      const r2 = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'post', contentType: 'application/json',
+        headers: { 'x-goog-api-key': key },
+        payload: JSON.stringify({
+          model: modelo,
+          input: [{ type: 'text', text: prompt }].concat(imgs.map(function (i) { return { type: 'image', mime_type: i.mime, data: i.data }; })),
+          response_format: { type: 'image', mime_type: 'image/png', aspect_ratio: aspecto, image_size: '1K' }
+        }),
+        muteHttpExceptions: true
+      });
+      const j2 = JSON.parse(r2.getContentText() || '{}');
+      if (r2.getResponseCode() === 200) {
+        const im2 = cazarImagenB64_(j2, 0);
+        if (im2) return { b64: im2.data, mime: im2.mime || 'image/png' };
+      }
+      ultimo = 'ix ' + modelo + ' HTTP ' + r2.getResponseCode() + ' ' + String((j2.error && j2.error.message) || '').slice(0, 140);
+    } catch (e) { ultimo = 'ix ' + modelo + ': ' + e; }
+  }
+  return { error: ultimo };
+}
+
+function cazarImagenB64_(o, prof) {
+  if (!o || typeof o !== 'object' || prof > 8) return null;
+  const claves = Object.keys(o);
+  for (let i = 0; i < claves.length; i++) {
+    const v = o[claves[i]];
+    if (typeof v === 'string' && v.length > 10000 && /^[A-Za-z0-9+\/=]+$/.test(v.slice(0, 120)))
+      return { data: v, mime: o.mime_type || o.mimeType || '' };
+    if (v && typeof v === 'object') { const r = cazarImagenB64_(v, prof + 1); if (r) return r; }
+  }
+  return null;
+}
+
+function verificarPreciosFlyer_(b64, mime, prods) {
+  const aKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!aKey || b64.length > 4800000) return null;
+  try {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'x-api-key': aKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 600,
+        output_config: { format: { type: 'json_schema', schema: {
+          type: 'object',
+          properties: { importes: { type: 'array', items: { type: 'string' }, description: 'TODOS los importes de dinero visibles en la imagen, dígitos exactos, incluidos los tachados' } },
+          required: ['importes'], additionalProperties: false } } },
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mime || 'image/png', data: b64 } },
+          { type: 'text', text: 'Transcribí TODOS los importes de dinero visibles en este flyer, uno por uno, con sus dígitos exactos (incluidos los tachados).' }
+        ] }]
+      }),
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) return null;
+    const body = JSON.parse(res.getContentText());
+    let texto = '';
+    (body.content || []).forEach(function (b) { if (b.type === 'text') texto += b.text; });
+    const leidos = (JSON.parse(texto).importes || []).map(function (s) { return String(s).replace(/\D/g, ''); }).filter(Boolean);
+    const problemas = [];
+    prods.forEach(function (p) {
+      const esperado = String(p.promo || p.precio || '').replace(/\D/g, '');
+      if (esperado && leidos.indexOf(esperado) === -1) problemas.push('"' + (p.promo || p.precio) + '" (' + p.nombre + ')');
+    });
+    return { ok: problemas.length === 0, problemas: problemas };
+  } catch (e) { return null; }
+}
+
+function disenoFlyerIA(p) {
+  try {
+    const gKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!gKey) return { error: 'sin_clave_gemini', mensaje: 'Falta la clave de Gemini (se carga desde el armador de flyers).' };
+    let prods = [];
+    try { prods = JSON.parse(dec(p.productos || '[]')); } catch (e) { prods = []; }
+    prods = prods.slice(0, 8);
+    if (!prods.length) return { error: 'sin productos' };
+    const t = { titulo: dec(p.titulo || ''), frase: dec(p.frase || ''), cierre: dec(p.cierre || '') };
+    const aspecto = p.formato === 'historia' ? '9:16' : p.formato === 'cuadrado' ? '1:1' : '4:5';
+    const imgs = [b64DeUrl_('https://res.cloudinary.com/dq2boloyp/image/upload/e_trim:10/w_440/app_icon_rmbyhb.png')];
+    prods.forEach(function (pr) { if (pr.foto) { try { imgs.push(b64DeUrl_(pr.foto)); } catch (e) { /* foto caída: sigue */ } } });
+    const conPrecios = p.precios !== '0';
+    const prompt = promptFlyerIA_(t, prods, dec(p.estilo || ''), aspecto, conPrecios, dec(p.web || ''));
+    let gen = geminiImagen_(gKey, prompt, imgs, aspecto);
+    if (!gen.b64) return { error: gen.error || 'Gemini no devolvió imagen' };
+    let aviso = '';
+    // sin precios en la pieza no hay nada que verificar
+    const ver = conPrecios ? verificarPreciosFlyer_(gen.b64, gen.mime, prods) : null;
+    if (ver && !ver.ok) {
+      const gen2 = geminiImagen_(gKey, prompt + '\nCORRECCIÓN CRÍTICA: en el intento anterior estos importes salieron mal o ilegibles: ' + ver.problemas.join('; ') + '. Repetí el diseño con CADA precio copiado EXACTO, grande y legible junto a su producto.', imgs, aspecto);
+      if (gen2.b64) {
+        const ver2 = verificarPreciosFlyer_(gen2.b64, gen2.mime, prods);
+        gen = gen2;
+        if (ver2 && !ver2.ok) aviso = 'Revisá los precios en la imagen antes de mandarla: ' + ver2.problemas.join('; ');
+      } else aviso = 'Revisá los precios en la imagen antes de mandarla: ' + ver.problemas.join('; ');
+    }
+    return { ok: true, b64: gen.b64, mime: gen.mime || 'image/png', aviso: aviso };
+  } catch (err) { return { error: 'disenoIA: ' + err }; }
+}
+
 // ─── HISTORIAL DE FLYERS ──────────────────────────────────────────────────────
 function guardarFlyer(ss, p) {
   const h = getOrCreate(ss, 'FlyersHijos', ['ID','Fecha','Hijo','URL','Titulo','Codigos','Idea','FondoIA','Estado','Config']);
@@ -3658,7 +3840,9 @@ function enviarFlyerWA(p) {
       payload: JSON.stringify({
         relay: true, secret: BOT_SECRET,
         dest: dec(p.hijo || '').toLowerCase(),
-        text: '🎨 ¡Tu flyer está listo! Reenvialo a tus contactos o subilo a tu estado.',
+        // El epígrafe del panel ya trae el link tocable: se manda tal cual para
+        // poder reenviarlo con la foto sin volver a escribirlo.
+        text: dec(p.texto || '') || '🎨 ¡Tu flyer está listo! Reenvialo a tus contactos o subilo a tu estado.',
         mediaUrl: dec(p.url || '')
       }),
       muteHttpExceptions: true
