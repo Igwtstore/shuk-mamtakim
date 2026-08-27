@@ -8,15 +8,19 @@ const dir = __dirname;
 let total = 0, fail = 0;
 const archivos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !f.startsWith('_')).sort();
 
-archivos.forEach(f => {
-  console.log('\n── ' + f.replace('.js', '') + ' ─────────────');
-  let res;
-  try { res = require(path.join(dir, f)).run(); }
-  catch (e) { console.log('  💥 EXCEPCIÓN: ' + e.message); fail++; total++; return; }
-  res.forEach(t => { total++; if (!t.ok) fail++; console.log('  ' + (t.ok ? '✓' : '✗ FALLÓ —') + ' ' + t.name); });
-});
+// `await`: un test puede devolver una promesa (los que simulan llamadas al backend).
+// Los de siempre, que devuelven el array directo, siguen andando igual.
+(async () => {
+  for (const f of archivos) {
+    console.log('\n── ' + f.replace('.js', '') + ' ─────────────');
+    let res;
+    try { res = await require(path.join(dir, f)).run(); }
+    catch (e) { console.log('  💥 EXCEPCIÓN: ' + e.message); fail++; total++; continue; }
+    res.forEach(t => { total++; if (!t.ok) fail++; console.log('  ' + (t.ok ? '✓' : '✗ FALLÓ —') + ' ' + t.name); });
+  }
 
-console.log('\n══════════════════════════════════════');
-console.log(fail === 0 ? `✅ TODO VERDE — ${total} checks de plata OK` : `❌ ${fail} de ${total} FALLARON — NO deployar`);
-console.log('══════════════════════════════════════');
-process.exit(fail === 0 ? 0 : 1);
+  console.log('\n══════════════════════════════════════');
+  console.log(fail === 0 ? `✅ TODO VERDE — ${total} checks de plata OK` : `❌ ${fail} de ${total} FALLARON — NO deployar`);
+  console.log('══════════════════════════════════════');
+  process.exit(fail === 0 ? 0 : 1);
+})();
