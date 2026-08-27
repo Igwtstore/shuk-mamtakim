@@ -12559,11 +12559,24 @@ async function _svRotacion(dias) {
         if (!m) return;
         const prod = _matchProdLinea(m[2].trim());
         if (!prod) return;
-        map[String(prod.id)] = (map[String(prod.id)] || 0) + (parseInt(m[1]) || 0);
+        // Se guarda CADA venta con su fecha (no un total): cada producto se mide después contra
+        // SU propia ventana. Un producto que entró hace 6 días vendió "1 u. en 6d", no "1 u. en 90d"
+        // — el total de 90 días lo hacía ver mucho peor de lo que es (pedido del usuario 26/08).
+        const k = String(prod.id);
+        (map[k] || (map[k] = [])).push({ ts: _tsFecha(v.fecha) || 0, qty: parseInt(m[1]) || 0 });
       });
     });
     return map;
   } catch (e) { return null; }
+}
+
+// Unidades vendidas desde una fecha. Las ventas con fecha ilegible se cuentan igual: no se puede
+// probar que sean viejas, y ante la duda conviene NO acusar a un producto de estar quieto.
+// PURA → la blinda tests/unit/stock_valorizado.js
+function _svVendidasDesde(eventos, desdeTs) {
+  let n = 0;
+  for (const e of (eventos || [])) if (!e.ts || e.ts >= desdeTs) n += e.qty || 0;
+  return n;
 }
 
 // ¿Hace cuántos días está esta mercadería en casa? Es lo que decide si tiene sentido llamarla
@@ -12650,6 +12663,9 @@ async function renderStockValorizado() {
   R.items.forEach(it => {
     it.dias = _svDiasEnCasa(it.creado, (_ocUltima[String(it.id)] || {}).fecha, ahora);
     it.nuevo = it.dias != null && it.dias < SV_DIAS_MIN;
+    // Cada producto se mide contra el tiempo que REALMENTE lleva en casa (tope: la ventana de 90d).
+    it.ventana = it.dias != null ? Math.min(SV_DIAS_ROT, it.dias) : SV_DIAS_ROT;
+    it.vend = rot ? _svVendidasDesde(rot[String(it.id)], ahora - it.ventana * 86400000) : 0;
   });
   const top = R.items.slice(0, 25);
   const itemHtml = top.map((it, i) => {
@@ -12660,10 +12676,12 @@ async function renderStockValorizado() {
       : `<div style="width:34px;height:34px;border-radius:6px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.85rem">🍬</div>`;
     let chipRot = '';
     if (rot) {
-      const vend = rot[String(it.id)] || 0;
-      if (vend > 0) chipRot = `<span style="font-size:0.6rem;color:var(--verde);font-weight:700" title="Unidades vendidas en los últimos ${SV_DIAS_ROT} días">↻ ${vend} u. en ${SV_DIAS_ROT}d</span>`;
-      else if (it.nuevo) chipRot = `<span style="font-size:0.6rem;color:#2c6fad;font-weight:700" title="Entró hace poco: todavía no tuvo tiempo de venderse, no cuenta como quieto">🆕 entró hace ${it.dias} día${it.dias === 1 ? '' : 's'}</span>`;
-      else chipRot = `<span style="font-size:0.6rem;color:var(--rojo);font-weight:800" title="No se vendió ni una unidad desde que entró">🧊 quieto ${it.dias != null ? Math.min(SV_DIAS_ROT, it.dias) : SV_DIAS_ROT}d</span>`;
+      // La ventana es la que le corresponde a ESTE producto: lo que entró hace 6 días se mide
+      // contra 6 días, no contra 90 (si no, "1 u. en 90d" lo hacía ver muerto sin serlo).
+      const vTxt = it.ventana >= SV_DIAS_ROT ? `${SV_DIAS_ROT}d` : (it.ventana === 1 ? '1 día' : `${it.ventana} días`);
+      if (it.vend > 0) chipRot = `<span style="font-size:0.6rem;color:var(--verde);font-weight:700" title="Unidades vendidas en ${vTxt} — el tiempo que lleva en casa">↻ ${it.vend} u. en ${vTxt}</span>`;
+      else if (it.nuevo) chipRot = `<span style="font-size:0.6rem;color:#2c6fad;font-weight:700" title="Entró hace poco: todavía no tuvo tiempo de venderse, no cuenta como quieto">🆕 entró hace ${it.dias} día${it.dias === 1 ? '' : 's'}, sin vender</span>`;
+      else chipRot = `<span style="font-size:0.6rem;color:var(--rojo);font-weight:800" title="No se vendió ni una unidad desde que entró">🧊 quieto ${vTxt}</span>`;
     }
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
       <span style="font-size:0.68rem;color:var(--texto-suave);font-weight:700;width:18px;flex-shrink:0">${i + 1}.</span>
@@ -12678,7 +12696,7 @@ async function renderStockValorizado() {
       </div>
     </div>`;
   }).join('');
-  const sinVender = rot ? R.items.filter(it => !(rot[String(it.id)] > 0)) : [];
+  const sinVender = rot ? R.items.filter(it => !(it.vend > 0)) : [];
   const quietos = sinVender.filter(it => !it.nuevo);          // los recién llegados NO son "quietos"
   const nuevos = sinVender.filter(it => it.nuevo);
   const quietoOrd = quietos.reduce((s, it) => s + it.ord, 0);
