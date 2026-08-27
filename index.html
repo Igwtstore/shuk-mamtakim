@@ -5800,7 +5800,10 @@ function _linkTiendaTexto() {
 }
 function _qrUrl() {
   const u = _linkTienda();
-  return u ? 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=1&data=' + encodeURIComponent(u) : '';
+  // Se pide GRANDE (600) y se achica con suavizado: el link minorista
+  // (…/#min-pL3q7) genera un QR más denso y, pedido chico, los módulos salían
+  // borrosos y el lector no lo agarraba.
+  return u ? 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=1&data=' + encodeURIComponent(u) : '';
 }
 
 function _promptEscenografia(base) {
@@ -6029,6 +6032,13 @@ function _gridDims(n, areaW, areaH, gap, aspectMax, aspectos, estilo) {
   // promedio no representa a nadie cuando hay bolsas verticales y tabletas
   // acostadas en el mismo flyer (y son justo las bolsas las que se achican).
   const ars = (aspectos && aspectos.length) ? aspectos : [0.8];
+  // El tope de "tarjeta chicle" no puede ser CIEGO al producto: con bolsas y
+  // barras paradas (ancho/alto ≈ 0,6) la tarjeta quedaba capada en 1,75× su
+  // ancho y la foto salía recortada en altura AUNQUE el flyer tuviera lugar
+  // de sobra debajo (era el hueco vacío entre los productos y el pie). Se le
+  // permite a la tarjeta el alto que pide la foto más parada, más el texto.
+  const arMin = Math.min.apply(null, ars.map(a => a > 0.05 ? a : 0.8));
+  aspectMax = Math.max(aspectMax, (1 / Math.max(0.3, arMin)) * 1.4);
   let best = null, bestScore = -1;
   for (let cols = 1; cols <= Math.min(8, n); cols++) {
     const filas = Math.ceil(n / cols);
@@ -6053,13 +6063,15 @@ function _gridDims(n, areaW, areaH, gap, aspectMax, aspectos, estilo) {
     // La tarjeta se recorta a lo que el contenido usa de verdad (si no, una
     // tableta acostada deja un hueco arriba que se lee como "tarjeta sin foto")
     const chReal = Math.min(ch, altoFoto + pad * 2 + texto);
-    // ...pero recortar deja aire AFUERA. Se pondera cuánto del área se llena:
-    // así el motor no elige ni fotos grandes con huecos ni un flyer apretado.
+    // ...pero recortar deja aire AFUERA. Se pondera cuánto del área se llena,
+    // con poco peso: el aire de más se reparte arriba y abajo de la fila y se
+    // lee como respiro, mientras que apretar filas para llenar el alto achica
+    // las fotos, que es lo que el ojo mide (exponente 0,45 → 0,30).
     const usado = chReal * filas + gap * (filas - 1);
     const ocupacion = Math.min(1, usado / areaH);
     const huecos = cols * filas - n;
     const castigo = 1 - Math.min(0.22, (huecos / cols) * 0.22);
-    const score = areaFoto * castigo * Math.pow(ocupacion, 0.45);
+    const score = areaFoto * castigo * Math.pow(ocupacion, 0.30);
     if (score > bestScore * 1.02) { best = { cols, filas, cw, ch: chReal }; bestScore = score; }
   }
   return best;
@@ -6074,16 +6086,36 @@ function _pintarGrid(ctx, prods, imgs, tema, FT, W, top, areaH, gap, estilo, asp
   const ars = imgs.filter(im => im && im.width && im.height).map(im => im.width / im.height);
   // Sin tarjeta que respetar, las fotos pueden ir casi pegadas y usar todo el
   // ancho (es lo que hace que los flyers de la competencia se vean "llenos").
-  const margen = estilo === 'aire' ? (n <= 4 ? 14 : 30) : (n <= 4 ? 34 : 56);
+  const margen = estilo === 'aire' ? (n <= 4 ? 14 : 22) : (n <= 4 ? 30 : 26);
   if (estilo === 'aire' && n <= 6) gap = Math.min(gap, 10);
   const g = _gridDims(n, W - margen * 2, areaH, gap, aspectMax, ars, estilo);
   if (window._espiaGrid) window._espiaGrid({ cols: g.cols, filas: g.filas, cw: Math.round(g.cw), ch: Math.round(g.ch) });
   const offY = top + Math.max(0, (areaH - (g.ch * g.filas + gap * (g.filas - 1))) / 2);
+  // 📏 Cada tarjeta se ajusta a SU contenido y todas se apoyan en la misma
+  // línea de abajo. Con el alto uniforme, una tableta acostada al lado de
+  // bolsas paradas dejaba media tarjeta en blanco: se leía como "tarjeta sin
+  // foto" (es el defecto que reportó el usuario). El alto nunca baja de lo
+  // que el nombre y el precio necesitan para NO achicarse.
+  const pocos = n <= 4;
+  const padC = estilo === 'aire' ? 4 : Math.max(9, Math.round(g.cw * 0.05));
+  const textoC = _altoTextoAprox(g.cw, g.ch, estilo, pocos);
+  const fwC = g.cw - padC * 2, fhC = g.ch - padC * 2 - textoC;
+  const cuota = pocos ? 0.30 : 0.46;
+  const altoDe = im => {
+    if (!im || !im.width || fhC <= 0) return g.ch;
+    const fh = Math.min(fwC / (im.width / im.height), fhC);
+    const minTexto = textoC > 0 ? textoC / cuota + padC * 2 : 0;
+    const alto = Math.min(g.ch, Math.max(Math.round(fh + padC * 2 + textoC), Math.round(minTexto), 168));
+    // Si le falta poco para la altura completa, va completa: si no, la fila
+    // queda con los bordes de arriba desparejos por 20 px y se ve descuidado.
+    return alto > g.ch * 0.88 ? g.ch : alto;
+  };
   prods.forEach((p, i) => {
     const col = i % g.cols, fila = Math.floor(i / g.cols);
     const enFila = fila === g.filas - 1 ? n - fila * g.cols : g.cols;
     const xB = margen + (W - margen * 2 - (g.cw * enFila + gap * (enFila - 1))) / 2;
-    _cardProd(ctx, p, imgs[i], xB + col * (g.cw + gap), offY + fila * (g.ch + gap), g.cw, g.ch, tema, FT, estilo, n <= 4);
+    const hC = altoDe(imgs[i]);
+    _cardProd(ctx, p, imgs[i], xB + col * (g.cw + gap), offY + fila * (g.ch + gap) + (g.ch - hC), g.cw, hC, tema, FT, estilo, pocos);
   });
 }
 
@@ -6539,7 +6571,7 @@ function _logoShuk(ctx, cx, cy, r, FT) {
 }
 
 // Banda de contacto al pie, estilo "para pedidos al…" con circulito verde.
-function _pieBanner(ctx, W, H, tema, FT, qrIm) {
+function _pieBanner(ctx, W, H, tema, FT, qrIm, cierre) {
   const tel = '11 3175-4540', web = _linkTiendaTexto();
   const bh = 76;
   ctx.font = '800 40px ' + FT; const wTel = ctx.measureText(tel).width;
@@ -6551,7 +6583,8 @@ function _pieBanner(ctx, W, H, tema, FT, qrIm) {
   if (!qrIm) {
     const bw = 62 + wTel + 26 + wMarca + 34;
     const bx = (W - bw) / 2, by = H - 114;
-    ctx.fillStyle = 'rgba(255,255,255,0.14)'; _rr(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = 'rgba(12,9,28,0.46)'; _rr(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.11)'; _rr(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
     ctx.strokeStyle = tema.accent; ctx.lineWidth = 2.5; _rr(ctx, bx, by, bw, bh, bh / 2); ctx.stroke();
     ctx.fillStyle = '#1faa59';
     ctx.beginPath(); ctx.arc(bx + 40, by + bh / 2, 24, 0, 7); ctx.fill();
@@ -6565,33 +6598,51 @@ function _pieBanner(ctx, W, H, tema, FT, qrIm) {
     ctx.textAlign = 'center';
     return;
   }
+  // CON QR: un solo bloque con el llamado a la acción, el código y el
+  // contacto. Antes eran dos cajas apiladas que decían lo mismo ("Escaneá y
+  // pedí ya" arriba, "Escaneá y comprá online" abajo) y entre las dos se
+  // llevaban 306 px de alto: en el flyer cuadrado, casi un tercio.
   // qz = zona de silencio: el marco blanco alrededor del QR. Sin esto los
   // lectores fallan (sobre todo impreso); el estándar pide ~4 módulos.
-  const qs = 118, pad = 16, qz = 17;
-  const anchoTxt = Math.max(wTel + 52, wWeb);
-  const bw = pad + qs + qz * 2 + 20 + anchoTxt + pad + 8;
+  const qs = 122, pad = 16, qz = 17;
+  const cta = (cierre || '').trim();
+  ctx.font = '800 42px ' + FT; const wCta = cta ? ctx.measureText(cta).width : 0;
+  // La dirección web es lo más largo del bloque (".com.ar/mayorista"): si no
+  // entra, se achica la letra en vez de desbordar el marco.
+  const fijo = pad + qs + qz * 2 + 22 + pad + 10;
+  let webFs = 27, wWeb2 = 0;
+  while (true) {
+    ctx.font = '700 ' + webFs + 'px ' + FT;
+    wWeb2 = web ? ctx.measureText(web).width : 0;
+    if (wWeb2 <= W - 44 - fijo || webFs <= 18) break;
+    webFs -= 1;
+  }
+  const anchoTxt = Math.max(wTel + 52, wWeb2, wCta);
+  const bw = Math.min(W - 44, fijo + anchoTxt);
   const bh2 = qs + qz * 2 + pad * 2;
   const bx = (W - bw) / 2, by = H - bh2 - 26;
-  ctx.fillStyle = 'rgba(255,255,255,0.13)'; _rr(ctx, bx, by, bw, bh2, 26); ctx.fill();
+  // Fondo con velo oscuro: con sólo el blanco translúcido, los emojis de la
+  // decoración se veían A TRAVÉS del bloque y se montaban sobre la dirección web.
+  ctx.fillStyle = 'rgba(12,9,28,0.46)'; _rr(ctx, bx, by, bw, bh2, 26); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.10)'; _rr(ctx, bx, by, bw, bh2, 26); ctx.fill();
   ctx.strokeStyle = tema.accent; ctx.lineWidth = 2.5; _rr(ctx, bx, by, bw, bh2, 26); ctx.stroke();
   // el QR va sobre blanco sí o sí, si no los lectores no lo agarran
   const qx = bx + pad + qz, qy = by + pad + qz;
   ctx.fillStyle = '#ffffff';
   _rr(ctx, qx - qz, qy - qz, qs + qz * 2, qs + qz * 2, 12); ctx.fill();
   ctx.drawImage(qrIm, qx, qy, qs, qs);
-  const tx = qx + qs + qz + 20;
+  const tx = qx + qs + qz + 22;
   ctx.textAlign = 'left';
+  if (cta) { ctx.font = '800 42px ' + FT; ctx.fillStyle = tema.accent; ctx.fillText(cta, tx, by + 56); }
   ctx.fillStyle = '#1faa59';
-  ctx.beginPath(); ctx.arc(tx + 18, by + bh2 * 0.34, 18, 0, 7); ctx.fill();
-  ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('📞', tx + 18, by + bh2 * 0.34 + 7);
+  ctx.beginPath(); ctx.arc(tx + 17, by + 96, 17, 0, 7); ctx.fill();
+  ctx.font = '19px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('📞', tx + 17, by + 103);
   ctx.textAlign = 'left';
   ctx.font = '800 38px ' + FT; ctx.fillStyle = '#ffffff';
-  ctx.fillText(tel, tx + 44, by + bh2 * 0.34 + 13);
-  ctx.font = '700 27px ' + FT; ctx.fillStyle = tema.accent;
-  ctx.fillText(web, tx, by + bh2 * 0.76 + 9);
-  ctx.font = '600 19px ' + FT; ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText('Escaneá y comprá online', tx, by + bh2 * 0.76 + 36);
+  ctx.fillText(tel, tx + 42, by + 109);
+  ctx.font = '700 ' + webFs + 'px ' + FT; ctx.fillStyle = tema.accent;
+  ctx.fillText(web, tx, by + 152);
   ctx.textAlign = 'center';
 }
 
@@ -6637,7 +6688,6 @@ async function dibujarFlyer(prods, t) {
   // Historia y Cuadrado usan el encabezado compacto: en vertical, cada píxel
   // que no gasta el logo se lo lleva la foto del producto.
   const compacto = H <= 1080 || fFormato === 'historia';
-  const headerH = compacto ? 362 : 406;   // logo + título + frase
   const conQR = fLink !== 'no';
   // 📱 ZONA SEGURA (formato Historia): WhatsApp e Instagram tapan una franja
   // arriba (nombre de quien publica) y otra abajo (caja de respuesta y
@@ -6647,8 +6697,34 @@ async function dibujarFlyer(prods, t) {
   const safeTop = esHistoria ? Math.round(H * 0.075) : 0;
   const safeBot = esHistoria ? Math.round(H * 0.105) : 0;
   const Hb = H - safeBot;   // borde inferior efectivo (donde termina lo visible)
-  const areaTop = safeTop + headerH + 18;
-  const areaBottom = Hb - (conQR ? 306 : 236), areaH = areaBottom - areaTop;
+
+  // 📐 ENCABEZADO MEDIDO (antes era una constante de 362/406 px). Reservaba
+  // lugar para una segunda línea de frase aunque no existiera y, sumado al
+  // pie, en el flyer CUADRADO se comía el 63% del alto: las fotos quedaban en
+  // el 8% del flyer. Ahora se mide lo que el texto ocupa DE VERDAD y todo lo
+  // que sobra se lo lleva la foto del producto.
+  const logoH = compacto ? 132 : 168;
+  const logoY = safeTop + (compacto ? 14 : 20);
+  let titFs = compacto ? 76 : 88;
+  do { ctx.font = '800 ' + titFs + 'px ' + FT; titFs -= 4; }
+  while (ctx.measureText(t.titulo || '').width > 860 && titFs > 40);
+  titFs += 4;
+  const titY = logoY + logoH + Math.round(titFs * 1.05);   // línea base del título
+  const fraseFs = compacto ? 34 : 38, fraseLh = compacto ? 44 : 50;
+  ctx.font = '700 ' + fraseFs + 'px ' + FT;
+  const fraseLineas = t.frase ? _wrap(ctx, t.frase, 900, 2) : [];
+  const fraseY0 = titY + Math.round(fraseFs * 1.7);
+  const headerH = (fraseLineas.length
+    ? fraseY0 + (fraseLineas.length - 1) * fraseLh + Math.round(fraseFs * 0.34)
+    : titY + Math.round(titFs * 0.22)) - safeTop;
+  const areaTop = safeTop + headerH + 16;
+  // Pie: con QR va UN SOLO bloque (llamado + código + contacto). Antes eran
+  // dos —la píldora "Escaneá y pedí ya" y la banda del QR, que además decía
+  // "Escaneá y comprá online"— y entre las dos se llevaban 306 px repitiendo
+  // el mismo mensaje.
+  const pieH = conQR ? 226 : 236;
+  const areaBottom = Hb - pieH, areaH = areaBottom - areaTop;
+  if (window._espiaGeo) window._espiaGeo({ areaTop, areaBottom, headerH, safeTop, safeBot });
 
   // Fondo: Catálogo pinta papel con bandas del tema (el dibujo de IA, si hay,
   // viste la banda de arriba); el resto, dibujo de IA o degradé como siempre.
@@ -6695,9 +6771,9 @@ async function dibujarFlyer(prods, t) {
   // El sello de la marca: el LOGO REAL; si no cargó, el sello dibujado de siempre
   const logoIm = await _cargarLogoReal();
   if (logoIm) {
-    const lh = compacto ? 148 : 180;
+    const lh = logoH;
     const lw = Math.round(lh * (logoIm.width / logoIm.height));
-    const lx = (W - lw) / 2, ly = safeTop + (compacto ? 18 : 22), lr = Math.round(lh * 0.16);
+    const lx = (W - lw) / 2, ly = logoY, lr = Math.round(lh * 0.16);
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.32)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 5;
     ctx.fillStyle = '#fdf3e3'; _rr(ctx, lx, ly, lw, lh, lr); ctx.fill();
@@ -6706,16 +6782,13 @@ async function dibujarFlyer(prods, t) {
     ctx.drawImage(logoIm, lx, ly, lw, lh);
     ctx.restore();
   } else {
-    _logoShuk(ctx, W / 2, safeTop + (compacto ? 98 : 116), compacto ? 66 : 80, FT);
+    _logoShuk(ctx, W / 2, logoY + logoH / 2, Math.round(logoH * 0.45), FT);
   }
 
   // Título con contorno + destellos a los costados
   ctx.textAlign = 'center';
-  let fs = compacto ? 76 : 88;
-  const titY = safeTop + (compacto ? 252 : 282);
-  do { ctx.font = '800 ' + fs + 'px ' + FT; fs -= 4; }
-  while (ctx.measureText(t.titulo).width > 860 && fs > 40);
-  const tw = ctx.measureText(t.titulo).width;
+  ctx.font = '800 ' + titFs + 'px ' + FT;
+  const tw = ctx.measureText(t.titulo || '').width;
   ctx.lineJoin = 'round';
   ctx.lineWidth = 14; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.strokeText(t.titulo, W / 2, titY);
@@ -6726,10 +6799,10 @@ async function dibujarFlyer(prods, t) {
   ctx.fillText('✨', W / 2 + tw / 2 + 52, titY - 14);
 
   // Frase
-  ctx.font = '700 ' + (compacto ? 34 : 38) + 'px ' + FT;
+  ctx.font = '700 ' + fraseFs + 'px ' + FT;
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
-  _wrap(ctx, t.frase, 900, 2).forEach((l, i) => ctx.fillText(l, W / 2, safeTop + (compacto ? 314 : 348) + i * (compacto ? 46 : 50)));
+  fraseLineas.forEach((l, i) => ctx.fillText(l, W / 2, fraseY0 + i * fraseLh));
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
   // Área de productos
@@ -6738,7 +6811,7 @@ async function dibujarFlyer(prods, t) {
     conQR ? _cargarImgFlyer(_qrUrl()) : Promise.resolve(null)
   ]);
   let imgs = imgsRaw;
-  const gap = prods.length > 12 ? 14 : 24;
+  const gap = prods.length > 12 ? 12 : prods.length > 4 ? 16 : 24;
   _prepararBlur(W, H);
   // Con escenografía, el fondo blanco de estudio de la foto se nota: se recorta.
   if (fFondoImg) imgs = imgs.map(im => im ? _recortarFondo(im) : im);
@@ -6749,15 +6822,18 @@ async function dibujarFlyer(prods, t) {
     esCatalogo ? 'papel' : fPlantilla === 'aire' ? 'aire' : fPlantilla === 'oferta' ? 'oferta'
     : (fMotor === 'arte' && fFondoImg) ? 'vidrio' : 'card');
 
-  // Cierre (pill grande) + banda de contacto (con QR si se eligió link)
-  const yC = Hb - (conQR ? 278 : 208);
-  ctx.font = '800 46px ' + FT;
-  const cw2 = Math.min(ctx.measureText(t.cierre).width + 80, W - 80);
-  ctx.fillStyle = tema.accent;
-  _rr(ctx, (W - cw2) / 2, yC, cw2, 78, 39); ctx.fill();
-  ctx.fillStyle = '#2d1a0a';
-  ctx.fillText(t.cierre, W / 2, yC + 54);
-  _pieBanner(ctx, W, Hb, tema, FT, qrIm);
+  // Cierre: sin QR va la píldora grande; con QR el llamado entra DENTRO del
+  // bloque del pie (si no, el mismo mensaje ocupaba dos cajas apiladas).
+  if (!conQR) {
+    const yC = Hb - 208;
+    ctx.font = '800 46px ' + FT;
+    const cw2 = Math.min(ctx.measureText(t.cierre).width + 80, W - 80);
+    ctx.fillStyle = tema.accent;
+    _rr(ctx, (W - cw2) / 2, yC, cw2, 78, 39); ctx.fill();
+    ctx.fillStyle = '#2d1a0a';
+    ctx.fillText(t.cierre, W / 2, yC + 54);
+  }
+  _pieBanner(ctx, W, Hb, tema, FT, qrIm, t.cierre);
 }
 
 // Etiqueta tipo cinta ("🔥 OFERTA") inclinada sobre la tarjeta
