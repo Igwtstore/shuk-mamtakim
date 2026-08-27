@@ -1649,6 +1649,10 @@
     </div>
   </div>
   <div class="admin-card" data-seccion="stock">
+    <div class="admin-titulo">💎 Cuánto vale mi stock <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· lo que tenés invertido y lo que valdría vendido</span></div>
+    <div id="sv-cont"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
+  </div>
+  <div class="admin-card" data-seccion="stock">
     <div class="admin-titulo">📦 Stock disponible</div>
     <input id="stock-buscar" oninput="renderStockTotal()" placeholder="🔍 Buscar producto para editar…" style="width:100%;margin-bottom:0.5rem;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none">
     <div style="display:flex;gap:0.4rem;margin-bottom:0.6rem;flex-wrap:wrap">
@@ -12455,7 +12459,245 @@ function filtrarSinStock() {
   const cnt = document.getElementById('sinstock-count');
   if (cnt) cnt.textContent = q ? `${filt.length}/${_sinStockLista.length}` : String(_sinStockLista.length);
 }
+// ─── 💎 STOCK VALORIZADO ──────────────────────────────────────────────────────
+// Cuánta plata hay dormida en el depósito hoy y cuánta saldría si se vendiera todo.
+// Reglas de moneda del sistema (no inventadas acá, son las que ya usa el panel):
+//   · el COSTO y el precio MAYORISTA están en la moneda de la ficha ($ o U$S)
+//   · el precio MINORISTA es SIEMPRE en pesos (ver _recepPreciosHtml)
+// Por eso se acumula por moneda y recién al final se unifica con el TC blue (_tc).
+// Cada escenario cuenta SOLO las fichas que tienen ese dato cargado y reporta cuántas
+// quedaron afuera: una ficha sin costo no vale 0 — meterla como 0 sería mentir el total.
+// PURA (sin DOM ni globales) → la blinda tests/unit/stock_valorizado.js
+function _stockValorizar(lista, tc) {
+  const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : 0; };
+  const tcOk = tc > 0;
+  const tcOrd = tcOk ? tc : 1500;   // SOLO para ordenar el ranking si no cargó el dólar; nunca se muestra
+  const cero = () => ({ ars: 0, usd: 0, fichas: 0, sinDato: 0 });
+  const R = {
+    fichas: 0, unidades: 0, tc: tcOk ? tc : 0, tcOk,
+    costo: cero(), min: cero(), may: cero(),
+    ganMin: { ventaArs: 0, costoArs: 0, fichas: 0, fueraPorTc: 0 },
+    ganMay: { ventaArs: 0, ventaUsd: 0, costoArs: 0, costoUsd: 0, fichas: 0 },
+    sinCosto: [], porCat: [], items: []
+  };
+  const cats = {};
+  (lista || []).forEach(p => {
+    const u = parseFloat(p.stock) || 0;
+    if (!(u > 0)) return;
+    const esUSD = p.moneda === 'U$S';
+    const costoU = num(p.costo), pMay = num(p.precioMay), pMin = num(p.precioMin);
+    R.fichas++; R.unidades += u;
+    // 💰 a costo
+    if (costoU > 0) {
+      R.costo.fichas++;
+      if (esUSD) R.costo.usd += u * costoU; else R.costo.ars += u * costoU;
+    } else { R.costo.sinDato++; R.sinCosto.push({ id: p.id, nombre: p.nombre, desc: p.desc || '', u }); }
+    // 🏪 todo minorista (siempre pesos)
+    if (pMin > 0) { R.min.fichas++; R.min.ars += u * pMin; } else R.min.sinDato++;
+    // 📦 todo mayorista (moneda de la ficha)
+    if (pMay > 0) {
+      R.may.fichas++;
+      if (esUSD) R.may.usd += u * pMay; else R.may.ars += u * pMay;
+    } else R.may.sinDato++;
+    // 💹 ganancia potencial: solo fichas comparables (tienen costo Y ese precio)
+    if (costoU > 0 && pMin > 0) {
+      if (esUSD && !tcOk) R.ganMin.fueraPorTc++;   // costo en U$S y sin dólar → no se puede comparar
+      else { R.ganMin.fichas++; R.ganMin.ventaArs += u * pMin; R.ganMin.costoArs += u * (esUSD ? costoU * tc : costoU); }
+    }
+    if (costoU > 0 && pMay > 0) {
+      R.ganMay.fichas++;
+      if (esUSD) { R.ganMay.ventaUsd += u * pMay; R.ganMay.costoUsd += u * costoU; }
+      else { R.ganMay.ventaArs += u * pMay; R.ganMay.costoArs += u * costoU; }
+    }
+    // por categoría + ranking (a costo: es la plata REAL inmovilizada, no la hipotética)
+    if (costoU > 0) {
+      const cat = (p.categoria || 'Varios').trim() || 'Varios';
+      const c = cats[cat] || (cats[cat] = { cat, u: 0, fichas: 0, ars: 0, usd: 0, ord: 0 });
+      c.u += u; c.fichas++;
+      if (esUSD) c.usd += u * costoU; else c.ars += u * costoU;
+      c.ord = c.ars + c.usd * tcOrd;
+      R.items.push({
+        id: p.id, nombre: p.nombre, desc: p.desc || '', imagen: p.imagen || '', categoria: cat,
+        u, costoU, moneda: esUSD ? 'U$S' : '$',
+        ars: esUSD ? 0 : u * costoU, usd: esUSD ? u * costoU : 0, ord: (esUSD ? u * costoU * tcOrd : u * costoU)
+      });
+    }
+  });
+  R.porCat = Object.values(cats).sort((a, b) => b.ord - a.ord);
+  R.items.sort((a, b) => b.ord - a.ord);
+  R.sinCosto.sort((a, b) => b.u - a.u);
+  R.totalOrd = R.items.reduce((s, i) => s + i.ord, 0);   // total a costo normalizado (para los %)
+  return R;
+}
+// Unifica un par ($, U$S) al TC. null = hay dólares y no cargó el TC → no se puede afirmar un número.
+function _svNorm(ars, usd, tcOk, tc) { return (usd > 0.009 && !tcOk) ? null : (ars + usd * (tcOk ? tc : 0)); }
+function _svAr(v) { return '$ ' + Math.round(v).toLocaleString('es-AR'); }
+function _svUs(v) { return 'U$S ' + v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+// "$ 4.180.500 + U$S 2.140,00" — muestra cada moneda como es, sin mezclarlas de prepo.
+function _svPlata(ars, usd) {
+  const t = [ars > 0.5 ? _svAr(ars) : '', usd > 0.009 ? _svUs(usd) : ''].filter(Boolean);
+  return t.length ? t.join(' + ') : '$ 0';
+}
+
+// Unidades vendidas por producto en los últimos N días — para marcar qué capital está QUIETO.
+// Lee las ventas reales con el mismo criterio que "Lo más vendido" (no cuenta canceladas ni cotizaciones).
+// NO usa el endpoint getProductosDormidos a propósito: ese matchea por NOMBRE (rompe con los gemelos
+// de nombre idéntico) y además saca de la lista a los que ya tienen oferta y a los ocultos — que igual
+// tienen plata adentro. Acá se matchea por ID con el mismo criterio que el remito (_matchProdLinea).
+// Devuelve un mapa {idProducto: unidades}. Si algo falla, devuelve null y el ranking sale sin el cruce.
+async function _svRotacion(dias) {
+  try {
+    const ventas = await apiGet('ventas');
+    if (!Array.isArray(ventas)) return null;
+    const corte = dias > 0 ? Date.now() - dias * 86400000 : 0;
+    const map = {};
+    ventas.forEach(v => {
+      if (v.estado === 'cancelado' || v.estado === 'cotizacion') return;
+      if (corte) { const ts = _tsFecha(v.fecha); if (ts && ts < corte) return; }
+      (v.productos || '').split(' || ').forEach(linea => {
+        const m = linea.match(/^•\s*(\d+)x\s+(.+?)\s+—\s+(?:\$|U\$S)\s+[\d.,]+\s+c\/u/);
+        if (!m) return;
+        const prod = _matchProdLinea(m[2].trim());
+        if (!prod) return;
+        map[String(prod.id)] = (map[String(prod.id)] || 0) + (parseInt(m[1]) || 0);
+      });
+    });
+    return map;
+  } catch (e) { return null; }
+}
+
+let _svRot = null;          // null = no se pidió aún · false = falló (no reintentar en cada tecla) · {} = mapa
+const SV_DIAS_ROT = 90;     // ventana para considerar un producto "quieto"
+
+async function renderStockValorizado() {
+  const cont = document.getElementById('sv-cont');
+  if (!cont) return;
+  if (!productos.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Cargando productos…</div>'; return; }
+  const R = _stockValorizar(productosVisibles(), _tc);
+  if (!R.fichas) { cont.innerHTML = '<div style="color:var(--texto-suave);font-size:0.85rem;padding:0.3rem 0">No hay nada con stock para valorizar.</div>'; return; }
+
+  const nCosto = _svNorm(R.costo.ars, R.costo.usd, R.tcOk, R.tc);
+  const nMin = R.min.ars;
+  const nMay = _svNorm(R.may.ars, R.may.usd, R.tcOk, R.tc);
+  const gMin = R.ganMin.fichas ? (R.ganMin.ventaArs - R.ganMin.costoArs) : null;
+  const gMayV = _svNorm(R.ganMay.ventaArs, R.ganMay.ventaUsd, R.tcOk, R.tc);
+  const gMayC = _svNorm(R.ganMay.costoArs, R.ganMay.costoUsd, R.tcOk, R.tc);
+  const gMay = (R.ganMay.fichas && gMayV != null && gMayC != null) ? (gMayV - gMayC) : null;
+  const pctMin = (gMin != null && R.ganMin.ventaArs > 0) ? Math.round(gMin / R.ganMin.ventaArs * 100) : null;
+  const pctMay = (gMay != null && gMayV > 0) ? Math.round(gMay / gMayV * 100) : null;
+
+  const chipGan = (g, pct, fichas) => {
+    if (g == null) return '<span style="font-size:0.68rem;color:var(--texto-suave)">—</span>';
+    const col = g >= 0 ? 'var(--verde)' : 'var(--rojo)';
+    return `<span style="font-size:0.72rem;font-weight:800;color:${col};white-space:nowrap" title="Sobre las ${fichas} fichas que tienen costo Y ese precio cargados">💹 ${g >= 0 ? '+' : '−'}${_svAr(Math.abs(g)).slice(2)} · ${pct != null ? (pct >= 0 ? '+' : '') + pct + '%' : ''}</span>`;
+  };
+  const falt = (n, qué) => n ? `<div style="font-size:0.64rem;color:var(--dorado);font-weight:600">${n} ficha${n > 1 ? 's' : ''} sin ${qué}</div>` : '';
+  const fila = (emoji, titulo, sub, plataTxt, normTxt, ganHtml, faltHtml) => `
+    <div style="display:flex;align-items:flex-start;gap:0.6rem;padding:0.6rem 0.2rem;border-bottom:1px solid var(--gris-medio);flex-wrap:wrap">
+      <div style="font-size:1.1rem;line-height:1.2;flex-shrink:0">${emoji}</div>
+      <div style="flex:1 1 150px;min-width:0">
+        <div style="font-size:0.82rem;font-weight:700;color:var(--texto);line-height:1.25">${titulo}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave);line-height:1.3">${sub}</div>
+        ${faltHtml}
+      </div>
+      <div style="text-align:right;flex:0 0 auto;margin-left:auto">
+        <div style="font-size:1rem;font-weight:800;color:var(--texto);line-height:1.25;white-space:nowrap">${plataTxt}</div>
+        ${normTxt ? `<div style="font-size:0.64rem;color:var(--texto-suave);white-space:nowrap">${normTxt}</div>` : ''}
+        ${ganHtml || ''}
+      </div>
+    </div>`;
+  const eq = (n, o) => (n != null && o.usd > 0.009) ? `≈ ${_svAr(n)} al TC $${Math.round(R.tc).toLocaleString('es-AR')}` : '';
+
+  const avisoTc = (!R.tcOk && (R.costo.usd > 0 || R.may.usd > 0))
+    ? `<div style="background:var(--dorado-claro);border-radius:8px;padding:0.5rem 0.7rem;font-size:0.72rem;color:var(--texto);margin-top:0.5rem">⚠️ No cargó el dólar, así que los pesos y los U$S se muestran separados (no se pueden sumar en un solo número).</div>` : '';
+  const avisoCosto = R.costo.sinDato
+    ? `<div style="background:var(--dorado-claro);border-radius:8px;padding:0.5rem 0.7rem;font-size:0.72rem;color:var(--texto);margin-top:0.5rem">⚠️ <b>${R.costo.sinDato} ficha${R.costo.sinDato > 1 ? 's' : ''} con stock pero sin costo cargado</b> (${R.sinCosto.reduce((s, x) => s + x.u, 0)} u.). No entran en la cuenta: <b>lo que tenés invertido es más</b> que lo que dice acá. Están listadas abajo 👇</div>` : '';
+
+  // ▸ Por categoría — dónde está parada la plata (a costo)
+  const maxCat = R.porCat.length ? R.porCat[0].ord : 0;
+  const catHtml = R.porCat.map(c => {
+    const pct = R.totalOrd > 0 ? Math.round(c.ord / R.totalOrd * 100) : 0;
+    const w = maxCat > 0 ? Math.max(2, Math.round(c.ord / maxCat * 100)) : 0;
+    return `<div style="margin-bottom:0.45rem">
+      <div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.76rem;align-items:baseline">
+        <span style="font-weight:700;color:var(--texto)">${esc(c.cat)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.68rem">${c.fichas} ficha${c.fichas > 1 ? 's' : ''} · ${c.u} u.</span></span>
+        <span style="font-weight:800;color:var(--texto);white-space:nowrap">${_svPlata(c.ars, c.usd)} <span style="font-weight:600;color:var(--texto-suave);font-size:0.68rem">${pct}%</span></span>
+      </div>
+      <div style="height:5px;background:var(--gris-medio);border-radius:3px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${w}%;background:var(--texto);opacity:0.75;border-radius:3px"></div></div>
+    </div>`;
+  }).join('');
+
+  // ▸ Dónde está tu plata — ranking por capital inmovilizado, con el cruce de rotación
+  const rot = _svRot || null;   // false (falló el cruce) → se dibuja sin los chips de rotación
+  const top = R.items.slice(0, 25);
+  const itemHtml = top.map((it, i) => {
+    const pct = R.totalOrd > 0 ? Math.round(it.ord / R.totalOrd * 100) : 0;
+    const imgs = (it.imagen || '').split(',').map(s => s.trim()).filter(Boolean);
+    const thumb = imgs.length
+      ? `<img src="${imgUrl(imgs[0])[0]}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">`
+      : `<div style="width:34px;height:34px;border-radius:6px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.85rem">🍬</div>`;
+    let chipRot = '';
+    if (rot) {
+      const vend = rot[String(it.id)] || 0;
+      chipRot = vend > 0
+        ? `<span style="font-size:0.6rem;color:var(--verde);font-weight:700" title="Unidades vendidas en los últimos ${SV_DIAS_ROT} días">↻ ${vend} u. en ${SV_DIAS_ROT}d</span>`
+        : `<span style="font-size:0.6rem;color:var(--rojo);font-weight:800" title="No se vendió ni una unidad en los últimos ${SV_DIAS_ROT} días">🧊 quieto ${SV_DIAS_ROT}d</span>`;
+    }
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
+      <span style="font-size:0.68rem;color:var(--texto-suave);font-weight:700;width:18px;flex-shrink:0">${i + 1}.</span>
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.76rem;font-weight:600;color:var(--texto);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.nombre)}</div>
+        <div style="font-size:0.62rem;color:var(--texto-suave);line-height:1.25">${it.u} u. × ${it.moneda === 'U$S' ? _svUs(it.costoU) : _svAr(it.costoU)} ${chipRot ? '· ' + chipRot : ''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:0.8rem;font-weight:800;color:var(--texto);white-space:nowrap">${_svPlata(it.ars, it.usd)}</div>
+        <div style="font-size:0.6rem;color:var(--texto-suave);white-space:nowrap">${(it.usd > 0.009 && R.tcOk) ? '≈ ' + _svAr(it.ord) + ' · ' : ''}${pct}% del total</div>
+      </div>
+    </div>`;
+  }).join('');
+  const quietos = rot ? R.items.filter(it => !(rot[String(it.id)] > 0)) : [];
+  const quietoOrd = quietos.reduce((s, it) => s + it.ord, 0);
+  const avisoQuieto = (rot && quietos.length)
+    ? `<div style="background:var(--rojo-claro);border-radius:8px;padding:0.5rem 0.7rem;font-size:0.72rem;color:var(--texto);margin-bottom:0.5rem">🧊 <b>${quietos.length} producto${quietos.length > 1 ? 's' : ''} sin vender una sola unidad en ${SV_DIAS_ROT} días</b> — tenés ${_svAr(quietoOrd)} dormidos ahí${R.totalOrd > 0 ? ` (${Math.round(quietoOrd / R.totalOrd * 100)}% de tu capital)` : ''}.</div>` : '';
+
+  const sinCostoHtml = R.sinCosto.map(x =>
+    `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem;align-items:center">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(x.nombre)}</b> <span style="color:var(--texto-suave);font-size:0.66rem">${esc((x.desc || '').substring(0, 24))}</span></span>
+      <span style="flex-shrink:0;display:flex;gap:0.4rem;align-items:center"><span style="color:var(--texto-suave);font-size:0.7rem">${x.u} u.</span><button onclick="irAEditarProducto(${x.id})" style="background:var(--gris);color:var(--texto);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 7px;font-size:0.68rem;cursor:pointer;font-family:inherit">✏️ cargar</button></span>
+    </div>`).join('');
+
+  cont.innerHTML = `
+    <div style="font-size:0.76rem;color:var(--texto-suave);font-weight:600;margin-bottom:0.3rem">${R.fichas} ficha${R.fichas > 1 ? 's' : ''} con stock · ${R.unidades.toLocaleString('es-AR')} unidad${R.unidades > 1 ? 'es' : ''}</div>
+    ${fila('💰', 'A costo', 'lo que tenés invertido en mercadería', _svPlata(R.costo.ars, R.costo.usd), eq(nCosto, R.costo), '', falt(R.costo.sinDato, 'costo'))}
+    ${fila('🏪', 'Si vendés todo minorista', 'al precio de la tienda (siempre en pesos)', _svPlata(nMin, 0), '', chipGan(gMin, pctMin, R.ganMin.fichas), falt(R.min.sinDato, 'precio min.'))}
+    ${fila('📦', 'Si vendés todo mayorista', 'al precio de lista de mayorista', _svPlata(R.may.ars, R.may.usd), eq(nMay, R.may), chipGan(gMay, pctMay, R.ganMay.fichas), falt(R.may.sinDato, 'precio may.'))}
+    ${avisoCosto}${avisoTc}
+    ${R.ganMin.fueraPorTc ? `<div style="font-size:0.66rem;color:var(--dorado);margin-top:0.35rem">${R.ganMin.fueraPorTc} ficha${R.ganMin.fueraPorTc > 1 ? 's' : ''} con costo en U$S quedaron fuera de la ganancia minorista (sin dólar no se puede comparar).</div>` : ''}
+    <div style="font-size:0.62rem;color:var(--texto-suave);margin-top:0.5rem;line-height:1.4">Es un <b>hipotético</b>: asume que se vende todo el stock al precio de lista de hoy, sin descuentos, ofertas ni packs. Cada escenario cuenta solo las fichas que tienen ese dato cargado.</div>
+    <details style="margin-top:0.7rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.55rem">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.84rem;list-style:none;color:var(--texto)">🗂️ Dónde está parada la plata, por categoría <span style="font-size:0.64rem;color:var(--texto-suave);font-weight:400">▸ tocá para ver</span></summary>
+      <div style="margin-top:0.6rem">${catHtml || '<div style="font-size:0.75rem;color:var(--texto-suave)">Sin datos (ninguna ficha con costo).</div>'}</div>
+    </details>
+    <details style="margin-top:0.5rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.55rem">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.84rem;list-style:none;color:var(--texto)">🧊 Los que se comen tu capital <span style="font-size:0.64rem;color:var(--texto-suave);font-weight:400">▸ top ${top.length} a costo${R.items.length > top.length ? ` de ${R.items.length}` : ''}</span></summary>
+      <div style="margin-top:0.6rem">${avisoQuieto}${itemHtml || '<div style="font-size:0.75rem;color:var(--texto-suave)">Sin datos.</div>'}</div>
+    </details>
+    ${R.sinCosto.length ? `<details style="margin-top:0.5rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.55rem">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.84rem;list-style:none;color:var(--dorado)">⚠️ Fichas con stock y sin costo (${R.sinCosto.length}) <span style="font-size:0.64rem;color:var(--texto-suave);font-weight:400">▸ completalas y el número se acomoda solo</span></summary>
+      <div style="margin-top:0.6rem">${sinCostoHtml}</div>
+    </details>` : ''}`;
+
+  // El cruce con ventas se pide UNA vez y después se repinta con el dato ya cargado.
+  if (_svRot === null) {
+    _svRot = (await _svRotacion(SV_DIAS_ROT)) || false;
+    if (_svRot) renderStockValorizado();
+  }
+}
+
 function renderStockTotal() {
+  // La valorización se repinta con la lista (misma pestaña, mismos datos). Es async: no se espera.
+  try { renderStockValorizado(); } catch (e) {}
   const cont = document.getElementById('stock-total-lista');
   if (!cont) return;
   if (!productos.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Cargando productos…</div>'; return; }
@@ -12794,9 +13036,13 @@ function _recepPreciosHtml(p, sel, ppp) {
   const pMin = parseFloat(sel.pMin) || 0;
   const mgMay = _recepMargenHtml(pMay, costoRef, 'rentabilidad mayorista sobre el costo nuevo');
   // Minorista SIEMPRE en pesos → si el costo es U$S se convierte con el TC de la tienda (_tc, blue)
-  const costoMinArs = esUSD ? (window._tc > 0 ? costoRef * window._tc : 0) : costoRef;
-  const mgMin = _recepMargenHtml(pMin, costoMinArs, esUSD ? `rentabilidad minorista al TC $${Math.round(window._tc || 0).toLocaleString('es-AR')} (dólar de la tienda)` : 'rentabilidad minorista sobre el costo nuevo');
-  const tcNota = (esUSD && pMin > 0) ? `<span style="font-size:0.62rem;color:var(--texto-suave)">${window._tc > 0 ? 'TC $' + Math.round(window._tc).toLocaleString('es-AR') : 'sin TC — margen min. no calculable'}</span>` : '';
+  // ⚠️ Acá decía `window._tc` y el dólar NUNCA llegaba: _tc se declara con `let`, y un `let` de
+  // nivel superior NO se cuelga de window (window._tc daba undefined siempre). Resultado: al recibir
+  // mercadería de Israel (costo en U$S) el margen minorista no se mostraba nunca y el cartelito
+  // decía "sin TC" aunque el dólar estuviera cargado. Se lee la variable directo. (v4.61)
+  const costoMinArs = esUSD ? (_tc > 0 ? costoRef * _tc : 0) : costoRef;
+  const mgMin = _recepMargenHtml(pMin, costoMinArs, esUSD ? `rentabilidad minorista al TC $${Math.round(_tc || 0).toLocaleString('es-AR')} (dólar de la tienda)` : 'rentabilidad minorista sobre el costo nuevo');
+  const tcNota = (esUSD && pMin > 0) ? `<span style="font-size:0.62rem;color:var(--texto-suave)">${_tc > 0 ? 'TC $' + Math.round(_tc).toLocaleString('es-AR') : 'sin TC — margen min. no calculable'}</span>` : '';
   const cambio = (String(sel.pMay) !== String(sel.pMay0)) || (String(sel.pMin) !== String(sel.pMin0));
   return `<div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.35rem;flex-wrap:wrap;padding-top:0.35rem;border-top:1px dashed #d8ecdf">
     <label style="font-size:0.72rem;color:var(--texto-suave)">Venta may. ${sym} <input type="text" inputmode="decimal" value="${esc(String(sel.pMay ?? ''))}" onchange="setRecep(${p.id},'pMay',this.value)" style="width:82px;padding:0.35rem;border:1.5px solid ${cambio ? 'var(--dorado)' : '#d8ecdf'};border-radius:6px;font-weight:700;text-align:right"></label>${mgMay}
