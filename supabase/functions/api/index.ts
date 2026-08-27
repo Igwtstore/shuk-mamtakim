@@ -479,6 +479,28 @@ function movsSociosData(movs: any[], envios: any[], ventas: any[]) {
 }
 
 // ── ANALÍTICA (getAnalitica portado de motor-v2.js, lee tabla trafico) ──────────
+// `trafico.fecha` es TEXTO 'dd/MM/yyyy HH:mm' (no una fecha de verdad), así que la base no
+// sabe filtrar por rango: el recorte por período se hace acá. Para no arrastrar meses de
+// historial cada vez que se miran "los últimos 7 días", leemos de lo MÁS NUEVO hacia atrás
+// y cortamos apenas la página se va antes de la ventana.
+function tsDeFecha(f: string): number | null {
+  const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)) : null;
+}
+async function traficoParaAnalitica(dias: number) {
+  if (dias <= 0) return await sbGet('trafico', 'select=*&order=id.asc');
+  const corte = Date.now() - 2 * dias * 86400000;   // 2× la ventana: la comparativa mira el período anterior
+  const filas: any[] = [];
+  for (let off = 0; off <= 500000; off += SB_MAX_FILAS) {
+    const pag = await sbGet('trafico', 'select=*&order=id.desc&limit=' + SB_MAX_FILAS + '&offset=' + off);
+    if (!Array.isArray(pag) || !pag.length) break;
+    for (const fila of pag) filas.push(fila);
+    if (pag.length < SB_MAX_FILAS) break;
+    const ult = tsDeFecha(pag[pag.length - 1].fecha);   // la más vieja de esta página
+    if (ult !== null && ult < corte) break;             // ya nos pasamos de la ventana → basta
+  }
+  return filas;
+}
 function analitica(rows: any[], dias: number) {
   if (!rows.length) return { vacio: true };
   const pf = (f: string) => { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/); return m ? { ts: Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)), hora: +(m[4] || 0), dow: new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])).getUTCDay(), dk: m[3] + '-' + m[2] + '-' + m[1], ddmm: m[1] + '/' + m[2] + ' ' + (m[4] || '00') + ':' + (m[5] || '00') } : null; };
@@ -580,10 +602,45 @@ function normEAN(v: any): string {
   if (!d) return '';
   return d.length === 12 ? '0' + d : d.slice(0, 14);
 }
-async function sbGet(tabla: string, query: string) {
+// ⚠️ EL TOPE DE LAS 1000 FILAS (bug cazado el 26/08/2026).
+// PostgREST corta TODA respuesta en `db.max_rows` (1000 en este proyecto) y NO avisa: un
+// `limit=200000` no trae 200.000 filas, trae las PRIMERAS 1000 y calla la boca. Consecuencias
+// reales: la Analítica leía las 1000 filas más VIEJAS de `trafico` (junio/julio) y al filtrar
+// "últimos 7 días" daba todo en cero — el panel parecía muerto desde mediados de julio; y el
+// backup diario guardaba cada tabla grande a medias. Por eso sbGet ahora trae página por
+// página hasta agotar de verdad lo pedido.
+const SB_MAX_FILAS = 1000;
+async function sbPagina(tabla: string, query: string) {
   const r = await fetch(SB_URL + '/rest/v1/' + tabla + '?' + query, { headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE } });
   if (!r.ok) throw new Error(tabla + ' ' + r.status);
   return r.json();
+}
+async function sbGet(tabla: string, query: string) {
+  const p = new URLSearchParams(query);
+  const tope = parseInt(p.get('limit') || '0') || 0;            // 0 = "todo lo que haya"
+  // Una sola página alcanza (o el llamador ya pidió con offset propio) → derecho viejo.
+  if ((tope && tope <= SB_MAX_FILAS) || p.get('offset')) return sbPagina(tabla, query);
+  p.set('limit', String(SB_MAX_FILAS));
+  let primera = await sbPagina(tabla, p.toString());
+  if (!Array.isArray(primera) || primera.length < SB_MAX_FILAS) return primera;
+  // Vino llena ⇒ hay más atrás del tope. Para que las páginas no se pisen ni saltee filas
+  // hace falta un orden estable: si la consulta no lo trae y las filas tienen `id`, ordenamos
+  // por id (y repetimos la primera página, ahora sí ordenada).
+  if (!p.get('order') && primera[0] && primera[0].id !== undefined) {
+    p.set('order', 'id.asc');
+    primera = await sbPagina(tabla, p.toString());
+  }
+  const todas = primera.slice();
+  const limite = tope || Infinity;
+  for (let off = SB_MAX_FILAS; todas.length < limite; off += SB_MAX_FILAS) {
+    p.set('offset', String(off));
+    const pag = await sbPagina(tabla, p.toString());
+    if (!Array.isArray(pag) || !pag.length) break;
+    for (const fila of pag) todas.push(fila);
+    if (pag.length < SB_MAX_FILAS) break;
+    if (off >= 500000) break;                                   // cinturón: jamás un loop infinito
+  }
+  return tope ? todas.slice(0, tope) : todas;
 }
 async function sbInsert(tabla: string, fila: any) {
   const r = await fetch(SB_URL + '/rest/v1/' + tabla, { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(fila) });
@@ -1579,7 +1636,7 @@ const TABLAS_BACKUP = ['productos', 'ventas', 'pagos', 'clientes', 'movs_socios'
 async function backupAhora(etiqueta: string) {
   const dump: any = {}; let filas = 0;
   for (const t of TABLAS_BACKUP) {
-    try { dump[t] = await sbGet(t, 'select=*&limit=100000'); filas += dump[t].length; } catch (e) { dump[t] = { error: String(e) }; }
+    try { dump[t] = await sbGet(t, 'select=*'); filas += dump[t].length; } catch (e) { dump[t] = { error: String(e) }; }
   }
   const f = fechaAhora();   // dd/MM/yyyy HH:mm
   const nombre = 'Backup Shuk ' + (etiqueta ? '(' + etiqueta + ') ' : '') + f.slice(6, 10) + '-' + f.slice(3, 5) + '-' + f.slice(0, 2) + ' ' + f.slice(11, 13) + 'h' + f.slice(14, 16) + '.json';
@@ -1940,7 +1997,7 @@ Deno.serve(async (req) => {
       if ((Q('evento') || 'visita') === 'visita') await sbInsert('visitas', { fecha: fechaAhora(), pagina: Q('pagina') || 'tienda' });
       return json({ ok: true });
     }
-    if (accion === 'visitas') return json((await sbGet('visitas', 'select=fecha,pagina&order=id&limit=200000')).map((r: any) => ({ fecha: (r.fecha || '').toString(), pagina: (r.pagina || '').toString() })));
+    if (accion === 'visitas') return json((await sbGet('visitas', 'select=fecha,pagina&order=id.asc')).map((r: any) => ({ fecha: (r.fecha || '').toString(), pagina: (r.pagina || '').toString() })));
     if (accion === 'registrarClienteMayorista') {
       const telM = Q('telefono').replace(/\D/g, '').slice(-10);
       const nomM = Q('nombre');
@@ -2976,7 +3033,7 @@ Deno.serve(async (req) => {
     if (accion === 'getDepositoHijos') return json((await sbGet('candy_deposito', 'select=*')).map((d: any) => ({ codigo: d.codigo, producto: d.nombre || '', cantidad: parseInt(d.cantidad) || 0 })));
     if (accion === 'getProveedoresHijos') return json((await sbGet('candy_proveedores', 'select=*')).map((r: any) => ({ id: r.id, nombre: r.nombre || '', telefono: r.telefono || '', notas: r.notas || '' })));
     if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id,precio_candy')).map((r: any) => ({ id: (r.shuk_id || '').toString().trim(), precio: parseFloat(r.precio_candy) || 0 })).filter((r: any) => r.id));
-    if (accion === 'getAnalitica') { const dias = parseInt(url.searchParams.get('dias') || '0') || 0; return json(analitica(await sbGet('trafico', 'select=*&order=id&limit=200000'), dias)); }
+    if (accion === 'getAnalitica') { const dias = parseInt(url.searchParams.get('dias') || '0') || 0; return json(analitica(await traficoParaAnalitica(dias), dias)); }
     if (accion === 'auditarHijos') {
       const hijo = url.searchParams.get('hijo') || '';
       const data = await sbGet('candy_ventas', 'select=*' + (hijo ? '&hijo=eq.' + encodeURIComponent(hijo) : ''));
