@@ -6025,9 +6025,9 @@ function _altoTextoAprox(w, h, estilo, pocos) {
 function _gridDims(n, areaW, areaH, gap, aspectMax, aspectos, estilo) {
   const pocos = n <= 4;
   aspectMax = aspectMax || (pocos ? 2.55 : 1.75);
-  // aspectos = ancho/alto de CADA foto. Se suma el área real de cada una: un
+  // aspectos = ancho/alto de CADA foto. Se usa el aspecto real de cada una: un
   // promedio no representa a nadie cuando hay bolsas verticales y tabletas
-  // apaisadas en el mismo flyer (y son justo las bolsas las que se achican).
+  // acostadas en el mismo flyer (y son justo las bolsas las que se achican).
   const ars = (aspectos && aspectos.length) ? aspectos : [0.8];
   let best = null, bestScore = -1;
   for (let cols = 1; cols <= Math.min(8, n); cols++) {
@@ -6038,23 +6038,29 @@ function _gridDims(n, areaW, areaH, gap, aspectMax, aspectos, estilo) {
     ch = Math.min(ch, cw * aspectMax);
     const pad = estilo === 'aire' ? 4 : Math.max(9, Math.round(cw * 0.05));
     const fw = cw - pad * 2;
-    const fh = ch - pad * 2 - _altoTextoAprox(cw, ch, estilo, pocos);
-    if (fw <= 4 || fh <= 4) continue;
-    // área real que ocupará CADA foto en esa tarjeta (la que peor la pasa
-    // arrastra el puntaje, que es lo que se ve como "fotos chiquitas")
-    let areaFoto = 0;
+    const texto = _altoTextoAprox(cw, ch, estilo, pocos);
+    const fhDisp = ch - pad * 2 - texto;
+    if (fw <= 4 || fhDisp <= 4) continue;
+    // área real de CADA foto en esa tarjeta, y cuánto alto usa la más alta
+    let areaFoto = 0, altoFoto = 0;
     for (let k = 0; k < ars.length; k++) {
       const a = ars[k] > 0.05 ? ars[k] : 0.8;
-      const esc = Math.min(fw / a, fh);
+      const esc = Math.min(fw / a, fhDisp);   // esc = alto de esa foto
       areaFoto += (a * esc) * esc;
+      if (esc > altoFoto) altoFoto = esc;
     }
     areaFoto /= ars.length;
-    // la fila incompleta deja una tarjeta huerfana: penaliza, pero menos que
-    // regalar tamaño de foto
+    // La tarjeta se recorta a lo que el contenido usa de verdad (si no, una
+    // tableta acostada deja un hueco arriba que se lee como "tarjeta sin foto")
+    const chReal = Math.min(ch, altoFoto + pad * 2 + texto);
+    // ...pero recortar deja aire AFUERA. Se pondera cuánto del área se llena:
+    // así el motor no elige ni fotos grandes con huecos ni un flyer apretado.
+    const usado = chReal * filas + gap * (filas - 1);
+    const ocupacion = Math.min(1, usado / areaH);
     const huecos = cols * filas - n;
     const castigo = 1 - Math.min(0.22, (huecos / cols) * 0.22);
-    const score = areaFoto * castigo;
-    if (score > bestScore * 1.02) { best = { cols, filas, cw, ch }; bestScore = score; }
+    const score = areaFoto * castigo * Math.pow(ocupacion, 0.45);
+    if (score > bestScore * 1.02) { best = { cols, filas, cw, ch: chReal }; bestScore = score; }
   }
   return best;
 }
@@ -6292,19 +6298,28 @@ function _cardProd(ctx, p, im, x, y, w, h, tema, FT, estilo, pocosProds) {
   // apaisada deja aire arriba y abajo. Ese aire se reparte (en vez de quedar
   // todo junto entre la foto y el nombre, que es el "hueco raro" clásico —
   // se nota sobre todo con los precios apagados).
-  let fotoTop = y + pad, fotoCaja = fotoH;
+  let fotoCaja = fotoH;
   if (im && fotoH > 0) {
     const escFoto = Math.min((w - pad * 2) / im.width, fotoH / im.height);
     const altoReal = im.height * escFoto;
-    const sobra = fotoH - altoReal;
-    if (sobra > 6) { fotoTop = y + pad + sobra / 2; fotoCaja = altoReal; }
+    if (fotoH - altoReal > 6) fotoCaja = altoReal;
   }
+  // Foto, nombre y precio son UN bloque: se centra entero y va pegado. Si la
+  // foto es más chata que su hueco (una tableta acostada), el aire sobrante se
+  // reparte AFUERA del bloque, en vez de quedar todo arriba de la foto —que se
+  // leía como "tarjeta sin imagen"— o entre el nombre y el precio.
+  const juntos = estilo !== 'oferta';
+  const bloqueTot = fotoCaja + nombreH + (juntos ? precioH : 0);
+  const libre = Math.max(0, (h - pad * 2 - (juntos ? bloqueTot : fotoCaja + nombreH)) );
+  const fotoTop = y + pad + (juntos ? libre / 2 : 0);
+  const yNombre = fotoTop + fotoCaja;
+  const yPrecio = yNombre + nombreH + precioH / 2;
   if (im) {
     // Sombra de contacto bajo la foto: la apoya en la escena (solo donde el
     // fondo se ve, o sea sin tarjeta blanca abajo).
     if (estilo === 'aire' || estilo === 'vidrio') {
       const esc = Math.min((w - pad * 2) / im.width, fotoH / im.height);
-      _sombraContacto(ctx, x + w / 2, fotoTop + fotoCaja - 2, im.width * esc);
+      _sombraContacto(ctx, x + w / 2, yNombre - 2, im.width * esc);
       ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 10;
     }
     _containImg(ctx, im, x + pad, fotoTop, w - pad * 2, fotoCaja);
@@ -6319,7 +6334,7 @@ function _cardProd(ctx, p, im, x, y, w, h, tema, FT, estilo, pocosProds) {
   // textura del fondo. Un velo degradado detrás del bloque de texto los asienta
   // sin encerrarlos en un rectángulo (que sería volver a la tarjeta).
   if (estilo === 'aire' && (nombreH + precioH) > 0) {
-    const sy = fotoTop + fotoCaja - 6, sh = nombreH + precioH + 14;
+    const sy = yNombre - 6, sh = nombreH + precioH + 14;
     const sc = ctx.createLinearGradient(0, sy, 0, sy + sh);
     sc.addColorStop(0, 'rgba(12,7,3,0)');
     sc.addColorStop(0.42, 'rgba(12,7,3,0.52)');
@@ -6340,7 +6355,7 @@ function _cardProd(ctx, p, im, x, y, w, h, tema, FT, estilo, pocosProds) {
     if (esAire) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 6; }
     ctx.font = '800 ' + nl.nf + 'px ' + FT;
     const bloqueH = nl.lineas.length * nl.nf * 1.12;
-    let by = fotoTop + fotoCaja + (nombreH - bloqueH) / 2 + nl.nf * 0.88;
+    let by = yNombre + (nombreH - bloqueH) / 2 + nl.nf * 0.88;
     nl.lineas.forEach(l => { ctx.fillText(l, x + w / 2, by); by += nl.nf * 1.12; });
     if (esAire) ctx.restore();
   }
@@ -6355,7 +6370,7 @@ function _cardProd(ctx, p, im, x, y, w, h, tema, FT, estilo, pocosProds) {
     ctx.restore();
     _precioGrupo(ctx, p, x + w / 2, y + h - stripH / 2, tema, FT, priceFs, w - 14, 'sobreAccent');
   } else {
-    _precioGrupo(ctx, p, x + w / 2, y + h - pad - precioH / 2, tema, FT, priceFs, w - 10,
+    _precioGrupo(ctx, p, x + w / 2, yPrecio, tema, FT, priceFs, w - 10,
       claro ? 'carta' : 'fondo');
   }
   const ex = fExtras[p.codigo];
@@ -6481,7 +6496,10 @@ function _decoTema(ctx, W, H, lista, soloBandas, corteTop, corteBottom, yTop, yB
     [0.055, 0.048, 84, -0.30], [0.940, 0.042, 70, 0.25], [0.135, 0.150, 46, 0.40],
     [0.875, 0.145, 54, -0.35], [0.040, 0.300, 56, 0.20], [0.963, 0.320, 50, -0.20],
     [0.050, 0.915, 78, 0.30], [0.950, 0.925, 86, -0.25], [0.893, 0.812, 46, 0.45],
-    [0.085, 0.795, 50, -0.40]
+    [0.085, 0.795, 50, -0.40],
+    // en vertical el pie queda largo: se puebla para que no se lea como vacío
+    [0.500, 0.972, 62, 0.18], [0.250, 0.955, 48, -0.28], [0.740, 0.960, 54, 0.34],
+    [0.170, 0.030, 44, 0.22], [0.640, 0.028, 40, -0.18]
   ];
   spots.forEach((s, i) => {
     const y = y0 + s[1] * alto;
@@ -6627,7 +6645,7 @@ async function dibujarFlyer(prods, t) {
   // quedan debajo de la interfaz y NO SE VEN.
   const esHistoria = fFormato === 'historia';
   const safeTop = esHistoria ? Math.round(H * 0.075) : 0;
-  const safeBot = esHistoria ? Math.round(H * 0.14) : 0;
+  const safeBot = esHistoria ? Math.round(H * 0.105) : 0;
   const Hb = H - safeBot;   // borde inferior efectivo (donde termina lo visible)
   const areaTop = safeTop + headerH + 18;
   const areaBottom = Hb - (conQR ? 306 : 236), areaH = areaBottom - areaTop;
@@ -6646,7 +6664,7 @@ async function dibujarFlyer(prods, t) {
     }
     ctx.fillStyle = tema.accent; ctx.fillRect(0, headerH, W, 7);
     ctx.fillStyle = tema.a; ctx.fillRect(0, H - 224, W, 224);
-    _decoTema(ctx, W, H, DECO, true, safeTop + headerH - 30, Hb - 200, safeTop, Hb);
+    _decoTema(ctx, W, H, DECO, true, safeTop + headerH - 30, Hb - 200);
   } else if (fFondoImg) {
     _coverImg(ctx, fFondoImg, 0, 0, W, H);
     ctx.fillStyle = 'rgba(15,20,40,0.30)'; ctx.fillRect(0, 0, W, H);
@@ -6669,9 +6687,9 @@ async function dibujarFlyer(prods, t) {
       ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, 7); ctx.fill();
     });
     ctx.globalAlpha = 1;
-    _decoTema(ctx, W, H, DECO, false, 0, 0, safeTop, Hb);
+    _decoTema(ctx, W, H, DECO);
   }
-  if (fFondoImg && !esCatalogo) _decoTema(ctx, W, H, DECO, false, 0, 0, safeTop, Hb);
+  if (fFondoImg && !esCatalogo) _decoTema(ctx, W, H, DECO);
 
   // El sello de la marca
   // El sello de la marca: el LOGO REAL; si no cargó, el sello dibujado de siempre
