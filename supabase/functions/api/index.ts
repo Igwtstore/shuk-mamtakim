@@ -501,7 +501,7 @@ async function traficoParaAnalitica(dias: number) {
   }
   return filas;
 }
-function analitica(rows: any[], dias: number) {
+function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[] = [], productos: any[] = []) {
   if (!rows.length) return { vacio: true };
   const pf = (f: string) => { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/); return m ? { ts: Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)), hora: +(m[4] || 0), dow: new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])).getUTCDay(), dk: m[3] + '-' + m[2] + '-' + m[1], ddmm: m[1] + '/' + m[2] + ' ' + (m[4] || '00') + ':' + (m[5] || '00') } : null; };
   const todas = rows.map((r: any) => ({ r, t: pf(r.fecha) })).filter((x) => x.t);
@@ -510,6 +510,9 @@ function analitica(rows: any[], dias: number) {
   const resumen: any = { visitas: 0, unicos: 0, nuevos: 0, recurrentes: 0, tienda: 0, mayorista: 0 };
   const porOrigen: any = {}, porDispositivo: any = {}, porCiudad: any = {}, porPais: any = {}, porHora = new Array(24).fill(0), porDia: any = {}, porDiaSemana = new Array(7).fill(0);
   const prodDeseados: any = {}, origenVisitaVids: any = {}, origenPedidoVids: any = {};
+  // 🔎 Lo que se agregó en la vuelta de rosca: el día a día en detalle, qué buscan en la
+  // tienda, y qué tocó cada visitante (para poder contar SU historia, no solo el total).
+  const porDiaDet: any = {}, busq: any = {};
   const embudoVids: any = { visita: {}, carrito: {}, checkout: {}, pedido: {} };
   const vids: any = {}, carritosPorVid: any = {};
   filas.forEach(({ r, t }) => {
@@ -532,11 +535,28 @@ function analitica(rows: any[], dias: number) {
       if (pais) porPais[pais] = (porPais[pais] || 0) + 1;
       porHora[t!.hora]++; porDiaSemana[t!.dow]++; porDia[t!.dk] = (porDia[t!.dk] || 0) + 1;
     }
+    // Día a día en detalle: no solo "cuántas visitas" sino qué pasó ese día.
+    const dk = t!.dk;
+    const D = porDiaDet[dk] = porDiaDet[dk] || { fecha: dk, visitas: 0, unicos: {}, carrito: {}, checkout: {}, pedido: {}, prod: {} };
+    if (evento === 'visita') D.visitas++;
+    if (vid) { D.unicos[vid] = 1; if (D[evento]) D[evento][vid] = 1; }
+    if (detalle && (evento === 'carrito' || evento === 'pedido')) D.prod[detalle] = (D.prod[detalle] || 0) + 1;
+    // 🔎 Búsquedas dentro de la tienda: `detalle` es lo que tipearon, `total` cuántos resultados
+    // les salieron. Una búsqueda con 0 resultados es un pedido de compra que no pudiste cumplir.
+    if (evento === 'busqueda' && detalle) {
+      const q = detalle.toLowerCase().trim().slice(0, 40);
+      const b = busq[q] = busq[q] || { q: detalle.trim().slice(0, 40), veces: 0, vacias: 0, vids: {} };
+      b.veces++; if ((parseInt(totalEv) || 0) === 0) b.vacias++; if (vid) b.vids[vid] = 1;
+    }
     if (embudoVids[evento] && vid) embudoVids[evento][vid] = 1;
     if (vid) {
-      if (!vids[vid]) vids[vid] = { visitas: 0, fechas: {}, nombre: '', telefono: '', ciudad: '', origen, pagina, primera: t!.ts, ultima: t!.ts };
+      if (!vids[vid]) vids[vid] = { visitas: 0, fechas: {}, nombre: '', telefono: '', ciudad: '', origen, pagina, primera: t!.ts, ultima: t!.ts, dispositivo: '', pais: '', productos: {}, eventos: {} };
       const o = vids[vid];
       if (evento === 'visita') o.visitas++;
+      o.eventos[evento] = (o.eventos[evento] || 0) + 1;
+      if (disp && !o.dispositivo) o.dispositivo = disp;
+      if (pais && !o.pais) o.pais = pais;
+      if (detalle && evento !== 'busqueda') o.productos[detalle] = (o.productos[detalle] || 0) + 1;
       o.fechas[t!.dk] = 1;
       if (nombre && !o.nombre) o.nombre = nombre;
       if (tel && !o.telefono) o.telefono = tel;
@@ -562,8 +582,239 @@ function analitica(rows: any[], dias: number) {
     const delta = (a: number, b: number) => b > 0 ? Math.round((a - b) / b * 100) : (a > 0 ? 100 : 0);
     comparativa = { visitas: { actual: resumen.visitas, anterior: pVis, delta: delta(resumen.visitas, pVis) }, unicos: { actual: resumen.unicos, anterior: Object.keys(pUni).length, delta: delta(resumen.unicos, Object.keys(pUni).length) }, pedidos: { actual: embudo.pedido, anterior: Object.keys(pPed).length, delta: delta(embudo.pedido, Object.keys(pPed).length) } };
   }
-  const abandonados = Object.keys(carritosPorVid).filter((v) => { const c = carritosPorVid[v]; return c.ultimaCarrito && (!c.ultimoPedido || c.ultimoPedido < c.ultimaCarrito); }).map((v) => { const c = carritosPorVid[v]; const info = vids[v] || {}; return { nombre: info.nombre || '', telefono: info.telefono || '', ciudad: info.ciudad || '', etapa: c.etapa, productos: Object.keys(c.productos).slice(0, 6), items: c.items || null, total: c.total || 0, cuando: c.ddmm, ts: c.ultimaCarrito }; }).sort((a, b) => b.ts - a.ts).slice(0, 30);
-  return { resumen, porOrigen, porDispositivo, topCiudades, topPaises, porHora, porDiaSemana, dias30, embudo, leads, abandonados, topProductos, conversionPorOrigen, comparativa };
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  🕵️ QUIÉN ES QUIÉN — el cruce que convierte "visitante anónimo" en una persona.
+  //  Todo pedido hecho desde la tienda guarda el `vid` del aparato (columna ventas.vid).
+  //  Entonces, si ese mismo teléfono/compu ya compró alguna vez, sabemos su nombre, su
+  //  teléfono y cuánto gastó — AUNQUE en esta visita no haya dejado un solo dato.
+  //  Sin esto, la pantalla mostraba 28 de 30 carritos como "👤 Visitante anónimo".
+  // ══════════════════════════════════════════════════════════════════════════════
+  const kAna = (x: any) => String(x == null ? '' : x).substring(0, 40).trim().toLowerCase();
+  const normNom = (x: any) => String(x == null ? '' : x).trim().toLowerCase();
+  const telDeCliente: any = {}, tipoDeCliente: any = {};
+  clientes.forEach((c: any) => { const k = normNom(c.nombre); if (!k) return; if (c.telefono) telDeCliente[k] = String(c.telefono); if (c.tipo) tipoDeCliente[k] = String(c.tipo); });
+
+  const compraDeVid: any = {};
+  ventas.forEach((v: any) => {
+    const vidV = String(v.vid || '').trim();
+    const est = (v.estado || '').toString();
+    if (!vidV || est === 'cancelado' || est === 'cotizacion') return;
+    const o = compraDeVid[vidV] = compraDeVid[vidV] || { compras: 0, ars: 0, usd: 0, cliente: '', ultimaTs: 0, ultima: '' };
+    o.compras++; o.ars += parseFloat(v.total_ars) || 0; o.usd += parseFloat(v.total_usd) || 0;
+    if (!o.cliente && v.cliente) o.cliente = String(v.cliente);
+    const tsV = tsDeFecha(v.fecha); if (tsV && tsV > o.ultimaTs) { o.ultimaTs = tsV; o.ultima = String(v.fecha || ''); }
+  });
+  // Segunda pasada: el nombre también sirve de puente. Alguien que se registró con su nombre
+  // y compró antes desde OTRO aparato igual queda identificado como cliente.
+  const compraDeNombre: any = {};
+  ventas.forEach((v: any) => {
+    const est = (v.estado || '').toString();
+    if (est === 'cancelado' || est === 'cotizacion') return;
+    const k = normNom(v.cliente); if (!k) return;
+    const o = compraDeNombre[k] = compraDeNombre[k] || { compras: 0, ars: 0, usd: 0, ultimaTs: 0, ultima: '' };
+    o.compras++; o.ars += parseFloat(v.total_ars) || 0; o.usd += parseFloat(v.total_usd) || 0;
+    const tsV = tsDeFecha(v.fecha); if (tsV && tsV > o.ultimaTs) { o.ultimaTs = tsV; o.ultima = String(v.fecha || ''); }
+  });
+
+  const quienEs = (v: string) => {
+    const o = vids[v] || {}, c = compraDeVid[v];
+    const nombre = (o.nombre || (c && c.cliente) || '').toString();
+    const kn = normNom(nombre);
+    const cn = kn ? compraDeNombre[kn] : null;
+    const hist = c || cn;
+    return {
+      nombre,
+      telefono: (o.telefono || telDeCliente[kn] || '').toString(),
+      esCliente: !!hist,
+      compras: hist ? hist.compras : 0,
+      gastadoARS: hist ? Math.round(hist.ars) : 0,
+      gastadoUSD: hist ? Math.round(hist.usd * 100) / 100 : 0,
+      ultimaCompra: hist ? hist.ultima : '',
+      tipoCliente: tipoDeCliente[kn] || '',
+      comoSeSupo: o.nombre ? 'se registró' : (c ? 'ya compró desde este aparato' : (cn ? 'ya compró antes' : '')),
+    };
+  };
+
+  // ── 🛒 CARRITOS SIN TERMINAR, ahora con nombre, antigüedad y prioridad ──────────
+  const ahoraT = Date.now();
+  const abandonados = Object.keys(carritosPorVid)
+    .filter((v) => { const c = carritosPorVid[v]; return c.ultimaCarrito && (!c.ultimoPedido || c.ultimoPedido < c.ultimaCarrito); })
+    .map((v) => {
+      const c = carritosPorVid[v], info = vids[v] || {}, q = quienEs(v);
+      const horas = Math.round((ahoraT - c.ultimaCarrito) / 3600000);
+      // Prioridad: primero al que se puede contactar y más plata dejó en la mesa, con lo
+      // reciente pesando fuerte (un carrito de hace 3 días ya está frío).
+      const score = (q.telefono ? 1000 : 0) + (q.esCliente ? 600 : 0) + (c.etapa === 'checkout' ? 400 : 0)
+        + Math.min(500, Math.round((c.total || 0) / 1000)) + Math.max(0, 300 - horas * 2);
+      return {
+        vid: v, ...q, ciudad: info.ciudad || '', dispositivo: info.dispositivo || '',
+        origen: info.origen || 'directo', visitas: info.visitas || 0,
+        etapa: c.etapa, productos: Object.keys(c.productos).slice(0, 6), items: c.items || null,
+        total: c.total || 0, cuando: c.ddmm, ts: c.ultimaCarrito, horas, score,
+      };
+    })
+    .sort((a, b) => b.score - a.score).slice(0, 60);
+
+  // ── 👥 FICHA DE CADA VISITANTE — la lista completa, con lo que hizo cada uno ─────
+  const visitantesTodos = listaVids.map((v) => {
+    const o = vids[v], q = quienEs(v), c = carritosPorVid[v];
+    return {
+      vid: v, ...q,
+      visitas: o.visitas, dias: Object.keys(o.fechas).length,
+      primeraTs: o.primera, ultimaTs: o.ultima, primera: fmtU(o.primera), ultima: fmtU(o.ultima),
+      ciudad: o.ciudad || '', pais: o.pais || '', dispositivo: o.dispositivo || '',
+      origen: o.origen || 'directo', pagina: o.pagina || 'tienda',
+      productos: Object.keys(o.productos).slice(0, 10),
+      armoCarrito: !!o.eventos.carrito, checkout: !!o.eventos.checkout, pidio: !!o.eventos.pedido,
+      valorCarrito: c ? (c.total || 0) : 0,
+      // La etiqueta que resume qué es esta persona para el negocio.
+      etiqueta: o.eventos.pedido ? 'compró' : (q.esCliente ? 'cliente que volvió' : (o.eventos.checkout ? 'casi compra' : (o.eventos.carrito ? 'armó carrito' : (Object.keys(o.fechas).length >= 2 ? 'mirón que vuelve' : 'miró y se fue')))),
+    };
+  }).sort((a, b) => b.ultimaTs - a.ultimaTs);
+  const visitantes = visitantesTodos.slice(0, 400);
+
+  // ── 📅 EL DÍA A DÍA, en detalle ────────────────────────────────────────────────
+  const diasDetalle = Object.keys(porDiaDet).sort().map((dk) => {
+    const D = porDiaDet[dk];
+    const u = Object.keys(D.unicos).length, ped = Object.keys(D.pedido).length;
+    return {
+      fecha: dk, visitas: D.visitas, unicos: u,
+      carritos: Object.keys(D.carrito).length, checkouts: Object.keys(D.checkout).length,
+      pedidos: ped, conv: u ? Math.round(ped / u * 100) : 0,
+      top: Object.entries(D.prod).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([nombre, n]) => ({ nombre, n })),
+    };
+  });
+
+  // ── 🔥 DESEO vs VENTA — lo que quieren contra lo que realmente se vendió ────────
+  const stockDe: any = {}, infoProd: any = {};
+  productos.forEach((p: any) => {
+    const k = kAna(p.nombre);
+    stockDe[k] = (stockDe[k] || 0) + (parseInt(p.stock) || 0);
+    if (!infoProd[k]) infoProd[k] = { activo: p.activo !== false, dueno: String(p.dueno || '') };
+  });
+  const vendidoU: any = {}, nomDeId: any = {};
+  productos.forEach((p: any) => { nomDeId[String(p.id)] = String(p.nombre || ''); });
+  ventas.forEach((v: any) => {
+    const est = (v.estado || '').toString();
+    if (est === 'cancelado' || est === 'cotizacion') return;
+    const tsV = tsDeFecha(v.fecha);
+    if (desdeT !== null && (tsV === null || tsV < desdeT)) return;      // solo el período mirado
+    String(v.stock_updates || '').split(',').forEach((u: string) => {
+      const pp = u.split(':'), id = String(pp[0] || '').trim(), q = parseInt(pp[1]) || 0;
+      if (!id || !q || !nomDeId[id]) return;
+      const k = kAna(nomDeId[id]);
+      vendidoU[k] = (vendidoU[k] || 0) + q;
+    });
+  });
+  const deseoVsVenta = Object.keys(prodDeseados).map((nombre) => {
+    const k = kAna(nombre), st = stockDe[k];
+    return {
+      nombre, deseado: prodDeseados[nombre], vendido: vendidoU[k] || 0,
+      stock: st === undefined ? null : st,
+      activo: infoProd[k] ? infoProd[k].activo : true,
+      dueno: infoProd[k] ? infoProd[k].dueno : '',
+    };
+  }).sort((a, b) => b.deseado - a.deseado).slice(0, 40);
+
+  // ── 🔎 QUÉ BUSCAN (y qué buscan y NO encontrás) ────────────────────────────────
+  const busquedas = Object.keys(busq).map((k) => {
+    const b = busq[k];
+    return { q: b.q, veces: b.veces, vacias: b.vacias, personas: Object.keys(b.vids).length };
+  }).sort((a, b) => (b.vacias - a.vacias) || (b.veces - a.veces)).slice(0, 30);
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  🎯 QUÉ HACER AHORA — el pedido de fondo: no más números lindos sin acción.
+  //  Cada fila de acá es algo concreto para hacer hoy, con la gente ya identificada.
+  // ══════════════════════════════════════════════════════════════════════════════
+  const acciones: any[] = [];
+  const plata = (n: number) => '$ ' + Math.round(n).toLocaleString('es-AR');
+
+  const calientes = abandonados.filter((a) => a.horas <= 48);
+  const contactables = calientes.filter((a) => a.telefono);
+  if (calientes.length) acciones.push({
+    id: 'carritos', icono: '🛒', urgencia: contactables.length ? 'alta' : 'media',
+    titulo: calientes.length + (calientes.length === 1 ? ' carrito quedó' : ' carritos quedaron') + ' sin terminar en las últimas 48 h',
+    detalle: (contactables.length ? '**' + contactables.length + '** con teléfono para escribirle ahora mismo' : 'ninguno dejó teléfono todavía')
+      + ' · ' + plata(calientes.reduce((t, a) => t + (a.total || 0), 0)) + ' sobre la mesa',
+    n: calientes.length, ir: 'carritos',
+  });
+
+  const vuelvenSinComprar = visitantesTodos.filter((v) => v.esCliente && !v.pidio && v.visitas >= 1);
+  if (vuelvenSinComprar.length) acciones.push({
+    id: 'clientes-volvieron', icono: '👋', urgencia: 'alta',
+    titulo: vuelvenSinComprar.length + (vuelvenSinComprar.length === 1 ? ' cliente tuyo entró' : ' clientes tuyos entraron') + ' y no compró nada',
+    detalle: 'Ya te compraron antes: ' + vuelvenSinComprar.slice(0, 3).map((v) => v.nombre || 'sin nombre').filter(Boolean).join(', ')
+      + (vuelvenSinComprar.length > 3 ? ' y ' + (vuelvenSinComprar.length - 3) + ' más' : '') + '. Un mensaje puede cerrar la venta.',
+    n: vuelvenSinComprar.length, ir: 'visitantes',
+  });
+
+  const deseadoSinStock = deseoVsVenta.filter((p) => p.stock !== null && p.stock <= 0 && p.deseado >= 2);
+  if (deseadoSinStock.length) acciones.push({
+    id: 'sin-stock', icono: '📦', urgencia: 'alta',
+    titulo: deseadoSinStock.length + (deseadoSinStock.length === 1 ? ' producto muy pedido está' : ' productos muy pedidos están') + ' en CERO',
+    detalle: deseadoSinStock.slice(0, 3).map((p) => p.nombre + ' (' + p.deseado + ' veces)').join(' · ') + '. Lo quieren y no lo tenés.',
+    n: deseadoSinStock.length, ir: 'deseo',
+  });
+
+  const vacias = busquedas.filter((b) => b.vacias > 0);
+  if (vacias.length) acciones.push({
+    id: 'busquedas-vacias', icono: '🔎', urgencia: 'media',
+    titulo: vacias.length + (vacias.length === 1 ? ' búsqueda no encontró' : ' búsquedas no encontraron') + ' nada',
+    detalle: 'Te lo buscaron y no estaba: ' + vacias.slice(0, 4).map((b) => '"' + b.q + '"').join(', ') + '. Son pedidos de compra gratis.',
+    n: vacias.length, ir: 'busquedas',
+  });
+
+  const insistentes = visitantesTodos.filter((v) => !v.pidio && !v.esCliente && v.dias >= 3);
+  if (insistentes.length) acciones.push({
+    id: 'insistentes', icono: '👀', urgencia: 'media',
+    titulo: insistentes.length + (insistentes.length === 1 ? ' persona volvió' : ' personas volvieron') + ' 3 días o más y nunca compró',
+    detalle: 'Están interesados pero algo los frena: precio, envío o que no encuentran lo que buscan.',
+    n: insistentes.length, ir: 'visitantes',
+  });
+
+  const casi = visitantesTodos.filter((v) => v.checkout && !v.pidio);
+  if (casi.length) acciones.push({
+    id: 'casi', icono: '🔥', urgencia: 'alta',
+    titulo: casi.length + (casi.length === 1 ? ' persona llegó' : ' personas llegaron') + ' hasta el final y no envió el pedido',
+    detalle: 'Abrieron el checkout y se cayeron ahí. Es la etapa más cara de perder.',
+    n: casi.length, ir: 'carritos',
+  });
+
+  if (comparativa && comparativa.visitas.delta <= -20) acciones.push({
+    id: 'caida', icono: '📉', urgencia: 'media',
+    titulo: 'El tráfico cayó ' + Math.abs(comparativa.visitas.delta) + '% contra el período anterior',
+    detalle: 'Pasaste de ' + comparativa.visitas.anterior + ' a ' + comparativa.visitas.actual + ' visitas. ¿Mandaste menos difusiones?',
+    n: 0, ir: '',
+  });
+  if (comparativa && comparativa.visitas.delta >= 25) acciones.push({
+    id: 'suba', icono: '📈', urgencia: 'baja',
+    titulo: 'El tráfico subió ' + comparativa.visitas.delta + '% contra el período anterior',
+    detalle: 'De ' + comparativa.visitas.anterior + ' a ' + comparativa.visitas.actual + ' visitas. Momento de tener stock de lo más pedido.',
+    n: 0, ir: '',
+  });
+
+  const orden: any = { alta: 0, media: 1, baja: 2 };
+  acciones.sort((a, b) => orden[a.urgencia] - orden[b.urgencia]);
+
+  // ── Números que resumen lo accionable (para la cabecera de la pantalla) ─────────
+  const identificados = visitantesTodos.filter((v) => v.nombre).length;
+  const conTelefono = visitantesTodos.filter((v) => v.telefono).length;
+  const oportunidad = abandonados.reduce((t, a) => t + (a.total || 0), 0);
+  const accionable = {
+    identificados, conTelefono, anonimos: visitantesTodos.length - identificados,
+    oportunidadARS: Math.round(oportunidad),
+    carritosContactables: abandonados.filter((a) => a.telefono).length,
+    clientesQueVolvieron: vuelvenSinComprar.length,
+  };
+
+  return {
+    resumen, porOrigen, porDispositivo, topCiudades, topPaises, porHora, porDiaSemana, dias30,
+    embudo, leads, abandonados, topProductos, conversionPorOrigen, comparativa,
+    // 🆕 la vuelta de rosca
+    acciones, accionable, visitantes, visitantesTotal: visitantesTodos.length,
+    diasDetalle, deseoVsVenta, busquedas,
+  };
 }
 
 // ── Infra ───────────────────────────────────────────────────────────────────────
@@ -3033,7 +3284,60 @@ Deno.serve(async (req) => {
     if (accion === 'getDepositoHijos') return json((await sbGet('candy_deposito', 'select=*')).map((d: any) => ({ codigo: d.codigo, producto: d.nombre || '', cantidad: parseInt(d.cantidad) || 0 })));
     if (accion === 'getProveedoresHijos') return json((await sbGet('candy_proveedores', 'select=*')).map((r: any) => ({ id: r.id, nombre: r.nombre || '', telefono: r.telefono || '', notas: r.notas || '' })));
     if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id,precio_candy')).map((r: any) => ({ id: (r.shuk_id || '').toString().trim(), precio: parseFloat(r.precio_candy) || 0 })).filter((r: any) => r.id));
-    if (accion === 'getAnalitica') { const dias = parseInt(url.searchParams.get('dias') || '0') || 0; return json(analitica(await traficoParaAnalitica(dias), dias)); }
+    if (accion === 'getAnalitica') {
+      // La analítica ya no mira solo el tráfico: lo cruza con las ventas (para saber QUIÉN es
+      // cada visitante), con los clientes (para el teléfono) y con los productos (stock real).
+      const dias = parseInt(url.searchParams.get('dias') || '0') || 0;
+      const [trA, vtA, clA, prA] = await Promise.all([
+        traficoParaAnalitica(dias),
+        sbGet('ventas', 'select=id,fecha,cliente,estado,total_ars,total_usd,vid,stock_updates&order=n_venta'),
+        sbGet('clientes', 'select=nombre,telefono,tipo'),
+        sbGet('productos', 'select=id,nombre,stock,activo,dueno'),
+      ]);
+      return json(analitica(trA, dias, vtA, clA, prA));
+    }
+    // 👤 FICHA DE UN VISITANTE: toda su historia, paso por paso. Se pide al tocarlo en la
+    // lista (no viaja en getAnalitica para no inflar la respuesta con miles de eventos).
+    if (accion === 'getFichaVisitante') {
+      const vidF = Q('vid');
+      if (!vidF) return json({ error: 'falta el visitante' });
+      const [evs, vtsF] = await Promise.all([
+        sbGet('trafico', 'select=*&vid=eq.' + encodeURIComponent(vidF) + '&order=id.asc'),
+        sbGet('ventas', 'select=id,n_venta,fecha,cliente,estado,total_ars,total_usd,productos&vid=eq.' + encodeURIComponent(vidF) + '&order=n_venta'),
+      ]);
+      if (!evs.length && !vtsF.length) return json({ error: 'sin datos de ese visitante' });
+      let nombreF = '', telF = '', ciudadF = '', paisF = '', dispF = '', ogF = '';
+      const dias: any = {}, prods: any = {}, cuenta: any = {};
+      const linea = evs.map((r: any) => {
+        const ev = (r.evento || 'visita').toString();
+        cuenta[ev] = (cuenta[ev] || 0) + 1;
+        if (r.nombre && !nombreF) nombreF = String(r.nombre);
+        if (r.telefono && !telF) telF = String(r.telefono);
+        if (r.ciudad && !ciudadF) ciudadF = String(r.ciudad);
+        if (r.pais && !paisF) paisF = String(r.pais);
+        if (r.dispositivo && !dispF) dispF = String(r.dispositivo);
+        if (r.origen && !ogF) ogF = String(r.origen);
+        const f = (r.fecha || '').toString();
+        dias[f.slice(0, 10)] = 1;
+        if (r.detalle && ev !== 'busqueda') prods[String(r.detalle)] = (prods[String(r.detalle)] || 0) + 1;
+        let items = null;
+        try { const arr = JSON.parse(String(r.carrito || '')); if (Array.isArray(arr) && arr.length) items = arr; } catch { /**/ }
+        return { fecha: f, evento: ev, pagina: (r.pagina || '').toString(), detalle: (r.detalle || '').toString(), total: parseFloat(r.total) || 0, items, origen: (r.origen || '').toString() };
+      });
+      const compras = vtsF.filter((v: any) => (v.estado || '') !== 'cancelado').map((v: any) => ({ nVenta: v.n_venta, fecha: v.fecha, cliente: v.cliente, estado: v.estado, totalARS: v.total_ars || 0, totalUSD: v.total_usd || 0, productos: (v.productos || '').toString().slice(0, 400) }));
+      if (!nombreF && compras.length) nombreF = String(compras[compras.length - 1].cliente || '');
+      if (!telF && nombreF) {
+        const cf = await sbGet('clientes', 'select=telefono,tipo&nombre=eq.' + encodeURIComponent(nombreF));
+        if (cf.length) telF = String(cf[0].telefono || '');
+      }
+      return json({
+        vid: vidF, nombre: nombreF, telefono: telF, ciudad: ciudadF, pais: paisF, dispositivo: dispF, origen: ogF,
+        eventos: cuenta, dias: Object.keys(dias).length, primera: linea.length ? linea[0].fecha : '', ultima: linea.length ? linea[linea.length - 1].fecha : '',
+        productos: Object.entries(prods).sort((a: any, b: any) => b[1] - a[1]).map(([nombre, n]) => ({ nombre, n })),
+        compras, gastadoARS: compras.reduce((t: number, c: any) => t + (parseFloat(c.totalARS) || 0), 0),
+        linea: linea.slice(-200),
+      });
+    }
     if (accion === 'auditarHijos') {
       const hijo = url.searchParams.get('hijo') || '';
       const data = await sbGet('candy_ventas', 'select=*' + (hijo ? '&hijo=eq.' + encodeURIComponent(hijo) : ''));

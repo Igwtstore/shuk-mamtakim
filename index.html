@@ -3742,6 +3742,7 @@ function renderCatalogo() {
     if (aOut !== bOut) return aOut - bOut;
     return getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre);
   });
+  _ultResultados = filtrados.length;   // 🔎 lo usa filtrar() para saber si la búsqueda encontró algo
   if (!filtrados.length) {
     // Link VIP muerto (set vacío): el banner rojo ya lo explica — nada de "Sin resultados".
     catalogo.innerHTML = (_vipIds && _vipIds.size === 0) ? '' : '<div class="loading">Sin resultados</div>';
@@ -11934,7 +11935,22 @@ async function borrarLinkVip(t) {
   verLinksVip();
 }
 
-function filtrar() { renderCatalogo(); }
+// 🔎 QUÉ BUSCAN EN LA TIENDA (y qué buscan y NO encontrás).
+// Se registra una sola vez, cuando dejan de tipear — no una por tecla. Guarda el texto y
+// cuántos resultados salieron: una búsqueda con 0 resultados es un cliente pidiéndote algo
+// que no tenés, y hasta ahora esa información se perdía entera.
+let _ultResultados = 0, _tBusqueda = null, _ultBusqueda = '';
+function filtrar() {
+  renderCatalogo();
+  const q = (document.getElementById('buscador').value || '').trim();
+  clearTimeout(_tBusqueda);
+  if (q.length < 3) return;                      // 1 o 2 letras no dicen nada
+  _tBusqueda = setTimeout(() => {
+    if (q === _ultBusqueda) return;              // no repetir la misma búsqueda
+    _ultBusqueda = q;
+    track('busqueda', { producto: q.slice(0, 40), total: String(_ultResultados) });
+  }, 1200);
+}
 
 function toggleDarkMode() {
   document.body.classList.toggle('dark');
@@ -13927,12 +13943,29 @@ function contactarCliente(nombre, tipo, tel) {
 }
 
 // ─── ANALÍTICA DE VISITANTES (panel admin) ──────────────────────────────────
+// Vuelta de rosca (v4.67): la pantalla dejó de ser un tablero de números lindos para
+// convertirse en una lista de cosas para HACER. Tres cambios de fondo:
+//  ① Los "visitantes anónimos" ahora tienen nombre — el pedido guarda el id del aparato
+//    (ventas.vid), así que si alguna vez te compró, sabemos quién es aunque hoy no deje datos.
+//  ② El día a día se puede abrir día por día, con números de verdad y no barritas mudas.
+//  ③ Todo lo accionable (carritos calientes, clientes que volvieron, faltantes) sube arriba.
 let _anaPeriodo = 7;
+let _anaTab = 'hoy';
+let _anaFiltroGente = 'todos';
+let _anaBuscaGente = '';
+let _anaDiaAbierto = null;
+
 function setAnaPeriodo(dias, btn) {
   _anaPeriodo = dias;
   document.querySelectorAll('#admin-tab-analitica .psec-btn').forEach(b => b.classList.remove('activo'));
   if (btn) btn.classList.add('activo');
   renderAnalitica();
+}
+
+function setAnaTab(t) {
+  _anaTab = t;
+  _anaDiaAbierto = null;
+  pintarAnalitica();
 }
 
 async function renderAnalitica() {
@@ -13955,6 +13988,11 @@ async function renderAnalitica() {
     (productos || []).forEach(p => (p.dueno === 'Jony' ? nomJony : nomMiri).add(kAna(p.nombre)));
     const soloJony = n => { const k = kAna(n); return nomJony.has(k) && !nomMiri.has(k); };
     d.topProductos = (d.topProductos || []).filter(x => !soloJony(x.nombre));
+    d.deseoVsVenta = (d.deseoVsVenta || []).filter(x => !soloJony(x.nombre));
+    d.busquedas = [];                                   // no se puede saber de quién buscaban
+    d.visitantes = (d.visitantes || []).map(v => ({ ...v, productos: (v.productos || []).filter(n => !soloJony(n)) }));
+    d.diasDetalle = (d.diasDetalle || []).map(x => ({ ...x, top: (x.top || []).filter(t => !soloJony(t.nombre)) }));
+    d.acciones = (d.acciones || []).filter(a => a.id !== 'sin-stock' && a.id !== 'busquedas-vacias');
     d.abandonados = (d.abandonados || []).map(a => {
       const items = (a.items || []).filter(it => !soloJony(it.n));
       const nombres = (a.productos || []).filter(n => !soloJony(n));
@@ -13965,29 +14003,97 @@ async function renderAnalitica() {
     }).filter(Boolean);
   }
 
-  window._anaData = d;   // para exportar a CSV
-  const r = d.resumen;
-  const pct = (a,b) => b > 0 ? Math.round(a/b*100) : 0;
-  const card = (inner, style='') => `<div class="admin-card" style="${style}">${inner}</div>`;
-  const kpi = (num, lbl, color='var(--azul)') => `<div style="flex:1;min-width:0;text-align:center">
-    <div style="font-size:1.5rem;font-weight:800;color:${color}">${num}</div>
-    <div style="font-size:0.68rem;color:var(--texto-suave);font-weight:600">${lbl}</div></div>`;
+  window._anaData = d;
+  window._abData = d.abandonados || [];
+  pintarAnalitica();
+}
 
-  // KPIs
-  let html = card(`<div class="admin-titulo">Resumen</div>
+// ── Piezas compartidas ────────────────────────────────────────────────────────
+const _anaCard = (inner, style = '') => `<div class="admin-card" style="${style}">${inner}</div>`;
+const _anaPct = (a, b) => b > 0 ? Math.round(a / b * 100) : 0;
+const _anaPlata = n => '$ ' + Math.round(n || 0).toLocaleString('es-AR');
+const _anaIconoOrigen = { whatsapp: '🟢 WhatsApp', instagram: '📸 Instagram', facebook: '🔵 Facebook', google: '🔍 Google', directo: '🔗 Directo', interno: '↩️ Interno', otro: '🌐 Otro' };
+const _anaKpi = (num, lbl, color = 'var(--azul)') => `<div style="flex:1;min-width:0;text-align:center">
+  <div style="font-size:1.5rem;font-weight:800;color:${color}">${num}</div>
+  <div style="font-size:0.68rem;color:var(--texto-suave);font-weight:600">${lbl}</div></div>`;
+
+// Cómo se muestra una persona: nombre real, o por qué sabemos quién es aunque no lo dijo.
+function _anaQuien(v) {
+  if (v.nombre) return esc(v.nombre);
+  if (v.esCliente) return '👤 Cliente conocido';
+  return '👤 Sin identificar';
+}
+function _anaChipCliente(v) {
+  if (!v.esCliente) return '';
+  const g = v.gastadoARS ? ' · ' + _anaPlata(v.gastadoARS) : '';
+  return `<span style="font-size:0.6rem;background:#e8f5ee;color:var(--verde);border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">⭐ ${v.compras} compra${v.compras !== 1 ? 's' : ''}${g}</span>`;
+}
+function _anaBtnWA(tel, msg, texto) {
+  if (!tel) return '';
+  return `<button onclick="window.open('https://wa.me/549${tel}?text=${encodeURIComponent(msg)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">${texto}</button>`;
+}
+
+function pintarAnalitica() {
+  const d = window._anaData; if (!d) return;
+  const cont = document.getElementById('analitica-contenido');
+  const tabs = [['hoy', '🎯 Qué hacer'], ['carritos', '🛒 Carritos'], ['gente', '👥 Gente'], ['dias', '📅 Día a día'], ['productos', '🔥 Productos'], ['canales', '📊 Canales']];
+  const nAcc = (d.acciones || []).length, nCar = (d.abandonados || []).length;
+  const badge = t => t === 'hoy' && nAcc ? ` <span style="background:#c0392b;color:#fff;border-radius:8px;padding:0 5px;font-size:0.62rem">${nAcc}</span>`
+    : (t === 'carritos' && nCar ? ` <span style="background:var(--azul);color:#fff;border-radius:8px;padding:0 5px;font-size:0.62rem">${nCar}</span>` : '');
+  const barra = `<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:0.7rem;-webkit-overflow-scrolling:touch">
+    ${tabs.map(([t, lbl]) => `<button onclick="setAnaTab('${t}')" class="psec-btn ${_anaTab === t ? 'activo' : ''}" style="font-size:0.78rem;padding:0.42rem 0.8rem;flex-shrink:0">${lbl}${badge(t)}</button>`).join('')}
+  </div>`;
+
+  let html = barra;
+  if (_anaTab === 'hoy') html += _anaSecHoy(d);
+  else if (_anaTab === 'carritos') html += _anaSecCarritos(d);
+  else if (_anaTab === 'gente') html += _anaSecGente(d);
+  else if (_anaTab === 'dias') html += _anaSecDias(d);
+  else if (_anaTab === 'productos') html += _anaSecProductos(d);
+  else html += _anaSecCanales(d);
+  cont.innerHTML = html;
+}
+
+// ═══ 🎯 QUÉ HACER — lo accionable primero ═══════════════════════════════════
+function _anaSecHoy(d) {
+  const a = d.accionable || {};
+  let html = _anaCard(`<div class="admin-titulo">💰 Lo que hay para agarrar</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${kpi(r.unicos, 'Visitantes únicos')}
-      ${kpi(r.visitas, 'Visitas totales', '#5c3d1e')}
-      ${kpi(r.nuevos, 'Nuevos', 'var(--verde)')}
-      ${kpi(r.recurrentes, 'Que vuelven', '#c0392b')}
+      ${_anaKpi(_anaPlata(a.oportunidadARS), 'En carritos sin cerrar', '#c0392b')}
+      ${_anaKpi(a.carritosContactables || 0, 'Se les puede escribir', 'var(--verde)')}
+      ${_anaKpi(a.identificados || 0, 'Sabemos quiénes son')}
+      ${_anaKpi(a.anonimos || 0, 'Sin identificar', 'var(--texto-suave)')}
+    </div>
+    <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:8px;line-height:1.4">ℹ️ A un visitante le ponemos nombre si se registró, si pidió, o si <b>alguna vez compró desde ese mismo aparato</b> — aunque esta vez no haya dejado datos.</div>`);
+
+  const acc = d.acciones || [];
+  const colorU = { alta: '#c0392b', media: '#e08a2a', baja: 'var(--texto-suave)' };
+  const fondoU = { alta: '#fdeaea', media: '#fdf3e6', baja: 'var(--gris-claro)' };
+  const irLbl = { carritos: '🛒 Ver carritos', visitantes: '👥 Ver gente', deseo: '🔥 Ver productos', busquedas: '🔎 Ver búsquedas' };
+  const irTab = { carritos: 'carritos', visitantes: 'gente', deseo: 'productos', busquedas: 'productos' };
+  const accRows = acc.length ? acc.map(x => `
+    <div style="border-left:4px solid ${colorU[x.urgencia]};background:${fondoU[x.urgencia]};border-radius:0 10px 10px 0;padding:0.65rem 0.8rem;margin-bottom:0.5rem">
+      <div style="font-weight:700;font-size:0.88rem;color:#2d1a0a;line-height:1.35">${x.icono} ${esc(x.titulo)}</div>
+      <div style="font-size:0.76rem;color:#5a4a3a;margin-top:3px;line-height:1.5">${esc(x.detalle).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</div>
+      ${x.ir ? `<button onclick="setAnaTab('${irTab[x.ir]}')" style="background:#fff;border:1.5px solid ${colorU[x.urgencia]};color:${colorU[x.urgencia]};border-radius:7px;padding:3px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;margin-top:7px">${irLbl[x.ir] || 'Ver'}</button>` : ''}
+    </div>`).join('') : '<div class="sinpedidos">Todo tranquilo: no hay nada urgente para hacer ahora ✓</div>';
+  html += _anaCard(`<div class="admin-titulo">🎯 Para hacer ahora</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Ordenado por urgencia. Cada punto es algo concreto, con la gente ya identificada.</div>
+    ${accRows}`);
+
+  const r = d.resumen;
+  html += _anaCard(`<div class="admin-titulo">Resumen del período</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${_anaKpi(r.unicos, 'Visitantes únicos')}
+      ${_anaKpi(r.visitas, 'Visitas totales', '#5c3d1e')}
+      ${_anaKpi(r.nuevos, 'Nuevos', 'var(--verde)')}
+      ${_anaKpi(r.recurrentes, 'Que vuelven', '#c0392b')}
     </div>
     <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--gris-medio);padding-top:10px">
-      ${kpi(r.tienda, '🛍️ Minorista')}
-      ${kpi(r.mayorista, '📦 Mayorista')}
-    </div>
-    <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:8px;line-height:1.4">ℹ️ Únicos = navegadores distintos. Tus visitas y las de Miri no cuentan (desde hoy). La misma persona desde celu y compu cuenta como 2.</div>`);
+      ${_anaKpi(r.tienda, '🛍️ Minorista')}
+      ${_anaKpi(r.mayorista, '📦 Mayorista')}
+    </div>`);
 
-  // Comparativa con el período anterior (solo si el período es acotado)
   if (d.comparativa) {
     const c = d.comparativa;
     const chip = (lbl, o) => {
@@ -14001,183 +14107,384 @@ async function renderAnalitica() {
         <div style="font-size:0.58rem;color:var(--texto-suave)">antes: ${o.anterior}</div>
       </div>`;
     };
-    html += card(`<div class="admin-titulo">📊 Comparado con el período anterior</div>
+    html += _anaCard(`<div class="admin-titulo">📊 Comparado con el período anterior</div>
       <div style="display:flex;gap:8px">${chip('Visitas', c.visitas)}${chip('Únicos', c.unicos)}${chip('Pedidos', c.pedidos)}</div>`);
   }
 
-  // Tendencia diaria
-  if (d.dias30 && d.dias30.length) {
-    const maxDia = Math.max(...d.dias30.map(x=>x.n), 1);
-    const barras = d.dias30.map(x => {
-      const fch = x.fecha.slice(8,10) + '/' + x.fecha.slice(5,7);
-      return `<div title="${fch} — ${x.n} visitas" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0">
-        <div style="width:80%;background:#2c6fad;border-radius:3px 3px 0 0;height:${Math.max(2,Math.round(x.n/maxDia*70))}px"></div>
-      </div>`;
-    }).join('');
-    const f0 = d.dias30[0].fecha, f1 = d.dias30[d.dias30.length-1].fecha;
-    html += card(`<div class="admin-titulo">📈 Visitas por día</div>
-      <div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:6px">${barras}</div>
-      <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--texto-suave);margin-top:3px">
-        <span>${f0.slice(8,10)}/${f0.slice(5,7)}</span><span>${f1.slice(8,10)}/${f1.slice(5,7)}</span></div>`);
-  }
-
-  // Embudo
   const e = d.embudo;
   const etapas = [['Entraron', e.visita, '#5c3d1e'], ['Agregaron al carrito', e.carrito, '#2c6fad'],
                   ['Iniciaron pedido', e.checkout, '#e08a2a'], ['✅ Enviaron pedido', e.pedido, 'var(--verde)']];
   const base = e.visita || 1;
-  html += card(`<div class="admin-titulo">Embudo de conversión</div>` +
-    etapas.map(([lbl, n, col]) => `
-      <div style="margin-bottom:8px">
+  html += _anaCard(`<div class="admin-titulo">Embudo de conversión</div>` +
+    etapas.map(([lbl, n, col], i) => {
+      const prev = i ? etapas[i - 1][1] : n;
+      const caida = i && prev > n ? ` <span style="color:#c0392b;font-size:0.68rem">−${prev - n} se cayeron</span>` : '';
+      return `<div style="margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:3px">
-          <span style="font-weight:600">${lbl}</span><span style="color:var(--texto-suave)">${n} · ${pct(n,base)}%</span>
+          <span style="font-weight:600">${lbl}${caida}</span><span style="color:var(--texto-suave)">${n} · ${_anaPct(n, base)}%</span>
         </div>
         <div style="background:var(--gris-medio);border-radius:6px;height:14px;overflow:hidden">
-          <div style="width:${pct(n,base)}%;height:100%;background:${col};border-radius:6px"></div>
+          <div style="width:${_anaPct(n, base)}%;height:100%;background:${col};border-radius:6px"></div>
         </div>
-      </div>`).join('') +
-    `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:4px">Conversión final: <b>${pct(e.pedido,base)}%</b> de los que entran terminan pidiendo.</div>`);
+      </div>`;
+    }).join('') +
+    `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:4px">Conversión final: <b>${_anaPct(e.pedido, base)}%</b> de los que entran terminan pidiendo.</div>`);
+  return html;
+}
 
-  // Top productos más deseados (lo que la gente agregó al carrito / pidió)
-  const tp = d.topProductos || [];
-  if (tp.length) {
-    const maxTp = Math.max(...tp.map(x=>x.n), 1);
-    const tpRows = tp.map((x,i) => `
-      <div style="margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px">
-          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${esc(x.nombre)}</span>
-          <span style="color:var(--texto-suave);flex-shrink:0;margin-left:6px">${x.n}</span>
-        </div>
-        <div style="background:var(--gris-medio);border-radius:5px;height:9px;overflow:hidden">
-          <div style="width:${pct(x.n,maxTp)}%;height:100%;background:#e08a2a;border-radius:5px"></div>
-        </div>
-      </div>`).join('');
-    html += card(`<div class="admin-titulo">🔥 Productos más deseados</div>
-      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo que más agregaron al carrito o pidieron en el período. Ideal para destacar o no quedarte sin stock.</div>
-      ${tpRows}`);
-  }
-
-  // Carritos abandonados / pedidos que no llegaron — ventas casi cerradas para recuperar
+// ═══ 🛒 CARRITOS SIN TERMINAR ═══════════════════════════════════════════════
+function _anaSecCarritos(d) {
   const ab = d.abandonados || [];
-  window._abData = ab;
-  const abRows = ab.length ? ab.map((a, i) => {
-    const quien = a.nombre ? esc(a.nombre) : '👤 Visitante anónimo';
+  const btnCsv = ab.length ? `<button onclick="descargarAnaCSV('abandonados')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
+  const rows = ab.length ? ab.map((a, i) => {
     const tieneItems = a.items && a.items.length;
     const detalle = tieneItems
       ? a.items.map(it => `<b>${it.q}×</b> ${esc(it.n)}`).join(' · ')
       : (a.productos.length ? esc(a.productos.join(', ')) + ' <span style="color:#bbb">(sin cantidades)</span>' : 'productos sin detalle');
-    const totalStr = a.total > 0 ? ` · 💰 <b>$ ${Math.round(a.total).toLocaleString('es-AR')}</b>` : '';
-    const msgRec = `¡Hola${a.nombre ? ' ' + a.nombre.split(' ')[0] : ''}! 👋 Vi que te quedó un pedido armado en *Shuk Mamtakim* 🍬 ¿Te lo preparo? Cualquier duda escribime.`;
+    const totalStr = a.total > 0 ? ` · 💰 <b>${_anaPlata(a.total)}</b>` : '';
+    const hace = a.horas < 1 ? 'recién' : (a.horas < 24 ? `hace ${a.horas} h` : `hace ${Math.round(a.horas / 24)} día${Math.round(a.horas / 24) !== 1 ? 's' : ''}`);
+    const caliente = a.horas <= 48;
     const btnCargar = tieneItems ? `<button onclick="cargarComoPedido(${i})" style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">📋 Cargar como pedido</button>` : '';
-    const btnWA = a.telefono ? `<button onclick="window.open('https://wa.me/549${a.telefono}?text=${encodeURIComponent(msgRec)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">💬 Contactar</button>` : '';
-    return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
-      <div style="font-weight:700;color:${a.etapa==='checkout'?'#c0392b':'var(--azul)'};font-size:0.85rem">${quien}
-        <span style="font-size:0.62rem;background:${a.etapa==='checkout'?'#fdeaea':'#eef4fb'};color:${a.etapa==='checkout'?'#c0392b':'#2c6fad'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${a.etapa==='checkout'?'🔥 llegó al checkout':'🛒 armó carrito'}</span>
-        ${a.telefono?` <span style="font-size:0.66rem;color:var(--texto-suave)">📞 ${esc(a.telefono)}</span>`:''}
+    const btnWA = a.telefono ? `<button onclick="waCarrito(${i})" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">💬 Escribirle con el pedido</button>` : '';
+    const btnFicha = `<button onclick="abrirFichaVisitante('${esc(a.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">👤 Su historia</button>`;
+    const comoSup = a.comoSeSupo && !a.nombre ? '' : (a.comoSeSupo ? ` <span style="font-size:0.6rem;color:var(--texto-suave)">(${esc(a.comoSeSupo)})</span>` : '');
+    return `<div style="border:1.5px solid ${caliente ? '#f0c9c9' : 'var(--gris-medio)'};border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem;background:${caliente ? '#fffafa' : 'transparent'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap">
+        <div style="font-weight:700;color:${a.etapa === 'checkout' ? '#c0392b' : 'var(--azul)'};font-size:0.85rem;min-width:0">${_anaQuien(a)}${comoSup}
+          <span style="font-size:0.62rem;background:${a.etapa === 'checkout' ? '#fdeaea' : '#eef4fb'};color:${a.etapa === 'checkout' ? '#c0392b' : '#2c6fad'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${a.etapa === 'checkout' ? '🔥 llegó al checkout' : '🛒 armó carrito'}</span>
+          ${_anaChipCliente(a)}
+          ${a.telefono ? ` <span style="font-size:0.66rem;color:var(--texto-suave)">📞 ${esc(a.telefono)}</span>` : ''}
+        </div>
+        <span style="font-size:0.66rem;font-weight:700;color:${caliente ? '#c0392b' : 'var(--texto-suave)'};flex-shrink:0">${hace}</span>
       </div>
       <div style="font-size:0.74rem;color:#444;margin-top:3px;line-height:1.5">${detalle}${totalStr}</div>
-      <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:1px">${esc(a.cuando)}${a.ciudad?(' · 📍 '+esc(a.ciudad)):''}</div>
-      ${(btnCargar||btnWA)?`<div style="display:flex;gap:6px;margin-top:7px">${btnCargar}${btnWA}</div>`:''}
+      <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:1px">${esc(a.cuando)}${a.ciudad ? (' · 📍 ' + esc(a.ciudad)) : ''}${a.dispositivo ? (' · ' + (a.dispositivo === 'celular' ? '📱' : '💻')) : ''}${a.visitas ? ` · ${a.visitas} visita${a.visitas !== 1 ? 's' : ''}` : ''}${a.origen ? ' · ' + esc(_anaIconoOrigen[a.origen] || a.origen) : ''}</div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">${btnWA}${btnCargar}${btnFicha}</div>
     </div>`;
   }).join('') : '<div class="sinpedidos">Sin carritos abandonados en el período ✓</div>';
-  const btnCsvAb = ab.length ? `<button onclick="descargarAnaCSV('abandonados')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
-  html += card(`<div class="admin-titulo">🛒 Carritos sin terminar / pedidos que no llegaron (${ab.length}) ${btnCsvAb}</div>
-    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Armaron el carrito y no completaron el pedido (o no llegó). Con "📋 Cargar como pedido" lo pasás al panel con sus cantidades.</div>
-    ${abRows}`);
+  const conTel = ab.filter(a => a.telefono).length;
+  return _anaCard(`<div class="admin-titulo">🛒 Carritos sin terminar (${ab.length}) ${btnCsv}</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Ordenados por lo que conviene atacar primero: primero los que podés contactar, los que ya te compraron y los de más plata. <b>${conTel}</b> tienen teléfono.</div>
+    ${rows}`);
+}
 
-  // Origen
-  const totOrigen = Object.values(d.porOrigen).reduce((s,n)=>s+n,0) || 1;
-  const iconoOrigen = { whatsapp:'🟢 WhatsApp', instagram:'📸 Instagram', facebook:'🔵 Facebook', google:'🔍 Google', directo:'🔗 Directo', interno:'↩️ Interno', otro:'🌐 Otro' };
-  const origenRows = Object.entries(d.porOrigen).sort((a,b)=>b[1]-a[1]).map(([k,n]) => `
+// ═══ 👥 GENTE — quién entró, qué hizo y cómo contactarlo ════════════════════
+function setAnaFiltroGente(f) { _anaFiltroGente = f; pintarAnalitica(); }
+function buscarGente(v) {
+  _anaBuscaGente = (v || '').toLowerCase().trim();
+  const cont = document.getElementById('ana-gente-lista');
+  if (cont) cont.innerHTML = _anaFilasGente(window._anaData);
+}
+function _anaFilasGente(d) {
+  const q = _anaBuscaGente;
+  let lista = (d.visitantes || []).filter(v => {
+    if (_anaFiltroGente === 'tel' && !v.telefono) return false;
+    if (_anaFiltroGente === 'clientes' && !v.esCliente) return false;
+    if (_anaFiltroGente === 'casi' && !(v.armoCarrito || v.checkout) ) return false;
+    if (_anaFiltroGente === 'anon' && v.nombre) return false;
+    if (_anaFiltroGente === 'vuelven' && v.dias < 2) return false;
+    if (!q) return true;
+    return (v.nombre || '').toLowerCase().includes(q) || (v.telefono || '').includes(q)
+      || (v.ciudad || '').toLowerCase().includes(q) || (v.productos || []).some(p => p.toLowerCase().includes(q));
+  });
+  if (!lista.length) return '<div class="sinpedidos">Nadie coincide con ese filtro</div>';
+  const colorEtq = { 'compró': 'var(--verde)', 'cliente que volvió': '#7b2ff7', 'casi compra': '#c0392b', 'armó carrito': '#e08a2a', 'mirón que vuelve': '#2c6fad', 'miró y se fue': 'var(--texto-suave)' };
+  return lista.slice(0, 150).map(v => {
+    const msg = `¡Hola${v.nombre ? ' ' + v.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬 ¿Puedo ayudarte con algo?`;
+    return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.55rem 0.7rem;margin-bottom:0.4rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700;color:var(--azul);font-size:0.86rem">${_anaQuien(v)}
+            <span style="font-size:0.6rem;background:var(--gris-claro);color:${colorEtq[v.etiqueta] || 'var(--texto-suave)'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${v.etiqueta}</span>
+            ${_anaChipCliente(v)}
+          </div>
+          <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:2px">
+            ${v.telefono ? '📞 ' + esc(v.telefono) + ' · ' : ''}${v.visitas} visita${v.visitas !== 1 ? 's' : ''} en ${v.dias} día${v.dias !== 1 ? 's' : ''}${v.ciudad ? ' · 📍 ' + esc(v.ciudad) : ''}${v.dispositivo ? ' · ' + (v.dispositivo === 'celular' ? '📱' : '💻') : ''} · ${esc(_anaIconoOrigen[v.origen] || v.origen)}
+          </div>
+          ${v.productos && v.productos.length ? `<div style="font-size:0.68rem;color:#666;margin-top:2px">👀 ${esc(v.productos.slice(0, 4).join(', '))}${v.productos.length > 4 ? '…' : ''}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:0.62rem;color:var(--texto-suave)">últ. ${esc(v.ultima)}</div>
+          <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end">
+            ${_anaBtnWA(v.telefono, msg, '💬')}
+            <button onclick="abrirFichaVisitante('${esc(v.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('') + (lista.length > 150 ? `<div style="font-size:0.7rem;color:var(--texto-suave);text-align:center;padding:6px">Mostrando 150 de ${lista.length}. Afiná con el buscador.</div>` : '');
+}
+function _anaSecGente(d) {
+  const vs = d.visitantes || [];
+  const filtros = [['todos', 'Todos', vs.length], ['tel', '📞 Con teléfono', vs.filter(v => v.telefono).length],
+    ['clientes', '⭐ Ya compraron', vs.filter(v => v.esCliente).length], ['casi', '🛒 Armaron carrito', vs.filter(v => v.armoCarrito || v.checkout).length],
+    ['vuelven', '🔄 Vuelven', vs.filter(v => v.dias >= 2).length], ['anon', '👤 Sin nombre', vs.filter(v => !v.nombre).length]];
+  return _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada persona que pisó la tienda, con lo que miró y cómo contactarla. Tocá 👤 para ver su historia completa.</div>
+    <input type="text" oninput="buscarGente(this.value)" placeholder="Buscar por nombre, teléfono, ciudad o producto…" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.82rem;margin-bottom:7px">
+    <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;margin-bottom:8px">
+      ${filtros.map(([f, lbl, n]) => `<button onclick="setAnaFiltroGente('${f}')" class="psec-btn ${_anaFiltroGente === f ? 'activo' : ''}" style="font-size:0.72rem;padding:0.3rem 0.65rem;flex-shrink:0">${lbl} (${n})</button>`).join('')}
+    </div>
+    <div id="ana-gente-lista">${_anaFilasGente(d)}</div>`);
+}
+
+// ═══ 📅 DÍA A DÍA ═══════════════════════════════════════════════════════════
+function abrirDiaAna(f) { _anaDiaAbierto = _anaDiaAbierto === f ? null : f; pintarAnalitica(); }
+function _anaSecDias(d) {
+  const dias = (d.diasDetalle || []).slice().reverse();   // del más reciente al más viejo
+  if (!dias.length) return _anaCard('<div class="sinpedidos">Sin días con datos en el período</div>');
+  const maxV = Math.max(...dias.map(x => x.visitas), 1);
+  const hoyK = (() => { const n = new Date(), p = v => String(v).padStart(2, '0'); return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate()); })();
+  const nombreDia = f => { const [a, m, dd] = f.split('-'); const dt = new Date(Date.UTC(+a, +m - 1, +dd)); return ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][dt.getUTCDay()]; };
+  const filas = dias.map(x => {
+    const abierto = _anaDiaAbierto === x.fecha;
+    const esHoy = x.fecha === hoyK;
+    return `<div onclick="abrirDiaAna('${x.fecha}')" style="cursor:pointer;border-bottom:1px solid var(--gris-medio);padding:0.5rem 0.2rem;background:${abierto ? 'var(--gris-claro)' : 'transparent'}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:76px;flex-shrink:0;font-size:0.76rem;font-weight:${esHoy ? '800' : '600'};color:${esHoy ? 'var(--verde)' : '#2d1a0a'}">${esHoy ? 'HOY' : nombreDia(x.fecha)} ${x.fecha.slice(8, 10)}/${x.fecha.slice(5, 7)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="background:var(--gris-medio);border-radius:5px;height:11px;overflow:hidden">
+            <div style="width:${Math.max(3, Math.round(x.visitas / maxV * 100))}%;height:100%;background:${x.pedidos ? 'var(--verde)' : '#2c6fad'};border-radius:5px"></div>
+          </div>
+        </div>
+        <div style="width:112px;flex-shrink:0;text-align:right;font-size:0.72rem;color:var(--texto-suave)">
+          <b style="color:#2d1a0a">${x.visitas}</b> vis · <b style="color:#2d1a0a">${x.unicos}</b> pers
+        </div>
+      </div>
+      <div style="display:flex;gap:9px;margin-top:3px;padding-left:84px;font-size:0.68rem;color:var(--texto-suave);flex-wrap:wrap">
+        <span>🛒 ${x.carritos}</span><span>🔥 ${x.checkouts}</span>
+        <span style="color:${x.pedidos ? 'var(--verde)' : 'inherit'};font-weight:${x.pedidos ? '700' : '400'}">✅ ${x.pedidos} pedido${x.pedidos !== 1 ? 's' : ''}</span>
+        <span>· conversión <b>${x.conv}%</b></span>
+        <span style="margin-left:auto">${abierto ? '▲' : '▼'}</span>
+      </div>
+      ${abierto ? `<div style="padding:6px 0 2px 84px;font-size:0.72rem;color:#444">
+        ${x.top && x.top.length ? '<b>Lo más tocado ese día:</b> ' + x.top.map(t => esc(t.nombre) + ' (' + t.n + ')').join(' · ') : '<i style="color:var(--texto-suave)">Nadie tocó ningún producto ese día</i>'}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  const tot = dias.reduce((a, x) => ({ v: a.v + x.visitas, u: a.u + x.unicos, p: a.p + x.pedidos }), { v: 0, u: 0, p: 0 });
+  const mejor = dias.slice().sort((a, b) => b.visitas - a.visitas)[0];
+  return _anaCard(`<div class="admin-titulo">📅 Día por día (${dias.length} días)</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Tocá cualquier día para ver qué miraron. Promedio: <b>${Math.round(tot.v / dias.length)}</b> visitas y <b>${Math.round(tot.u / dias.length)}</b> personas por día${mejor ? ` · mejor día: <b>${mejor.fecha.slice(8, 10)}/${mejor.fecha.slice(5, 7)}</b> con ${mejor.visitas}` : ''}.</div>
+    ${filas}`);
+}
+
+// ═══ 🔥 PRODUCTOS — deseo contra venta, y qué buscan ════════════════════════
+function _anaSecProductos(d) {
+  let html = '';
+  const dv = d.deseoVsVenta || [];
+  if (dv.length) {
+    const maxD = Math.max(...dv.map(x => x.deseado), 1);
+    const rows = dv.map(x => {
+      const sinStock = x.stock !== null && x.stock <= 0;
+      const noVendio = x.deseado >= 3 && x.vendido === 0;
+      const alerta = sinStock ? '<span style="font-size:0.6rem;background:#fdeaea;color:#c0392b;border-radius:5px;padding:1px 6px;font-weight:700">📦 SIN STOCK</span>'
+        : (noVendio ? '<span style="font-size:0.6rem;background:#fdf3e6;color:#e08a2a;border-radius:5px;padding:1px 6px;font-weight:700">👀 lo miran, no lo compran</span>' : '');
+      return `<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;gap:6px">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nombre)} ${alerta}</span>
+          <span style="color:var(--texto-suave);flex-shrink:0">${x.deseado} 👀 · ${x.vendido} 🛍️${x.stock !== null ? ` · stock ${x.stock}` : ''}</span>
+        </div>
+        <div style="background:var(--gris-medio);border-radius:5px;height:9px;overflow:hidden;position:relative">
+          <div style="width:${_anaPct(x.deseado, maxD)}%;height:100%;background:#e08a2a;border-radius:5px"></div>
+          <div style="position:absolute;top:0;left:0;width:${_anaPct(x.vendido, maxD)}%;height:100%;background:var(--verde);border-radius:5px;opacity:.85"></div>
+        </div>
+      </div>`;
+    }).join('');
+    html += _anaCard(`<div class="admin-titulo">🔥 Lo que quieren contra lo que se vendió</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">🟠 veces que lo agregaron al carrito · 🟢 unidades vendidas de verdad. Si la barra naranja es larga y la verde corta, algo lo está frenando: precio, stock o foto.</div>
+      ${rows}`);
+  }
+  const bs = d.busquedas || [];
+  const vacias = bs.filter(b => b.vacias > 0);
+  html += _anaCard(`<div class="admin-titulo">🔎 Qué buscan en la tienda</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo que escriben en el buscador. <b>Las que no encuentran nada son pedidos de compra gratis</b>: te están diciendo qué traer.</div>
+    ${bs.length ? bs.map(b => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;padding:5px 0;border-bottom:1px solid var(--gris-medio);gap:6px">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.vacias ? '❌' : '🔍'} "${esc(b.q)}"</span>
+        <span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem">${b.veces}× · ${b.personas} pers${b.vacias ? ` · <b style="color:#c0392b">${b.vacias} sin resultado</b>` : ''}</span>
+      </div>`).join('')
+      : '<div class="sinpedidos">Todavía no hay búsquedas registradas. Se empiezan a guardar desde ahora, a medida que la gente use el buscador de la tienda. 🔎</div>'}
+    ${vacias.length ? `<div style="background:#fdeaea;border-radius:8px;padding:0.5rem 0.7rem;margin-top:8px;font-size:0.74rem;color:#c0392b"><b>💡 ${vacias.length} búsqueda${vacias.length !== 1 ? 's' : ''} sin resultado.</b> Fijate si conviene traer eso o renombrar un producto que sí tenés.</div>` : ''}`);
+
+  const tp = d.topProductos || [];
+  if (tp.length) {
+    const maxTp = Math.max(...tp.map(x => x.n), 1);
+    html += _anaCard(`<div class="admin-titulo">👀 Productos más deseados</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo que más agregaron al carrito o pidieron. Ideal para destacar o no quedarte sin stock.</div>
+      ${tp.map((x, i) => `<div style="margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i + 1}. ${esc(x.nombre)}</span>
+          <span style="color:var(--texto-suave);flex-shrink:0;margin-left:6px">${x.n}</span>
+        </div>
+        <div style="background:var(--gris-medio);border-radius:5px;height:9px;overflow:hidden">
+          <div style="width:${_anaPct(x.n, maxTp)}%;height:100%;background:#e08a2a;border-radius:5px"></div>
+        </div>
+      </div>`).join('')}`);
+  }
+  return html;
+}
+
+// ═══ 📊 CANALES, aparatos, lugares y horarios ═══════════════════════════════
+function _anaSecCanales(d) {
+  const totOrigen = Object.values(d.porOrigen).reduce((s, n) => s + n, 0) || 1;
+  const origenRows = Object.entries(d.porOrigen).sort((a, b) => b[1] - a[1]).map(([k, n]) => `
     <div style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px">
-        <span>${iconoOrigen[k]||k}</span><span style="color:var(--texto-suave)">${n} · ${pct(n,totOrigen)}%</span>
+        <span>${_anaIconoOrigen[k] || esc(k)}</span><span style="color:var(--texto-suave)">${n} · ${_anaPct(n, totOrigen)}%</span>
       </div>
       <div style="background:var(--gris-medio);border-radius:5px;height:10px;overflow:hidden">
-        <div style="width:${pct(n,totOrigen)}%;height:100%;background:#2c6fad;border-radius:5px"></div>
+        <div style="width:${_anaPct(n, totOrigen)}%;height:100%;background:#2c6fad;border-radius:5px"></div>
       </div>
     </div>`).join('');
-  html += card(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
+  let html = _anaCard(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
 
-  // Conversión por canal: qué origen trae gente que efectivamente compra
   const cpo = (d.conversionPorOrigen || []).filter(x => x.visitantes > 0);
   if (cpo.length) {
-    const convRows = cpo.map(x => `
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio)">
-        <span>${iconoOrigen[x.origen]||x.origen}</span>
-        <span style="color:var(--texto-suave)">${x.pedidos}/${x.visitantes} · <b style="color:${x.pct>=20?'var(--verde)':(x.pct>=8?'#e08a2a':'#c0392b')}">${x.pct}%</b></span>
-      </div>`).join('');
-    html += card(`<div class="admin-titulo">🎯 Conversión por canal</div>
+    html += _anaCard(`<div class="admin-titulo">🎯 Conversión por canal</div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:6px">De cada canal, cuántos visitantes terminaron pidiendo. Te dice dónde conviene invertir.</div>
-      ${convRows}`);
+      ${cpo.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio)">
+        <span>${_anaIconoOrigen[x.origen] || esc(x.origen)}</span>
+        <span style="color:var(--texto-suave)">${x.pedidos}/${x.visitantes} · <b style="color:${x.pct >= 20 ? 'var(--verde)' : (x.pct >= 8 ? '#e08a2a' : '#c0392b')}">${x.pct}%</b></span>
+      </div>`).join('')}`);
   }
 
-  // Dispositivo + ciudades (lado a lado)
-  const dispRows = Object.entries(d.porDispositivo).sort((a,b)=>b[1]-a[1])
-    .map(([k,n]) => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
-      <span>${k==='celular'?'📱 Celular':'💻 Compu'}</span><b>${n}</b></div>`).join('') || '<div class="sinpedidos">Sin datos</div>';
+  const dispRows = Object.entries(d.porDispositivo).sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
+      <span>${k === 'celular' ? '📱 Celular' : '💻 Compu'}</span><b>${n}</b></div>`).join('') || '<div class="sinpedidos">Sin datos</div>';
   const ciudadRows = d.topCiudades.length
     ? d.topCiudades.map(c => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0">
         <span>📍 ${esc(c.nombre)}</span><b>${c.n}</b></div>`).join('')
     : '<div class="sinpedidos">Sin datos</div>';
   const paises = d.topPaises || [];
   const paisCard = (paises.length > 1)
-    ? card(`<div class="admin-titulo">Países</div>${paises.map(p => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0"><span>🌎 ${esc(p.nombre)}</span><b>${p.n}</b></div>`).join('')}`, 'flex:1;min-width:140px')
+    ? _anaCard(`<div class="admin-titulo">Países</div>${paises.map(p => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0"><span>🌎 ${esc(p.nombre)}</span><b>${p.n}</b></div>`).join('')}`, 'flex:1;min-width:140px')
     : '';
   html += `<div style="display:flex;gap:0.75rem;flex-wrap:wrap">
-    ${card(`<div class="admin-titulo">Dispositivo</div>${dispRows}`, 'flex:1;min-width:140px')}
-    ${card(`<div class="admin-titulo">Ciudades top</div>${ciudadRows}`, 'flex:1;min-width:140px')}
+    ${_anaCard(`<div class="admin-titulo">Dispositivo</div>${dispRows}`, 'flex:1;min-width:140px')}
+    ${_anaCard(`<div class="admin-titulo">Ciudades top</div>${ciudadRows}`, 'flex:1;min-width:140px')}
     ${paisCard}
   </div>`;
 
-  // Horarios pico
   const maxHora = Math.max(...d.porHora, 1);
-  html += card(`<div class="admin-titulo">🕐 Horarios de mayor tráfico</div>
+  const horaPico = d.porHora.indexOf(maxHora);
+  html += _anaCard(`<div class="admin-titulo">🕐 Horarios de mayor tráfico</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:4px">La hora más movida es alrededor de las <b>${horaPico}:00</b>. Buen momento para mandar una difusión.</div>
     <div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:6px">
-      ${d.porHora.map((n,h) => `<div title="${h}:00 — ${n} visitas" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">
-        <div style="width:100%;background:${n?'#5c3d1e':'var(--gris-medio)'};border-radius:3px 3px 0 0;height:${Math.max(2,Math.round(n/maxHora*70))}px"></div>
+      ${d.porHora.map((n, h) => `<div title="${h}:00 — ${n} visitas" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">
+        <div style="width:100%;background:${n ? (h === horaPico ? 'var(--verde)' : '#5c3d1e') : 'var(--gris-medio)'};border-radius:3px 3px 0 0;height:${Math.max(2, Math.round(n / maxHora * 70))}px"></div>
       </div>`).join('')}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--texto-suave);margin-top:3px">
       <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>`);
 
-  // Día de la semana con más tráfico
-  if (d.porDiaSemana && d.porDiaSemana.some(n=>n>0)) {
-    const diasLbl = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  if (d.porDiaSemana && d.porDiaSemana.some(n => n > 0)) {
+    const diasLbl = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const maxDS = Math.max(...d.porDiaSemana, 1);
-    const dsRows = d.porDiaSemana.map((n,i) => `
+    html += _anaCard(`<div class="admin-titulo">📅 Días de la semana</div>${d.porDiaSemana.map((n, i) => `
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
         <span style="font-size:0.72rem;width:30px;flex-shrink:0">${diasLbl[i]}</span>
         <div style="flex:1;background:var(--gris-medio);border-radius:5px;height:12px;overflow:hidden">
-          <div style="width:${pct(n,maxDS)}%;height:100%;background:#7b2ff7;border-radius:5px"></div>
+          <div style="width:${_anaPct(n, maxDS)}%;height:100%;background:#7b2ff7;border-radius:5px"></div>
         </div>
         <span style="font-size:0.7rem;color:var(--texto-suave);width:28px;text-align:right;flex-shrink:0">${n}</span>
-      </div>`).join('');
-    html += card(`<div class="admin-titulo">📅 Días de la semana</div>${dsRows}`);
+      </div>`).join('')}`);
   }
 
-  // Leads identificados
-  const leadRows = d.leads.length
-    ? d.leads.map(l => `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
+  const btnCsvLeads = d.leads.length ? `<button onclick="descargarAnaCSV('leads')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
+  html += _anaCard(`<div class="admin-titulo">🧑 Visitantes identificados (${d.leads.length}) ${btnCsvLeads}</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Personas que dejaron sus datos al registrarse o pedir, con su historial de visitas atado.</div>
+    ${d.leads.length ? d.leads.map(l => `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem;flex-wrap:wrap">
           <div style="min-width:0">
             <div style="font-weight:700;color:var(--azul);font-size:0.88rem">${esc(l.nombre)}</div>
-            <div style="font-size:0.7rem;color:var(--texto-suave)">${l.telefono?('📞 '+esc(l.telefono)+' · '):''}${esc(iconoOrigen[l.origen]||l.origen)}${l.ciudad?(' · 📍 '+esc(l.ciudad)):''}</div>
+            <div style="font-size:0.7rem;color:var(--texto-suave)">${l.telefono ? ('📞 ' + esc(l.telefono) + ' · ') : ''}${esc(_anaIconoOrigen[l.origen] || l.origen)}${l.ciudad ? (' · 📍 ' + esc(l.ciudad)) : ''}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:0.82rem;font-weight:700">${l.visitas} visita${l.visitas!==1?'s':''}</div>
+            <div style="font-size:0.82rem;font-weight:700">${l.visitas} visita${l.visitas !== 1 ? 's' : ''}</div>
             <div style="font-size:0.66rem;color:var(--texto-suave)">últ. ${esc(l.ultima)}</div>
-            ${l.telefono?`<button onclick="window.open('https://wa.me/549${l.telefono}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:2px 8px;font-size:0.7rem;font-weight:600;cursor:pointer;margin-top:3px">💬 Escribir</button>`:''}
+            ${l.telefono ? `<button onclick="window.open('https://wa.me/549${l.telefono}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:2px 8px;font-size:0.7rem;font-weight:600;cursor:pointer;margin-top:3px">💬 Escribir</button>` : ''}
           </div>
         </div>
       </div>`).join('')
-    : '<div class="sinpedidos">Todavía nadie se identificó. Aparecen acá cuando alguien hace un pedido o se registra.</div>';
-  const btnCsvLeads = d.leads.length ? `<button onclick="descargarAnaCSV('leads')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
-  html += card(`<div class="admin-titulo">🧑 Visitantes identificados (${d.leads.length}) ${btnCsvLeads}</div>
-    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Personas que dejaron sus datos al registrarse o pedir, con su historial de visitas atado.</div>
-    ${leadRows}`);
+      : '<div class="sinpedidos">Todavía nadie se identificó. Aparecen acá cuando alguien hace un pedido o se registra.</div>'}`);
+  return html;
+}
 
-  cont.innerHTML = html;
+// ── 💬 WhatsApp con el carrito adentro: el mensaje sale con lo que había armado ──
+function waCarrito(i) {
+  const a = (window._abData || [])[i];
+  if (!a || !a.telefono) return;
+  const items = (a.items && a.items.length)
+    ? a.items.map(it => `• ${it.q}× ${it.n}`).join('\n')
+    : (a.productos || []).map(n => `• ${n}`).join('\n');
+  const msg = `¡Hola${a.nombre ? ' ' + a.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬\n\n`
+    + `Vi que te quedó un pedido armado y no llegó a salir:\n${items}\n`
+    + (a.total > 0 ? `\nTotal: *${_anaPlata(a.total)}*\n` : '')
+    + `\n¿Te lo preparo? Si querés cambiar algo, avisame 😊`;
+  window.open(`https://wa.me/549${a.telefono}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+// ── 👤 FICHA DEL VISITANTE: toda su historia, paso por paso ──────────────────
+async function abrirFichaVisitante(vid) {
+  let m = document.getElementById('ana-ficha-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'ana-ficha-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:14px';
+    m.onclick = e => { if (e.target === m) cerrarFichaVisitante(); };
+    document.body.appendChild(m);
+  }
+  m.style.display = 'flex';
+  m.innerHTML = `<div style="background:var(--fondo-card,#fff);border-radius:16px;max-width:520px;width:100%;max-height:86vh;overflow-y:auto;padding:1rem 1.1rem"><div class="sinpedidos">Buscando su historia…</div></div>`;
+  let f;
+  try { f = await (await fetch(APPS_SCRIPT_URL + '?accion=getFichaVisitante&vid=' + encodeURIComponent(vid))).json(); }
+  catch { f = { error: 'no se pudo cargar' }; }
+  const caja = inner => `<div style="background:var(--fondo-card,#fff);border-radius:16px;max-width:520px;width:100%;max-height:86vh;overflow-y:auto;padding:1rem 1.1rem">${inner}</div>`;
+  if (!f || f.error) { m.innerHTML = caja(`<div class="sinpedidos">${esc((f && f.error) || 'no se pudo cargar')}</div><button onclick="cerrarFichaVisitante()" style="width:100%;margin-top:10px;padding:0.5rem;border:none;border-radius:9px;background:var(--gris-claro);font-weight:700;cursor:pointer">Cerrar</button>`); return; }
+
+  const evIcono = { visita: '👣', carrito: '🛒', checkout: '🔥', pedido: '✅', registro: '📝', busqueda: '🔎' };
+  const evTxt = { visita: 'Entró a la tienda', carrito: 'Agregó al carrito', checkout: 'Empezó el pedido', pedido: 'Envió el pedido', registro: 'Dejó sus datos', busqueda: 'Buscó' };
+  const linea = (f.linea || []).slice().reverse().map(l => `
+    <div style="display:flex;gap:7px;padding:4px 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem">
+      <span style="flex-shrink:0">${evIcono[l.evento] || '•'}</span>
+      <div style="min-width:0;flex:1">
+        <div>${evTxt[l.evento] || esc(l.evento)}${l.detalle ? ': <b>' + esc(l.detalle) + '</b>' : ''}${l.evento === 'busqueda' ? ` <span style="color:${l.total ? 'var(--texto-suave)' : '#c0392b'}">(${l.total || 0} resultado${l.total !== 1 ? 's' : ''})</span>` : ''}</div>
+        ${l.items && l.items.length ? `<div style="color:var(--texto-suave);font-size:0.7rem">${l.items.map(it => it.q + '× ' + esc(it.n)).join(' · ')}${l.total ? ' — ' + _anaPlata(l.total) : ''}</div>` : ''}
+      </div>
+      <span style="flex-shrink:0;color:var(--texto-suave);font-size:0.68rem">${esc((l.fecha || '').slice(0, 16))}</span>
+    </div>`).join('');
+  const compras = (f.compras || []).map(c => `
+    <div style="border:1.5px solid #cfe6d8;background:#f4fbf7;border-radius:9px;padding:0.45rem 0.6rem;margin-bottom:4px;font-size:0.75rem">
+      <b>Pedido #${c.nVenta}</b> · ${esc(c.fecha)} · <b>${_anaPlata(c.totalARS)}</b>${c.totalUSD ? ' + U$S ' + c.totalUSD : ''}
+      <span style="font-size:0.66rem;color:var(--texto-suave)"> · ${esc(c.estado)}</span>
+    </div>`).join('');
+  const msg = `¡Hola${f.nombre ? ' ' + f.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬 ¿Puedo ayudarte con algo?`;
+  m.innerHTML = caja(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
+      <div style="min-width:0">
+        <div style="font-weight:800;font-size:1.02rem;color:var(--azul)">${f.nombre ? esc(f.nombre) : '👤 Sin identificar'}</div>
+        <div style="font-size:0.72rem;color:var(--texto-suave)">${f.telefono ? '📞 ' + esc(f.telefono) + ' · ' : ''}${f.ciudad ? '📍 ' + esc(f.ciudad) + ' · ' : ''}${f.dispositivo === 'celular' ? '📱 celular' : (f.dispositivo ? '💻 compu' : '')}${f.origen ? ' · ' + esc(_anaIconoOrigen[f.origen] || f.origen) : ''}</div>
+      </div>
+      <button onclick="cerrarFichaVisitante()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--texto-suave);line-height:1">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">
+      ${_anaKpi(f.eventos.visita || 0, 'Visitas')}
+      ${_anaKpi(f.dias || 0, 'Días distintos')}
+      ${_anaKpi((f.compras || []).length, 'Compras', 'var(--verde)')}
+      ${_anaKpi(_anaPlata(f.gastadoARS || 0), 'Gastado', 'var(--verde)')}
+    </div>
+    <div style="font-size:0.7rem;color:var(--texto-suave);margin-bottom:9px">Primera vez: ${esc(f.primera || '?')} · Última: ${esc(f.ultima || '?')}</div>
+    ${f.telefono ? `<div style="margin-bottom:9px">${_anaBtnWA(f.telefono, msg, '💬 Escribirle por WhatsApp')}</div>` : ''}
+    ${compras ? `<div style="font-weight:700;font-size:0.82rem;margin:8px 0 5px">🛍️ Le compró ${(f.compras || []).length} vez${(f.compras || []).length !== 1 ? 'ces' : ''}</div>${compras}` : ''}
+    ${(f.productos || []).length ? `<div style="font-weight:700;font-size:0.82rem;margin:9px 0 4px">👀 Lo que más miró</div>
+      <div style="font-size:0.75rem;color:#444;line-height:1.6">${f.productos.slice(0, 8).map(p => esc(p.nombre) + ' <span style="color:var(--texto-suave)">×' + p.n + '</span>').join(' · ')}</div>` : ''}
+    <div style="font-weight:700;font-size:0.82rem;margin:11px 0 4px">🧭 Su recorrido (lo último primero)</div>
+    ${linea || '<div class="sinpedidos">Sin eventos</div>'}
+  `);
+}
+function cerrarFichaVisitante() {
+  const m = document.getElementById('ana-ficha-modal');
+  if (m) m.style.display = 'none';
 }
 
 // Exporta a CSV los leads o los carritos abandonados del período mostrado.
