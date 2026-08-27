@@ -12517,7 +12517,7 @@ function _stockValorizar(lista, tc) {
       if (esUSD) c.usd += u * costoU; else c.ars += u * costoU;
       c.ord = c.ars + c.usd * tcOrd;
       R.items.push({
-        id: p.id, nombre: p.nombre, desc: p.desc || '', imagen: p.imagen || '', categoria: cat,
+        id: p.id, nombre: p.nombre, desc: p.desc || '', imagen: p.imagen || '', categoria: cat, creado: p.creado || '',
         u, costoU, moneda: esUSD ? 'U$S' : '$',
         ars: esUSD ? 0 : u * costoU, usd: esUSD ? u * costoU : 0, ord: (esUSD ? u * costoU * tcOrd : u * costoU)
       });
@@ -12566,8 +12566,24 @@ async function _svRotacion(dias) {
   } catch (e) { return null; }
 }
 
+// ¿Hace cuántos días está esta mercadería en casa? Es lo que decide si tiene sentido llamarla
+// "quieta": lo que entró la semana pasada NO tuvo tiempo de venderse (pedido del usuario 2026-08-26,
+// vio 41 productos marcados quietos y casi todos eran de la compra de Israel recién recibida).
+// Se toma la fecha MÁS NUEVA entre el alta de la ficha y la última recepción registrada: si repusiste
+// stock el mes pasado, la mercadería que está hoy en la caja entró el mes pasado, no cuando se creó
+// la ficha. `creado` solo no alcanza: los productos anteriores a la migración figuran todos el 02/07.
+// PURA (recibe el "ahora") → la blinda tests/unit/stock_valorizado.js
+function _svDiasEnCasa(creado, fechaCompra, ahora) {
+  const tsC = creado ? new Date(creado).getTime() : 0;
+  const tsR = _tsFecha(fechaCompra);                       // 'dd/MM/yyyy' de la tabla recepciones
+  const ts = Math.max(isFinite(tsC) ? tsC : 0, tsR || 0);
+  if (!ts) return null;                                    // sin dato → no se juzga
+  return Math.max(0, Math.floor((ahora - ts) / 86400000));
+}
+
 let _svRot = null;          // null = no se pidió aún · false = falló (no reintentar en cada tecla) · {} = mapa
 const SV_DIAS_ROT = 90;     // ventana para considerar un producto "quieto"
+const SV_DIAS_MIN = 30;     // menos que esto en casa → es NUEVO, no se lo acusa de nada
 
 async function renderStockValorizado() {
   const cont = document.getElementById('sv-cont');
@@ -12629,6 +12645,12 @@ async function renderStockValorizado() {
 
   // ▸ Dónde está tu plata — ranking por capital inmovilizado, con el cruce de rotación
   const rot = _svRot || null;   // false (falló el cruce) → se dibuja sin los chips de rotación
+  // Antigüedad de cada producto: es lo que separa "quieto" (no se vende) de "recién llegado".
+  const ahora = Date.now();
+  R.items.forEach(it => {
+    it.dias = _svDiasEnCasa(it.creado, (_ocUltima[String(it.id)] || {}).fecha, ahora);
+    it.nuevo = it.dias != null && it.dias < SV_DIAS_MIN;
+  });
   const top = R.items.slice(0, 25);
   const itemHtml = top.map((it, i) => {
     const pct = R.totalOrd > 0 ? Math.round(it.ord / R.totalOrd * 100) : 0;
@@ -12639,9 +12661,9 @@ async function renderStockValorizado() {
     let chipRot = '';
     if (rot) {
       const vend = rot[String(it.id)] || 0;
-      chipRot = vend > 0
-        ? `<span style="font-size:0.6rem;color:var(--verde);font-weight:700" title="Unidades vendidas en los últimos ${SV_DIAS_ROT} días">↻ ${vend} u. en ${SV_DIAS_ROT}d</span>`
-        : `<span style="font-size:0.6rem;color:var(--rojo);font-weight:800" title="No se vendió ni una unidad en los últimos ${SV_DIAS_ROT} días">🧊 quieto ${SV_DIAS_ROT}d</span>`;
+      if (vend > 0) chipRot = `<span style="font-size:0.6rem;color:var(--verde);font-weight:700" title="Unidades vendidas en los últimos ${SV_DIAS_ROT} días">↻ ${vend} u. en ${SV_DIAS_ROT}d</span>`;
+      else if (it.nuevo) chipRot = `<span style="font-size:0.6rem;color:#2c6fad;font-weight:700" title="Entró hace poco: todavía no tuvo tiempo de venderse, no cuenta como quieto">🆕 entró hace ${it.dias} día${it.dias === 1 ? '' : 's'}</span>`;
+      else chipRot = `<span style="font-size:0.6rem;color:var(--rojo);font-weight:800" title="No se vendió ni una unidad desde que entró">🧊 quieto ${it.dias != null ? Math.min(SV_DIAS_ROT, it.dias) : SV_DIAS_ROT}d</span>`;
     }
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio)">
       <span style="font-size:0.68rem;color:var(--texto-suave);font-weight:700;width:18px;flex-shrink:0">${i + 1}.</span>
@@ -12656,10 +12678,15 @@ async function renderStockValorizado() {
       </div>
     </div>`;
   }).join('');
-  const quietos = rot ? R.items.filter(it => !(rot[String(it.id)] > 0)) : [];
+  const sinVender = rot ? R.items.filter(it => !(rot[String(it.id)] > 0)) : [];
+  const quietos = sinVender.filter(it => !it.nuevo);          // los recién llegados NO son "quietos"
+  const nuevos = sinVender.filter(it => it.nuevo);
   const quietoOrd = quietos.reduce((s, it) => s + it.ord, 0);
+  const nuevoOrd = nuevos.reduce((s, it) => s + it.ord, 0);
   const avisoQuieto = (rot && quietos.length)
-    ? `<div style="background:var(--rojo-claro);border-radius:8px;padding:0.5rem 0.7rem;font-size:0.72rem;color:var(--texto);margin-bottom:0.5rem">🧊 <b>${quietos.length} producto${quietos.length > 1 ? 's' : ''} sin vender una sola unidad en ${SV_DIAS_ROT} días</b> — tenés ${_svAr(quietoOrd)} dormidos ahí${R.totalOrd > 0 ? ` (${Math.round(quietoOrd / R.totalOrd * 100)}% de tu capital)` : ''}.</div>` : '';
+    ? `<div style="background:var(--rojo-claro);border-radius:8px;padding:0.5rem 0.7rem;font-size:0.72rem;color:var(--texto);margin-bottom:0.5rem">🧊 <b>${quietos.length} producto${quietos.length > 1 ? 's' : ''} sin vender una sola unidad</b> — tenés ${_svAr(quietoOrd)} dormidos ahí${R.totalOrd > 0 ? ` (${Math.round(quietoOrd / R.totalOrd * 100)}% de tu capital)` : ''}. No cuentan los que entraron hace menos de ${SV_DIAS_MIN} días.</div>` : '';
+  const avisoNuevo = (rot && nuevos.length)
+    ? `<div style="background:#eaf1f8;border-radius:8px;padding:0.5rem 0.7rem;font-size:0.72rem;color:var(--texto);margin-bottom:0.5rem">🆕 <b>${nuevos.length} producto${nuevos.length > 1 ? 's' : ''} que ${nuevos.length > 1 ? 'entraron' : 'entró'} hace poco</b> y todavía no ${nuevos.length > 1 ? 'vendieron' : 'vendió'} (${_svAr(nuevoOrd)}). Es normal: ${nuevos.length > 1 ? 'recién llegaron' : 'recién llegó'}, no ${nuevos.length > 1 ? 'son' : 'es'} capital dormido.</div>` : '';
 
   const sinCostoHtml = R.sinCosto.map(x =>
     `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem;align-items:center">
@@ -12681,7 +12708,7 @@ async function renderStockValorizado() {
     </details>
     <details style="margin-top:0.5rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.55rem">
       <summary style="cursor:pointer;font-weight:700;font-size:0.84rem;list-style:none;color:var(--texto)">🧊 Los que se comen tu capital <span style="font-size:0.64rem;color:var(--texto-suave);font-weight:400">▸ top ${top.length} a costo${R.items.length > top.length ? ` de ${R.items.length}` : ''}</span></summary>
-      <div style="margin-top:0.6rem">${avisoQuieto}${itemHtml || '<div style="font-size:0.75rem;color:var(--texto-suave)">Sin datos.</div>'}</div>
+      <div style="margin-top:0.6rem">${avisoQuieto}${avisoNuevo}${itemHtml || '<div style="font-size:0.75rem;color:var(--texto-suave)">Sin datos.</div>'}</div>
     </details>
     ${R.sinCosto.length ? `<details style="margin-top:0.5rem;border-top:1.5px dashed var(--gris-medio);padding-top:0.55rem">
       <summary style="cursor:pointer;font-weight:700;font-size:0.84rem;list-style:none;color:var(--dorado)">⚠️ Fichas con stock y sin costo (${R.sinCosto.length}) <span style="font-size:0.64rem;color:var(--texto-suave);font-weight:400">▸ completalas y el número se acomoda solo</span></summary>
@@ -12690,6 +12717,8 @@ async function renderStockValorizado() {
 
   // El cruce con ventas se pide UNA vez y después se repinta con el dato ya cargado.
   if (_svRot === null) {
+    // La fecha de la última recepción sale del mismo lugar que la orden de compra (una sola llamada).
+    if (!Object.keys(_ocUltima || {}).length) { try { await _ocCargarUltimas(); } catch (e) {} }
     _svRot = (await _svRotacion(SV_DIAS_ROT)) || false;
     if (_svRot) renderStockValorizado();
   }
