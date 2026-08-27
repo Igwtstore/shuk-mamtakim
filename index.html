@@ -5239,6 +5239,7 @@ async function renderPedidos() {
             return `<a class="btn-accion" href="https://wa.me/${_num}?text=${_txt}" target="_blank" rel="noopener" style="background:#e7f9ee;color:#128c4a;text-decoration:none;display:inline-block" title="Escribirle al ${_t}">💬 WhatsApp</a>`;
           })()}
           <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${JSON.stringify(v).replace(/'/g,"&#39;")})'>🧾 Remito</button>
+          <button class="btn-accion" style="background:#efe7dd;color:#5c3d1e" title="Imprime el remito directo, sin pasar por el modal" onclick='abrirRemitoPDF(${JSON.stringify(v).replace(/'/g,"&#39;")}, true)'>🖨️ Imprimir</button>
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick='exportarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>📤 Exportar</button>
         </div>
       </div>`;
@@ -15919,12 +15920,16 @@ function copiarRemito() {
   navigator.clipboard.writeText(_remitoTexto).then(() => showToast('Remito copiado ✓'));
 }
 
-function abrirRemitoPDF(v) {
+// autoPrint = true -> abre el remito y dispara solo el diálogo de impresión (botón 🖨️ Imprimir del pedido).
+function abrirRemitoPDF(v, autoPrint) {
   if (!v) return;
   const soloMiri = esVistaMiri();   // REGLA: en vista Miri el remito NO muestra NADA de Jony
   const tARSProd = soloMiri ? (parseFloat(v.arsMyri) || 0) : (parseFloat(v.totalARS) || 0);
   const tUSD = soloMiri ? (parseFloat(v.usdMyri) || 0) : (parseFloat(v.totalUSD) || 0);
-  const envioPDF = _remitoEnvioVal();
+  // Envío/TC: si el modal está abierto con ESTE pedido, vale lo que se ve en pantalla; si se
+  // imprime derecho desde la tarjeta, el envío sale de la Caja Envíos (no del input de otro pedido).
+  const _delModal = !!(_remitoVenta && String(_remitoVenta.id) === String(v.id));
+  const envioPDF = _delModal ? _remitoEnvioVal() : Math.round(parseFloat((_enviosPorVenta[v.id] || {}).cobrado) || 0);
   const tARS = tARSProd + envioPDF;
   const totales = [];
   if (tARS > 0) totales.push(`$ ${Math.round(tARS).toLocaleString('es-AR')}`);
@@ -15996,7 +16001,7 @@ function abrirRemitoPDF(v) {
   const lineas = filas;
 
   // Conversión a pesos (informativa): toma el TC elegido en el modal (auto de la página o manual).
-  const tcPDF = (typeof _remitoTCval === 'function') ? _remitoTCval() : 0;
+  const tcPDF = (_delModal && typeof _remitoTCval === 'function') ? _remitoTCval() : 0;
   const _usdPDF = parseFloat(v.totalUSD) || 0, _arsPDF = (parseFloat(v.totalARS) || 0) + envioPDF;
   const _granARS = Math.round(_arsPDF + _usdPDF * tcPDF);
   const _selloFechaHora = new Date().toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -16081,8 +16086,13 @@ function abrirRemitoPDF(v) {
 </div>
 </body></html>`;
 
+  // Espera a que carguen banner y fotos antes de abrir el diálogo (si no, sale sin imágenes),
+  // con un tope de 3 s por si alguna foto no responde.
+  const autoScript = autoPrint ? `<script>(function(){var y=false;function go(){if(y)return;y=true;setTimeout(function(){try{window.focus();window.print();}catch(e){}},250);}if(document.readyState==='complete')go();else window.addEventListener('load',go);setTimeout(go,3000);})();<\/script>` : '';
+
   const win = window.open('', '_blank');
-  win.document.write(html);
+  if (!win) { showToast('El navegador bloqueó la ventana — habilitá los pop-ups'); return; }
+  win.document.write(autoScript ? html.replace('</body>', autoScript + '</body>') : html);
   win.document.close();
 }
 
