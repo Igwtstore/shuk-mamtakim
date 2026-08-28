@@ -59,6 +59,12 @@ const trafico = [
   { ...ev('geo_US', 'bloqueado', 1, 8), pais: 'US', origen: 'candado' },
   // Y uno que entró igual: el navegador dice Israel, el candado lo vio como argentino.
   ev('v_nadie', 'geo', 1, 9, { detalle: 'navegador:Israel · candado:AR · candado PRENDIDO' }),
+  // 🛒 El rescate del carrito: a uno se le ofreció y lo retomó (y ese terminó comprando),
+  // a otro se le ofreció y empezó de cero.
+  ev('v_compra', 'rescate', 1, 14, { detalle: 'ofrecido · 2 items' }),
+  ev('v_compra', 'rescate', 1, 14, { detalle: 'retomado · 2 items' }),
+  ev('v_nadie', 'rescate', 1, 9, { detalle: 'ofrecido · 1 items' }),
+  ev('v_nadie', 'rescate', 1, 9, { detalle: 'descartado' }),
 ];
 const ventas = [
   { id: 'P1', fecha: dd(20, 18), cliente: 'Débora Levy', estado: 'entregado', total_ars: 45000, total_usd: 0, vid: 'v_debora', stock_updates: '1:2' },
@@ -118,6 +124,14 @@ function run() {
      d.abandonados.findIndex(x => x.vid === 'v_may') < d.abandonados.length - 1);
   ok('la oportunidad total separa las dos monedas', d.accionable.oportunidadUSD === 85.5 && d.accionable.oportunidadARS > 0);
   eq('guarda qué tipo de cambio usó', d.accionable.tcRef, 1400);
+
+  // ── 🛒 ¿SIRVE EL RECORDATORIO DEL CARRITO? ──────────────────────────────────
+  eq('cuenta a cuántos se les ofreció', d.rescate.ofrecidos, 2);
+  eq('cuántos lo retomaron', d.rescate.retomados, 1);
+  eq('cuántos empezaron de cero', d.rescate.descartados, 1);
+  eq('y —lo único que importa— cuántos terminaron comprando', d.rescate.compraron, 1);
+  eq('el porcentaje de retoma', d.rescate.pctRetoma, 50);
+  ok('el rescate NO cuenta como visita ni como carrito', d.resumen.visitas === 9 && d.abandonados.length === 4);
 
   // ── 🌎 EL CANDADO ───────────────────────────────────────────────────────────
   eq('cuenta a los que el candado rechazó', d.candado.bloqueados, 2);

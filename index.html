@@ -2959,6 +2959,7 @@ async function cargarProductos() {
     }
     renderCatalogo();
     renderFiltros();
+    _ofrecerCarritoGuardado();   // 🛒 "dejaste esto armado, ¿seguimos?"
     _vipCargar();
     poblarEditorProductos();
     renderStockAdmin();
@@ -4314,6 +4315,99 @@ function agregarAlCarrito(id) {
 function actualizarBadge() {
   const total = Object.values(carrito).reduce((s,i) => s + i.qty, 0);
   document.getElementById('carrito-count').textContent = total;
+  _guardarCarritoLocal();
+}
+
+// ═══ 🛒 RESCATE DEL CARRITO (v4.72) ══════════════════════════════════════════
+// El carrito vivía solo en memoria: si el cliente cerraba la pestaña, lo armado se
+// perdía y volvía a empezar de cero (o no volvía). Ahora se guarda en SU navegador y,
+// cuando vuelve, la tienda se lo ofrece. No se le manda nada ni se guarda un dato
+// personal: la memoria es del propio aparato del cliente.
+const CARRITO_KEY = 'shuk_carrito_guardado';
+const RESCATE_DIAS = 30;
+function _guardarCarritoLocal() {
+  try {
+    const items = Object.values(carrito || {});
+    if (!items.length) { localStorage.removeItem(CARRITO_KEY); return; }
+    localStorage.setItem(CARRITO_KEY, JSON.stringify({
+      ts: Date.now(), modo,
+      items: items.map(it => ({ id: String(it.id), q: it.qty || 0 })).filter(x => x.q > 0)
+    }));
+  } catch { /* modo incógnito o storage lleno: el rescate simplemente no existe */ }
+}
+function _leerCarritoGuardado() {
+  try {
+    const g = JSON.parse(localStorage.getItem(CARRITO_KEY) || 'null');
+    if (!g || !Array.isArray(g.items) || !g.items.length) return null;
+    if (Date.now() - (g.ts || 0) > RESCATE_DIAS * 86400000) { localStorage.removeItem(CARRITO_KEY); return null; }
+    return g;
+  } catch { return null; }
+}
+// Lo guardado son IDS, no precios: al retomar se rearma con el catálogo de HOY. Así nunca
+// se le ofrece un precio viejo ni algo que se quedó sin stock.
+function _rearmarCarrito(g) {
+  const vivos = [], perdidos = [];
+  g.items.forEach(it => {
+    const p = (productos || []).find(x => String(x.id) === String(it.id));
+    if (!p || p.stock <= 0 || p.activo === false) { perdidos.push(p ? p.nombre : null); return; }
+    vivos.push({ p, q: Math.min(it.q, p.stock) });
+  });
+  return { vivos, perdidos: perdidos.filter(Boolean) };
+}
+function _ofrecerCarritoGuardado() {
+  try {
+    if (adminAuth || localStorage.getItem('shuk_no_track')) return;      // el equipo no
+    if (Object.keys(carrito || {}).length) return;                       // ya está armando uno
+    if (sessionStorage.getItem('shuk_rescate')) return;                  // una vez por visita
+    const g = _leerCarritoGuardado();
+    if (!g) return;
+    if (g.modo && g.modo !== modo) return;                               // mayorista ≠ minorista
+    const { vivos } = _rearmarCarrito(g);
+    if (!vivos.length) { localStorage.removeItem(CARRITO_KEY); return; }
+    sessionStorage.setItem('shuk_rescate', '1');
+    const n = vivos.reduce((t, x) => t + x.q, 0);
+    const total = vivos.reduce((t, x) => t + x.q * (modo === 'mayorista'
+      ? (parseFloat(String(x.p.precioMay || '0').replace(',', '.')) || 0)
+      : Math.round(x.p.precioMin || 0)), 0);
+    const hayUSD = modo === 'mayorista' && vivos.some(x => !esPesos(x.p));
+    const totalTxt = hayUSD ? '' : ' · ' + (modo === 'mayorista' ? '$ ' : '$ ') + Math.round(total).toLocaleString('es-AR');
+    const dias = Math.round((Date.now() - g.ts) / 86400000);
+    const cuando = dias >= 1 ? `hace ${dias} día${dias !== 1 ? 's' : ''}` : 'hace un rato';
+    const b = document.createElement('div');
+    b.id = 'rescate-carrito';
+    b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:14px;z-index:520;background:#fff;border:2px solid var(--dorado,#c9a227);border-radius:16px;box-shadow:0 10px 34px rgba(0,0,0,.22);padding:0.85rem 1rem;max-width:460px;margin:0 auto;font-family:"DM Sans",sans-serif';
+    b.innerHTML = `
+      <div style="font-weight:800;color:#5c3d1e;font-size:0.98rem">🛒 Te quedó un pedido armado</div>
+      <div style="font-size:0.82rem;color:#6b5a48;margin:3px 0 9px;line-height:1.45">
+        ${n} producto${n !== 1 ? 's' : ''}${totalTxt} · lo armaste ${cuando}.<br>
+        <span style="font-size:0.76rem;color:#8a7a68">${vivos.slice(0, 3).map(x => esc(x.p.nombre)).join(' · ')}${vivos.length > 3 ? ' y ' + (vivos.length - 3) + ' más' : ''}</span>
+      </div>
+      <div style="display:flex;gap:7px">
+        <button onclick="retomarCarrito()" style="flex:1;background:var(--verde,#2e9e5b);color:#fff;border:none;border-radius:10px;padding:0.6rem;font-weight:800;font-size:0.86rem;cursor:pointer">Seguir con mi pedido</button>
+        <button onclick="descartarCarritoGuardado()" style="background:#f2ece2;color:#6b5a48;border:none;border-radius:10px;padding:0.6rem 0.9rem;font-weight:700;font-size:0.82rem;cursor:pointer">Empezar de cero</button>
+      </div>`;
+    document.body.appendChild(b);
+    track('rescate', { producto: 'ofrecido · ' + n + ' items' });
+  } catch { /* el rescate nunca puede romper la tienda */ }
+}
+function _cerrarRescate() { const b = document.getElementById('rescate-carrito'); if (b) b.remove(); }
+function retomarCarrito() {
+  const g = _leerCarritoGuardado();
+  _cerrarRescate();
+  if (!g) return;
+  const { vivos, perdidos } = _rearmarCarrito(g);
+  vivos.forEach(({ p, q }) => { carrito[p.id] = { ...p, qty: q }; });
+  actualizarBadge(); renderCatalogo();
+  track('rescate', { producto: 'retomado · ' + vivos.length + ' items', ..._cartParaTrack() });
+  if (perdidos.length) showToast('Volvió tu pedido ✓ (sin ' + perdidos[0] + (perdidos.length > 1 ? ' y ' + (perdidos.length - 1) + ' más, sin stock)' : ', sin stock)'));
+  else showToast('¡Volvió tu pedido! ✓');
+  abrirCarrito();
+}
+function descartarCarritoGuardado() {
+  _cerrarRescate();
+  try { localStorage.removeItem(CARRITO_KEY); } catch {}
+  carrito = {}; actualizarBadge();
+  track('rescate', { producto: 'descartado' });
 }
 
 function abrirCarrito() {
@@ -4596,6 +4690,7 @@ async function enviarPedido(_stockVerificado) {
   });
 
   carrito = {};
+  try { localStorage.removeItem(CARRITO_KEY); } catch {}   // 🛒 el pedido salió: nada que rescatar
   actualizarBadge();
   cerrarCarrito();
   renderCatalogo();
@@ -14068,6 +14163,21 @@ function _anaSecHoy(d) {
       ${_anaKpi(a.anonimos || 0, 'Sin identificar', 'var(--texto-suave)')}
     </div>
     <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:8px;line-height:1.4">ℹ️ A un visitante le ponemos nombre si se registró, si pidió, o si <b>alguna vez compró desde ese mismo aparato</b> — aunque esta vez no haya dejado datos.</div>`);
+
+  const rs = d.rescate;
+  if (rs) {
+    html += _anaCard(`<div class="admin-titulo">🛒 ¿Sirve el recordatorio del carrito?</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cuando alguien vuelve y había dejado un pedido armado, la tienda se lo ofrece. Acá se ve si funciona.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${_anaKpi(rs.ofrecidos, 'Se lo ofrecimos')}
+        ${_anaKpi(rs.retomados, 'Lo retomaron', 'var(--verde)')}
+        ${_anaKpi(rs.compraron, 'Y terminaron comprando', 'var(--verde)')}
+        ${_anaKpi(rs.descartados, 'Empezaron de cero', 'var(--texto-suave)')}
+      </div>
+      <div style="font-size:0.74rem;color:#5a4a3a;margin-top:8px;line-height:1.5">
+        De cada 100 a los que se lo ofrecimos, <b>${rs.pctRetoma}</b> lo retomaron${rs.retomados ? `, y de ésos <b>${rs.pctCompra}%</b> terminó comprando` : ''}.
+      </div>`);
+  }
 
   const acc = d.acciones || [];
   const colorU = { alta: '#c0392b', media: '#e08a2a', baja: 'var(--texto-suave)' };

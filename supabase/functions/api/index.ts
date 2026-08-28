@@ -517,6 +517,9 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // ve el navegador no coincide con el que ve el candado (VPN, proxy, o país ilegible).
   const bloqueos: any = { total: 0, porPais: {}, ultimo: '' };
   const discrepancias: any[] = [];
+  // 🛒 El rescate del carrito: a cuántos se les ofreció, cuántos lo retomaron y —lo único
+  // que importa de verdad— cuántos de ésos terminaron comprando.
+  const resc: any = { ofrecidos: {}, retomados: {}, descartados: {} };
   const embudoVids: any = { visita: {}, carrito: {}, checkout: {}, pedido: {} };
   const vids: any = {}, carritosPorVid: any = {};
   filas.forEach(({ r, t }) => {
@@ -531,6 +534,11 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       return;
     }
     if (evento === 'geo') { discrepancias.push({ fecha: r.fecha, detalle, ciudad: r.ciudad || '', pais: r.pais || '' }); return; }
+    if (evento === 'rescate') {
+      const cual = detalle.split(' ')[0];                      // ofrecido | retomado | descartado
+      if (vid && resc[cual + 's']) resc[cual + 's'][vid] = 1;
+      return;
+    }
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
       if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos: {}, ultimaCarrito: null, ultimoPedido: null, etapa: 'carrito', items: null, total: 0, itemsTs: null, ddmm: '' };
       const c = carritosPorVid[vid];
@@ -909,6 +917,18 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     .slice(0, 40)
     .map((v) => ({ vid: v.vid, nombre: v.nombre, telefono: v.telefono, esCliente: v.esCliente, visitas: v.visitas, dias: v.dias, ultima: v.ultima, ciudad: v.ciudad, origen: v.origen, dispositivo: v.dispositivo, productos: v.productos.slice(0, 5), armoCarrito: v.armoCarrito, checkout: v.checkout, valorCarrito: v.valorCarrito }));
 
+  // ── 🛒 ¿SIRVE EL RESCATE DEL CARRITO? ──────────────────────────────────────────
+  const ofr = Object.keys(resc.ofrecidos), ret = Object.keys(resc.retomados);
+  const retomaronYCompraron = ret.filter((v) => embudoVids.pedido[v]).length;
+  const rescate = ofr.length || ret.length ? {
+    ofrecidos: ofr.length,
+    retomados: ret.length,
+    descartados: Object.keys(resc.descartados).length,
+    compraron: retomaronYCompraron,
+    pctRetoma: ofr.length ? Math.round(ret.length / ofr.length * 100) : 0,
+    pctCompra: ret.length ? Math.round(retomaronYCompraron / ret.length * 100) : 0,
+  } : null;
+
   // ── 🌎 EL CANDADO GEOGRÁFICO, a la vista ───────────────────────────────────────
   // Dos preguntas que antes no se podían contestar: ¿a cuánta gente estoy rechazando?
   // y ¿cómo entró alguien de afuera si el candado está prendido?
@@ -940,7 +960,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     // 🆕 la vuelta de rosca
     acciones, accionable, visitantes, visitantesTotal: visitantesTodos.length,
     diasDetalle, deseoVsVenta, busquedas, candado,
-    tiempoADecidir, juntos, comparativo, mironesTop,
+    tiempoADecidir, juntos, comparativo, mironesTop, rescate,
   };
 }
 
