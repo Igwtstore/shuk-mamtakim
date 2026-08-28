@@ -14218,12 +14218,70 @@ function _anaFilasGente(d) {
     </div>`;
   }).join('') + (lista.length > 150 ? `<div style="font-size:0.7rem;color:var(--texto-suave);text-align:center;padding:6px">Mostrando 150 de ${lista.length}. Afiná con el buscador.</div>` : '');
 }
+function _anaSecMirones(d) {
+  const ms = d.mironesTop || [];
+  if (!ms.length) return '';
+  const conTel = ms.filter(m => m.telefono);
+  const rows = ms.slice(0, 25).map(m => {
+    const msg = `¡Hola${m.nombre ? ' ' + m.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬 Vi que estuviste mirando${m.productos.length ? ' ' + m.productos[0] : ''}. ¿Te ayudo con algo o te preparo un pedido?`;
+    const calor = m.checkout ? '🔥' : (m.armoCarrito ? '🛒' : '👀');
+    return `<div style="border:1.5px solid var(--gris-medio);border-radius:9px;padding:0.5rem 0.65rem;margin-bottom:0.38rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700;font-size:0.84rem;color:var(--azul)">${calor} ${_anaQuien(m)} ${_anaChipCliente(m)}</div>
+          <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:2px">Volvió <b>${m.dias} días</b> · ${m.visitas} visitas${m.ciudad ? ' · 📍 ' + esc(m.ciudad) : ''} · ${esc(_anaIconoOrigen[m.origen] || m.origen)} · últ. ${esc(m.ultima)}</div>
+          ${m.productos.length ? `<div style="font-size:0.68rem;color:#666;margin-top:2px">👀 ${esc(m.productos.join(', '))}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          ${_anaBtnWA(m.telefono, msg, '💬')}
+          <button onclick="abrirFichaVisitante('${esc(m.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  return _anaCard(`<div class="admin-titulo">🎣 Mirones para tentar (${ms.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Volvieron 2 días o más y nunca compraron: <b>son los más cerca de comprar de todos los que no compraron</b>. ${conTel.length ? `<b>${conTel.length}</b> dejaron teléfono — a ésos escribiles hoy.` : 'Ninguno dejó teléfono todavía.'}</div>
+    ${rows}`);
+}
+
+function _anaSecComparativo(d) {
+  const c = d.comparativo;
+  if (!c) return '';
+  const col = (t, o, color) => `<div style="flex:1;min-width:120px;border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.55rem 0.65rem">
+    <div style="font-weight:800;font-size:0.8rem;color:${color}">${t}</div>
+    <div style="font-size:1.3rem;font-weight:800;margin:2px 0">${o.n}</div>
+    <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.6">
+      ${o.visitasProm} visitas c/u<br>
+      ${o.productosProm} productos mirados<br>
+      ${o.canal ? esc(_anaIconoOrigen[o.canal.que] || o.canal.que) + ' ' + o.canal.pct + '%' : '—'}<br>
+      ${o.aparato ? (o.aparato.que === 'celular' ? '📱' : '💻') + ' ' + o.aparato.pct + '%' : '—'}
+    </div></div>`;
+  let extra = '';
+  const t = d.tiempoADecidir;
+  if (t) {
+    extra = `<div style="background:var(--gris-claro);border-radius:9px;padding:0.55rem 0.7rem;margin-top:9px;font-size:0.75rem;line-height:1.6">
+      <b>⏱️ Cuánto tardan en decidirse</b> (${t.n} que compraron):<br>
+      <b>${t.mismoDia}</b> compraron el mismo día que te conocieron · <b>${t.hasta3}</b> dentro de los 3 días · <b>${t.masDe3}</b> tardaron más.<br>
+      ${t.mismoDia >= t.n / 2
+        ? 'Tu negocio es de <b>impulso</b>: si no compran el primer día, hay que salir a buscarlos.'
+        : 'Tu negocio es de <b>maduración</b>: la gente vuelve antes de comprar, así que insistir sirve.'}
+    </div>`;
+  }
+  return _anaCard(`<div class="admin-titulo">🆚 En qué se diferencia el que compra del que solo mira</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Si el mirón llega por otro canal o mira menos productos, ahí está la palanca.</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      ${col('✅ Compraron', c.compradores, 'var(--verde)')}
+      ${col('🛒 Casi compran', c.casiCompran, '#e08a2a')}
+      ${col('👀 Solo miraron', c.mirones, 'var(--texto-suave)')}
+    </div>${extra}`);
+}
+
 function _anaSecGente(d) {
   const vs = d.visitantes || [];
   const filtros = [['todos', 'Todos', vs.length], ['tel', '📞 Con teléfono', vs.filter(v => v.telefono).length],
     ['clientes', '⭐ Ya compraron', vs.filter(v => v.esCliente).length], ['casi', '🛒 Armaron carrito', vs.filter(v => v.armoCarrito || v.checkout).length],
     ['vuelven', '🔄 Vuelven', vs.filter(v => v.dias >= 2).length], ['anon', '👤 Sin nombre', vs.filter(v => !v.nombre).length]];
-  return _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
+  return _anaSecMirones(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada persona que pisó la tienda, con lo que miró y cómo contactarla. Tocá 👤 para ver su historia completa.</div>
     <input type="text" oninput="buscarGente(this.value)" placeholder="Buscar por nombre, teléfono, ciudad o producto…" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.82rem;margin-bottom:7px">
     <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;margin-bottom:8px">
@@ -14310,6 +14368,16 @@ function _anaSecProductos(d) {
       : '<div class="sinpedidos">Todavía no hay búsquedas registradas. Se empiezan a guardar desde ahora, a medida que la gente use el buscador de la tienda. 🔎</div>'}
     ${vacias.length ? `<div style="background:#fdeaea;border-radius:8px;padding:0.5rem 0.7rem;margin-top:8px;font-size:0.74rem;color:#c0392b"><b>💡 ${vacias.length} búsqueda${vacias.length !== 1 ? 's' : ''} sin resultado.</b> Fijate si conviene traer eso o renombrar un producto que sí tenés.</div>` : ''}`);
 
+  const jt = d.juntos || [];
+  if (jt.length) {
+    html += _anaCard(`<div class="admin-titulo">🧺 Qué se llevan juntos</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Productos que aparecen en el mismo carrito. Son los packs que se arman solos: ponelos juntos o hacé un combo.</div>
+      ${jt.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:5px 0;border-bottom:1px solid var(--gris-medio);gap:6px">
+        <span style="min-width:0">${esc(x.a)} <span style="color:var(--texto-suave)">+</span> ${esc(x.b)}</span>
+        <span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem">${x.n}×</span>
+      </div>`).join('')}`);
+  }
+
   const tp = d.topProductos || [];
   if (tp.length) {
     const maxTp = Math.max(...tp.map(x => x.n), 1);
@@ -14392,6 +14460,22 @@ function _anaSecCanales(d) {
         </div>
         <span style="font-size:0.7rem;color:var(--texto-suave);width:28px;text-align:right;flex-shrink:0">${n}</span>
       </div>`).join('')}`);
+  }
+
+  const cg = d.candado;
+  if (cg) {
+    const filaPais = cg.bloqueadosPorPais.map(p => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:3px 0"><span>🚫 ${esc(p.pais)}</span><b>${p.n}</b></div>`).join('');
+    const afuera = (cg.deAfueraDetalle || []).map(v => `<div style="font-size:0.72rem;padding:3px 0;border-bottom:1px solid var(--gris-medio)">🌎 <b>${esc(v.pais)}</b>${v.ciudad ? ' · ' + esc(v.ciudad) : ''} — ${v.visitas} visita${v.visitas !== 1 ? 's' : ''} · ${esc(v.etiqueta)} · últ. ${esc(v.ultima)}</div>`).join('');
+    const disc = (cg.discrepancias || []).map(x => `<div style="font-size:0.72rem;padding:3px 0;border-bottom:1px solid var(--gris-medio)">🔍 ${esc(x.detalle)} <span style="color:var(--texto-suave)">· ${esc(x.fecha)}</span></div>`).join('');
+    html += _anaCard(`<div class="admin-titulo">🌎 Candado geográfico</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        ${_anaKpi(cg.bloqueados, 'Rechazados por el candado', '#c0392b')}
+        ${_anaKpi(cg.entraronDeAfuera, 'Entraron igual de afuera', '#e08a2a')}
+      </div>
+      ${filaPais ? '<div style="font-weight:700;font-size:0.78rem;margin:6px 0 2px">A quiénes rechazó</div>' + filaPais : '<div style="font-size:0.72rem;color:var(--texto-suave)">Todavía no hay rechazos registrados (se empiezan a contar desde ahora).</div>'}
+      ${afuera ? '<div style="font-weight:700;font-size:0.78rem;margin:9px 0 2px">Los que figuran de afuera</div>' + afuera : ''}
+      ${disc ? '<div style="font-weight:700;font-size:0.78rem;margin:9px 0 2px">Por qué se colaron</div>' + disc : ''}
+      <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:9px;line-height:1.5">ℹ️ El candado mira la <b>IP que ve el servidor</b>; la analítica mira lo que dice el <b>navegador del visitante</b>. Pueden no coincidir por VPN, wifi de empresa o el "Retransmisión privada" del iPhone. Además, si el servidor <b>no logra leer el país, el candado deja pasar a propósito</b> (nunca bloquear a un cliente real por un problema técnico), y el que tiene el <b>link con pase</b> entra desde cualquier lado.</div>`);
   }
 
   const btnCsvLeads = d.leads.length ? `<button onclick="descargarAnaCSV('leads')" style="background:none;border:1px solid var(--gris-medio);border-radius:6px;padding:2px 8px;font-size:0.66rem;font-weight:600;color:var(--texto-suave);cursor:pointer;float:right">⬇️ CSV</button>` : '';
@@ -16317,8 +16401,27 @@ async function track(evento, extra = {}) {
     fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
   } catch {}
 }
+// 🌎 CONTROL DEL CANDADO GEOGRÁFICO (v4.71)
+// El candado (middleware de Vercel) mira la IP que ve el servidor; la analítica mira lo que
+// dice ipapi.co DESDE EL NAVEGADOR. Son dos fuentes distintas y pueden no coincidir: VPN,
+// proxy de empresa, iCloud Private Relay, o que Vercel no logre resolver el país (en ese caso
+// el candado deja pasar a propósito — fail-open, para no bloquear nunca a un cliente real).
+// Por eso, cuando el navegador dice que está FUERA del Mercosur, se le pregunta al candado qué
+// país vio ÉL y se registra la discrepancia. Así se sabe si alguien se coló, si es un espejismo
+// del geo del navegador, o si el candado no pudo leer el país.
+const _PAISES_OK = ['argentina', 'uruguay', 'brazil', 'brasil', 'paraguay', 'bolivia', 'chile'];
+async function _controlGeo(g) {
+  try {
+    const pais = (g && g.pais || '').toLowerCase();
+    if (!pais || _PAISES_OK.includes(pais)) return;         // lo normal: ni se consulta
+    const r = await fetch('/_geocheck', { cache: 'no-store' });
+    const j = await r.json();
+    track('geo', { producto: 'navegador:' + (g.pais || '?') + ' · candado:' + (j.country || 'no lo pudo leer') + ' · candado ' + (j.gate === 'mercosur' ? 'PRENDIDO' : 'apagado') });
+  } catch { /* nunca molestar al cliente por esto */ }
+}
 function registrarVisita(pagina) {
   track('visita');
+  _geo().then(_controlGeo);
   if (!localStorage.getItem('shuk_cookies_ok')) {
     const el = document.getElementById('cookie-aviso');
     if (el) el.style.display = 'flex';

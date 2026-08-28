@@ -513,11 +513,24 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // 🔎 Lo que se agregó en la vuelta de rosca: el día a día en detalle, qué buscan en la
   // tienda, y qué tocó cada visitante (para poder contar SU historia, no solo el total).
   const porDiaDet: any = {}, busq: any = {};
+  // 🌎 Control del candado geográfico: a cuánta gente rechazó, y los casos donde el país que
+  // ve el navegador no coincide con el que ve el candado (VPN, proxy, o país ilegible).
+  const bloqueos: any = { total: 0, porPais: {}, ultimo: '' };
+  const discrepancias: any[] = [];
   const embudoVids: any = { visita: {}, carrito: {}, checkout: {}, pedido: {} };
   const vids: any = {}, carritosPorVid: any = {};
   filas.forEach(({ r, t }) => {
     const vid = r.vid, pagina = r.pagina, evento = r.evento, origen = r.origen, disp = r.dispositivo, ciudad = r.ciudad, pais = r.pais, nombre = r.nombre, tel = r.telefono;
     const detalle = (r.detalle || '').toString(), cartJson = (r.carrito || '').toString(), totalEv = (r.total || '').toString();
+    // Un rechazo del candado no es una visita ni un visitante: se cuenta aparte.
+    if (evento === 'bloqueado') {
+      bloqueos.total++;
+      const pb = r.pais || 'sin dato';
+      bloqueos.porPais[pb] = (bloqueos.porPais[pb] || 0) + 1;
+      bloqueos.ultimo = r.fecha || '';
+      return;
+    }
+    if (evento === 'geo') { discrepancias.push({ fecha: r.fecha, detalle, ciudad: r.ciudad || '', pais: r.pais || '' }); return; }
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
       if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos: {}, ultimaCarrito: null, ultimoPedido: null, etapa: 'carrito', items: null, total: 0, itemsTs: null, ddmm: '' };
       const c = carritosPorVid[vid];
@@ -556,7 +569,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       o.eventos[evento] = (o.eventos[evento] || 0) + 1;
       if (disp && !o.dispositivo) o.dispositivo = disp;
       if (pais && !o.pais) o.pais = pais;
-      if (detalle && evento !== 'busqueda') o.productos[detalle] = (o.productos[detalle] || 0) + 1;
+      if (detalle && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) o.productos[detalle] = (o.productos[detalle] || 0) + 1;
       o.fechas[t!.dk] = 1;
       if (nombre && !o.nombre) o.nombre = nombre;
       if (tel && !o.telefono) o.telefono = tel;
@@ -836,6 +849,79 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const orden: any = { alta: 0, media: 1, baja: 2 };
   acciones.sort((a, b) => orden[a.urgencia] - orden[b.urgencia]);
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  🔬 HERRAMIENTAS PARA ENTENDER AL MIRÓN (v4.71)
+  //  Tres preguntas que el negocio no podía contestar: ¿cuánto tarda alguien en decidirse?,
+  //  ¿qué se lleva junto?, y ¿en qué se diferencia el que compra del que solo mira?
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  // ⏱️ CUÁNTO TARDAN EN DECIDIRSE: de la primera visita al pedido. Dice si el negocio es de
+  // impulso (compran el mismo día) o de maduración (hay que insistir un par de días).
+  const demoras: number[] = [];
+  visitantesTodos.forEach((v) => { if (v.pidio) demoras.push(Math.max(0, Math.round((v.ultimaTs - v.primeraTs) / 86400000))); });
+  demoras.sort((a, b) => a - b);
+  const tiempoADecidir = demoras.length ? {
+    n: demoras.length,
+    mismoDia: demoras.filter((d) => d === 0).length,
+    hasta3: demoras.filter((d) => d > 0 && d <= 3).length,
+    masDe3: demoras.filter((d) => d > 3).length,
+    mediana: demoras[Math.floor(demoras.length / 2)],
+    promedio: Math.round(demoras.reduce((a, b) => a + b, 0) / demoras.length * 10) / 10,
+  } : null;
+
+  // 🧺 QUÉ SE LLEVA JUNTO: pares de productos que aparecen en el mismo carrito. Materia prima
+  // para armar packs y para sugerir "llevá también…".
+  const pares: any = {};
+  Object.keys(carritosPorVid).forEach((v) => {
+    const items = (carritosPorVid[v].items || []).map((it: any) => String(it.n || '')).filter(Boolean);
+    const unicos = [...new Set(items)].sort();
+    for (let i = 0; i < unicos.length; i++) for (let j = i + 1; j < unicos.length; j++) {
+      const k = unicos[i] + ' ⊕ ' + unicos[j];
+      pares[k] = (pares[k] || 0) + 1;
+    }
+  });
+  const juntos = Object.entries(pares).filter((x: any) => x[1] >= 2)
+    .sort((a: any, b: any) => b[1] - a[1]).slice(0, 15)
+    .map(([k, n]) => ({ a: k.split(' ⊕ ')[0], b: k.split(' ⊕ ')[1], n }));
+
+  // 🆚 EL MIRÓN CONTRA EL COMPRADOR: en qué se diferencian de verdad. Sirve para saber dónde
+  // apretar (si el mirón viene de un canal, entra a una hora o usa un aparato distinto).
+  const perfilDe = (arr: any[]) => {
+    const og: any = {}, disp: any = {};
+    let visitas = 0, prods = 0;
+    arr.forEach((v) => {
+      og[v.origen || 'directo'] = (og[v.origen || 'directo'] || 0) + 1;
+      if (v.dispositivo) disp[v.dispositivo] = (disp[v.dispositivo] || 0) + 1;
+      visitas += v.visitas; prods += (v.productos || []).length;
+    });
+    const top = (o: any) => { const e = Object.entries(o).sort((a: any, b: any) => b[1] - a[1])[0]; return e ? { que: e[0], n: e[1], pct: Math.round(Number(e[1]) / Math.max(1, arr.length) * 100) } : null; };
+    return { n: arr.length, visitasProm: arr.length ? Math.round(visitas / arr.length * 10) / 10 : 0, productosProm: arr.length ? Math.round(prods / arr.length * 10) / 10 : 0, canal: top(og), aparato: top(disp) };
+  };
+  const compradores = visitantesTodos.filter((v) => v.pidio);
+  const mirones = visitantesTodos.filter((v) => !v.pidio && !v.armoCarrito && !v.checkout);
+  const casiCompran = visitantesTodos.filter((v) => !v.pidio && (v.armoCarrito || v.checkout));
+  const comparativo = { compradores: perfilDe(compradores), mirones: perfilDe(mirones), casiCompran: perfilDe(casiCompran) };
+
+  // 🎣 LOS MIRONES QUE MÁS VALE LA PENA TENTAR: los que más volvieron sin comprar nunca.
+  const mironesTop = visitantesTodos
+    .filter((v) => !v.pidio && v.dias >= 2)
+    .sort((a, b) => (b.dias - a.dias) || (b.visitas - a.visitas))
+    .slice(0, 40)
+    .map((v) => ({ vid: v.vid, nombre: v.nombre, telefono: v.telefono, esCliente: v.esCliente, visitas: v.visitas, dias: v.dias, ultima: v.ultima, ciudad: v.ciudad, origen: v.origen, dispositivo: v.dispositivo, productos: v.productos.slice(0, 5), armoCarrito: v.armoCarrito, checkout: v.checkout, valorCarrito: v.valorCarrito }));
+
+  // ── 🌎 EL CANDADO GEOGRÁFICO, a la vista ───────────────────────────────────────
+  // Dos preguntas que antes no se podían contestar: ¿a cuánta gente estoy rechazando?
+  // y ¿cómo entró alguien de afuera si el candado está prendido?
+  const deAfuera = visitantesTodos.filter((v) => v.pais && !['Argentina', 'Uruguay', 'Brazil', 'Brasil', 'Paraguay', 'Bolivia', 'Chile'].includes(v.pais));
+  const candado = {
+    bloqueados: bloqueos.total,
+    bloqueadosPorPais: Object.entries(bloqueos.porPais).sort((a: any, b: any) => b[1] - a[1]).map(([pais, n]) => ({ pais, n })),
+    ultimoBloqueo: bloqueos.ultimo,
+    entraronDeAfuera: deAfuera.length,
+    deAfueraDetalle: deAfuera.slice(0, 15).map((v) => ({ pais: v.pais, ciudad: v.ciudad, visitas: v.visitas, ultima: v.ultima, etiqueta: v.etiqueta, nombre: v.nombre })),
+    discrepancias: discrepancias.slice(-15).reverse(),
+  };
+
   // ── Números que resumen lo accionable (para la cabecera de la pantalla) ─────────
   const identificados = visitantesTodos.filter((v) => v.nombre).length;
   const conTelefono = visitantesTodos.filter((v) => v.telefono).length;
@@ -853,7 +939,8 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     embudo, leads, abandonados, topProductos, conversionPorOrigen, comparativa,
     // 🆕 la vuelta de rosca
     acciones, accionable, visitantes, visitantesTotal: visitantesTodos.length,
-    diasDetalle, deseoVsVenta, busquedas,
+    diasDetalle, deseoVsVenta, busquedas, candado,
+    tiempoADecidir, juntos, comparativo, mironesTop,
   };
 }
 

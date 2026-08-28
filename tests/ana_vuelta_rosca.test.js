@@ -44,6 +44,23 @@ const DATA = {
     { nombre: 'Pitzujim Nueces Pecan', deseado: 11, vendido: 0, stock: 25, activo: true, dueno: 'Jony' },
   ],
   busquedas: [{ q: 'halva', veces: 7, vacias: 7, personas: 5 }, { q: 'bon o bon', veces: 4, vacias: 0, personas: 4 }],
+  candado: {
+    bloqueados: 12, bloqueadosPorPais: [{ pais: 'IL', n: 8 }, { pais: 'US', n: 4 }], ultimoBloqueo: '27/08/2026 10:00',
+    entraronDeAfuera: 2,
+    deAfueraDetalle: [{ pais: 'Israel', ciudad: 'Tel Aviv', visitas: 1, ultima: '24/08/2026 21:30', etiqueta: 'miró y se fue', nombre: '' }],
+    discrepancias: [{ fecha: '27/08/2026 11:48', detalle: 'navegador:United States · candado:AR · candado PRENDIDO', ciudad: 'Boca Raton', pais: 'United States' }],
+  },
+  tiempoADecidir: { n: 8, mismoDia: 5, hasta3: 2, masDe3: 1, mediana: 0, promedio: 1.2 },
+  juntos: [{ a: 'Chocolate Elite', b: 'Bon O Bon', n: 4 }],
+  comparativo: {
+    compradores: { n: 8, visitasProm: 3.2, productosProm: 4.1, canal: { que: 'whatsapp', n: 5, pct: 62 }, aparato: { que: 'celular', n: 6, pct: 75 } },
+    mirones: { n: 250, visitasProm: 1.2, productosProm: 0.3, canal: { que: 'directo', n: 200, pct: 80 }, aparato: { que: 'celular', n: 180, pct: 72 } },
+    casiCompran: { n: 39, visitasProm: 2.4, productosProm: 2.8, canal: { que: 'whatsapp', n: 20, pct: 51 }, aparato: { que: 'celular', n: 30, pct: 77 } },
+  },
+  mironesTop: [
+    { vid: 'v_miron', nombre: '', telefono: '', esCliente: false, visitas: 9, dias: 5, ultima: '27/08/2026 09:00', ciudad: 'CABA', origen: 'instagram', dispositivo: 'celular', productos: ['Chocolate Elite'], armoCarrito: true, checkout: false, valorCarrito: 12000 },
+    { vid: 'v_miron2', nombre: 'Ariel', telefono: '1122334455', esCliente: true, visitas: 4, dias: 3, ultima: '26/08/2026 18:00', ciudad: 'CABA', origen: 'whatsapp', dispositivo: 'compu', productos: ['Bon O Bon'], armoCarrito: false, checkout: false, valorCarrito: 0 },
+  ],
 };
 const FICHA = {
   vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', ciudad: 'CABA', pais: 'Argentina', dispositivo: 'celular', origen: 'whatsapp',
@@ -129,6 +146,12 @@ const FICHA = {
   ok('GENTE: el buscador filtra (busqué Rosario y quedó uno)', !t.includes('Débora Levy'));
   await pg.evaluate(() => buscarGente(''));
 
+  t = await txt();
+  ok('GENTE: lista los mirones para tentar', t.includes('Mirones para tentar') && t.includes('Volvió'));
+  ok('GENTE: avisa a cuántos mirones se les puede escribir', t.includes('dejaron teléfono'));
+  ok('GENTE: compara comprador contra mirón', t.includes('En qué se diferencia') && t.includes('Solo miraron'));
+  ok('GENTE: dice cuánto tardan en decidirse y qué significa', t.includes('Cuánto tardan en decidirse') && t.includes('impulso'));
+
   await pg.evaluate(() => setAnaTab('dias'));
   await pg.waitForTimeout(250);
   t = await txt();
@@ -146,11 +169,18 @@ const FICHA = {
   ok('PRODUCTOS: marca lo que miran y no compran', t.includes('lo miran, no lo compran'));
   ok('PRODUCTOS: muestra las búsquedas sin resultado', t.includes('halva') && t.includes('sin resultado'));
 
+  t = await txt();
+  ok('PRODUCTOS: muestra qué se llevan juntos (packs que se arman solos)', t.includes('Qué se llevan juntos') && t.includes('Chocolate Elite'));
+
   await pg.evaluate(() => setAnaTab('canales'));
   await pg.waitForTimeout(250);
   t = await txt();
   ok('CANALES: de dónde vienen + conversión por canal', t.includes('WhatsApp') && t.includes('Conversión por canal'));
   ok('CANALES: dice la hora pico en criollo', t.includes('21:00'));
+  ok('CANDADO: dice a cuántos rechazó y de dónde', t.includes('Rechazados por el candado') && t.includes('IL'));
+  ok('CANDADO: muestra a los que entraron igual', t.includes('Tel Aviv'));
+  ok('CANDADO: explica POR QUÉ se coló', t.includes('candado:AR'));
+  ok('CANDADO: aclara que son dos fuentes distintas', t.includes('IP que ve el servidor'));
 
   await pg.evaluate(() => abrirFichaVisitante('v_abc'));
   await pg.waitForTimeout(600);

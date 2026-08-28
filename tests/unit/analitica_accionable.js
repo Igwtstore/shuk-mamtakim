@@ -19,7 +19,7 @@ function fnReal(nombre) {
     .replace(/const (\w+)\s*:\s*any(\[\])?\s*=/g, 'const $1 =')
     .replace(/\(([a-z]\w*)\s*:\s*any\)/g, '($1)')
     .replace(/\((\w+)\s*:\s*any,\s*(\w+)\s*:\s*any\)/g, '($1, $2)')
-    .replace(/\bas any\b/g, '')
+    .replace(/\s+as\s+(any|number|string|boolean)\b/g, '')
     .replace(/(\w+)!\./g, '$1.')
     .replace(/(\w+)!\[/g, '$1[');
 }
@@ -54,6 +54,11 @@ const trafico = [
   // MINORISTA — ahí el precio es en PESOS. (Es el error que cometí midiendo a mano.)
   ev('v_min', 'visita', 1, 12),
   ev('v_min', 'carrito', 1, 12, { detalle: 'Klik dolar', carrito: JSON.stringify([{ n: 'Klik dolar', q: 2, p: 12000 }]), total: 24000 }),
+  // 🌎 El candado rechazó a dos: eso NO es una visita ni un visitante, se cuenta aparte.
+  { ...ev('geo_IL', 'bloqueado', 1, 8), pais: 'IL', origen: 'candado' },
+  { ...ev('geo_US', 'bloqueado', 1, 8), pais: 'US', origen: 'candado' },
+  // Y uno que entró igual: el navegador dice Israel, el candado lo vio como argentino.
+  ev('v_nadie', 'geo', 1, 9, { detalle: 'navegador:Israel · candado:AR · candado PRENDIDO' }),
 ];
 const ventas = [
   { id: 'P1', fecha: dd(20, 18), cliente: 'Débora Levy', estado: 'entregado', total_ars: 45000, total_usd: 0, vid: 'v_debora', stock_updates: '1:2' },
@@ -113,6 +118,22 @@ function run() {
      d.abandonados.findIndex(x => x.vid === 'v_may') < d.abandonados.length - 1);
   ok('la oportunidad total separa las dos monedas', d.accionable.oportunidadUSD === 85.5 && d.accionable.oportunidadARS > 0);
   eq('guarda qué tipo de cambio usó', d.accionable.tcRef, 1400);
+
+  // ── 🌎 EL CANDADO ───────────────────────────────────────────────────────────
+  eq('cuenta a los que el candado rechazó', d.candado.bloqueados, 2);
+  eq('y de qué países eran', d.candado.bloqueadosPorPais.length, 2);
+  ok('el rechazado NO cuenta como visita', d.resumen.visitas === 9);
+  ok('el rechazado NO aparece como visitante', !d.visitantes.some(v => v.vid.startsWith('geo_')));
+  ok('guarda POR QUÉ se coló el de afuera', (d.candado.discrepancias || []).some(x => /candado:AR/.test(x.detalle)));
+  ok('el evento de geo no ensucia "lo que miró"', !(d.visitantes.find(v => v.vid === 'v_nadie').productos || []).some(p => /navegador:/.test(p)));
+
+  // ── 🔬 LAS HERRAMIENTAS NUEVAS ──────────────────────────────────────────────
+  ok('mide cuánto tardan en decidirse', d.tiempoADecidir && d.tiempoADecidir.n >= 1);
+  ok('separa comprador / casi compra / mirón', d.comparativo.compradores.n >= 1 && d.comparativo.mirones.n >= 1);
+  ok('el comprador y el mirón se cuentan una sola vez',
+     d.comparativo.compradores.n + d.comparativo.mirones.n + d.comparativo.casiCompran.n === d.visitantesTotal);
+  ok('lista los mirones que más volvieron sin comprar', (d.mironesTop || []).some(m => m.vid === 'v_nadie'));
+  ok('y NO mete en esa lista al que ya compró', !(d.mironesTop || []).some(m => m.vid === 'v_compra'));
 
   // ── DESEO CONTRA VENTA ──────────────────────────────────────────────────────
   const elite = d.deseoVsVenta.find(p => p.nombre === 'Chocolate Elite');

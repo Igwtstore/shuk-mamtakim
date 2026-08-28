@@ -51,6 +51,16 @@ async function sha256hex(s) {
     return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
   } catch { return ''; }
 }
+// 📊 Cuántos clientes está rechazando el candado. Sin esto, un bloqueo es invisible: el que
+// rebota no aparece en ningún lado y no hay forma de decidir si conviene abrir la puerta.
+// Se espera con un tope corto: la persona ya está bloqueada, no se le suma demora real.
+const TRACK_URL = 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';
+async function registrarBloqueo(country, pathname) {
+  try {
+    const p = new URLSearchParams({ accion: 'track', evento: 'bloqueado', pagina: 'tienda', vid: 'geo_' + (country || 'xx'), pais: country || '', origen: 'candado', producto: (pathname || '/').slice(0, 40) });
+    await fetch(TRACK_URL + '?' + p.toString(), { signal: AbortSignal.timeout(700) });
+  } catch { /* si no se puede registrar, el bloqueo igual se aplica */ }
+}
 function paginaBloqueo() {
   const wa = 'https://wa.me/5491131754540';
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shuk Mamtakim</title>
@@ -80,6 +90,7 @@ export default async function middleware(request) {
     if (d.t === 'geocheck') return new Response(JSON.stringify({ alive: true, gate: d.gate, country: d.country, mercosur: d.mercosur }, null, 2), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-sm-geo': 'check' } });
     if (d.t === 'allow') return undefined;
     if (d.t === 'redirect') { const limpio = new URL(url); limpio.searchParams.delete('pase'); return new Response(null, { status: 302, headers: { 'location': limpio.pathname + limpio.search, 'set-cookie': `sm_pase=${cfg.passHash}; Path=/; Max-Age=31536000; SameSite=Lax`, 'cache-control': 'no-store' } }); }
+    await registrarBloqueo(ctx.country, ctx.pathname);
     return paginaBloqueo();
   } catch {
     return undefined;   // 🛟 cualquier error → dejar pasar
