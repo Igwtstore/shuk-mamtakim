@@ -504,7 +504,8 @@ async function traficoParaAnalitica(dias: number) {
   }
   return filas;
 }
-function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[] = [], productos: any[] = []) {
+function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[] = [], productos: any[] = [], aliasPuestos: any = null) {
+  const alias = aliasPuestos || {};
   if (!rows.length) return { vacio: true };
   const pf = (f: string) => { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/); return m ? { ts: Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)), hora: +(m[4] || 0), dow: new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])).getUTCDay(), dk: m[3] + '-' + m[2] + '-' + m[1], ddmm: m[1] + '/' + m[2] + ' ' + (m[4] || '00') + ':' + (m[5] || '00') } : null; };
   const todas = rows.map((r: any) => ({ r, t: pf(r.fecha) })).filter((x) => x.t);
@@ -647,9 +648,22 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     const tsV = tsDeFecha(v.fecha); if (tsV && tsV > o.ultimaTs) { o.ultimaTs = tsV; o.ultima = String(v.fecha || ''); }
   });
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  🏷️ PONERLE UN NOMBRE AL QUE NO LO DEJÓ
+  //  Dos cosas distintas y las dos hacen falta:
+  //  ① Un APODO automático y estable (#A4F2, sacado de su id de aparato). No dice quién es,
+  //     pero permite RECONOCERLO: si vuelve dentro de un mes es el mismo #A4F2, se lo puede
+  //     anotar, seguir y hablar de él. Un "visitante anónimo" no se puede ni nombrar.
+  //  ② Un nombre puesto A MANO: cuando Jony deduce quién es ("este es el primo de David"),
+  //     lo bautiza desde el panel y queda para siempre, en todas las pantallas. Convierte
+  //     una corazonada en un dato. Va marcado como puesto por él, nunca se confunde con
+  //     un nombre que la persona haya dejado de verdad.
+  // ══════════════════════════════════════════════════════════════════════════════
+  const apodoDe = (v: string) => '#' + String(v || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
   const quienEs = (v: string) => {
     const o = vids[v] || {}, c = compraDeVid[v];
-    const nombre = (o.nombre || (c && c.cliente) || '').toString();
+    const puesto = alias[v];
+    const nombre = (o.nombre || (c && c.cliente) || (puesto && puesto.alias) || '').toString();
     const kn = normNom(nombre);
     const cn = kn ? compraDeNombre[kn] : null;
     const hist = c || cn;
@@ -662,7 +676,10 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       gastadoUSD: hist ? Math.round(hist.usd * 100) / 100 : 0,
       ultimaCompra: hist ? hist.ultima : '',
       tipoCliente: tipoDeCliente[kn] || '',
-      comoSeSupo: o.nombre ? 'se registró' : (c ? 'ya compró desde este aparato' : (cn ? 'ya compró antes' : '')),
+      comoSeSupo: o.nombre ? 'se registró' : (c ? 'ya compró desde este aparato' : (cn ? 'ya compró antes' : (puesto && puesto.alias ? 'se lo pusiste vos' : ''))),
+      apodo: apodoDe(v),
+      leDijiste: !!(puesto && puesto.alias) && !o.nombre && !c,
+      nota: (puesto && puesto.nota) || '',
     };
   };
 
@@ -975,7 +992,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     .filter((v) => !v.pidio && v.dias >= 2)
     .sort((a, b) => (b.dias - a.dias) || (b.visitas - a.visitas))
     .slice(0, 40)
-    .map((v) => ({ vid: v.vid, nombre: v.nombre, telefono: v.telefono, esCliente: v.esCliente, visitas: v.visitas, dias: v.dias, ultima: v.ultima, ciudad: v.ciudad, origen: v.origen, dispositivo: v.dispositivo, productos: v.productos.slice(0, 5), armoCarrito: v.armoCarrito, checkout: v.checkout, valorCarrito: v.valorCarrito }));
+    .map((v) => ({ vid: v.vid, nombre: v.nombre, telefono: v.telefono, esCliente: v.esCliente, visitas: v.visitas, dias: v.dias, ultima: v.ultima, ciudad: v.ciudad, origen: v.origen, dispositivo: v.dispositivo, productos: v.productos.slice(0, 5), armoCarrito: v.armoCarrito, checkout: v.checkout, valorCarrito: v.valorCarrito, apodo: v.apodo, leDijiste: v.leDijiste, nota: v.nota, perfil: v.perfil }));
 
   // ── 🛒 ¿SIRVE EL RESCATE DEL CARRITO? ──────────────────────────────────────────
   const ofr = Object.keys(resc.ofrecidos), ret = Object.keys(resc.retomados);
@@ -3547,7 +3564,27 @@ Deno.serve(async (req) => {
         sbGet('clientes', 'select=nombre,telefono,tipo'),
         sbGet('productos', 'select=id,nombre,stock,activo,dueno,moneda'),
       ]);
-      return json(analitica(trA, dias, vtA, clA, prA));
+      // 🏷️ Los nombres que Jony le puso a mano a visitantes que no se identificaron.
+      const aliasRows = await sbGet('config', 'select=clave,valor&clave=like.vid_alias:*');
+      const aliasMap: any = {};
+      aliasRows.forEach((r: any) => {
+        const vidA = String(r.clave || '').slice('vid_alias:'.length);
+        if (!vidA) return;
+        try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
+      });
+      return json(analitica(trA, dias, vtA, clA, prA, aliasMap));
+    }
+    // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
+    // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.
+    if (accion === 'ponerAliasVisitante') {
+      const vidB = P(body, 'vid') || Q('vid');
+      if (!vidB) return json({ error: 'falta el visitante' });
+      const claveB = 'vid_alias:' + vidB;
+      const valorB = JSON.stringify({ alias: (P(body, 'alias') || Q('alias')).slice(0, 60), nota: (P(body, 'nota') || Q('nota')).slice(0, 300) });
+      const exB = await sbGet('config', 'select=clave&clave=eq.' + encodeURIComponent(claveB));
+      if (exB.length) await sbPatch('config', 'clave=eq.' + encodeURIComponent(claveB), { valor: valorB });
+      else await sbInsert('config', { clave: claveB, valor: valorB });
+      return json({ ok: true });
     }
     // 👤 FICHA DE UN VISITANTE: toda su historia, paso por paso. Se pide al tocarlo en la
     // lista (no viaja en getAnalitica para no inflar la respuesta con miles de eventos).
@@ -3594,9 +3631,14 @@ Deno.serve(async (req) => {
           if ((r.evento || '') === 'salida') { segF += parseInt(j.seg) || 0; intF += parseInt(j.int) || 0; }
         } catch { /**/ }
       });
+      const aliasF = await sbGet('config', 'select=valor&clave=eq.' + encodeURIComponent('vid_alias:' + vidF));
+      let puestoF: any = { alias: '', nota: '' };
+      if (aliasF.length) { try { puestoF = JSON.parse(aliasF[0].valor || '{}'); } catch { /**/ } }
       return json({
         vid: vidF, nombre: nombreF, telefono: telF, ciudad: ciudadF, pais: paisF, dispositivo: dispF, origen: ogF,
         fichaTecnica: fichaTec, segundos: segF, interacciones: intF,
+        apodo: '#' + vidF.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(),
+        aliasPuesto: puestoF.alias || '', notaPuesta: puestoF.nota || '',
         eventos: cuenta, dias: Object.keys(dias).length, primera: linea.length ? linea[0].fecha : '', ultima: linea.length ? linea[linea.length - 1].fecha : '',
         productos: Object.entries(prods).sort((a: any, b: any) => b[1] - a[1]).map(([nombre, n]) => ({ nombre, n })),
         compras, gastadoARS: compras.reduce((t: number, c: any) => t + (parseFloat(c.totalARS) || 0), 0),

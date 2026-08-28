@@ -99,7 +99,7 @@ function run() {
   const c = [];
   const ok = (n, v) => c.push({ name: n, ok: !!v });
   const eq = (n, a, b) => c.push({ name: n + ' (=' + JSON.stringify(b) + ')', ok: JSON.stringify(a) === JSON.stringify(b) });
-  const d = analitica(trafico, 7, ventas, clientes, productos);
+  const d = analitica(trafico, 7, ventas, clientes, productos, ALIAS);
 
   // ── EL CRUCE: ponerle nombre al que no dejó datos ───────────────────────────
   const deb = d.visitantes.find(v => v.vid === 'v_debora');
@@ -122,8 +122,13 @@ function run() {
   // ── CARRITOS: prioridad y antigüedad ────────────────────────────────────────
   eq('los carritos sin cerrar son 6 (el que pidió no cuenta)', d.abandonados.length, 6);
   eq('primero el contactable que ya te compró', d.abandonados[0].nombre, 'Débora Levy');
-  ok('sabe hace cuántas horas quedó colgado', d.abandonados[0].horas >= 20 && d.abandonados[0].horas <= 40);
-  ok('guarda el vid para poder abrir su ficha', !!d.abandonados[0].vid);
+  const carDeb = d.abandonados.find(a => a.vid === 'v_debora');
+  const carSar = d.abandonados.find(a => a.vid === 'v_sarah');
+  // Ojo: nada de rangos finos acá. El caso usa fechas relativas ("ayer a las 21"), así que
+  // las horas exactas cambian según a qué hora se corra el test. Lo estable es la RELACIÓN.
+  ok('sabe hace cuántas horas quedó colgado', carDeb.horas > 0 && carDeb.horas < 48);
+  ok('y el de anteayer figura como más viejo que el de ayer', carSar.horas > carDeb.horas);
+  ok('guarda el vid para poder abrir su ficha', !!carDeb.vid);
 
   // ── 💵 LA MONEDA DEL CARRITO ────────────────────────────────────────────────
   const may = d.abandonados.find(x => x.vid === 'v_may');
@@ -163,6 +168,19 @@ function run() {
   ok('y avisa cuántos son anteriores a la mejora', d.radiografia.sinFicha >= 1);
   ok('agrupa dónde están de verdad', d.radiografia.dondeEstan.some(x => x.que === 'Argentina'));
   ok('cuenta a los que aceptan notificaciones', d.radiografia.aceptanAvisos === 1);
+
+  // ── 🏷️ PONERLE NOMBRE AL QUE NO LO DEJÓ ─────────────────────────────────────
+  const anon = d.visitantes.find(v => v.vid === 'v_israel');
+  ok('todo visitante tiene un apodo estable para poder seguirlo', /^#[A-Z0-9]{1,4}$/.test(anon.apodo));
+  ok('el apodo sale de su aparato: si vuelve, es el mismo', anon.apodo === '#' + 'v_israel'.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase());
+  const bautizado = d.visitantes.find(v => v.vid === 'v_min');
+  eq('el nombre que le pusiste a mano se usa en todos lados', bautizado.nombre, 'El primo de David');
+  ok('y queda marcado como puesto por vos (no como dato de la persona)', bautizado.leDijiste === true);
+  eq('explica de dónde salió ese nombre', bautizado.comoSeSupo, 'se lo pusiste vos');
+  eq('la nota que anotaste viaja con él', bautizado.nota, 'entra siempre de noche, mira Elite');
+  const real = d.visitantes.find(v => v.vid === 'v_sarah');
+  ok('a la que dejó su nombre de verdad NO la marca como puesta por vos', real.leDijiste === false);
+  ok('el bautizado ahora cuenta como identificado', d.accionable.identificados === 4);
 
   // ── 🕐 LA HORA DE ELLOS (lo que separa al cliente del robot) ────────────────
   const isr = d.candado.deAfueraDetalle.find(x => x.ciudad === 'Tel Aviv');
@@ -234,8 +252,8 @@ function run() {
   ok('cada día dice qué miraron', d.diasDetalle.some(x => x.top.length > 0));
 
   // ── LOS NÚMEROS DE LA CABECERA ──────────────────────────────────────────────
-  eq('cuenta los identificados', d.accionable.identificados, 3);   // Débora, Sarah, Iosi
-  eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 7);
+  eq('cuenta los identificados', d.accionable.identificados, 4);   // Débora, Sarah, Iosi + el bautizado
+  eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 6);
   ok('suma los pesos que quedaron en los carritos', d.accionable.oportunidadARS === 34000 + 24000);
 
   // ── Que no se haya roto nada de lo de antes ─────────────────────────────────
@@ -246,5 +264,7 @@ function run() {
 }
 // Para inspeccionar a mano lo que devuelve el backend con este caso:
 //   node -e "console.log(require('./tests/unit/analitica_accionable.js').salida().resumen)"
-function salida() { return analitica(trafico, 7, ventas, clientes, productos); }
+// A éste Jony lo reconoció y lo bautizó a mano (v_nadie queda como el anónimo puro).
+const ALIAS = { v_min: { alias: 'El primo de David', nota: 'entra siempre de noche, mira Elite' } };
+function salida() { return analitica(trafico, 7, ventas, clientes, productos, ALIAS); }
 module.exports = { run, salida };

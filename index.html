@@ -2749,6 +2749,64 @@ async function toggleAccesoMiri() {
 }
 
 // 🌎 Vidriera geográfica: interruptor provisorio (Todos / Solo Mercosur).
+// ═══ 🕐 CANDADO POR RELOJ (v4.75) ════════════════════════════════════════════
+// El candado de la puerta mira la IP, y una VPN la cambia: alguien en Tel Aviv con
+// una VPN argentina entraba como argentino. Lo que la VPN NO cambia es el reloj del
+// aparato. Este control corre en el navegador y tapa justamente ese agujero.
+//
+// ⚠️ NO es una caja fuerte: alguien que sepa puede cambiarse la hora de la compu.
+//    Es un filtro que atrapa al 99% sin molestar a nadie.
+// 🛟 MISMA REGLA DE ORO que el candado de la puerta: ante CUALQUIER duda, deja pasar.
+//    Si el navegador no dice en qué huso está, pasa. Si el interruptor está apagado, pasa.
+const HUSOS_MERCOSUR = [
+  'America/Argentina/',                                                     // todas las provincias
+  'America/Buenos_Aires', 'America/Cordoba', 'America/Rosario', 'America/Catamarca', 'America/Jujuy', 'America/Mendoza',
+  'America/Montevideo',                                                     // Uruguay
+  'America/Sao_Paulo', 'America/Bahia', 'America/Fortaleza', 'America/Recife', 'America/Maceio',   // Brasil
+  'America/Araguaina', 'America/Belem', 'America/Santarem', 'America/Manaus', 'America/Boa_Vista',
+  'America/Porto_Velho', 'America/Cuiaba', 'America/Campo_Grande', 'America/Rio_Branco',
+  'America/Eirunepe', 'America/Noronha', 'Brazil/',
+  'America/Asuncion',                                                       // Paraguay
+  'America/La_Paz',                                                         // Bolivia
+  'America/Santiago', 'America/Punta_Arenas', 'Pacific/Easter', 'Chile/',   // Chile
+];
+function _husoPropio() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+}
+// Devuelve el huso SOLO si está claramente afuera. '' = adentro, no se pudo leer, o duda.
+function _relojDiceAfuera() {
+  const tz = _husoPropio();
+  if (!tz) return '';                                                       // 🛟 sin dato → pasa
+  const adentro = HUSOS_MERCOSUR.some(h => h.slice(-1) === '/' ? tz.indexOf(h) === 0 : tz === h);
+  return adentro ? '' : tz;
+}
+function _tienePase() {
+  try { return (document.cookie || '').indexOf('sm_pase=') !== -1 || new URLSearchParams(location.search).has('pase'); } catch { return false; }
+}
+async function _candadoPorReloj() {
+  try {
+    const tz = _relojDiceAfuera();
+    if (!tz) return;                                                        // lo normal: ni consulta
+    if (adminAuth || sessionStorage.getItem('adminAuth') === '1') return;   // el dueño, nunca
+    if (_tienePase()) return;                                               // el link con pase manda
+    const d = await fetch(APPS_SCRIPT_URL + '?accion=geoGate&z=' + Date.now()).then(r => r.json()).catch(() => null);
+    if (!d || d.gate !== 'mercosur') return;                                // 🛟 apagado o sin respuesta → pasa
+    try { track('bloqueado', { producto: 'reloj:' + tz, origen: 'reloj', pais: tz }); } catch {}
+    _pantallaFueraDeZona();
+  } catch { /* 🛟 cualquier error → la tienda sigue abierta */ }
+}
+function _pantallaFueraDeZona() {
+  const wa = 'https://wa.me/5491131754540';
+  document.documentElement.innerHTML = `<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shuk Mamtakim</title></head>
+  <body style="margin:0;font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#faf5ec;color:#2d1a0a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center">
+    <div style="max-width:440px;background:#fff;border:1px solid #ece2d1;border-radius:18px;padding:38px 30px;box-shadow:0 10px 40px rgba(0,0,0,.06)">
+      <div style="font-size:3rem;margin-bottom:10px">🌎🍬</div>
+      <h1 style="font-size:1.35rem;color:#5c3d1e;margin:0 0 12px">Shuk Mamtakim</h1>
+      <p style="font-size:.95rem;line-height:1.6;color:#6b5a48;margin:0 0 22px">Nuestra tienda online está disponible por ahora <b>solo para clientes del Mercosur</b> 🇦🇷🇺🇾🇧🇷🇵🇾🇧🇴.<br>Si sos cliente y estás de viaje, escribinos y te ayudamos.</p>
+      <a href="${wa}" style="display:inline-flex;align-items:center;gap:8px;background:#25d366;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:12px;font-size:.95rem">💬 Escribinos por WhatsApp</a>
+    </div></body>`;
+}
+
 async function cargarGeoGate() {
   try {
     const d = await fetch(APPS_SCRIPT_URL + '?accion=geoGate&z=' + Date.now()).then(r => r.json());
@@ -14121,9 +14179,21 @@ const _anaKpi = (num, lbl, color = 'var(--azul)') => `<div style="flex:1;min-wid
 
 // Cómo se muestra una persona: nombre real, o por qué sabemos quién es aunque no lo dijo.
 function _anaQuien(v) {
-  if (v.nombre) return esc(v.nombre);
-  if (v.esCliente) return '👤 Cliente conocido';
-  return '👤 Sin identificar';
+  // Un apodo estable (#A4F2) vale mucho más que "anónimo": si vuelve dentro de un mes es el
+  // mismo #A4F2, así se lo puede seguir, anotar y hasta bautizar cuando caés en quién es.
+  const ap = v.apodo ? ` <span style="font-size:0.62rem;color:var(--texto-suave);font-weight:600">${esc(v.apodo)}</span>` : '';
+  if (v.nombre) return esc(v.nombre) + (v.leDijiste ? ' <span style="font-size:0.58rem;background:#f3e8ff;color:#7b2ff7;border-radius:5px;padding:1px 5px;font-weight:700" title="Se lo pusiste vos">✏️ vos</span>' : '') + ap;
+  if (v.esCliente) return '👤 Cliente conocido' + ap;
+  return '👤 Visitante' + (v.apodo ? ' <b>' + esc(v.apodo) + '</b>' : ' sin identificar');
+}
+// ✏️ Bautizar a alguien que no dejó nombre: una corazonada tuya se vuelve un dato permanente.
+async function bautizarVisitante(vid, actual, notaActual) {
+  const alias = prompt('¿Quién creés que es? (queda marcado como puesto por vos, en todas las pantallas)\n\nDejalo vacío para borrarlo.', actual || '');
+  if (alias === null) return;
+  const nota = prompt('¿Querés anotar algo más? (opcional)\nEj: "creo que es el primo de David, entra siempre de noche"', notaActual || '');
+  if (nota === null) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'ponerAliasVisitante', vid, alias: alias.trim(), nota: (nota || '').trim() }), alias.trim() ? '🏷️ Guardado ✓' : '🏷️ Nombre borrado ✓');
+  if (r && r.ok) { cerrarFichaVisitante(); renderAnalitica(); }
 }
 function _anaChipCliente(v) {
   if (!v.esCliente) return '';
@@ -14324,11 +14394,13 @@ function _anaFilasGente(d) {
             ${v.perfil.aparato ? esc(v.perfil.aparato) : ''}${v.perfil.dondeEsta ? ' · 🕐 ' + esc(v.perfil.dondeEsta) : ''}${v.perfil.idioma ? ' · ' + esc(v.perfil.idioma) : ''}${v.perfil.segundos ? ' · se quedó ' + v.perfil.segundos + 's' : ''}${v.perfil.aceptaAvisos ? ' · 🔔 acepta avisos' : ''}${v.perfil.appInstalada ? ' · 📲 app instalada' : ''}
           </div>` : ''}
           ${v.productos && v.productos.length ? `<div style="font-size:0.68rem;color:#666;margin-top:2px">👀 ${esc(v.productos.slice(0, 4).join(', '))}${v.productos.length > 4 ? '…' : ''}</div>` : ''}
+          ${v.nota ? `<div style="font-size:0.68rem;color:#7b2ff7;margin-top:2px">✏️ ${esc(v.nota)}</div>` : ''}
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:0.62rem;color:var(--texto-suave)">últ. ${esc(v.ultima)}</div>
           <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end">
             ${_anaBtnWA(v.telefono, msg, '💬')}
+            <button onclick="bautizarVisitante('${esc(v.vid)}', '${esc(v.leDijiste ? v.nombre : '')}', '${esc(v.nota || '')}')" title="Ponerle nombre" style="background:#f3e8ff;color:#7b2ff7;border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">✏️</button>
             <button onclick="abrirFichaVisitante('${esc(v.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
           </div>
         </div>
@@ -14349,6 +14421,7 @@ function _anaSecMirones(d) {
           <div style="font-weight:700;font-size:0.84rem;color:var(--azul)">${calor} ${_anaQuien(m)} ${_anaChipCliente(m)}</div>
           <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:2px">Volvió <b>${m.dias} días</b> · ${m.visitas} visitas${m.ciudad ? ' · 📍 ' + esc(m.ciudad) : ''} · ${esc(_anaIconoOrigen[m.origen] || m.origen)} · últ. ${esc(m.ultima)}</div>
           ${m.productos.length ? `<div style="font-size:0.68rem;color:#666;margin-top:2px">👀 ${esc(m.productos.join(', '))}</div>` : ''}
+          ${m.nota ? `<div style="font-size:0.68rem;color:#7b2ff7;margin-top:2px">✏️ ${esc(m.nota)}</div>` : ''}
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0">
           ${_anaBtnWA(m.telefono, msg, '💬')}
@@ -14701,7 +14774,8 @@ async function abrirFichaVisitante(vid) {
   m.innerHTML = caja(`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
       <div style="min-width:0">
-        <div style="font-weight:800;font-size:1.02rem;color:var(--azul)">${f.nombre ? esc(f.nombre) : '👤 Sin identificar'}</div>
+        <div style="font-weight:800;font-size:1.02rem;color:var(--azul)">${f.nombre ? esc(f.nombre) : '👤 Visitante'} ${f.apodo ? `<span style="font-size:0.75rem;color:var(--texto-suave)">${esc(f.apodo)}</span>` : ''}${f.aliasPuesto ? ' <span style="font-size:0.58rem;background:#f3e8ff;color:#7b2ff7;border-radius:5px;padding:1px 5px;font-weight:700">✏️ se lo pusiste vos</span>' : ''}</div>
+        ${f.notaPuesta ? `<div style="font-size:0.72rem;color:#7b2ff7;margin-top:2px">✏️ ${esc(f.notaPuesta)}</div>` : ''}
         <div style="font-size:0.72rem;color:var(--texto-suave)">${f.telefono ? '📞 ' + esc(f.telefono) + ' · ' : ''}${f.ciudad ? '📍 ' + esc(f.ciudad) + ' · ' : ''}${f.dispositivo === 'celular' ? '📱 celular' : (f.dispositivo ? '💻 compu' : '')}${f.origen ? ' · ' + esc(_anaIconoOrigen[f.origen] || f.origen) : ''}</div>
       </div>
       <button onclick="cerrarFichaVisitante()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--texto-suave);line-height:1">✕</button>
@@ -14720,7 +14794,10 @@ async function abrirFichaVisitante(vid) {
       ${f.fichaTecnica.idi ? '🗣️ lee en <b>' + esc(f.fichaTecnica.idi) + '</b>' : ''}${f.fichaTecnica.wa ? ' · entró desde WhatsApp/Instagram' : ''}${f.fichaTecnica.pwa ? ' · 📲 tiene la tienda instalada' : ''}${f.fichaTecnica.push ? ' · 🔔 acepta notificaciones' : ''}<br>
       ${f.segundos ? '⏱️ se quedó <b>' + f.segundos + ' segundos</b> en total · ' + (f.interacciones || 0) + ' cosas tocó' : ''}
     </div>` : ''}
-    ${f.telefono ? `<div style="margin-bottom:9px">${_anaBtnWA(f.telefono, msg, '💬 Escribirle por WhatsApp')}</div>` : ''}
+    <div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">
+      ${f.telefono ? _anaBtnWA(f.telefono, msg, '💬 Escribirle por WhatsApp') : ''}
+      <button onclick="bautizarVisitante('${esc(f.vid)}', '${esc(f.aliasPuesto || '')}', '${esc(f.notaPuesta || '')}')" style="background:#f3e8ff;color:#7b2ff7;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">✏️ ${f.aliasPuesto ? 'Cambiar el nombre' : '¿Sabés quién es? Ponele nombre'}</button>
+    </div>
     ${compras ? `<div style="font-weight:700;font-size:0.82rem;margin:8px 0 5px">🛍️ Le compró ${(f.compras || []).length} vez${(f.compras || []).length !== 1 ? 'ces' : ''}</div>${compras}` : ''}
     ${(f.productos || []).length ? `<div style="font-weight:700;font-size:0.82rem;margin:9px 0 4px">👀 Lo que más miró</div>
       <div style="font-size:0.75rem;color:#444;line-height:1.6">${f.productos.slice(0, 8).map(p => esc(p.nombre) + ' <span style="color:var(--texto-suave)">×' + p.n + '</span>').join(' · ')}</div>` : ''}
@@ -16459,6 +16536,7 @@ if (localStorage.getItem('darkMode') === '1') {
 function init() {
   cargarEstadoTienda();   // estado de la tienda (abierta/cotización/cerrada)
   cargarGeoGate();        // 🌎 estado del interruptor de vidriera geográfica
+  _candadoPorReloj();     // 🕐 el control que la VPN no puede esquivar
   const hash = window.location.hash.replace('#', '');
   const path = window.location.pathname;
   document.getElementById('modo-bar').style.display = 'none';
@@ -16536,7 +16614,7 @@ function _fichaTecnica() {
   try { f.wa = /WhatsApp|FBAN|FBAV|Instagram/i.test(navigator.userAgent) ? 1 : 0; } catch { f.wa = 0; }   // abrió desde la app
   // 🔑 ¿Entró con el link con pase (el que saltea el candado geográfico)? Si alguien de afuera
   // aparece con esto, ya no hay misterio: le pasaron el link privilegiado.
-  try { f.pase = (document.cookie || '').includes('sm_pase=') || new URLSearchParams(location.search).has('pase') ? 1 : 0; } catch { f.pase = 0; }
+  try { f.pase = _tienePase() ? 1 : 0; } catch { f.pase = 0; }
   return f;
 }
 
