@@ -18,15 +18,16 @@ const DATA = {
   conversionPorOrigen: [{ origen: 'whatsapp', visitantes: 80, pedidos: 12, pct: 15 }],
   leads: [{ nombre: 'Sarah G', telefono: '1155667788', ciudad: 'CABA', origen: 'whatsapp', pagina: 'tienda', visitas: 9, ultima: '26/08/2026 20:10' }],
   abandonados: [
-    { vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, gastadoUSD: 0, ultimaCompra: '10/08/2026 18:00', tipoCliente: 'Minorista', comoSeSupo: 'ya compró desde este aparato', ciudad: 'CABA', dispositivo: 'celular', origen: 'whatsapp', visitas: 6, etapa: 'checkout', productos: ['Chocolate Elite'], items: [{ n: 'Chocolate Elite', q: 3, p: 8000 }, { n: 'Bon O Bon', q: 2, p: 5000 }], total: 34000, cuando: '26/08 21:15', ts: Date.now() - 3600000, horas: 1, score: 1900 },
-    { vid: 'v_xyz', nombre: '', telefono: '', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: '', ciudad: 'Rosario', dispositivo: 'compu', origen: 'directo', visitas: 2, etapa: 'carrito', productos: ['Pesek Zman'], items: [{ n: 'Pesek Zman', q: 1, p: 6000 }], total: 6000, cuando: '24/08 10:00', ts: Date.now() - 3 * 86400000, horas: 72, score: 120 },
+    { vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, gastadoUSD: 0, ultimaCompra: '10/08/2026 18:00', tipoCliente: 'Minorista', comoSeSupo: 'ya compró desde este aparato', ciudad: 'CABA', dispositivo: 'celular', origen: 'whatsapp', visitas: 6, etapa: 'checkout', productos: ['Chocolate Elite'], items: [{ n: 'Chocolate Elite', q: 3, p: 8000 }, { n: 'Bon O Bon', q: 2, p: 5000 }], total: 34000, totalUSD: 0, totalEquiv: 34000, mayorista: false, cuando: '26/08 21:15', ts: Date.now() - 3600000, horas: 1, score: 1900 },
+    { vid: 'v_may', nombre: 'Isi Michan', telefono: '1130275468', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: 'se registró', ciudad: 'CABA', dispositivo: 'compu', origen: 'directo', visitas: 3, etapa: 'carrito', productos: ['Klik dolar'], items: [{ n: 'Klik dolar', q: 10, p: 8.55, m: 'U$S' }], total: 0, totalUSD: 85.5, totalEquiv: 119700, mayorista: true, cuando: '27/08 11:00', ts: Date.now() - 7200000, horas: 2, score: 900 },
+    { vid: 'v_xyz', nombre: '', telefono: '', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: '', ciudad: 'Rosario', dispositivo: 'compu', origen: 'directo', visitas: 2, etapa: 'carrito', productos: ['Pesek Zman'], items: [{ n: 'Pesek Zman', q: 1, p: 6000 }], total: 6000, totalUSD: 0, totalEquiv: 6000, mayorista: false, cuando: '24/08 10:00', ts: Date.now() - 3 * 86400000, horas: 72, score: 120 },
   ],
   acciones: [
     { id: 'carritos', icono: '🛒', urgencia: 'alta', titulo: '2 carritos quedaron sin terminar en las últimas 48 h', detalle: '**1** con teléfono para escribirle ahora mismo · $ 40.000 sobre la mesa', n: 2, ir: 'carritos' },
     { id: 'sin-stock', icono: '📦', urgencia: 'alta', titulo: '1 producto muy pedido está en CERO', detalle: 'Chocolate Elite (23 veces). Lo quieren y no lo tenés.', n: 1, ir: 'deseo' },
     { id: 'suba', icono: '📈', urgencia: 'baja', titulo: 'El tráfico subió 20%', detalle: 'De 400 a 480 visitas.', n: 0, ir: '' },
   ],
-  accionable: { identificados: 40, conTelefono: 22, anonimos: 257, oportunidadARS: 40000, carritosContactables: 1, clientesQueVolvieron: 3 },
+  accionable: { identificados: 40, conTelefono: 22, anonimos: 257, oportunidadARS: 40000, oportunidadUSD: 85.5, tcRef: 1400, carritosContactables: 1, clientesQueVolvieron: 3 },
   visitantes: [
     { vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, gastadoUSD: 0, ultimaCompra: '10/08/2026', tipoCliente: 'Minorista', comoSeSupo: 'ya compró desde este aparato', visitas: 6, dias: 4, primeraTs: 0, ultimaTs: Date.now(), primera: '01/08/2026 10:00', ultima: '26/08/2026 21:15', ciudad: 'CABA', pais: 'Argentina', dispositivo: 'celular', origen: 'whatsapp', pagina: 'tienda', productos: ['Chocolate Elite', 'Bon O Bon'], armoCarrito: true, checkout: true, pidio: false, valorCarrito: 34000, etiqueta: 'casi compra' },
     { vid: 'v_xyz', nombre: '', telefono: '', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: '', visitas: 2, dias: 1, primeraTs: 0, ultimaTs: Date.now() - 1000, primera: '24/08/2026', ultima: '24/08/2026 10:00', ciudad: 'Rosario', pais: 'Argentina', dispositivo: 'compu', origen: 'directo', pagina: 'tienda', productos: ['Pesek Zman'], armoCarrito: true, checkout: false, pidio: false, valorCarrito: 6000, etiqueta: 'armó carrito' },
@@ -100,6 +101,13 @@ const FICHA = {
   ok('CARRITOS: dice hace cuánto quedó colgado', t.includes('hace 1 h') && t.includes('hace 3 días'));
   ok('CARRITOS: el que no se sabe quién es queda claro', t.includes('Sin identificar'));
   ok('CARRITOS: botón de WhatsApp con el pedido adentro', (await pg.content()).includes('waCarrito(0)'));
+
+  ok('CARRITOS: el mayorista en dólares NO se muestra como pesos', t.includes('U$S 85,5') && !t.includes('$ 86'));
+  ok('CARRITOS: se ve que ese carrito es mayorista', t.includes('mayorista'));
+  const cab = await pg.evaluate(() => { setAnaTab('hoy'); return document.getElementById('analitica-contenido').innerText; });
+  ok('CABECERA: la oportunidad muestra las dos monedas por separado', cab.includes('U$S 85,5'));
+  await pg.evaluate(() => setAnaTab('carritos'));
+  await pg.waitForTimeout(200);
 
   const msg = await pg.evaluate(() => {
     let capt = '';

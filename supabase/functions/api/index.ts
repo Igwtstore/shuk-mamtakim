@@ -521,7 +521,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
       if (!carritosPorVid[vid]) carritosPorVid[vid] = { productos: {}, ultimaCarrito: null, ultimoPedido: null, etapa: 'carrito', items: null, total: 0, itemsTs: null, ddmm: '' };
       const c = carritosPorVid[vid];
-      if (cartJson && (!c.itemsTs || t!.ts >= c.itemsTs)) { try { const arr = JSON.parse(cartJson); if (Array.isArray(arr) && arr.length) { c.items = arr; c.total = parseInt(totalEv) || 0; c.itemsTs = t!.ts; } } catch { /**/ } }
+      if (cartJson && (!c.itemsTs || t!.ts >= c.itemsTs)) { try { const arr = JSON.parse(cartJson); if (Array.isArray(arr) && arr.length) { c.items = arr; c.total = parseInt(totalEv) || 0; c.itemsTs = t!.ts; c.pagCarrito = pagina; } } catch { /**/ } }
       if (evento === 'pedido') { c.ultimoPedido = t!.ts; const og = origen || 'directo'; (origenPedidoVids[og] = origenPedidoVids[og] || {})[vid] = 1; }
       else { if (!c.ultimaCarrito || t!.ts > c.ultimaCarrito) { c.ultimaCarrito = t!.ts; c.ddmm = t!.ddmm; } if (evento === 'checkout') c.etapa = 'checkout'; if (detalle) c.productos[detalle] = 1; }
       if (detalle) prodDeseados[detalle] = (prodDeseados[detalle] || 0) + 1;
@@ -636,6 +636,39 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     };
   };
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  💵 LA MONEDA DEL CARRITO — caso real (Isi Michan, 27/08): armó un carrito
+  //  MAYORISTA de U$S 85,50 y la pantalla mostraba "$ 86". El mayorista puede tener
+  //  precios en dólares; el minorista SIEMPRE cobra en pesos. Sumarlos como si fueran
+  //  la misma plata desordena la prioridad (ese carrito aparecía último) y miente el total.
+  //  Los carritos nuevos ya viajan con la moneda de cada renglón; para los viejos se
+  //  deduce de la página del evento + la moneda del producto.
+  // ══════════════════════════════════════════════════════════════════════════════
+  const esUSD: any = {};
+  productos.forEach((p: any) => { esUSD[kAna(p.nombre)] = (p.moneda === 'U$S'); });
+  // Tipo de cambio de referencia: el de la venta más reciente que lo tenga cargado. Solo se
+  // usa para ORDENAR y para el total "equivalente" — los dos importes se muestran separados.
+  let tcRef = 0, tcTs = 0;
+  ventas.forEach((v: any) => {
+    const tc = parseFloat(v.tipo_cambio) || 0;
+    if (tc <= 0) return;
+    const ts = tsDeFecha(v.fecha) || 0;
+    if (ts >= tcTs) { tcTs = ts; tcRef = tc; }
+  });
+  if (tcRef <= 0) tcRef = 1000;
+  const totalesCarrito = (c: any) => {
+    let ars = 0, usd = 0;
+    const may = c.pagCarrito === 'mayorista';
+    (c.items || []).forEach((it: any) => {
+      const v = (parseFloat(it.q) || 0) * (parseFloat(it.p) || 0);
+      // `it.m` lo manda la tienda desde v4.70; si no está (carritos viejos) se deduce.
+      const enUSD = it.m ? (it.m === 'U$S') : (may && !!esUSD[kAna(it.n)]);
+      if (enUSD) usd += v; else ars += v;
+    });
+    if (!(c.items || []).length) { ars = c.total || 0; }      // sin detalle: lo que haya
+    return { ars: Math.round(ars), usd: Math.round(usd * 100) / 100, equiv: Math.round(ars + usd * tcRef) };
+  };
+
   // ── 🛒 CARRITOS SIN TERMINAR, ahora con nombre, antigüedad y prioridad ──────────
   const ahoraT = Date.now();
   const abandonados = Object.keys(carritosPorVid)
@@ -643,15 +676,18 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     .map((v) => {
       const c = carritosPorVid[v], info = vids[v] || {}, q = quienEs(v);
       const horas = Math.round((ahoraT - c.ultimaCarrito) / 3600000);
+      const m = totalesCarrito(c);
       // Prioridad: primero al que se puede contactar y más plata dejó en la mesa, con lo
-      // reciente pesando fuerte (un carrito de hace 3 días ya está frío).
+      // reciente pesando fuerte (un carrito de hace 3 días ya está frío). La plata se mide
+      // en el equivalente en pesos: si no, un carrito en dólares parecía de dos mangos.
       const score = (q.telefono ? 1000 : 0) + (q.esCliente ? 600 : 0) + (c.etapa === 'checkout' ? 400 : 0)
-        + Math.min(500, Math.round((c.total || 0) / 1000)) + Math.max(0, 300 - horas * 2);
+        + Math.min(500, Math.round(m.equiv / 1000)) + Math.max(0, 300 - horas * 2);
       return {
         vid: v, ...q, ciudad: info.ciudad || '', dispositivo: info.dispositivo || '',
         origen: info.origen || 'directo', visitas: info.visitas || 0,
         etapa: c.etapa, productos: Object.keys(c.productos).slice(0, 6), items: c.items || null,
-        total: c.total || 0, cuando: c.ddmm, ts: c.ultimaCarrito, horas, score,
+        total: m.ars, totalUSD: m.usd, totalEquiv: m.equiv, mayorista: c.pagCarrito === 'mayorista',
+        cuando: c.ddmm, ts: c.ultimaCarrito, horas, score,
       };
     })
     .sort((a, b) => b.score - a.score).slice(0, 60);
@@ -728,22 +764,25 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   //  Cada fila de acá es algo concreto para hacer hoy, con la gente ya identificada.
   // ══════════════════════════════════════════════════════════════════════════════
   const acciones: any[] = [];
-  const plata = (n: number) => '$ ' + Math.round(n).toLocaleString('es-AR');
 
+  const plataDe = (arr: any[]) => {
+    const ars = arr.reduce((t, a) => t + (a.total || 0), 0), usd = arr.reduce((t, a) => t + (a.totalUSD || 0), 0);
+    return '$ ' + Math.round(ars).toLocaleString('es-AR') + (usd > 0 ? ' + U$S ' + (Math.round(usd * 100) / 100).toLocaleString('es-AR') : '');
+  };
   const calientes = abandonados.filter((a) => a.horas <= 48);
   const contactables = calientes.filter((a) => a.telefono);
   if (calientes.length) acciones.push({
     id: 'carritos', icono: '🛒', urgencia: contactables.length ? 'alta' : 'media',
     titulo: calientes.length + (calientes.length === 1 ? ' carrito quedó' : ' carritos quedaron') + ' sin terminar en las últimas 48 h',
     detalle: (contactables.length ? '**' + contactables.length + '** con teléfono para escribirle ahora mismo' : 'ninguno dejó teléfono todavía')
-      + ' · ' + plata(calientes.reduce((t, a) => t + (a.total || 0), 0)) + ' sobre la mesa',
+      + ' · ' + plataDe(calientes) + ' sobre la mesa',
     n: calientes.length, ir: 'carritos',
   });
 
   const vuelvenSinComprar = visitantesTodos.filter((v) => v.esCliente && !v.pidio && v.visitas >= 1);
   if (vuelvenSinComprar.length) acciones.push({
     id: 'clientes-volvieron', icono: '👋', urgencia: 'alta',
-    titulo: vuelvenSinComprar.length + (vuelvenSinComprar.length === 1 ? ' cliente tuyo entró' : ' clientes tuyos entraron') + ' y no compró nada',
+    titulo: vuelvenSinComprar.length === 1 ? 'Un cliente tuyo entró y no compró nada' : vuelvenSinComprar.length + ' clientes tuyos entraron y no compraron nada',
     detalle: 'Ya te compraron antes: ' + vuelvenSinComprar.slice(0, 3).map((v) => v.nombre || 'sin nombre').filter(Boolean).join(', ')
       + (vuelvenSinComprar.length > 3 ? ' y ' + (vuelvenSinComprar.length - 3) + ' más' : '') + '. Un mensaje puede cerrar la venta.',
     n: vuelvenSinComprar.length, ir: 'visitantes',
@@ -768,7 +807,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const insistentes = visitantesTodos.filter((v) => !v.pidio && !v.esCliente && v.dias >= 3);
   if (insistentes.length) acciones.push({
     id: 'insistentes', icono: '👀', urgencia: 'media',
-    titulo: insistentes.length + (insistentes.length === 1 ? ' persona volvió' : ' personas volvieron') + ' 3 días o más y nunca compró',
+    titulo: insistentes.length === 1 ? 'Una persona volvió 3 días o más y nunca compró' : insistentes.length + ' personas volvieron 3 días o más y nunca compraron',
     detalle: 'Están interesados pero algo los frena: precio, envío o que no encuentran lo que buscan.',
     n: insistentes.length, ir: 'visitantes',
   });
@@ -776,7 +815,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const casi = visitantesTodos.filter((v) => v.checkout && !v.pidio);
   if (casi.length) acciones.push({
     id: 'casi', icono: '🔥', urgencia: 'alta',
-    titulo: casi.length + (casi.length === 1 ? ' persona llegó' : ' personas llegaron') + ' hasta el final y no envió el pedido',
+    titulo: casi.length === 1 ? 'Una persona llegó hasta el final y no envió el pedido' : casi.length + ' personas llegaron hasta el final y no enviaron el pedido',
     detalle: 'Abrieron el checkout y se cayeron ahí. Es la etapa más cara de perder.',
     n: casi.length, ir: 'carritos',
   });
@@ -800,10 +839,11 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // ── Números que resumen lo accionable (para la cabecera de la pantalla) ─────────
   const identificados = visitantesTodos.filter((v) => v.nombre).length;
   const conTelefono = visitantesTodos.filter((v) => v.telefono).length;
-  const oportunidad = abandonados.reduce((t, a) => t + (a.total || 0), 0);
   const accionable = {
     identificados, conTelefono, anonimos: visitantesTodos.length - identificados,
-    oportunidadARS: Math.round(oportunidad),
+    oportunidadARS: Math.round(abandonados.reduce((t, a) => t + (a.total || 0), 0)),
+    oportunidadUSD: Math.round(abandonados.reduce((t, a) => t + (a.totalUSD || 0), 0) * 100) / 100,
+    tcRef,
     carritosContactables: abandonados.filter((a) => a.telefono).length,
     clientesQueVolvieron: vuelvenSinComprar.length,
   };
@@ -3290,9 +3330,9 @@ Deno.serve(async (req) => {
       const dias = parseInt(url.searchParams.get('dias') || '0') || 0;
       const [trA, vtA, clA, prA] = await Promise.all([
         traficoParaAnalitica(dias),
-        sbGet('ventas', 'select=id,fecha,cliente,estado,total_ars,total_usd,vid,stock_updates&order=n_venta'),
+        sbGet('ventas', 'select=id,fecha,cliente,estado,total_ars,total_usd,vid,stock_updates,tipo_cambio&order=n_venta'),
         sbGet('clientes', 'select=nombre,telefono,tipo'),
-        sbGet('productos', 'select=id,nombre,stock,activo,dueno'),
+        sbGet('productos', 'select=id,nombre,stock,activo,dueno,moneda'),
       ]);
       return json(analitica(trA, dias, vtA, clA, prA));
     }

@@ -46,12 +46,20 @@ const trafico = [
   ev('v_nadie', 'busqueda', 1, 9, { detalle: 'bon o bon', total: 4 }),
   // COMPRADOR: hizo todo el camino hasta el pedido.
   ev('v_compra', 'visita', 1, 15), ev('v_compra', 'carrito', 1, 15, { detalle: 'Pesek Zman' }), ev('v_compra', 'pedido', 1, 15, { nombre: 'Iosi M' }),
+  // 💵 MAYORISTA EN DÓLARES (caso real Isi Michan, 27/08): U$S 85,50 que la pantalla
+  // mostraba como "$ 86". Los renglones viejos NO traen la moneda: hay que deducirla.
+  { ...ev('v_may', 'visita', 1, 11), pagina: 'mayorista' },
+  { ...ev('v_may', 'carrito', 1, 11, { detalle: 'Klik dolar', carrito: JSON.stringify([{ n: 'Klik dolar', q: 10, p: 8.55 }]), total: 86 }), pagina: 'mayorista' },
+  // 🪤 LA TRAMPA: producto que en mayorista se cotiza en U$S, pero comprado por la tienda
+  // MINORISTA — ahí el precio es en PESOS. (Es el error que cometí midiendo a mano.)
+  ev('v_min', 'visita', 1, 12),
+  ev('v_min', 'carrito', 1, 12, { detalle: 'Klik dolar', carrito: JSON.stringify([{ n: 'Klik dolar', q: 2, p: 12000 }]), total: 24000 }),
 ];
 const ventas = [
   { id: 'P1', fecha: dd(20, 18), cliente: 'Débora Levy', estado: 'entregado', total_ars: 45000, total_usd: 0, vid: 'v_debora', stock_updates: '1:2' },
   { id: 'P2', fecha: dd(9, 18), cliente: 'Débora Levy', estado: 'entregado', total_ars: 100000, total_usd: 0, vid: 'v_debora', stock_updates: '1:1' },
   { id: 'P3', fecha: dd(30, 18), cliente: 'Sarah G', estado: 'entregado', total_ars: 20000, total_usd: 0, vid: 'v_viejo_de_sarah', stock_updates: '2:1' },
-  { id: 'P4', fecha: dd(1, 16), cliente: 'Iosi M', estado: 'pendiente', total_ars: 12000, total_usd: 0, vid: 'v_compra', stock_updates: '3:2' },
+  { id: 'P4', fecha: dd(1, 16), cliente: 'Iosi M', estado: 'pendiente', total_ars: 12000, total_usd: 0, vid: 'v_compra', stock_updates: '3:2', tipo_cambio: 1400 },
   { id: 'P5', fecha: dd(1, 16), cliente: 'Cancelada', estado: 'cancelado', total_ars: 999999, total_usd: 0, vid: 'v_debora', stock_updates: '1:50' },
 ];
 const clientes = [{ nombre: 'Débora Levy', telefono: '1144556677', tipo: 'Minorista' }, { nombre: 'Sarah G', telefono: '1155667788', tipo: 'Mayorista' }];
@@ -59,6 +67,7 @@ const productos = [
   { id: '1', nombre: 'Chocolate Elite', stock: 0, activo: true, dueno: 'Jony' },
   { id: '2', nombre: 'Bon O Bon', stock: 40, activo: true, dueno: 'Jony' },
   { id: '3', nombre: 'Pesek Zman', stock: 12, activo: true, dueno: 'Jony' },
+  { id: '4', nombre: 'Klik dolar', stock: 30, activo: true, dueno: 'Jony', moneda: 'U$S' },
 ];
 
 function run() {
@@ -86,10 +95,24 @@ function run() {
   eq('el que compró queda etiquetado como tal', d.visitantes.find(v => v.vid === 'v_compra').etiqueta, 'compró');
 
   // ── CARRITOS: prioridad y antigüedad ────────────────────────────────────────
-  eq('los carritos sin cerrar son 2 (el que pidió no cuenta)', d.abandonados.length, 2);
+  eq('los carritos sin cerrar son 4 (el que pidió no cuenta)', d.abandonados.length, 4);
   eq('primero el contactable que ya te compró', d.abandonados[0].nombre, 'Débora Levy');
   ok('sabe hace cuántas horas quedó colgado', d.abandonados[0].horas >= 20 && d.abandonados[0].horas <= 40);
   ok('guarda el vid para poder abrir su ficha', !!d.abandonados[0].vid);
+
+  // ── 💵 LA MONEDA DEL CARRITO ────────────────────────────────────────────────
+  const may = d.abandonados.find(x => x.vid === 'v_may');
+  const min = d.abandonados.find(x => x.vid === 'v_min');
+  eq('carrito MAYORISTA en dólares: no suma pesos', may.total, 0);
+  eq('carrito MAYORISTA en dólares: los U$S van aparte', may.totalUSD, 85.5);
+  ok('queda marcado como mayorista', may.mayorista === true);
+  eq('el equivalente usa el tipo de cambio de la última venta (1400)', may.totalEquiv, 119700);
+  eq('carrito MINORISTA de un producto que en mayorista es U$S → sigue siendo PESOS', min.total, 24000);
+  eq('y no inventa dólares donde no los hay', min.totalUSD, 0);
+  ok('el carrito en dólares NO queda último por "poca plata"',
+     d.abandonados.findIndex(x => x.vid === 'v_may') < d.abandonados.length - 1);
+  ok('la oportunidad total separa las dos monedas', d.accionable.oportunidadUSD === 85.5 && d.accionable.oportunidadARS > 0);
+  eq('guarda qué tipo de cambio usó', d.accionable.tcRef, 1400);
 
   // ── DESEO CONTRA VENTA ──────────────────────────────────────────────────────
   const elite = d.deseoVsVenta.find(p => p.nombre === 'Chocolate Elite');
@@ -126,12 +149,12 @@ function run() {
   ok('cada día dice qué miraron', d.diasDetalle.some(x => x.top.length > 0));
 
   // ── LOS NÚMEROS DE LA CABECERA ──────────────────────────────────────────────
-  eq('cuenta los identificados', d.accionable.identificados, 3);
-  eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 1);
-  ok('suma la plata que quedó en los carritos', d.accionable.oportunidadARS === 34000);
+  eq('cuenta los identificados', d.accionable.identificados, 3);   // Débora, Sarah, Iosi
+  eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 3);
+  ok('suma los pesos que quedaron en los carritos', d.accionable.oportunidadARS === 34000 + 24000);
 
   // ── Que no se haya roto nada de lo de antes ─────────────────────────────────
-  ok('sigue devolviendo el resumen de siempre', d.resumen.visitas === 7 && d.resumen.unicos === 4);
+  ok('sigue devolviendo el resumen de siempre', d.resumen.visitas === 9 && d.resumen.unicos === 6);
   ok('sigue devolviendo el embudo', d.embudo.pedido === 1 && d.embudo.checkout === 1);
   ok('sigue devolviendo leads y orígenes', d.leads.length >= 1 && !!d.porOrigen.whatsapp);
   return c;
