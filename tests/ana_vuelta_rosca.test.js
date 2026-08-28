@@ -47,7 +47,10 @@ const DATA = {
   candado: {
     bloqueados: 12, bloqueadosPorPais: [{ pais: 'IL', n: 8 }, { pais: 'US', n: 4 }], ultimoBloqueo: '27/08/2026 10:00',
     entraronDeAfuera: 2,
-    deAfueraDetalle: [{ pais: 'Israel', ciudad: 'Tel Aviv', visitas: 1, ultima: '24/08/2026 21:30', etiqueta: 'miró y se fue', nombre: '' }],
+    deAfueraDetalle: [
+      { pais: 'Israel', ciudad: 'Tel Aviv', visitas: 1, ultima: '24/08/2026 21:30', etiqueta: 'miró y se fue', nombre: '', vid: 'v_il', aparato: 'Windows', origen: 'directo', horaAlla: 'mar, 03:30', pareceRobot: true, dondeEsta: 'Israel', conPase: false, segundos: 1 },
+      { pais: 'United States', ciudad: 'Boca Raton', visitas: 2, ultima: '27/08/2026 11:48', etiqueta: 'miró y se fue', nombre: '', vid: 'v_us', aparato: 'iPhone', origen: 'directo', horaAlla: 'jue, 10:48', pareceRobot: false, dondeEsta: 'América (New York)', conPase: true, segundos: 40 },
+    ],
     discrepancias: [{ fecha: '27/08/2026 11:48', detalle: 'navegador:United States · candado:AR · candado PRENDIDO', ciudad: 'Boca Raton', pais: 'United States' }],
   },
   tiempoADecidir: { n: 8, mismoDia: 5, hasta3: 2, masDe3: 1, mediana: 0, promedio: 1.2 },
@@ -196,6 +199,10 @@ const FICHA = {
   ok('CANDADO: dice a cuántos rechazó y de dónde', t.includes('Rechazados por el candado') && t.includes('IL'));
   ok('CANDADO: muestra a los que entraron igual', t.includes('Tel Aviv'));
   ok('CANDADO: explica POR QUÉ se coló', t.includes('candado:AR'));
+  ok('CANDADO: dice qué hora era PARA ÉL', t.includes('allá: mar, 03:30') && t.includes('allá: jue, 10:48'));
+  ok('CANDADO: marca cuál no parece persona', t.includes('no parece persona'));
+  ok('CANDADO: avisa si entró con el link con pase', t.includes('entró con el pase'));
+  ok('CANDADO: aclara que el bloqueado no deja rastro', t.includes('vieron el catálogo'));
   ok('CANDADO: aclara que son dos fuentes distintas', t.includes('IP que ve el servidor'));
 
   await pg.evaluate(() => abrirFichaVisitante('v_abc'));

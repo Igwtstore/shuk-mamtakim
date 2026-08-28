@@ -55,6 +55,7 @@ const PRODUCTOS = [P('1', 'Chocolate Elite', 10, 9000), P('2', 'Bon O Bon', 5, 5
   ok('sabe si tiene la tienda instalada', typeof f.pwa === 'number');
   ok('sabe si acepta notificaciones', typeof f.push === 'number');
   ok('guarda la hora local del visitante', typeof f.hl === 'number');
+  ok('sabe que este NO entró con el link con pase', f.pase === 0);
 
   // 🌎 Como el navegador dice Israel, la tienda le pregunta al candado qué vio ÉL
   const geo = evento('geo');
@@ -63,6 +64,12 @@ const PRODUCTOS = [P('1', 'Chocolate Elite', 10, 9000), P('2', 'Bon O Bon', 5, 5
     const det = new URL(geo).searchParams.get('producto') || '';
     ok('y anota la discrepancia (navegador Israel vs candado AR)', det.includes('Israel') && det.includes('AR'));
   }
+
+  // 🔑 Ahora el mismo visitante, pero entrando con el link con pase
+  await pg.evaluate(() => { document.cookie = 'sm_pase=abc123; path=/'; });
+  const conPase = await pg.evaluate(() => _fichaTecnica().pase);
+  ok('si entró con el link con pase, queda registrado', conPase === 1);
+  await pg.evaluate(() => { document.cookie = 'sm_pase=; path=/; max-age=0'; });
 
   // ⏱️ Se queda un rato y toca cosas
   await pg.evaluate(() => { const a = productos[0].id; cantidades[a] = 1; agregarAlCarrito(a); });

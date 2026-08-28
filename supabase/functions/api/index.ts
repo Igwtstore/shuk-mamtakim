@@ -767,6 +767,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       dondeEsta, tz: f.tz || '', idioma: idiomaLegible(f.idi || ''), aparato: f.ap || '',
       pantalla: f.px || '', tactil: f.toq === 1, appInstalada: f.pwa === 1, aceptaAvisos: f.push === 1,
       desdeApp: f.wa === 1, horaLocal: typeof f.hl === 'number' && f.hl >= 0 ? f.hl : null,
+      conPase: f.pase === 1,
       segundos: o.seg, interacciones: o.inter, productosVistos: o.vistos,
       pareceRobot: bot, señales,
     };
@@ -1015,12 +1016,35 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // Dos preguntas que antes no se podían contestar: ¿a cuánta gente estoy rechazando?
   // y ¿cómo entró alguien de afuera si el candado está prendido?
   const deAfuera = visitantesTodos.filter((v) => v.pais && !['Argentina', 'Uruguay', 'Brazil', 'Brasil', 'Paraguay', 'Bolivia', 'Chile'].includes(v.pais));
+  // 🕐 QUÉ HORA ERA PARA ÉL. Las fechas se guardan en hora de Buenos Aires; alguien que entra
+  // a una tienda de golosinas a las 3 de la mañana de SU país no es una persona, es un programa.
+  // Es el dato que separa al cliente de viaje del robot de escaneo, y no requiere nada nuevo.
+  const HUSO: Record<string, string> = {
+    'Israel': 'Asia/Jerusalem', 'United States': 'America/New_York', 'Mexico': 'America/Mexico_City',
+    'Spain': 'Europe/Madrid', 'The Netherlands': 'Europe/Amsterdam', 'France': 'Europe/Paris',
+    'Germany': 'Europe/Berlin', 'United Kingdom': 'Europe/London', 'Italy': 'Europe/Rome',
+    'Canada': 'America/Toronto', 'Panama': 'America/Panama', 'Peru': 'America/Lima', 'Colombia': 'America/Bogota',
+  };
+  const horaAlla = (fechaAR: string, pais: string, tzReal: string) => {
+    const m = (fechaAR || '').match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+    const tz = tzReal || HUSO[pais];
+    if (!m || !tz) return '';
+    try {
+      const utc = Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4] + 3, +m[5]);   // Buenos Aires es UTC−3
+      return new Intl.DateTimeFormat('es-AR', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(utc));
+    } catch { return ''; }
+  };
   const candado = {
     bloqueados: bloqueos.total,
     bloqueadosPorPais: Object.entries(bloqueos.porPais).sort((a: any, b: any) => b[1] - a[1]).map(([pais, n]) => ({ pais, n })),
     ultimoBloqueo: bloqueos.ultimo,
     entraronDeAfuera: deAfuera.length,
-    deAfueraDetalle: deAfuera.slice(0, 15).map((v) => ({ pais: v.pais, ciudad: v.ciudad, visitas: v.visitas, ultima: v.ultima, etiqueta: v.etiqueta, nombre: v.nombre })),
+    deAfueraDetalle: deAfuera.slice(0, 15).map((v) => ({
+      pais: v.pais, ciudad: v.ciudad, visitas: v.visitas, ultima: v.ultima, etiqueta: v.etiqueta, nombre: v.nombre,
+      vid: v.vid, aparato: v.perfil.aparato || v.dispositivo || '', origen: v.origen,
+      horaAlla: horaAlla(v.ultima, v.pais, v.perfil.tz), pareceRobot: v.perfil.pareceRobot,
+      dondeEsta: v.perfil.dondeEsta, conPase: v.perfil.conPase, segundos: v.perfil.segundos,
+    })),
     discrepancias: discrepancias.slice(-15).reverse(),
   };
 
