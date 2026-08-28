@@ -483,6 +483,9 @@ function movsSociosData(movs: any[], envios: any[], ventas: any[]) {
 // sabe filtrar por rango: el recorte por período se hace acá. Para no arrastrar meses de
 // historial cada vez que se miran "los últimos 7 días", leemos de lo MÁS NUEVO hacia atrás
 // y cortamos apenas la página se va antes de la ventana.
+// ¿El texto es un JSON? (123 es el código de la llave de apertura: escribirla como carácter
+// suelto dentro de un string descoloca a cualquier herramienta que cuente llaves).
+const esJSON = (x: string) => (x || '').charCodeAt(0) === 123;
 function tsDeFecha(f: string): number | null {
   const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
   return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)) : null;
@@ -569,15 +572,21 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       const b = busq[q] = busq[q] || { q: detalle.trim().slice(0, 40), veces: 0, vacias: 0, vids: {} };
       b.veces++; if ((parseInt(totalEv) || 0) === 0) b.vacias++; if (vid) b.vids[vid] = 1;
     }
-    if (embudoVids[evento] && vid) embudoVids[evento][vid] = 1;
+    if (embudoVids[evento] && vid) embudoVids[evento][vid] = 1;   // 'salida' no está en el embudo: no infla nada
     if (vid) {
-      if (!vids[vid]) vids[vid] = { visitas: 0, fechas: {}, nombre: '', telefono: '', ciudad: '', origen, pagina, primera: t!.ts, ultima: t!.ts, dispositivo: '', pais: '', productos: {}, eventos: {} };
+      if (!vids[vid]) vids[vid] = { visitas: 0, fechas: {}, nombre: '', telefono: '', ciudad: '', origen, pagina, primera: t!.ts, ultima: t!.ts, dispositivo: '', pais: '', productos: {}, eventos: {}, ficha: null, seg: 0, inter: 0, vistos: 0 };
       const o = vids[vid];
       if (evento === 'visita') o.visitas++;
       o.eventos[evento] = (o.eventos[evento] || 0) + 1;
       if (disp && !o.dispositivo) o.dispositivo = disp;
       if (pais && !o.pais) o.pais = pais;
       if (detalle && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) o.productos[detalle] = (o.productos[detalle] || 0) + 1;
+      // 🔬 Del anónimo igual se sabe muchísimo: la visita trae su ficha técnica (zona horaria,
+      // idioma, aparato, pantalla) y la salida cuánto se quedó y cuánto tocó.
+      if (evento === 'visita' && esJSON(detalle)) { try { o.ficha = { ...(o.ficha || {}), ...JSON.parse(detalle) }; } catch { /**/ } }
+      if (evento === 'salida' && esJSON(detalle)) {
+        try { const sx = JSON.parse(detalle); o.seg += parseInt(sx.seg) || 0; o.inter += parseInt(sx.int) || 0; o.vistos = Math.max(o.vistos, parseInt(sx.prod) || 0); } catch { /**/ }
+      }
       o.fechas[t!.dk] = 1;
       if (nombre && !o.nombre) o.nombre = nombre;
       if (tel && !o.telefono) o.telefono = tel;
@@ -714,9 +723,59 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     .sort((a, b) => b.score - a.score).slice(0, 60);
 
   // ── 👥 FICHA DE CADA VISITANTE — la lista completa, con lo que hizo cada uno ─────
+  // ── 🔬 QUÉ SE PUEDE DECIR DE UN ANÓNIMO ────────────────────────────────────────
+  // La zona horaria es el dato más honesto de todos: un argentino con VPN sigue teniendo la
+  // hora de Buenos Aires. Sirve para saber dónde está DE VERDAD alguien, y —cruzada con el
+  // resto— para separar a una persona de un robot de escaneo (que no toca nada y se va en
+  // dos segundos). Los robots se MARCAN, nunca se borran: los números siguen siendo los reales.
+  const zonaAPais = (tz: string) => {
+    const z = (tz || '').toLowerCase();
+    if (z.includes('argentina') || z.includes('buenos_aires')) return 'Argentina';
+    if (z.includes('jerusalem') || z.includes('tel_aviv')) return 'Israel';
+    if (z.includes('montevideo')) return 'Uruguay';
+    if (z.includes('sao_paulo') || z.includes('brazil')) return 'Brasil';
+    if (z.includes('santiago')) return 'Chile';
+    if (z.includes('asuncion')) return 'Paraguay';
+    if (z.startsWith('america/')) return 'América (' + (tz.split('/').pop() || '').replace(/_/g, ' ') + ')';
+    if (z.startsWith('europe/')) return 'Europa (' + (tz.split('/').pop() || '').replace(/_/g, ' ') + ')';
+    return tz || '';
+  };
+  const idiomaLegible = (i: string) => {
+    const x = (i || '').toLowerCase();
+    if (x.startsWith('es')) return 'español';
+    if (x.startsWith('he') || x.startsWith('iw')) return 'hebreo';
+    if (x.startsWith('en')) return 'inglés';
+    if (x.startsWith('pt')) return 'portugués';
+    return i || '';
+  };
+  const leerPerfil = (o: any) => {
+    const f = o.ficha || {};
+    const dondeEsta = zonaAPais(f.tz || '');
+    const señales: string[] = [];
+    // ⚖️ NO SE PUEDE ACUSAR SIN PRUEBAS: a un visitante solo se lo juzga si dejó ficha técnica
+    // o tiempo de permanencia. Los anteriores a esta mejora no tienen nada de eso — marcarlos
+    // como robots por no traer un dato que en su momento no existía sería una calumnia.
+    const juzgable = !!o.ficha || o.seg > 0;
+    if (juzgable) {
+      if (o.seg > 0 && o.seg < 3) señales.push('se fue en ' + o.seg + ' s');
+      if (o.inter === 0 && o.visitas <= 1) señales.push('no tocó nada');
+      if (!f.tz) señales.push('el navegador no dice ni en qué huso horario está');
+      if (f.px && /^(0x0|1x1)$/.test(f.px)) señales.push('pantalla de 0 píxeles');
+    }
+    const bot = juzgable && señales.length >= 2 && o.inter === 0;
+    return {
+      dondeEsta, tz: f.tz || '', idioma: idiomaLegible(f.idi || ''), aparato: f.ap || '',
+      pantalla: f.px || '', tactil: f.toq === 1, appInstalada: f.pwa === 1, aceptaAvisos: f.push === 1,
+      desdeApp: f.wa === 1, horaLocal: typeof f.hl === 'number' && f.hl >= 0 ? f.hl : null,
+      segundos: o.seg, interacciones: o.inter, productosVistos: o.vistos,
+      pareceRobot: bot, señales,
+    };
+  };
+
   const visitantesTodos = listaVids.map((v) => {
     const o = vids[v], q = quienEs(v), c = carritosPorVid[v];
     return {
+      perfil: leerPerfil(o),
       vid: v, ...q,
       visitas: o.visitas, dias: Object.keys(o.fechas).length,
       primeraTs: o.primera, ultimaTs: o.ultima, primera: fmtU(o.primera), ultima: fmtU(o.ultima),
@@ -929,6 +988,29 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     pctCompra: ret.length ? Math.round(retomaronYCompraron / ret.length * 100) : 0,
   } : null;
 
+  // 🤖 Cuántos de los que figuran como visitantes no parecen personas. Se informa, no se
+  // borra: los números de arriba siguen siendo los reales, con esto se sabe cuánto descontar.
+  const robots = visitantesTodos.filter((v) => v.perfil.pareceRobot);
+  const conFicha = visitantesTodos.filter((v) => v.perfil.tz);
+  const promSeg = (() => { const c = visitantesTodos.filter((v) => v.perfil.segundos > 0); return c.length ? Math.round(c.reduce((t, v) => t + v.perfil.segundos, 0) / c.length) : 0; })();
+  const dondeEstan: any = {};
+  visitantesTodos.forEach((v) => { if (v.perfil.dondeEsta) dondeEstan[v.perfil.dondeEsta] = (dondeEstan[v.perfil.dondeEsta] || 0) + 1; });
+  const idiomas: any = {};
+  visitantesTodos.forEach((v) => { if (v.perfil.idioma) idiomas[v.perfil.idioma] = (idiomas[v.perfil.idioma] || 0) + 1; });
+  const aparatos: any = {};
+  visitantesTodos.forEach((v) => { if (v.perfil.aparato) aparatos[v.perfil.aparato] = (aparatos[v.perfil.aparato] || 0) + 1; });
+  const radiografia = {
+    conFicha: conFicha.length, sinFicha: visitantesTodos.length - conFicha.length,
+    robots: robots.length,
+    segundosPromedio: promSeg,
+    aceptanAvisos: visitantesTodos.filter((v) => v.perfil.aceptaAvisos).length,
+    appInstalada: visitantesTodos.filter((v) => v.perfil.appInstalada).length,
+    dondeEstan: Object.entries(dondeEstan).sort((a: any, b: any) => b[1] - a[1]).slice(0, 8).map(([que, n]) => ({ que, n })),
+    idiomas: Object.entries(idiomas).sort((a: any, b: any) => b[1] - a[1]).map(([que, n]) => ({ que, n })),
+    aparatos: Object.entries(aparatos).sort((a: any, b: any) => b[1] - a[1]).map(([que, n]) => ({ que, n })),
+    robotsDetalle: robots.slice(0, 10).map((v) => ({ pais: v.pais, ciudad: v.ciudad, ultima: v.ultima, señales: v.perfil.señales, aparato: v.perfil.aparato })),
+  };
+
   // ── 🌎 EL CANDADO GEOGRÁFICO, a la vista ───────────────────────────────────────
   // Dos preguntas que antes no se podían contestar: ¿a cuánta gente estoy rechazando?
   // y ¿cómo entró alguien de afuera si el candado está prendido?
@@ -960,7 +1042,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     // 🆕 la vuelta de rosca
     acciones, accionable, visitantes, visitantesTotal: visitantesTodos.length,
     diasDetalle, deseoVsVenta, busquedas, candado,
-    tiempoADecidir, juntos, comparativo, mironesTop, rescate,
+    tiempoADecidir, juntos, comparativo, mironesTop, rescate, radiografia,
   };
 }
 
@@ -3477,8 +3559,20 @@ Deno.serve(async (req) => {
         const cf = await sbGet('clientes', 'select=telefono,tipo&nombre=eq.' + encodeURIComponent(nombreF));
         if (cf.length) telF = String(cf[0].telefono || '');
       }
+      // Del anónimo: lo que su propio navegador cuenta de él (zona horaria, idioma, aparato).
+      let fichaTec: any = null, segF = 0, intF = 0;
+      evs.forEach((r: any) => {
+        const det = (r.detalle || '').toString();
+        if (!esJSON(det)) return;
+        try {
+          const j = JSON.parse(det);
+          if ((r.evento || '') === 'visita') fichaTec = { ...(fichaTec || {}), ...j };
+          if ((r.evento || '') === 'salida') { segF += parseInt(j.seg) || 0; intF += parseInt(j.int) || 0; }
+        } catch { /**/ }
+      });
       return json({
         vid: vidF, nombre: nombreF, telefono: telF, ciudad: ciudadF, pais: paisF, dispositivo: dispF, origen: ogF,
+        fichaTecnica: fichaTec, segundos: segF, interacciones: intF,
         eventos: cuenta, dias: Object.keys(dias).length, primera: linea.length ? linea[0].fecha : '', ultima: linea.length ? linea[linea.length - 1].fecha : '',
         productos: Object.entries(prods).sort((a: any, b: any) => b[1] - a[1]).map(([nombre, n]) => ({ nombre, n })),
         compras, gastadoARS: compras.reduce((t: number, c: any) => t + (parseFloat(c.totalARS) || 0), 0),

@@ -4309,6 +4309,7 @@ function agregarAlCarrito(id) {
   actualizarBadge();
   renderCatalogo();
   showToast(`${p.nombre} agregado ✓`);
+  _contarInteraccion(p.nombre);
   track('carrito', { producto: p.nombre, ..._cartParaTrack() });
 }
 
@@ -4411,6 +4412,7 @@ function descartarCarritoGuardado() {
 }
 
 function abrirCarrito() {
+  _contarInteraccion('');
   document.getElementById('carrito-overlay').classList.add('abierto');
   renderCarrito();
 }
@@ -11849,6 +11851,7 @@ function setKosherSup(v) { _kosherSup = v || ''; renderCatalogo(); }
 function setKosherTipo(v) { _kosherTipo = v || ''; renderFiltros(); renderCatalogo(); }
 
 function setCategoria(cat) {
+  _contarInteraccion('');
   _categoriaActiva = cat;
   renderFiltros();
   renderCatalogo();
@@ -12043,6 +12046,7 @@ function filtrar() {
   _tBusqueda = setTimeout(() => {
     if (q === _ultBusqueda) return;              // no repetir la misma búsqueda
     _ultBusqueda = q;
+    _contarInteraccion('');
     track('busqueda', { producto: q.slice(0, 40), total: String(_ultResultados) });
   }, 1200);
 }
@@ -14310,11 +14314,15 @@ function _anaFilasGente(d) {
         <div style="min-width:0;flex:1">
           <div style="font-weight:700;color:var(--azul);font-size:0.86rem">${_anaQuien(v)}
             <span style="font-size:0.6rem;background:var(--gris-claro);color:${colorEtq[v.etiqueta] || 'var(--texto-suave)'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${v.etiqueta}</span>
+            ${v.perfil && v.perfil.pareceRobot ? '<span style="font-size:0.6rem;background:#fdeaea;color:#c0392b;border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle" title="No parece una persona">🤖 robot</span>' : ''}
             ${_anaChipCliente(v)}
           </div>
           <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:2px">
             ${v.telefono ? '📞 ' + esc(v.telefono) + ' · ' : ''}${v.visitas} visita${v.visitas !== 1 ? 's' : ''} en ${v.dias} día${v.dias !== 1 ? 's' : ''}${v.ciudad ? ' · 📍 ' + esc(v.ciudad) : ''}${v.dispositivo ? ' · ' + (v.dispositivo === 'celular' ? '📱' : '💻') : ''} · ${esc(_anaIconoOrigen[v.origen] || v.origen)}
           </div>
+          ${v.perfil && (v.perfil.tz || v.perfil.segundos) ? `<div style="font-size:0.66rem;color:#7a6a58;margin-top:2px">
+            ${v.perfil.aparato ? esc(v.perfil.aparato) : ''}${v.perfil.dondeEsta ? ' · 🕐 ' + esc(v.perfil.dondeEsta) : ''}${v.perfil.idioma ? ' · ' + esc(v.perfil.idioma) : ''}${v.perfil.segundos ? ' · se quedó ' + v.perfil.segundos + 's' : ''}${v.perfil.aceptaAvisos ? ' · 🔔 acepta avisos' : ''}${v.perfil.appInstalada ? ' · 📲 app instalada' : ''}
+          </div>` : ''}
           ${v.productos && v.productos.length ? `<div style="font-size:0.68rem;color:#666;margin-top:2px">👀 ${esc(v.productos.slice(0, 4).join(', '))}${v.productos.length > 4 ? '…' : ''}</div>` : ''}
         </div>
         <div style="text-align:right;flex-shrink:0">
@@ -14386,12 +14394,38 @@ function _anaSecComparativo(d) {
     </div>${extra}`);
 }
 
+function _anaSecRadiografia(d) {
+  const r = d.radiografia;
+  if (!r) return '';
+  const lista = (arr, icono) => arr.length
+    ? arr.map(x => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:3px 0"><span>${icono} ${esc(x.que)}</span><b>${x.n}</b></div>`).join('')
+    : '<div style="font-size:0.72rem;color:var(--texto-suave)">Sin datos todavía</div>';
+  const robots = (r.robotsDetalle || []).map(x => `<div style="font-size:0.72rem;padding:3px 0;border-bottom:1px solid var(--gris-medio)">🤖 ${esc(x.pais || '?')}${x.ciudad ? ' · ' + esc(x.ciudad) : ''} · ${esc(x.aparato || '?')} · <span style="color:var(--texto-suave)">${esc((x.señales || []).join(', '))}</span> · ${esc(x.ultima)}</div>`).join('');
+  return _anaCard(`<div class="admin-titulo">🔬 Radiografía de los que no dejan nombre</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Del anónimo igual se sabe muchísimo, sin tocar un dato personal: su propio navegador cuenta en qué huso horario está, en qué idioma lee y con qué aparato entró.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">
+      ${_anaKpi(r.segundosPromedio + 's', 'Se quedan, promedio')}
+      ${_anaKpi(r.aceptanAvisos, 'Aceptan notificaciones', 'var(--verde)')}
+      ${_anaKpi(r.appInstalada, 'Tienen la app instalada', 'var(--verde)')}
+      ${_anaKpi(r.robots, 'No parecen personas', '#c0392b')}
+    </div>
+    <div style="display:flex;gap:0.7rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px"><div style="font-weight:700;font-size:0.78rem;margin-bottom:2px">📍 Dónde están de verdad</div>${lista(r.dondeEstan, '🕐')}
+        <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:4px">Por la hora de su aparato: es el dato más honesto, la VPN no lo cambia.</div></div>
+      <div style="flex:1;min-width:130px"><div style="font-weight:700;font-size:0.78rem;margin-bottom:2px">🗣️ En qué idioma leen</div>${lista(r.idiomas, '')}</div>
+      <div style="flex:1;min-width:130px"><div style="font-weight:700;font-size:0.78rem;margin-bottom:2px">📱 Con qué aparato</div>${lista(r.aparatos, '')}</div>
+    </div>
+    ${robots ? `<div style="font-weight:700;font-size:0.78rem;margin:10px 0 2px">🤖 Visitas que no parecen personas</div>${robots}
+      <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:5px">Son programas que recorren webs solos (buscadores, escáneres, copiadores de precios). <b>No se borran</b>: los números de arriba siguen siendo los reales, pero ahora sabés cuánto descontar.</div>` : ''}
+    ${r.sinFicha ? `<div style="font-size:0.66rem;color:var(--texto-suave);margin-top:8px">ℹ️ ${r.sinFicha} visitantes son anteriores a esta mejora y no tienen ficha técnica. Los nuevos la traen desde ahora.</div>` : ''}`);
+}
+
 function _anaSecGente(d) {
   const vs = d.visitantes || [];
   const filtros = [['todos', 'Todos', vs.length], ['tel', '📞 Con teléfono', vs.filter(v => v.telefono).length],
     ['clientes', '⭐ Ya compraron', vs.filter(v => v.esCliente).length], ['casi', '🛒 Armaron carrito', vs.filter(v => v.armoCarrito || v.checkout).length],
     ['vuelven', '🔄 Vuelven', vs.filter(v => v.dias >= 2).length], ['anon', '👤 Sin nombre', vs.filter(v => !v.nombre).length]];
-  return _anaSecMirones(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
+  return _anaSecMirones(d) + _anaSecRadiografia(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada persona que pisó la tienda, con lo que miró y cómo contactarla. Tocá 👤 para ver su historia completa.</div>
     <input type="text" oninput="buscarGente(this.value)" placeholder="Buscar por nombre, teléfono, ciudad o producto…" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.82rem;margin-bottom:7px">
     <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;margin-bottom:8px">
@@ -14672,6 +14706,13 @@ async function abrirFichaVisitante(vid) {
       ${_anaKpi(_anaPlata(f.gastadoARS || 0), 'Gastado', 'var(--verde)')}
     </div>
     <div style="font-size:0.7rem;color:var(--texto-suave);margin-bottom:9px">Primera vez: ${esc(f.primera || '?')} · Última: ${esc(f.ultima || '?')}</div>
+    ${f.fichaTecnica ? `<div style="background:var(--gris-claro);border-radius:9px;padding:0.5rem 0.7rem;margin-bottom:9px;font-size:0.73rem;line-height:1.6">
+      <b>🔬 Ficha técnica</b> (lo que cuenta su propio navegador)<br>
+      ${f.fichaTecnica.ap ? '📱 <b>' + esc(f.fichaTecnica.ap) + '</b>' : ''}${f.fichaTecnica.px ? ' · pantalla ' + esc(f.fichaTecnica.px) : ''}${f.fichaTecnica.toq ? ' · táctil' : ''}<br>
+      ${f.fichaTecnica.tz ? '🕐 huso horario: <b>' + esc(f.fichaTecnica.tz) + '</b>' : ''}${typeof f.fichaTecnica.hl === 'number' && f.fichaTecnica.hl >= 0 ? ' (para él eran las ' + f.fichaTecnica.hl + ' h)' : ''}<br>
+      ${f.fichaTecnica.idi ? '🗣️ lee en <b>' + esc(f.fichaTecnica.idi) + '</b>' : ''}${f.fichaTecnica.wa ? ' · entró desde WhatsApp/Instagram' : ''}${f.fichaTecnica.pwa ? ' · 📲 tiene la tienda instalada' : ''}${f.fichaTecnica.push ? ' · 🔔 acepta notificaciones' : ''}<br>
+      ${f.segundos ? '⏱️ se quedó <b>' + f.segundos + ' segundos</b> en total · ' + (f.interacciones || 0) + ' cosas tocó' : ''}
+    </div>` : ''}
     ${f.telefono ? `<div style="margin-bottom:9px">${_anaBtnWA(f.telefono, msg, '💬 Escribirle por WhatsApp')}</div>` : ''}
     ${compras ? `<div style="font-weight:700;font-size:0.82rem;margin:8px 0 5px">🛍️ Le compró ${(f.compras || []).length} vez${(f.compras || []).length !== 1 ? 'ces' : ''}</div>${compras}` : ''}
     ${(f.productos || []).length ? `<div style="font-weight:700;font-size:0.82rem;margin:9px 0 4px">👀 Lo que más miró</div>
@@ -16459,6 +16500,61 @@ function _origen() {
 function _dispositivo() {
   return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'celular' : 'compu';
 }
+
+// ═══ 🔬 FICHA TÉCNICA DEL VISITANTE (v4.73) ═════════════════════════════════
+// Del que no deja nombre igual se puede saber muchísimo, sin tocar un solo dato
+// personal. Lo más valioso es la ZONA HORARIA: dice dónde está DE VERDAD la persona
+// (un argentino con VPN sigue teniendo la hora de Buenos Aires), así que resuelve
+// lo que la IP no puede. Y todo junto permite separar a una persona de un robot.
+function _aparato() {
+  const u = navigator.userAgent || '';
+  if (/iPhone/i.test(u)) return 'iPhone';
+  if (/iPad/i.test(u)) return 'iPad';
+  if (/Android/i.test(u)) return /Mobi/i.test(u) ? 'Android' : 'tablet Android';
+  if (/Macintosh|Mac OS/i.test(u)) return 'Mac';
+  if (/Windows/i.test(u)) return 'Windows';
+  if (/Linux/i.test(u)) return 'Linux';
+  return 'otro';
+}
+function _fichaTecnica() {
+  const f = {};
+  try { f.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { f.tz = ''; }
+  try { f.idi = (navigator.language || '').slice(0, 5); } catch { f.idi = ''; }
+  f.ap = _aparato();
+  try { f.px = screen.width + 'x' + screen.height; } catch { f.px = ''; }
+  try { f.toq = (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) ? 1 : 0; } catch { f.toq = 0; }
+  try { f.pwa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone ? 1 : 0; } catch { f.pwa = 0; }
+  try { f.push = (window.Notification && Notification.permission === 'granted') ? 1 : 0; } catch { f.push = 0; }
+  try { f.hl = new Date().getHours(); } catch { f.hl = -1; }
+  try { f.wa = /WhatsApp|FBAN|FBAV|Instagram/i.test(navigator.userAgent) ? 1 : 0; } catch { f.wa = 0; }   // abrió desde la app
+  return f;
+}
+
+// ⏱️ CUÁNTO SE QUEDÓ Y CUÁNTO TOCÓ. Distingue al que miró 4 segundos del que estuvo
+// 3 minutos revolviendo el catálogo — y a la persona del robot (un robot no toca nada).
+let _entroA = Date.now(), _interacciones = 0, _vistos = {}, _salidaMandada = false;
+function _contarInteraccion(prod) {
+  _interacciones++;
+  if (prod) _vistos[String(prod).substring(0, 40)] = 1;
+}
+function _mandarSalida() {
+  if (_salidaMandada) return;
+  const seg = Math.round((Date.now() - _entroA) / 1000);
+  if (seg < 1) return;
+  _salidaMandada = true;
+  try {
+    if (localStorage.getItem('shuk_no_track')) return;
+    const params = new URLSearchParams({
+      accion: 'track', vid: _vid(), pagina: (modo === 'mayorista' ? 'mayorista' : 'tienda'),
+      evento: 'salida', producto: JSON.stringify({ seg, int: _interacciones, prod: Object.keys(_vistos).length }),
+    });
+    // sendBeacon es el único que sobrevive al cierre de la pestaña.
+    if (navigator.sendBeacon) navigator.sendBeacon(APPS_SCRIPT_URL + '?' + params.toString());
+    else fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors', keepalive: true }).catch(() => {});
+  } catch { /**/ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _mandarSalida(); });
+window.addEventListener('pagehide', _mandarSalida);
 // Ciudad aproximada vía servicio gratuito, UNA vez por visitante (cacheada). Best-effort.
 let _geoCache = null;
 async function _geo() {
@@ -16530,7 +16626,7 @@ async function _controlGeo(g) {
   } catch { /* nunca molestar al cliente por esto */ }
 }
 function registrarVisita(pagina) {
-  track('visita');
+  track('visita', { producto: JSON.stringify(_fichaTecnica()) });
   _geo().then(_controlGeo);
   if (!localStorage.getItem('shuk_cookies_ok')) {
     const el = document.getElementById('cookie-aviso');

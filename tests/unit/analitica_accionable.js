@@ -21,9 +21,10 @@ function fnReal(nombre) {
     .replace(/\((\w+)\s*:\s*any,\s*(\w+)\s*:\s*any\)/g, '($1, $2)')
     .replace(/\s+as\s+(any|number|string|boolean)\b/g, '')
     .replace(/(\w+)!\./g, '$1.')
-    .replace(/(\w+)!\[/g, '$1[');
+    .replace(/(\w+)!\[/g, '$1[')
+    .replace(/\)!\./g, ').');
 }
-const codigo = fnReal('tsDeFecha') + '\n' + fnReal('analitica') + '\nreturn { analitica };';
+const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('analitica') + '\nreturn { analitica };';
 const { analitica } = new Function(codigo)();
 
 // ── El caso: dos días de tráfico, un cliente que vuelve y un desconocido ───────
@@ -61,6 +62,13 @@ const trafico = [
   ev('v_nadie', 'geo', 1, 9, { detalle: 'navegador:Israel · candado:AR · candado PRENDIDO' }),
   // 🛒 El rescate del carrito: a uno se le ofreció y lo retomó (y ese terminó comprando),
   // a otro se le ofreció y empezó de cero.
+  // 🔬 Ficha técnica: el navegador cuenta dónde está de verdad, en qué idioma lee y con qué entró.
+  ev('v_ficha', 'visita', 1, 13, { detalle: JSON.stringify({ tz: 'America/Argentina/Buenos_Aires', idi: 'es-AR', ap: 'iPhone', px: '390x844', toq: 1, pwa: 1, push: 1, hl: 13, wa: 1 }) }),
+  ev('v_ficha', 'carrito', 1, 13, { detalle: 'Bon O Bon' }),
+  ev('v_ficha', 'salida', 1, 13, { detalle: JSON.stringify({ seg: 180, int: 6, prod: 4 }) }),
+  // 🤖 Un robot de escaneo: entra una vez, no toca nada, se va en 1 segundo y ni huso horario tiene.
+  ev('v_robot', 'visita', 1, 3, { detalle: JSON.stringify({ tz: '', idi: '', ap: 'Linux', px: '1280x720', toq: 0 }) }),
+  ev('v_robot', 'salida', 1, 3, { detalle: JSON.stringify({ seg: 1, int: 0, prod: 0 }) }),
   ev('v_compra', 'rescate', 1, 14, { detalle: 'ofrecido · 2 items' }),
   ev('v_compra', 'rescate', 1, 14, { detalle: 'retomado · 2 items' }),
   ev('v_nadie', 'rescate', 1, 9, { detalle: 'ofrecido · 1 items' }),
@@ -106,7 +114,7 @@ function run() {
   eq('el que compró queda etiquetado como tal', d.visitantes.find(v => v.vid === 'v_compra').etiqueta, 'compró');
 
   // ── CARRITOS: prioridad y antigüedad ────────────────────────────────────────
-  eq('los carritos sin cerrar son 4 (el que pidió no cuenta)', d.abandonados.length, 4);
+  eq('los carritos sin cerrar son 5 (el que pidió no cuenta)', d.abandonados.length, 5);
   eq('primero el contactable que ya te compró', d.abandonados[0].nombre, 'Débora Levy');
   ok('sabe hace cuántas horas quedó colgado', d.abandonados[0].horas >= 20 && d.abandonados[0].horas <= 40);
   ok('guarda el vid para poder abrir su ficha', !!d.abandonados[0].vid);
@@ -125,18 +133,43 @@ function run() {
   ok('la oportunidad total separa las dos monedas', d.accionable.oportunidadUSD === 85.5 && d.accionable.oportunidadARS > 0);
   eq('guarda qué tipo de cambio usó', d.accionable.tcRef, 1400);
 
+  // ── 🔬 LO QUE SE SABE DE UN ANÓNIMO ─────────────────────────────────────────
+  const vf = d.visitantes.find(v => v.vid === 'v_ficha');
+  eq('dice dónde está DE VERDAD (por su reloj, no por la IP)', vf.perfil.dondeEsta, 'Argentina');
+  eq('en qué idioma lee', vf.perfil.idioma, 'español');
+  eq('con qué aparato entró', vf.perfil.aparato, 'iPhone');
+  eq('y de qué tamaño es la pantalla', vf.perfil.pantalla, '390x844');
+  ok('sabe que tiene la tienda instalada', vf.perfil.appInstalada === true);
+  ok('sabe que acepta notificaciones (¡se le puede avisar sin teléfono!)', vf.perfil.aceptaAvisos === true);
+  ok('sabe que entró desde WhatsApp/Instagram', vf.perfil.desdeApp === true);
+  eq('cuánto se quedó', vf.perfil.segundos, 180);
+  eq('y cuántas cosas tocó', vf.perfil.interacciones, 6);
+  ok('a una persona real NO la marca como robot', vf.perfil.pareceRobot === false);
+
+  const vr = d.visitantes.find(v => v.vid === 'v_robot');
+  ok('al robot de escaneo SÍ lo marca', vr.perfil.pareceRobot === true);
+  ok('y dice por qué', vr.perfil.señales.length >= 2);
+
+  // ⚖️ Lo más importante: no acusar sin pruebas
+  const viejo = d.visitantes.find(v => v.vid === 'v_nadie');
+  ok('al visitante VIEJO (sin ficha técnica) NO lo acusa de robot', viejo.perfil.pareceRobot === false);
+  eq('la radiografía cuenta un solo robot', d.radiografia.robots, 1);
+  ok('y avisa cuántos son anteriores a la mejora', d.radiografia.sinFicha >= 1);
+  ok('agrupa dónde están de verdad', d.radiografia.dondeEstan.some(x => x.que === 'Argentina'));
+  ok('cuenta a los que aceptan notificaciones', d.radiografia.aceptanAvisos === 1);
+
   // ── 🛒 ¿SIRVE EL RECORDATORIO DEL CARRITO? ──────────────────────────────────
   eq('cuenta a cuántos se les ofreció', d.rescate.ofrecidos, 2);
   eq('cuántos lo retomaron', d.rescate.retomados, 1);
   eq('cuántos empezaron de cero', d.rescate.descartados, 1);
   eq('y —lo único que importa— cuántos terminaron comprando', d.rescate.compraron, 1);
   eq('el porcentaje de retoma', d.rescate.pctRetoma, 50);
-  ok('el rescate NO cuenta como visita ni como carrito', d.resumen.visitas === 9 && d.abandonados.length === 4);
+  ok('el rescate NO cuenta como visita ni como carrito', d.resumen.visitas === 11 && d.abandonados.length === 5);
 
   // ── 🌎 EL CANDADO ───────────────────────────────────────────────────────────
   eq('cuenta a los que el candado rechazó', d.candado.bloqueados, 2);
   eq('y de qué países eran', d.candado.bloqueadosPorPais.length, 2);
-  ok('el rechazado NO cuenta como visita', d.resumen.visitas === 9);
+  ok('el rechazado NO cuenta como visita', d.resumen.visitas === 11);
   ok('el rechazado NO aparece como visitante', !d.visitantes.some(v => v.vid.startsWith('geo_')));
   ok('guarda POR QUÉ se coló el de afuera', (d.candado.discrepancias || []).some(x => /candado:AR/.test(x.detalle)));
   ok('el evento de geo no ensucia "lo que miró"', !(d.visitantes.find(v => v.vid === 'v_nadie').productos || []).some(p => /navegador:/.test(p)));
@@ -185,11 +218,11 @@ function run() {
 
   // ── LOS NÚMEROS DE LA CABECERA ──────────────────────────────────────────────
   eq('cuenta los identificados', d.accionable.identificados, 3);   // Débora, Sarah, Iosi
-  eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 3);
+  eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 5);
   ok('suma los pesos que quedaron en los carritos', d.accionable.oportunidadARS === 34000 + 24000);
 
   // ── Que no se haya roto nada de lo de antes ─────────────────────────────────
-  ok('sigue devolviendo el resumen de siempre', d.resumen.visitas === 9 && d.resumen.unicos === 6);
+  ok('sigue devolviendo el resumen de siempre', d.resumen.visitas === 11 && d.resumen.unicos === 8);
   ok('sigue devolviendo el embudo', d.embudo.pedido === 1 && d.embudo.checkout === 1);
   ok('sigue devolviendo leads y orígenes', d.leads.length >= 1 && !!d.porOrigen.whatsapp);
   return c;

@@ -29,8 +29,8 @@ const DATA = {
   ],
   accionable: { identificados: 40, conTelefono: 22, anonimos: 257, oportunidadARS: 40000, oportunidadUSD: 85.5, tcRef: 1400, carritosContactables: 1, clientesQueVolvieron: 3 },
   visitantes: [
-    { vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, gastadoUSD: 0, ultimaCompra: '10/08/2026', tipoCliente: 'Minorista', comoSeSupo: 'ya compró desde este aparato', visitas: 6, dias: 4, primeraTs: 0, ultimaTs: Date.now(), primera: '01/08/2026 10:00', ultima: '26/08/2026 21:15', ciudad: 'CABA', pais: 'Argentina', dispositivo: 'celular', origen: 'whatsapp', pagina: 'tienda', productos: ['Chocolate Elite', 'Bon O Bon'], armoCarrito: true, checkout: true, pidio: false, valorCarrito: 34000, etiqueta: 'casi compra' },
-    { vid: 'v_xyz', nombre: '', telefono: '', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: '', visitas: 2, dias: 1, primeraTs: 0, ultimaTs: Date.now() - 1000, primera: '24/08/2026', ultima: '24/08/2026 10:00', ciudad: 'Rosario', pais: 'Argentina', dispositivo: 'compu', origen: 'directo', pagina: 'tienda', productos: ['Pesek Zman'], armoCarrito: true, checkout: false, pidio: false, valorCarrito: 6000, etiqueta: 'armó carrito' },
+    { vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, gastadoUSD: 0, ultimaCompra: '10/08/2026', tipoCliente: 'Minorista', comoSeSupo: 'ya compró desde este aparato', visitas: 6, dias: 4, primeraTs: 0, ultimaTs: Date.now(), primera: '01/08/2026 10:00', ultima: '26/08/2026 21:15', ciudad: 'CABA', pais: 'Argentina', dispositivo: 'celular', origen: 'whatsapp', pagina: 'tienda', productos: ['Chocolate Elite', 'Bon O Bon'], armoCarrito: true, checkout: true, pidio: false, valorCarrito: 34000, etiqueta: 'casi compra', perfil: { dondeEsta: 'Argentina', tz: 'America/Argentina/Buenos_Aires', idioma: 'español', aparato: 'iPhone', pantalla: '390x844', tactil: true, appInstalada: true, aceptaAvisos: true, desdeApp: false, horaLocal: 21, segundos: 180, interacciones: 6, productosVistos: 4, pareceRobot: false, señales: [] } },
+    { vid: 'v_xyz', nombre: '', telefono: '', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: '', visitas: 2, dias: 1, primeraTs: 0, ultimaTs: Date.now() - 1000, primera: '24/08/2026', ultima: '24/08/2026 10:00', ciudad: 'Rosario', pais: 'Argentina', dispositivo: 'compu', origen: 'directo', pagina: 'tienda', productos: ['Pesek Zman'], armoCarrito: true, checkout: false, pidio: false, valorCarrito: 6000, etiqueta: 'armó carrito', perfil: { dondeEsta: 'Israel', tz: 'Asia/Jerusalem', idioma: 'hebreo', aparato: 'Linux', pantalla: '1280x720', tactil: false, appInstalada: false, aceptaAvisos: false, desdeApp: false, horaLocal: 3, segundos: 1, interacciones: 0, productosVistos: 0, pareceRobot: true, señales: ['se fue en 1 s', 'no tocó nada'] } },
   ],
   visitantesTotal: 297,
   diasDetalle: [
@@ -57,6 +57,13 @@ const DATA = {
     mirones: { n: 250, visitasProm: 1.2, productosProm: 0.3, canal: { que: 'directo', n: 200, pct: 80 }, aparato: { que: 'celular', n: 180, pct: 72 } },
     casiCompran: { n: 39, visitasProm: 2.4, productosProm: 2.8, canal: { que: 'whatsapp', n: 20, pct: 51 }, aparato: { que: 'celular', n: 30, pct: 77 } },
   },
+  radiografia: {
+    conFicha: 120, sinFicha: 30, robots: 3, segundosPromedio: 74, aceptanAvisos: 9, appInstalada: 4,
+    dondeEstan: [{ que: 'Argentina', n: 110 }, { que: 'Israel', n: 3 }],
+    idiomas: [{ que: 'español', n: 115 }, { que: 'hebreo', n: 3 }],
+    aparatos: [{ que: 'iPhone', n: 70 }, { que: 'Android', n: 40 }, { que: 'Windows', n: 10 }],
+    robotsDetalle: [{ pais: 'Israel', ciudad: 'Tel Aviv', ultima: '24/08/2026 21:30', señales: ['se fue en 1 s', 'no tocó nada'], aparato: 'Linux' }],
+  },
   mironesTop: [
     { vid: 'v_miron', nombre: '', telefono: '', esCliente: false, visitas: 9, dias: 5, ultima: '27/08/2026 09:00', ciudad: 'CABA', origen: 'instagram', dispositivo: 'celular', productos: ['Chocolate Elite'], armoCarrito: true, checkout: false, valorCarrito: 12000 },
     { vid: 'v_miron2', nombre: 'Ariel', telefono: '1122334455', esCliente: true, visitas: 4, dias: 3, ultima: '26/08/2026 18:00', ciudad: 'CABA', origen: 'whatsapp', dispositivo: 'compu', productos: ['Bon O Bon'], armoCarrito: false, checkout: false, valorCarrito: 0 },
@@ -67,6 +74,8 @@ const FICHA = {
   eventos: { visita: 6, carrito: 4, checkout: 1 }, dias: 4, primera: '01/08/2026 10:00', ultima: '26/08/2026 21:15',
   productos: [{ nombre: 'Chocolate Elite', n: 3 }], compras: [{ nVenta: 88, fecha: '10/08/2026 18:00', cliente: 'Débora Levy', estado: 'entregado', totalARS: 45000, totalUSD: 0, productos: '• 2x Chocolate Elite' }],
   gastadoARS: 145000,
+  fichaTecnica: { tz: 'America/Argentina/Buenos_Aires', idi: 'es-AR', ap: 'iPhone', px: '390x844', toq: 1, pwa: 1, push: 1, hl: 21, wa: 1 },
+  segundos: 180, interacciones: 6,
   linea: [
     { fecha: '26/08/2026 21:10', evento: 'visita', pagina: 'tienda', detalle: '', total: 0, items: null, origen: 'whatsapp' },
     { fecha: '26/08/2026 21:12', evento: 'busqueda', pagina: 'tienda', detalle: 'halva', total: 0, items: null, origen: '' },
@@ -151,6 +160,13 @@ const FICHA = {
   ok('GENTE: avisa a cuántos mirones se les puede escribir', t.includes('dejaron teléfono'));
   ok('GENTE: compara comprador contra mirón', t.includes('En qué se diferencia') && t.includes('Solo miraron'));
   ok('GENTE: dice cuánto tardan en decidirse y qué significa', t.includes('Cuánto tardan en decidirse') && t.includes('impulso'));
+  ok('RADIOGRAFÍA: dice dónde están de verdad (por su reloj)', t.includes('Dónde están de verdad') && t.includes('Israel'));
+  ok('RADIOGRAFÍA: en qué idioma leen y con qué aparato', t.includes('hebreo') && t.includes('iPhone'));
+  ok('RADIOGRAFÍA: cuántos aceptan notificaciones', t.includes('Aceptan notificaciones'));
+  ok('RADIOGRAFÍA: marca las visitas que no parecen personas', t.includes('No parecen personas') && t.includes('no tocó nada'));
+  ok('RADIOGRAFÍA: aclara que a los robots NO los borra', t.includes('siguen siendo los reales'));
+  ok('GENTE: al robot lo marca en la lista', t.includes('🤖 robot'));
+  ok('GENTE: muestra el perfil técnico de cada uno', t.includes('se quedó 180s') && t.includes('acepta avisos'));
 
   await pg.evaluate(() => setAnaTab('dias'));
   await pg.waitForTimeout(250);
@@ -189,6 +205,8 @@ const FICHA = {
   ok('FICHA: muestra sus compras anteriores', ficha.includes('Pedido #88'));
   ok('FICHA: muestra el recorrido paso por paso', ficha.includes('Entró a la tienda') && ficha.includes('Empezó el pedido'));
   ok('FICHA: muestra la búsqueda que no encontró nada', ficha.includes('Buscó: halva') && ficha.includes('0 resultados'));
+  ok('FICHA: muestra su ficha técnica (huso, idioma, aparato)', ficha.includes('Ficha técnica') && ficha.includes('Buenos_Aires') && ficha.includes('iPhone'));
+  ok('FICHA: dice cuánto se quedó', ficha.includes('180 segundos'));
   await pg.evaluate(() => cerrarFichaVisitante());
   const cerrada = await pg.evaluate(() => document.getElementById('ana-ficha-modal').style.display);
   ok('FICHA: cierra bien', cerrada === 'none');
