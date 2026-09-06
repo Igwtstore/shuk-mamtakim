@@ -41,13 +41,13 @@ const MATCHER = aRegex(mw.config.matcher[0]);
 const OCULTOS = /^\/(despliegue|api|supabase|tests|\.git|middleware\.js$|vercel\.json$|[^/]*\.sql$)/i;
 
 // ── De qué país viene la visita ─────────────────────────────────────────────
-// La IP real la pone nginx en X-Real-IP (solo se le cree si el que conecta es nginx, o sea
-// loopback). Si algún día hay Cloudflare adelante, nginx ya la traduce (ver nginx-shuk.conf).
-const esLocal = (ip) => /^(::1|127\.|::ffff:127\.)/.test(ip || '');
+// La IP real la pone el proxy Caddy en X-Real-IP (despliegue/shuk.caddy). Solo se le cree si el
+// que conecta es interno (loopback o la red docker): a un pedido directo de afuera no se le cree.
+const esInterna = (ip) => /^(?:::ffff:)?(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)|^::1$/.test(ip || '');
 function ipDe(req) {
   const par = req.socket.remoteAddress || '';
   const real = req.headers['x-real-ip'];
-  return (esLocal(par) && typeof real === 'string' && real) ? real : par.replace(/^::ffff:/, '');
+  return (esInterna(par) && typeof real === 'string' && real) ? real.replace(/^::ffff:/, '') : par.replace(/^::ffff:/, '');
 }
 function paisDe(req) {
   try { const g = geoip.lookup(ipDe(req)); return (g && g.country) || ''; } catch { return ''; }

@@ -1,0 +1,26 @@
+# Shuk Mamtakim en el proxy Caddy compartido del VPS (va a /srv/proxy/sites/shuk.caddy; lo copia
+# despliegue/instalar-vps.sh y lo mantiene al día despliegue/actualizar.sh).
+#
+# Dos nombres para el mismo sitio:
+#  · shuk.82-25-74-242.sslip.io  → para probar YA, con certificado real (resuelve solo a la IP del VPS).
+#  · shukmamtakim.com.ar         → el dominio de verdad. Hoy apunta a Vercel; el día del corte se
+#    apunta el A de @ y de www a 82.25.74.242 y listo: el certificado se saca solo con la PRIMERA
+#    visita (on_demand), sin tocar nada acá. Mientras el DNS no apunte, Caddy no intenta nada.
+shukmamtakim.com.ar, shuk.82-25-74-242.sslip.io {
+	tls {
+		on_demand
+	}
+	encode gzip
+	reverse_proxy shuk-sitio:3100 {
+		# La IP real del visitante, para el candado geográfico (el servidor solo se la cree al proxy).
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# www → apex con 308, igual que hacía Vercel.
+www.shukmamtakim.com.ar {
+	tls {
+		on_demand
+	}
+	redir https://shukmamtakim.com.ar{uri} 308
+}

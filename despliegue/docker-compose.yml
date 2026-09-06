@@ -1,19 +1,24 @@
 # El sitio del Shuk en el VPS. Un solo contenedor: Node sirviendo el repo (montado de solo
-# lectura) + el candado geográfico + el lector de tickets. nginx (en el host) le pasa el tráfico.
-# Publicado SOLO en 127.0.0.1: desde afuera se entra únicamente por nginx (80/443).
+# lectura) + el candado geográfico + el lector de tickets. No publica puertos: se entra
+# únicamente por el proxy Caddy compartido del VPS (/srv/proxy), por la red "edge".
+# El archivo del sitio para ese proxy es despliegue/shuk.caddy (lo copia instalar-vps.sh).
 services:
   sitio:
     build: ./sitio
     container_name: shuk-sitio
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:3100:3100"
     volumes:
       - ..:/app:ro
     env_file:
       - shuk.env
+    environment:
+      TZ: America/Argentina/Buenos_Aires
+    networks: [edge]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/_salud"]
       interval: 60s
       timeout: 5s
       retries: 3
+networks:
+  edge:
+    external: true
