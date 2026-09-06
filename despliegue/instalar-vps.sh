@@ -33,7 +33,7 @@ sudo ln -sf /etc/nginx/sites-available/shuk /etc/nginx/sites-enabled/shuk
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl enable -q nginx
-sudo systemctl reload nginx
+sudo systemctl restart nginx
 
 echo "▸ variables (despliegue/shuk.env)"
 if [ ! -f despliegue/shuk.env ]; then cp despliegue/shuk.env.ejemplo despliegue/shuk.env; chmod 600 despliegue/shuk.env; echo "  ⚠️ completar ANTHROPIC_API_KEY en despliegue/shuk.env y correr: docker compose -f despliegue/docker-compose.yml up -d"; fi
