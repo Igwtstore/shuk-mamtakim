@@ -29,7 +29,8 @@ fi
 echo "▸ auto-deploy (cron cada 2 min)"
 chmod +x despliegue/actualizar.sh
 LINEA="*/2 * * * * flock -n /tmp/shuk-actualizar.lock $REPO/despliegue/actualizar.sh >> $HOME/shuk-actualizar.log 2>&1"
-( crontab -l 2>/dev/null | grep -v "shuk-mamtakim/despliegue/actualizar.sh" ; echo "$LINEA" ) | crontab -
+( crontab -l 2>/dev/null | grep -v "shuk-mamtakim/despliegue/actualizar.sh" || true; echo "$LINEA" ) | crontab -
+crontab -l | grep -q "despliegue/actualizar.sh" && echo "  cron instalado"
 
 echo "▸ prueba"
 sleep 2
