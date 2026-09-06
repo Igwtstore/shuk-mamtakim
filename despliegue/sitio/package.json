@@ -1,0 +1,16 @@
+{
+  "name": "shuk-sitio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "El sitio del Shuk servido desde el VPS (lo que antes hacía Vercel)",
+  "type": "module",
+  "main": "servidor.mjs",
+  "scripts": {
+    "start": "node servidor.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "geoip-lite": "^1.4.10"
+  }
+}

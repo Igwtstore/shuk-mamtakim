@@ -1,0 +1,19 @@
+# El sitio del Shuk en el VPS. Un solo contenedor: Node sirviendo el repo (montado de solo
+# lectura) + el candado geográfico + el lector de tickets. nginx (en el host) le pasa el tráfico.
+# Publicado SOLO en 127.0.0.1: desde afuera se entra únicamente por nginx (80/443).
+services:
+  sitio:
+    build: ./sitio
+    container_name: shuk-sitio
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ..:/app:ro
+    env_file:
+      - shuk.env
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/_salud"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
