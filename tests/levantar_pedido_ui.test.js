@@ -25,13 +25,27 @@ const PEDIDO = {
   pg.on('dialog', d => d.accept());
   await pg.goto(INDEX, { waitUntil: 'domcontentloaded' });
   await pg.waitForFunction(() => typeof abrirLevantarPedido === 'function' && typeof _planLevantarPedido === 'function', { timeout: 20000 });
-  await pg.evaluate(cat => { productos = cat; }, CAT);
+  await pg.evaluate(cat => {
+    productos = cat;
+    // El "levantar" refresca el stock desde la base antes de decidir: se intercepta esa lectura
+    // y se devuelve lo que diga window.__stockBase (por defecto, el mismo del catálogo mock).
+    window.__stockBase = null;
+    const _origFetch = window.fetch;
+    window.fetch = async (u, o) => {
+      const s = typeof u === 'string' ? u : (u && u.url) || '';
+      if (/\/rest\/v1\/productos\?select=id,stock/.test(s)) {
+        const base = window.__stockBase || productos.map(p => ({ id: p.id, stock: p.stock }));
+        return { ok: true, status: 200, json: async () => base, text: async () => JSON.stringify(base) };
+      }
+      return _origFetch(u, o);
+    };
+  }, CAT);
 
   let okAll = true; const chk = (n, c, e = '') => { if (!c) okAll = false; console.log((c ? '✅' : '❌') + ' ' + n + (e ? ' — ' + e : '')); };
 
   // ── 1. La radiografía ───────────────────────────────────────────────────────
-  const radio = await pg.evaluate(ped => {
-    abrirLevantarPedido(ped);
+  const radio = await pg.evaluate(async ped => {
+    await abrirLevantarPedido(ped);
     const txt = document.getElementById('levantar-overlay').innerText;
     return { txt, lineas: _lvLineas.map(l => ({ n: l.nombre, pedida: l.pedida, qty: l.qty, motivo: l.motivo })) };
   }, PEDIDO);
@@ -75,7 +89,7 @@ const PEDIDO = {
   // ── 3. El motor avisa que había MENOS stock del que figuraba ────────────────
   const rehecho = await pg.evaluate(async ped => {
     productos[0].stock = 12; productos[1].stock = 1;
-    abrirLevantarPedido(ped);
+    await abrirLevantarPedido(ped);
     const orig = window.fetch;
     const resp = { error: 'el stock cambió', recalcular: true, faltantes: [{ id: 1, pide: 2, hay: 1 }] };
     window.fetch = async () => ({ ok: true, status: 200, json: async () => resp, text: async () => JSON.stringify(resp) });
@@ -91,9 +105,9 @@ const PEDIDO = {
   chk('No se tocó el stock local (no se escribió nada)', rehecho.stockLocal[0] === 12 && rehecho.stockLocal[1] === 1, JSON.stringify(rehecho.stockLocal));
 
   // ── 4. Pedido sin nada de stock ─────────────────────────────────────────────
-  const vacio = await pg.evaluate(ped => {
+  const vacio = await pg.evaluate(async ped => {
     productos.forEach(p => p.stock = 0);
-    abrirLevantarPedido(ped);
+    await abrirLevantarPedido(ped);
     const txt = document.getElementById('levantar-overlay').innerText;
     const btn = document.getElementById('lv-btn-ok');
     return { txt, deshabilitado: !!(btn && btn.disabled) };
@@ -101,6 +115,27 @@ const PEDIDO = {
   console.log('\n── Pedido sin stock de nada ──');
   chk('El botón queda bloqueado', vacio.deshabilitado);
   chk('Lo dice con todas las letras', /No hay stock de nada/.test(vacio.txt));
+
+  // ── 3bis. El panel tiene el stock VIEJO y en el depósito hay más (caso real #146) ──
+  // Pasó de verdad: la pantalla decía "no queda nada" de tres productos que tenían 4 en el
+  // depósito, porque el panel usaba el catálogo cargado al abrirse. NO puede sacar del pedido
+  // algo que sí está en stock.
+  const desactualizado = await pg.evaluate(async ped => {
+    productos[0].stock = 0; productos[1].stock = 0; productos[2].stock = 0;   // foto vieja del panel
+    window.__stockBase = [{ id: 1, stock: 12 }, { id: 2, stock: 9 }, { id: 3, stock: 4 }];   // la base de verdad
+    await abrirLevantarPedido(ped);
+    const txt = document.getElementById('levantar-overlay').innerText;
+    const r = { lineas: _lvLineas.map(l => ({ qty: l.qty, hay: l.hay, motivo: l.motivo })), avisoRojo: /puede estar viejo/.test(txt), stockPanel: productos.map(p => p.stock) };
+    document.getElementById('levantar-overlay').remove();
+    window.__stockBase = null;
+    productos[0].stock = 12; productos[1].stock = 1; productos[2].stock = 0;
+    return r;
+  }, PEDIDO);
+  console.log('\n── Si el panel tenía el stock viejo ──');
+  chk('Lee el depósito de verdad y NO saca lo que sí hay', desactualizado.lineas.every(l => l.qty === l.pedida || l.hay > 0), JSON.stringify(desactualizado.lineas));
+  chk('El pedido entra completo (2, 3 y 2)', JSON.stringify(desactualizado.lineas.map(l => l.qty)) === '[2,3,2]', JSON.stringify(desactualizado.lineas.map(l => l.qty)));
+  chk('Y el catálogo del panel queda actualizado', JSON.stringify(desactualizado.stockPanel) === '[12,9,4]', JSON.stringify(desactualizado.stockPanel));
+  chk('Sin aviso rojo cuando el depósito se pudo leer', !desactualizado.avisoRojo);
 
   // ── 4bis. La tarjeta del pedido cancelado ofrece levantarlo ────────────────
   // El pedido cancelado se llega por TRES caminos distintos y el botón tiene que estar en los

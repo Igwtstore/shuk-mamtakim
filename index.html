@@ -17434,7 +17434,7 @@ function _identificarLineasPedido(lineas, v, prods) {
 // parte de eso, así que el pedido se reconstruye con lo que HAY DE VERDAD hoy: lo que no alcanza
 // se ajusta a lo disponible y lo que no queda nada se cae del pedido. Antes de escribir nada se
 // muestra la radiografía para que la decisión sea tuya, no una sorpresa.
-let _lvPed = null, _lvLineas = [], _lvNotas = [], _lvDesc = 0, _lvStockOverride = {};
+let _lvPed = null, _lvLineas = [], _lvNotas = [], _lvDesc = 0, _lvStockOverride = {}, _lvStockFresco = true;
 
 // El plan, en limpio (función pura, testeada en tests/unit/levantar_pedido.js): para cada renglón
 // decide qué queda. Varios renglones del mismo producto se sirven por orden de aparición: el
@@ -17461,9 +17461,28 @@ function _stockHoyPorId() {
   return m;
 }
 
-function abrirLevantarPedido(v) {
+// 🔄 EL STOCK EN MEMORIA PUEDE ESTAR VIEJO (caso real 07/09/2026, pedido #146 de Yimbo): el panel
+// carga el catálogo al abrirse, y mientras tanto se vendió, se recibió mercadería o se corrigió
+// stock desde otro lado. Decidir con esa foto vieja es peligroso al revés que sobrevender: la
+// pantalla decía "no queda nada" de tres Chocketa que en el depósito tenían 4, y los sacaba del
+// pedido. Antes de la radiografía se refresca el stock desde la base (lectura liviana: id+stock).
+async function _refrescarStockCatalogo() {
+  try {
+    const r = await fetch(SB_REST + '/productos?select=id,stock&limit=5000', { headers: SB_ANON_H });
+    const rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) return false;
+    const m = {};
+    rows.forEach(p => { m[String(p.id)] = parseInt(p.stock) || 0; });
+    (productos || []).forEach(p => { const k = String(p.id); if (m[k] !== undefined) p.stock = m[k]; });
+    return true;
+  } catch { return false; }
+}
+
+async function abrirLevantarPedido(v) {
   if ((v.estado || '') !== 'cancelado') { showToast('Este pedido no está cancelado'); return; }
-  _lvPed = v; _lvStockOverride = {};
+  showToast('Revisando el depósito…');
+  const _fresco = await _refrescarStockCatalogo();
+  _lvPed = v; _lvStockOverride = {}; _lvStockFresco = _fresco;
   const _sep = _separarNotasPedido(parsearLineasPedido(v.productos));
   _lvNotas = _sep.notas; _lvDesc = _sep.desc;
   _identificarLineasPedido(_sep.lineas, v);
@@ -17535,6 +17554,9 @@ function _renderLevantar() {
     <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.12rem">↩️ Levantar pedido ${v.nVenta ? '#' + v.nVenta : ''} — ${esc(v.cliente || '')}</div>
     <div style="font-size:0.76rem;color:var(--texto-suave);margin:0.25rem 0 0.8rem">Vuelve a quedar <b>pendiente</b> y se descuenta el stock otra vez. Chequeé qué hay hoy en el depósito: <b>solo queda lo que existe de verdad</b>.</div>
     ${avisoCobro}
+    ${_lvStockFresco ? '' : `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;font-weight:700;color:#c0392b">
+        ⚠️ No pude leer el depósito recién — lo que ves puede estar viejo. Recargá la página antes de levantarlo.
+      </div>`}
     ${(nAjust || nFuera) ? `<div style="background:#f6f6f6;border-radius:9px;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.78rem;font-weight:700;color:#555">
       ${nAjust ? '✏️ ' + nAjust + ' ajustado' + (nAjust > 1 ? 's' : '') : ''}${(nAjust && nFuera) ? ' · ' : ''}${nFuera ? '❌ ' + nFuera + ' sale' + (nFuera > 1 ? 'n' : '') + ' del pedido' : ''}
     </div>` : ''}
