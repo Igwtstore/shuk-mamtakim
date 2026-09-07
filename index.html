@@ -5355,11 +5355,11 @@ async function renderPedidos() {
         <div class="pedido-acciones">
           ${estado === 'cotizacion' ? `
           <button class="btn-accion" style="background:#fdf3e3;color:#7a5a1a;font-weight:700;border:1.5px solid var(--dorado)" onclick="aceptarCotizacion('${v.id}')">✅ Aceptar (descuenta stock)</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Rechazar</button>` : (conAcciones ? `
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Rechazar</button>` : (estado === 'cancelado' ? `
+          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a;font-weight:700;border:1.5px solid var(--verde)" title="Vuelve a ponerlo pendiente y descuenta el stock que haya" onclick='abrirLevantarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>↩️ Levantar pedido</button>` : (conAcciones ? `
           ${estado === 'pendiente' ? `<button class="btn-accion" style="background:#e8eeff;color:#2c6fad" onclick="cambiarEstado('${v.id}','preparando',this)">🔧 Preparando</button>` : ''}
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : (estado === 'cancelado' ? `
-          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a;font-weight:700;border:1.5px solid var(--verde)" title="Vuelve a ponerlo pendiente y descuenta el stock que haya" onclick='abrirLevantarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>↩️ Levantar pedido</button>` : `
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : `
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`))}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">

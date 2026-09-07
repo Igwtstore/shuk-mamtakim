@@ -103,16 +103,29 @@ const PEDIDO = {
   chk('Lo dice con todas las letras', /No hay stock de nada/.test(vacio.txt));
 
   // ── 4bis. La tarjeta del pedido cancelado ofrece levantarlo ────────────────
+  // El pedido cancelado se llega por TRES caminos distintos y el botón tiene que estar en los
+  // tres (el 07/09 faltaba justo en el del buscador, que es el que uno usa para encontrarlo).
   const tarjeta = await pg.evaluate(async ped => {
     productos.forEach(p => p.stock = 5);
     apiGet = async (a) => (a === 'ventas' ? [ped] : []);
-    await renderPedidos();
-    const html = document.getElementById('pedidos-lista').innerHTML;
-    return { hayLevantar: /Levantar pedido/.test(html), hayCancelarDeNuevo: /Cancelar y devolver stock/.test(html) };
+    const ver = async (prep) => {
+      prep();
+      await renderPedidos();
+      const html = document.getElementById('pedidos-lista').innerHTML;
+      return { levantar: /Levantar pedido/.test(html), cancelarDeNuevo: /Cancelar y devolver stock/.test(html), entregado: /✓ Entregado/.test(html) };
+    };
+    const normal = await ver(() => { _busquedaPedidos = ''; _filtroEstadoActual = 'todos'; });
+    const filtrado = await ver(() => { _busquedaPedidos = ''; _filtroEstadoActual = 'cancelado'; });
+    const buscado = await ver(() => { _busquedaPedidos = 'Cliente Test'; _filtroEstadoActual = 'todos'; });
+    _busquedaPedidos = '';
+    return { normal, filtrado, buscado };
   }, PEDIDO);
-  console.log('\n── La tarjeta del pedido cancelado ──');
-  chk('Ofrece "↩️ Levantar pedido"', tarjeta.hayLevantar);
-  chk('Ya no ofrece volver a cancelar lo que está cancelado', !tarjeta.hayCancelarDeNuevo);
+  console.log('\n── La tarjeta del pedido cancelado, por los 3 caminos ──');
+  chk('En la lista normal (historial) ofrece "↩️ Levantar pedido"', tarjeta.normal.levantar);
+  chk('Con el filtro ✕ Cancelado también', tarjeta.filtrado.levantar);
+  chk('Y BUSCÁNDOLO por cliente también (el que faltaba)', tarjeta.buscado.levantar);
+  chk('Buscándolo NO ofrece "✓ Entregado" de un cancelado', !tarjeta.buscado.entregado);
+  chk('Ya no ofrece volver a cancelar lo que está cancelado', !tarjeta.normal.cancelarDeNuevo && !tarjeta.filtrado.cancelarDeNuevo);
 
   // ── 5. El reloj de la reserva y la nota del cliente ─────────────────────────
   const reloj = await pg.evaluate(() => {
