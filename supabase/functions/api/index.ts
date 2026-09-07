@@ -4058,9 +4058,23 @@ Deno.serve(async (req) => {
         'PROHIBIDO en el prompt: texto, letras, números, logos, marcas, personas, packaging legible. ' +
         'También elegís una paleta de 3 colores en hex que combine con ese fondo: dos para un degradé oscuro-medio ' +
         '(con buen contraste para texto blanco encima) y un acento vibrante claro (para pills con texto oscuro).';
+      // 🔄 "Otro texto": los modelos actuales ya no aceptan temperatura, así que con el
+      // MISMO pedido devuelven casi siempre lo MISMO. Por eso el panel manda lo que ya
+      // generó y acá se le pide, explícito, un ángulo distinto. Sin 'evitar' se comporta
+      // igual que antes (lo usan también candyshop.html y paralelo.html).
+      const evitarF = Q('evitar').substring(0, 900);
+      const intentoF = parseInt(Q('intento')) || 1;
+      const anguloF = ['el sabor y la textura', 'el origen israelí y lo kosher', 'la urgencia (poco stock, recién llegado)',
+        'el precio / la conveniencia', 'la ocasión (para compartir, para regalar)', 'la novedad / lo que no se consigue'][(intentoF - 1) % 6];
       const userF = 'Productos del flyer: ' + productosF + '\n' +
         (ocasionF ? 'Ocasión/tema del flyer: ' + ocasionF + '\n' : '') +
         (ideaF ? 'Idea/texto que escribió ' + hijoF + ' (mejorala manteniendo su espíritu): "' + ideaF + '"' : 'No dejó texto: inventá algo corto y tentador.') +
+        (evitarF
+          ? '\n\nOJO — ESTO ES UN PEDIDO DE OTRA VERSIÓN. Para este mismo flyer ya escribiste:\n' + evitarF +
+            '\nEscribí una versión NUEVA y claramente distinta: no repitas esos títulos, frases ni cierres, ' +
+            'ni sus palabras clave. Cambiá el ángulo de venta — esta vez entrale por ' + anguloF + ' — ' +
+            'y cambiá también la paleta y el estilo visual del fondo.'
+          : '') +
         '\nGenerá los textos del flyer, el prompt del fondo y la paleta.';
       try {
         const rF = await anthropicMsg(apiKey, {

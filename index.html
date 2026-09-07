@@ -5615,7 +5615,10 @@ async function guardarClaveIA() {
 
 // ─── FLYER CON IA (Shuk) — espejo del motor del Candy Shop ───────
 function flyerApi(accion, extra = {}) {
-  return fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion, ...extra }))
+  // El '_' es un anti-caché: sin él, dos pedidos idénticos seguidos (el caso de
+  // "🔄 Otro texto") los puede contestar el caché del navegador con la MISMA
+  // respuesta, sin llegar nunca al servidor.
+  return fetch(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion, ...extra, _: Date.now() }), { cache: 'no-store' })
     .then(r => r.json()).catch(() => null);
 }
 let catalogoCache = [];   // productos en formato flyer (codigo/nombre/precioVenta/foto)
@@ -5646,6 +5649,10 @@ let fStep = 0, fSel = {}, fTextos = null, fFondoImg = null, fMotor = 'canvas';
 let fMostrarPrecios = true, fLink = 'no';   // link a la tienda: 'no' | 'may' | 'min'
 let fFormato = 'post', fTema = 'clasico', fPlantilla = 'grilla', fExtras = {};
 let fUltimaURL = '', fGuardando = null;
+// 🔄 "Otro texto": los modelos nuevos no aceptan temperatura, así que con el
+// MISMO pedido contestan casi siempre lo MISMO. La variedad se pide explícita:
+// se guarda lo ya generado y se le manda como "esto no lo repitas".
+let fVariantes = [], fFirma = '';
 const esIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
 let fPrecioModo = 'min';
@@ -5670,6 +5677,7 @@ function abrirFlyer(prefill) {
   fFormato = 'post'; fTema = 'clasico'; fPlantilla = 'grilla'; fMotor = 'canvas';
   fMostrarPrecios = true; fLink = 'no';
   fUltimaURL = ''; fGuardando = null;
+  fVariantes = []; fFirma = '';
   document.getElementById('flyer-idea').value = '';
   document.getElementById('flyer-fondo').checked = false;
   document.getElementById('flyer-buscar').value = '';
@@ -5891,13 +5899,19 @@ async function generarTextoFlyer() {
   // Texto y fondo en paralelo. El fondo se reusa al pedir "otro texto" (no se re-paga).
   fUltimaURL = ''; fGuardando = null;
   try { await document.fonts.load('800 90px "Baloo 2"'); } catch (e) {}
+  // Si cambió el pedido (otros productos, otra idea, otro tema), arranca de cero:
+  // lo que hay que evitar repetir es lo generado para ESTE mismo pedido.
+  const firma = [lista, idea, fTema, fMostrarPrecios, fLink].join('|');
+  if (firma !== fFirma) { fFirma = firma; fVariantes = []; }
   // 1) Claude escribe los textos Y el prompt del fondo (dirección de arte)
   const d = await flyerApi('flyerTexto', { negocio: 'shuk', hijo: 'Shuk', productos: lista, idea,
-    ocasion: TEMAS[fTema]?.prompt || '', conPrecios: fMostrarPrecios ? '1' : '0', conWeb: fLink !== 'no' ? '1' : '0' });
+    ocasion: TEMAS[fTema]?.prompt || '', conPrecios: fMostrarPrecios ? '1' : '0', conWeb: fLink !== 'no' ? '1' : '0',
+    evitar: fVariantes.slice(-6).join(' ~ '), intento: String(fVariantes.length + 1) });
   if (!d || d.error) {
     status.textContent = '😕 ' + (d?.mensaje || d?.error || 'No se pudo generar. Probá de nuevo.');
     return;
   }
+  fVariantes.push((d.titulo || '') + ' / ' + (d.frase || '') + ' / ' + (d.cierre || ''));
   fTextos = d;
   // 🪄 Modo Diseño IA: Gemini compone el flyer ENTERO. Si falla, cae al clásico.
   if (fMotor === 'ia') {
