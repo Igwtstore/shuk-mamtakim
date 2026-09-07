@@ -18,14 +18,32 @@ CLAVE_EN="${HOME}/.claude/projects/-Users-antoniojsetton-shuk-mamtakim/memory/pr
 
 cd "$REPO"
 
-# La clave de despliegue (sbp_…) vive en la memoria del proyecto, no en el repo.
-TOKEN="${SUPABASE_ACCESS_TOKEN:-$(grep -ohE 'sbp_[A-Za-z0-9_]{20,}' "$CLAVE_EN" | head -1)}"
+# ── DE DÓNDE SALE LA CLAVE DE DESPLIEGUE (sbp_…), en orden ───────────────────
+# 1) La variable de entorno, si la pasás a mano.
+# 2) 🔐 El LLAVERO de macOS (lo bueno: cifrado por el sistema, no es texto plano).
+#    Se carga una sola vez:
+#      security add-generic-password -a "$USER" -s shuk-supabase-deploy -w 'sbp_…' -U
+# 3) El archivo de memoria — sobrevive solo como puente hasta terminar de rotar
+#    la clave (2026-09-07). Ahí la clave está EN TEXTO PLANO: una vez que la
+#    nueva esté en el llavero, borrala de ahí y sacá este último escalón.
+TOKEN="${SUPABASE_ACCESS_TOKEN:-}"
+FUENTE="la variable de entorno"
 if [ -z "$TOKEN" ]; then
-  echo "❌ No encontré la clave de despliegue en:"
-  echo "   $CLAVE_EN"
-  echo "   Podés pasarla a mano:  SUPABASE_ACCESS_TOKEN=sbp_... bash despliegue/deploy-motor.sh"
+  TOKEN="$(security find-generic-password -a "$USER" -s shuk-supabase-deploy -w 2>/dev/null || true)"
+  FUENTE="🔐 el llavero de macOS"
+fi
+if [ -z "$TOKEN" ] && [ -f "$CLAVE_EN" ]; then
+  TOKEN="$(grep -ohE 'sbp_[A-Za-z0-9_]{20,}' "$CLAVE_EN" | head -1)"
+  FUENTE="⚠️ el archivo de memoria (texto plano — pasala al llavero)"
+fi
+if [ -z "$TOKEN" ]; then
+  echo "❌ No encontré la clave de despliegue."
+  echo "   Cargala una sola vez en el llavero:"
+  echo "     security add-generic-password -a \"\$USER\" -s shuk-supabase-deploy -w 'sbp_…' -U"
+  echo "   O pasala a mano:  SUPABASE_ACCESS_TOKEN=sbp_… bash despliegue/deploy-motor.sh"
   exit 1
 fi
+echo "🔑 Clave tomada de: $FUENTE"
 
 echo "🚀 Publicando el motor (Edge Function 'api')…"
 SUPABASE_ACCESS_TOKEN="$TOKEN" npx --yes supabase functions deploy api \
