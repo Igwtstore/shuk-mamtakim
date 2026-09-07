@@ -17520,20 +17520,28 @@ function _renderLevantar() {
   const ahora = { ars: arm.totalARS, usd: arm.totalUSD };
   const cambió = Math.abs(antes.ars - ahora.ars) > 0.5 || Math.abs(antes.usd - ahora.usd) > 0.005;
   const nAjust = _lvLineas.filter(l => l.motivo === 'ajustada').length;
-  const nFuera = _lvLineas.filter(l => (parseInt(l.qty) || 0) === 0).length;
+  const nFuera = _lvLineas.filter(l => (parseInt(l.qty) || 0) === 0 && l.motivo !== 'sacada').length;
+  const nSacadas = _lvLineas.filter(l => l.motivo === 'sacada').length;
 
   const filas = _lvLineas.map((l, i) => {
     const q = parseInt(l.qty) || 0;
     const cfg = q === 0
-      ? { bg: '#fde0e0', bd: '#e0b4b4', ico: '❌', col: '#c0392b' }
+      ? (l.motivo === 'sacada' ? { bg: '#f2f2f2', bd: '#d8d8d8', ico: '🚫', col: '#777' } : { bg: '#fde0e0', bd: '#e0b4b4', ico: '❌', col: '#c0392b' })
       : (l.motivo === 'ajustada' ? { bg: '#fff3d6', bd: '#e8cf9a', ico: '✏️', col: '#b8730a' }
                                  : { bg: '#eef7ee', bd: '#cfe4cf', ico: '✅', col: '#1a7a3a' });
     let detalle;
-    if (l.motivo === 'sin-catalogo') detalle = 'ya no está en el catálogo → sale del pedido';
+    if (l.motivo === 'sacada') detalle = 'lo sacaste vos · hay ' + l.hay + ' en depósito si lo querés de vuelta';
+    else if (l.motivo === 'sin-catalogo') detalle = 'ya no está en el catálogo → sale del pedido';
     else if (q === 0) detalle = 'pedía ' + l.pedida + ' · no queda nada en depósito → sale del pedido';
     else if (l.motivo === 'ajustada') detalle = 'pedía ' + l.pedida + ' · quedan ' + l.hay + ' → lo ajusté a ' + q;
     else detalle = l.pedida + ' u. · hay ' + l.hay + ' en depósito';
     const sub = (parseFloat(l.precio) || 0) * q * (1 - (parseFloat(l.desc) || 0) / 100);
+    // × para sacar el renglón a mano; si ya está afuera y hay stock, el mismo botón lo devuelve (↺).
+    const puedeVolver = q === 0 && l.max > 0;
+    const btnQuitar = (q > 0 || puedeVolver)
+      ? `<button onclick="_quitarLineaLevantar(${i})" title="${q > 0 ? 'Sacar este producto del pedido' : 'Volver a ponerlo (hay ' + l.hay + ')'}"
+          style="background:${q > 0 ? '#fde8e8' : '#e8f5ee'};border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:${q > 0 ? '#e05c2a' : '#1a7a3a'};font-size:${q > 0 ? '1rem' : '0.85rem'};font-weight:700;flex-shrink:0;font-family:inherit">${q > 0 ? '×' : '↺'}</button>`
+      : `<span style="width:26px;flex-shrink:0"></span>`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:${cfg.bg};border:1px solid ${cfg.bd};margin-bottom:5px">
       <div style="flex:1;min-width:0">
         <div style="font-size:0.82rem;font-weight:700;color:#2b2b2b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cfg.ico} ${esc(l.nombre || '')}${l.descripcion ? ' · ' + esc(String(l.descripcion).substring(0, 40)) : ''}</div>
@@ -17541,7 +17549,8 @@ function _renderLevantar() {
       </div>
       <input type="number" min="0" max="${l.max}" value="${q}" ${l.max > 0 ? '' : 'disabled'} onchange="_setQtyLevantar(${i}, this.value)"
         style="width:58px;padding:5px;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.82rem;text-align:center;background:#fff">
-      <div style="width:96px;text-align:right;font-size:0.76rem;font-weight:700;color:${q ? '#2b2b2b' : '#b0b0b0'}">${fmtM(sub, l.moneda)}</div>
+      <div style="width:90px;text-align:right;font-size:0.76rem;font-weight:700;color:${q ? '#2b2b2b' : '#b0b0b0'}">${fmtM(sub, l.moneda)}</div>
+      ${btnQuitar}
     </div>`;
   }).join('');
 
@@ -17557,8 +17566,10 @@ function _renderLevantar() {
     ${_lvStockFresco ? '' : `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;font-weight:700;color:#c0392b">
         ⚠️ No pude leer el depósito recién — lo que ves puede estar viejo. Recargá la página antes de levantarlo.
       </div>`}
-    ${(nAjust || nFuera) ? `<div style="background:#f6f6f6;border-radius:9px;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.78rem;font-weight:700;color:#555">
-      ${nAjust ? '✏️ ' + nAjust + ' ajustado' + (nAjust > 1 ? 's' : '') : ''}${(nAjust && nFuera) ? ' · ' : ''}${nFuera ? '❌ ' + nFuera + ' sale' + (nFuera > 1 ? 'n' : '') + ' del pedido' : ''}
+    ${(nAjust || nFuera || nSacadas) ? `<div style="background:#f6f6f6;border-radius:9px;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.78rem;font-weight:700;color:#555">
+      ${[nAjust ? '✏️ ' + nAjust + ' ajustado' + (nAjust > 1 ? 's' : '') : '',
+         nFuera ? '❌ ' + nFuera + ' sin stock' : '',
+         nSacadas ? '🚫 ' + nSacadas + ' que sacaste vos' : ''].filter(Boolean).join(' · ')}
     </div>` : ''}
     <div style="margin-bottom:0.7rem">${filas || '<div style="font-size:0.8rem;color:var(--texto-suave)">Este pedido no tiene renglones de productos.</div>'}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gris);border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.85rem">
@@ -17581,7 +17592,20 @@ function _setQtyLevantar(i, valor) {
   if (q < 0) q = 0;
   if (q > l.max) { q = l.max; showToast('De ' + l.nombre + ' hay ' + l.hay + ' nomás'); }
   l.qty = q;
-  if (q > 0 && l.motivo !== 'sin-catalogo') l.motivo = (q < l.pedida) ? 'ajustada' : 'ok';
+  if (l.motivo !== 'sin-catalogo') {
+    if (q > 0) l.motivo = (q < l.pedida) ? 'ajustada' : 'ok';
+    else l.motivo = (l.max > 0) ? 'sacada' : 'sin-stock';   // en 0 habiendo stock = decisión tuya
+  }
+  _renderLevantar();
+}
+
+// ✕ Sacar un renglón del pedido a mano (aunque haya stock), y ↺ volver a ponerlo.
+function _quitarLineaLevantar(i) {
+  const l = _lvLineas[i];
+  if (!l) return;
+  if ((parseInt(l.qty) || 0) > 0) { l.qty = 0; l.motivo = (l.max > 0) ? 'sacada' : 'sin-stock'; }
+  else if (l.max > 0) { l.qty = l.max; l.motivo = (l.max < l.pedida) ? 'ajustada' : 'ok'; }
+  else { showToast('De ' + l.nombre + ' no hay stock para volver a ponerlo'); return; }
   _renderLevantar();
 }
 
@@ -17589,7 +17613,7 @@ async function confirmarLevantarPedido() {
   if (!_lvPed) return;
   const quedan = _lvLineas.filter(l => (parseInt(l.qty) || 0) > 0);
   if (!quedan.length) { showToast('No hay stock de nada de este pedido'); return; }
-  const fuera = _lvLineas.filter(l => (parseInt(l.qty) || 0) === 0);
+  const fuera = _lvLineas.filter(l => (parseInt(l.qty) || 0) === 0 && l.motivo !== 'sacada');
   if (fuera.length && !confirm('Se van a sacar del pedido ' + fuera.length + ' renglón/es por falta de stock:\n• '
       + fuera.map(l => l.nombre).join('\n• ') + '\n\n¿Levanto el pedido con el resto?')) return;
   const btn = document.getElementById('lv-btn-ok');
@@ -17693,6 +17717,13 @@ function abrirEditarPedido(v) {
   renderEditLineas();
   recalcularEditTotal();
   document.getElementById('edit-pedido-overlay').classList.add('open');
+  // 🔄 Mismo pozo que tenía el "levantar": los topes de cantidad se calculan con el stock que el
+  // panel cargó al abrirse, y mientras tanto se pudo vender o recibir mercadería. Se relee el
+  // depósito en segundo plano (la pantalla abre al instante) y se redibujan los topes al llegar.
+  _refrescarStockCatalogo().then(ok => {
+    const ov = document.getElementById('edit-pedido-overlay');
+    if (ok && ov && ov.classList.contains('open') && _editPedidoActual === v) { renderEditLineas(); recalcularEditTotal(); }
+  });
 }
 
 // 🏷️ DESCUENTO GLOBAL AL REABRIR EL EDITOR (bug 24/08/2026): el "🏷️ Descuento global: 15%" que

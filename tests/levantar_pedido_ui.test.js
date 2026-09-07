@@ -137,6 +137,36 @@ const PEDIDO = {
   chk('Y el catálogo del panel queda actualizado', JSON.stringify(desactualizado.stockPanel) === '[12,9,4]', JSON.stringify(desactualizado.stockPanel));
   chk('Sin aviso rojo cuando el depósito se pudo leer', !desactualizado.avisoRojo);
 
+  // ── 3ter. La × para sacar un renglón a mano (y el ↺ para volver a ponerlo) ──
+  const equis = await pg.evaluate(async ped => {
+    productos[0].stock = 12; productos[1].stock = 9; productos[2].stock = 4;
+    window.__stockBase = [{ id: 1, stock: 12 }, { id: 2, stock: 9 }, { id: 3, stock: 4 }];
+    await abrirLevantarPedido(ped);
+    const html0 = document.getElementById('levantar-overlay').innerHTML;
+    const hayEquis = (html0.match(/_quitarLineaLevantar\(/g) || []).length;
+    _quitarLineaLevantar(0);                                  // saco el primer renglón a mano
+    const tras = { qty: _lvLineas[0].qty, motivo: _lvLineas[0].motivo, txt: document.getElementById('levantar-overlay').innerText };
+    _quitarLineaLevantar(0);                                  // y lo devuelvo
+    const vuelto = { qty: _lvLineas[0].qty, motivo: _lvLineas[0].motivo };
+    _quitarLineaLevantar(0);
+    // lo que se manda a guardar no debe incluir el renglón sacado
+    let url = null; const orig = window.fetch;
+    window.fetch = async (u) => { const s = typeof u === 'string' ? u : (u && u.url) || ''; if (/levantarPedido/.test(s) && !url) url = s; return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => '{"ok":true}' }; };
+    await confirmarLevantarPedido();
+    window.fetch = orig;
+    window.__stockBase = null;
+    productos[0].stock = 12; productos[1].stock = 1; productos[2].stock = 0;
+    return { hayEquis, tras, vuelto, url };
+  }, PEDIDO);
+  console.log('\n── La × para sacar un renglón a mano ──');
+  chk('Cada renglón tiene su botón', equis.hayEquis === 3, 'botones=' + equis.hayEquis);
+  chk('La × lo saca del pedido aunque haya stock', equis.tras.qty === 0 && equis.tras.motivo === 'sacada', JSON.stringify(equis.tras.qty + '/' + equis.tras.motivo));
+  chk('Se distingue de "no hay stock" ("lo sacaste vos")', /lo sacaste vos/.test(equis.tras.txt));
+  chk('El ↺ lo vuelve a poner con lo que hay', equis.vuelto.qty === 2 && equis.vuelto.motivo === 'ok', JSON.stringify(equis.vuelto));
+  const qe = new URLSearchParams((equis.url || '').split('?')[1] || '');
+  chk('Lo sacado NO viaja en el pedido guardado', !/Chocolate Elite/.test(qe.get('productos') || ''), qe.get('productos'));
+  chk('Ni se le descuenta stock', !/^1:/.test(qe.get('stockUpdatesNuevo') || '') , qe.get('stockUpdatesNuevo'));
+
   // ── 4bis. La tarjeta del pedido cancelado ofrece levantarlo ────────────────
   // El pedido cancelado se llega por TRES caminos distintos y el botón tiene que estar en los
   // tres (el 07/09 faltaba justo en el del buscador, que es el que uno usa para encontrarlo).
