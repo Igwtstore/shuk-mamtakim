@@ -5295,7 +5295,7 @@ async function renderPedidos() {
       if (!soloMiri && comiA > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: $ ${Math.round(comiA).toLocaleString('es-AR')}</span>`);
       if (!soloMiri && comiU > 0) splitParts.push(`<span style="color:var(--dorado)">Comi JONY: U$S ${comiU.toFixed(2)}</span>`);
       // Aviso de reserva: a los 4 días recordatorio, a los 6 (24hs antes) último aviso, a los 7+ vencido.
-      const diasPed = diasDesdePedido(v.fecha);
+      const diasPed = diasDesdePedido(_fechaReserva(v));   // levantado = el reloj de los 7 días arranca de nuevo
       const esPend = (estado === 'pendiente' || estado === 'preparando');
       let avisoVenc = '';
       if (esPend && diasPed >= 4) {
@@ -5358,8 +5358,9 @@ async function renderPedidos() {
           <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Rechazar</button>` : (conAcciones ? `
           ${estado === 'pendiente' ? `<button class="btn-accion" style="background:#e8eeff;color:#2c6fad" onclick="cambiarEstado('${v.id}','preparando',this)">🔧 Preparando</button>` : ''}
           <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : `
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`)}
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : (estado === 'cancelado' ? `
+          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a;font-weight:700;border:1.5px solid var(--verde)" title="Vuelve a ponerlo pendiente y descuenta el stock que haya" onclick='abrirLevantarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>↩️ Levantar pedido</button>` : `
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`))}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
           ${estado !== 'cotizacion' ? (() => {
@@ -16340,6 +16341,19 @@ function jsAttr(s) {
 }
 
 // Días transcurridos desde la fecha de un pedido ("dd/MM/yyyy HH:mm").
+// 🔁 Un pedido LEVANTADO de una cancelación arranca el reloj de la reserva de nuevo: la fecha del
+// pedido y su número no se tocan (son la historia contable), así que la fecha de "levantado" viaja
+// como prefijo de la nota. _notaCliente() es la misma nota SIN los marcadores internos: es lo que
+// puede leer el cliente (remito, WhatsApp); en el panel la nota se ve entera.
+function _fechaReserva(v) {
+  const m = ((v && v.notas) || '').toString().match(/^🔁 Levantado el (\d{2}\/\d{2}\/\d{4})/);
+  return m ? m[1] : ((v && v.fecha) || '');
+}
+function _notaCliente(v) {
+  const n = ((v && v.notas) || '').toString().replace(/^(?:🔁 Levantado el \d{2}\/\d{2}\/\d{4}(?: · )?|🟡 COTIZACIÓN · )+/, '').trim();
+  return (n && n !== 'Manual') ? n : '';
+}
+
 function diasDesdePedido(fechaStr) {
   const f = (fechaStr || '').split(' ')[0].split('/');
   if (f.length < 3) return 0;
@@ -16985,7 +16999,7 @@ function _buildRemitoTexto(v, tc) {
     lines.push(`💵 _Equiv. en pesos (informativo): ≈ $ ${granARS.toLocaleString('es-AR')}_`);
     lines.push(`   _TC: U$S 1 = $ ${Math.round(tc).toLocaleString('es-AR')} · ${new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})} hs_`);
   }
-  if (v.notas && v.notas !== 'Manual') lines.push(`📝 Nota: ${v.notas}`);
+  if (_notaCliente(v)) lines.push(`📝 Nota: ${_notaCliente(v)}`);   // sin los marcadores internos (🔁 levantado / cotización)
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`Shuk Mamtakim 🍬 — ${SITIO_DOM}`);
   return lines.join('\n');
@@ -17213,7 +17227,7 @@ function abrirRemitoPDF(v, autoPrint) {
     <div class="info-item"><label>Fecha</label><span>${esc(v.fecha)}</span></div>
     <div class="info-item"><label>Forma de pago</label><span>${esc(v.formaPago)}</span></div>
   </div>
-  ${v.notas && v.notas !== 'Manual' ? `<div class="nota-box" style="margin:12px 24px 0">📝 ${esc(v.notas)}</div>` : ''}
+  ${_notaCliente(v) ? `<div class="nota-box" style="margin:12px 24px 0">📝 ${esc(_notaCliente(v))}</div>` : ''}
   <div class="th-row" style="margin-top:12px;grid-template-columns:56px 1fr 50px 90px 90px">
     <span></span><span>Producto</span><span style="text-align:center">Cant.</span><span>P. Unit.</span><span>Subtotal</span>
   </div>
@@ -17266,7 +17280,7 @@ function exportarPedido(v) {
   lines.push('');
   if (v.totalARS > 0) lines.push(`💰 Total ARS: $ ${Math.round(v.totalARS).toLocaleString('es-AR')}`);
   if (v.totalUSD > 0) lines.push(`💰 Total USD: U$S ${parseFloat(v.totalUSD).toFixed(2)}`);
-  if (v.notas && v.notas !== 'Manual') lines.push(`📝 ${v.notas}`);
+  if (_notaCliente(v)) lines.push(`📝 ${_notaCliente(v)}`);
   const texto = lines.join('\n');
   if (navigator.share) {
     navigator.share({ text: texto }).catch(() => {});
@@ -17284,13 +17298,59 @@ let _editNotas = [];      // renglones del pedido que no son productos (notas su
 // que se guarda aparte para no borrarlo al editar el texto libre.
 let _editNotaOrig = '', _editNotaPrefijo = '';
 
-function abrirEditarPedido(v) {
-  _editPedidoActual = v;
-  _editLineas = parsearLineasPedido(v.productos);
-  const _sep = _separarNotasPedido(_editLineas);
-  _editLineas = _sep.lineas;
-  _editNotas = _sep.notas;
-  const _descGuardado = _sep.desc;
+// 🧮 LA CUENTA DEL PEDIDO, UNA SOLA VEZ: desde las líneas arma el texto que se guarda, los
+// totales y el reparto 2×2 (dueño × moneda) con la comisión de Miri. La usan el editor de pedidos
+// y el "levantar pedido cancelado" — tener esta cuenta duplicada ya costó tres bugs de plata
+// seguidos (v4.23/24/25), así que vive en un solo lugar.
+// Sutileza intencional que se respeta tal cual estaba: el TOTAL agrupa por la moneda de la LÍNEA
+// (lo que se le cobró al cliente) y el REPARTO por la moneda del PRODUCTO en el catálogo.
+// Las líneas con cantidad 0 no entran (así el "levantar" saca lo que no hay sin cuentas raras).
+function _armarPedidoDesdeLineas(lineas, notas, descGlobal, tipo, prods) {
+  const cat = prods || productos;
+  const fmt = (n, m) => m === 'U$S' ? n.toFixed(2) : Math.round(n).toLocaleString('es-AR');
+  const dg = parseFloat(descGlobal) || 0;
+  const desc = (dg > 0 && dg <= 100) ? dg : 0;
+  const fg = 1 - desc / 100;
+  const renglones = [], qtys = {};
+  let totalARS = 0, totalUSD = 0, arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0;
+  (lineas || []).forEach(l => {
+    const qty = parseInt(l.qty) || 0;
+    if (qty <= 0) return;
+    const dProd = (parseFloat(l.desc) || 0) / 100;
+    const precioEf = (parseFloat(l.precio) || 0) * (1 - dProd);
+    const sub = precioEf * qty;
+    const descTag = (parseFloat(l.desc) || 0) > 0 ? ` [-${l.desc}%]` : '';
+    const descProducto = l.descripcion ? ` · ${l.descripcion}` : '';
+    renglones.push(`• ${qty}x ${l.nombre}${descProducto}${descTag} — ${l.moneda} ${fmt(precioEf, l.moneda)} c/u = ${l.moneda} ${fmt(sub, l.moneda)}`);
+    if (l.moneda === 'U$S') totalUSD += sub; else totalARS += sub;
+    // Dueño y moneda mandan por el CATÁLOGO; el nombre ('pitzujim') solo si el producto ya no existe.
+    const p = l.prodId ? cat.find(x => String(x.id) === String(l.prodId)) : null;
+    const esJ = p ? (p.dueno === 'Jony') : /pitzujim/i.test(l.nombre || '');
+    const mon = p ? _precioMoneda(p, tipo).moneda : (l.moneda || '$');
+    if (mon === 'U$S') { if (esJ) usdJONY += sub; else usdMyri += sub; }
+    else if (esJ) arsJONY += sub;
+    else arsMyri += sub;
+    if (l.prodId) qtys[l.prodId] = (qtys[l.prodId] || 0) + qty;
+  });
+  (notas || []).forEach(n => renglones.push(n));
+  if (desc > 0) renglones.push(`🏷️ Descuento global: ${desc}%`);
+  totalARS *= fg; totalUSD *= fg; arsJONY *= fg; arsMyri *= fg; usdMyri *= fg; usdJONY *= fg;
+  return {
+    productos: renglones.join(' || '),
+    totalARS, totalUSD, arsJONY, arsMyri, usdMyri, usdJONY,
+    comiARS: Math.round(arsMyri * 0.15),                     // la comisión es SOLO sobre lo de Miri
+    comiUSD: parseFloat((usdMyri * 0.15).toFixed(2)),
+    qtys,
+    stockUpdates: Object.keys(qtys).filter(k => qtys[k] > 0).map(k => k + ':' + qtys[k]).join(',')
+  };
+}
+
+// 🔎 IDENTIFICAR QUÉ PRODUCTO ES CADA RENGLÓN de un pedido guardado (el pedido se guarda como
+// texto). Lo usan el editor de pedidos y el "levantar pedido cancelado": los dos necesitan saber
+// el prodId de cada línea para tocar el stock del producto correcto. Una sola fuente de verdad:
+// si el matcher mejora, mejora en los dos lugares. Devuelve las mismas líneas, con l.prodId.
+function _identificarLineasPedido(lineas, v, prods) {
+  const cat = prods || productos;
   // IDs EXACTOS que esta venta descontó (stock_updates "id:cant"): es la verdad de qué productos
   // se vendieron. Ante GEMELOS de distinto dueño con nombre Y descripción idénticos (Kukiman
   // #68 Miri / #153 Jony), el match por nombre+desc empataba y podía elegir el del dueño
@@ -17298,7 +17358,7 @@ function abrirEditarPedido(v) {
   const _suIds = new Set((v.stockUpdates || '').toString().split(',').map(u => u.split(':')[0].trim()).filter(x => /^\d+$/.test(x)));
   // Identificar el producto de cada línea (por nombre, desempatando por descripción o precio):
   // hace falta para ajustar stock al guardar y para reparar descripciones perdidas.
-  _editLineas.forEach(l => {
+  lineas.forEach(l => {
     if (!l.nombre) return;
     // Match por nombre actual O anteriores (historial) → renombrar no rompe pedidos viejos.
     const ld = (l.descripcion || '').trim().toLowerCase();
@@ -17315,7 +17375,7 @@ function abrirEditarPedido(v) {
     let cands = [], _nombreExacto = false;
     for (let i = _partes.length; i >= 2 && !cands.length; i--) {   // i>=2: el nombre ARMADO (con ' · ')
       const nom = _partes.slice(0, i).join(' · ').trim();
-      const hit = productos.filter(p => (p.nombre || '').trim() === nom);
+      const hit = cat.filter(p => (p.nombre || '').trim() === nom);
       if (!hit.length) continue;
       // Si la venta descontó uno de estos IDs, ese manda (el ID es la verdad, no el nombre).
       const enSu0 = _suIds.size ? hit.filter(c => _suIds.has(String(c.id))) : [];
@@ -17324,8 +17384,8 @@ function abrirEditarPedido(v) {
       // la línea llama "descripción" es en realidad el resto del nombre + la desc recortada.
       _nombreExacto = true;
     }
-    if (!cands.length) cands = productos.filter(p => p.nombre === l.nombre);
-    if (!cands.length) cands = productos.filter(p => _matchNombreProd(p, l.nombre));
+    if (!cands.length) cands = cat.filter(p => p.nombre === l.nombre);
+    if (!cands.length) cands = cat.filter(p => _matchNombreProd(p, l.nombre));
     // Candado por ID: si hay varios candidatos y la venta registró EXACTAMENTE uno de ellos,
     // ese es (sin adivinar por desc/precio). Si registró varios gemelos a la vez, siguen los
     // desempates de siempre (caso rarísimo: el mismo pedido con el gemelo de Miri Y el de Jony).
@@ -17357,7 +17417,7 @@ function abrirEditarPedido(v) {
       const lp = palabras(l.nombre + ' ' + (l.descripcion || ''));
       if (lp.length) {
         let best = null, score = 0;
-        productos.forEach(p => { const cp = palabras((p.nombre || '') + ' ' + (p.desc || '')); const sc = lp.filter(w => cp.indexOf(w) !== -1).length; if (sc > score) { score = sc; best = p; } });
+        cat.forEach(p => { const cp = palabras((p.nombre || '') + ' ' + (p.desc || '')); const sc = lp.filter(w => cp.indexOf(w) !== -1).length; if (sc > score) { score = sc; best = p; } });
         if (score >= 2) pl = best;
       }
     }
@@ -17365,6 +17425,209 @@ function abrirEditarPedido(v) {
     l.prodId = pl.id;
     if (!l.descripcion && pl.desc) l.descripcion = pl.desc.substring(0, 45);
   });
+  return lineas;
+}
+
+// ── ↩️ LEVANTAR UN PEDIDO CANCELADO ─────────────────────────────────────────────────────────
+// Cancelar devolvió la mercadería al depósito, así que "levantar" no es solo cambiar el estado:
+// hay que volver a sacar del stock lo que el pedido pide. Y en el medio pudo venderse todo o
+// parte de eso, así que el pedido se reconstruye con lo que HAY DE VERDAD hoy: lo que no alcanza
+// se ajusta a lo disponible y lo que no queda nada se cae del pedido. Antes de escribir nada se
+// muestra la radiografía para que la decisión sea tuya, no una sorpresa.
+let _lvPed = null, _lvLineas = [], _lvNotas = [], _lvDesc = 0, _lvStockOverride = {};
+
+// El plan, en limpio (función pura, testeada en tests/unit/levantar_pedido.js): para cada renglón
+// decide qué queda. Varios renglones del mismo producto se sirven por orden de aparición: el
+// primero se lleva lo que hay. Sin prodId = el producto ya no está en el catálogo → no hay stock.
+function _planLevantarPedido(lineas, stockPorId) {
+  const usado = {}, sp = stockPorId || {};
+  return (lineas || []).map(l => {
+    const pedida = parseInt(l.qty) || 0;
+    const id = l.prodId ? String(l.prodId) : '';
+    const hay = id ? Math.max(0, (parseInt(sp[id]) || 0) - (usado[id] || 0)) : 0;
+    const q = Math.min(pedida, hay);
+    if (id) usado[id] = (usado[id] || 0) + q;
+    const motivo = !id ? 'sin-catalogo' : (q === 0 ? 'sin-stock' : (q < pedida ? 'ajustada' : 'ok'));
+    return Object.assign({}, l, { pedida, qty: q, hay, max: Math.min(pedida, hay), motivo });
+  });
+}
+
+// Stock de hoy tal como lo ve el panel, con el override que manda el backend cuando descubre que
+// había menos (caso típico: producto que comparte depósito con Candy, donde la verdad vive allá).
+function _stockHoyPorId() {
+  const m = {};
+  (productos || []).forEach(p => { m[String(p.id)] = parseInt(p.stock) || 0; });
+  Object.keys(_lvStockOverride).forEach(k => { m[k] = _lvStockOverride[k]; });
+  return m;
+}
+
+function abrirLevantarPedido(v) {
+  if ((v.estado || '') !== 'cancelado') { showToast('Este pedido no está cancelado'); return; }
+  _lvPed = v; _lvStockOverride = {};
+  const _sep = _separarNotasPedido(parsearLineasPedido(v.productos));
+  _lvNotas = _sep.notas; _lvDesc = _sep.desc;
+  _identificarLineasPedido(_sep.lineas, v);
+  // Renglón sin precio válido: se repara desde el catálogo (mismo criterio que el editor — el
+  // precio guardado manda siempre, porque puede ser un precio especial acordado con el cliente).
+  _sep.lineas.forEach(l => {
+    if (isFinite(l.precio) && l.precio > 0) return;
+    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
+    if (!p) return;
+    const pm = _precioMoneda(p, v.tipo || 'Minorista');
+    if (pm.moneda) l.moneda = pm.moneda;
+    if (isFinite(pm.precioUnit) && pm.precioUnit > 0) l.precio = pm.precioUnit;
+  });
+  _lvLineas = _planLevantarPedido(_sep.lineas, _stockHoyPorId());
+  let ov = document.getElementById('levantar-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'levantar-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  }
+  _renderLevantar();
+}
+
+function _renderLevantar() {
+  const ov = document.getElementById('levantar-overlay');
+  if (!ov || !_lvPed) return;
+  const v = _lvPed, tipo = v.tipo || 'Minorista';
+  const quedan = _lvLineas.filter(l => (parseInt(l.qty) || 0) > 0);
+  const arm = _armarPedidoDesdeLineas(quedan, _lvNotas, _lvDesc, tipo);
+  const fmtM = (n, m) => m === 'U$S' ? 'U$S ' + n.toFixed(2) : '$ ' + Math.round(n).toLocaleString('es-AR');
+  const totalTxt = t => [t.ars > 0.5 ? fmtM(t.ars, '$') : '', t.usd > 0.005 ? fmtM(t.usd, 'U$S') : ''].filter(Boolean).join(' + ') || '$ 0';
+  const antes = { ars: parseFloat(v.totalARS) || 0, usd: parseFloat(v.totalUSD) || 0 };
+  const ahora = { ars: arm.totalARS, usd: arm.totalUSD };
+  const cambió = Math.abs(antes.ars - ahora.ars) > 0.5 || Math.abs(antes.usd - ahora.usd) > 0.005;
+  const nAjust = _lvLineas.filter(l => l.motivo === 'ajustada').length;
+  const nFuera = _lvLineas.filter(l => (parseInt(l.qty) || 0) === 0).length;
+
+  const filas = _lvLineas.map((l, i) => {
+    const q = parseInt(l.qty) || 0;
+    const cfg = q === 0
+      ? { bg: '#fde0e0', bd: '#e0b4b4', ico: '❌', col: '#c0392b' }
+      : (l.motivo === 'ajustada' ? { bg: '#fff3d6', bd: '#e8cf9a', ico: '✏️', col: '#b8730a' }
+                                 : { bg: '#eef7ee', bd: '#cfe4cf', ico: '✅', col: '#1a7a3a' });
+    let detalle;
+    if (l.motivo === 'sin-catalogo') detalle = 'ya no está en el catálogo → sale del pedido';
+    else if (q === 0) detalle = 'pedía ' + l.pedida + ' · no queda nada en depósito → sale del pedido';
+    else if (l.motivo === 'ajustada') detalle = 'pedía ' + l.pedida + ' · quedan ' + l.hay + ' → lo ajusté a ' + q;
+    else detalle = l.pedida + ' u. · hay ' + l.hay + ' en depósito';
+    const sub = (parseFloat(l.precio) || 0) * q * (1 - (parseFloat(l.desc) || 0) / 100);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:${cfg.bg};border:1px solid ${cfg.bd};margin-bottom:5px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.82rem;font-weight:700;color:#2b2b2b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cfg.ico} ${esc(l.nombre || '')}${l.descripcion ? ' · ' + esc(String(l.descripcion).substring(0, 40)) : ''}</div>
+        <div style="font-size:0.68rem;color:${cfg.col};font-weight:600">${detalle}</div>
+      </div>
+      <input type="number" min="0" max="${l.max}" value="${q}" ${l.max > 0 ? '' : 'disabled'} onchange="_setQtyLevantar(${i}, this.value)"
+        style="width:58px;padding:5px;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.82rem;text-align:center;background:#fff">
+      <div style="width:96px;text-align:right;font-size:0.76rem;font-weight:700;color:${q ? '#2b2b2b' : '#b0b0b0'}">${fmtM(sub, l.moneda)}</div>
+    </div>`;
+  }).join('');
+
+  const avisoCobro = (typeof esCobradoReal === 'function' && esCobradoReal(v))
+    ? `<div style="background:#fff3d6;border:2px solid #e8a13a;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;color:#7a5a1a">
+        ⚠️ Este pedido ya tenía <b>cobro registrado</b>. Al levantarlo vuelve a contar como venta viva${cambió ? ' y ahora vale menos que lo cobrado — revisá el saldo a favor del cliente' : ''}.
+      </div>` : '';
+
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.1rem 1.2rem;max-width:620px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.12rem">↩️ Levantar pedido ${v.nVenta ? '#' + v.nVenta : ''} — ${esc(v.cliente || '')}</div>
+    <div style="font-size:0.76rem;color:var(--texto-suave);margin:0.25rem 0 0.8rem">Vuelve a quedar <b>pendiente</b> y se descuenta el stock otra vez. Chequeé qué hay hoy en el depósito: <b>solo queda lo que existe de verdad</b>.</div>
+    ${avisoCobro}
+    ${(nAjust || nFuera) ? `<div style="background:#f6f6f6;border-radius:9px;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.78rem;font-weight:700;color:#555">
+      ${nAjust ? '✏️ ' + nAjust + ' ajustado' + (nAjust > 1 ? 's' : '') : ''}${(nAjust && nFuera) ? ' · ' : ''}${nFuera ? '❌ ' + nFuera + ' sale' + (nFuera > 1 ? 'n' : '') + ' del pedido' : ''}
+    </div>` : ''}
+    <div style="margin-bottom:0.7rem">${filas || '<div style="font-size:0.8rem;color:var(--texto-suave)">Este pedido no tiene renglones de productos.</div>'}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gris);border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.85rem">
+      <div style="font-size:0.72rem;color:var(--texto-suave)">Total del pedido${cambió ? ' <span style="text-decoration:line-through">' + totalTxt(antes) + '</span>' : ''}</div>
+      <div style="font-size:1rem;font-weight:800;color:${cambió ? '#b8730a' : 'var(--verde)'}">${totalTxt(ahora)}</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('levantar-overlay').remove()" style="flex:1;padding:0.65rem;background:var(--gris);border:none;border-radius:9px;font-weight:700;cursor:pointer;font-family:inherit">Dejarlo cancelado</button>
+      <button id="lv-btn-ok" ${quedan.length ? '' : 'disabled'} onclick="confirmarLevantarPedido()"
+        style="flex:2;padding:0.65rem;background:${quedan.length ? 'var(--verde)' : '#c9c9c9'};color:#fff;border:none;border-radius:9px;font-weight:700;cursor:${quedan.length ? 'pointer' : 'not-allowed'};font-family:inherit">
+        ${quedan.length ? '↩️ Levantar con lo que hay' : 'No hay stock de nada'}</button>
+    </div>
+  </div>`;
+}
+
+function _setQtyLevantar(i, valor) {
+  const l = _lvLineas[i];
+  if (!l) return;
+  let q = parseInt(valor) || 0;
+  if (q < 0) q = 0;
+  if (q > l.max) { q = l.max; showToast('De ' + l.nombre + ' hay ' + l.hay + ' nomás'); }
+  l.qty = q;
+  if (q > 0 && l.motivo !== 'sin-catalogo') l.motivo = (q < l.pedida) ? 'ajustada' : 'ok';
+  _renderLevantar();
+}
+
+async function confirmarLevantarPedido() {
+  if (!_lvPed) return;
+  const quedan = _lvLineas.filter(l => (parseInt(l.qty) || 0) > 0);
+  if (!quedan.length) { showToast('No hay stock de nada de este pedido'); return; }
+  const fuera = _lvLineas.filter(l => (parseInt(l.qty) || 0) === 0);
+  if (fuera.length && !confirm('Se van a sacar del pedido ' + fuera.length + ' renglón/es por falta de stock:\n• '
+      + fuera.map(l => l.nombre).join('\n• ') + '\n\n¿Levanto el pedido con el resto?')) return;
+  const btn = document.getElementById('lv-btn-ok');
+  if (btn) { btn.textContent = 'Levantando...'; btn.disabled = true; }
+  const tipo = _lvPed.tipo || 'Minorista';
+  const arm = _armarPedidoDesdeLineas(quedan, _lvNotas, _lvDesc, tipo);
+  const params = new URLSearchParams({
+    accion: 'levantarPedido',
+    id: _lvPed.id,
+    productos: arm.productos,
+    stockUpdatesNuevo: arm.stockUpdates,
+    totalARS: Math.round(arm.totalARS),
+    totalUSD: arm.totalUSD.toFixed(2),
+    arsJONY: Math.round(arm.arsJONY),
+    arsMyri: Math.round(arm.arsMyri),
+    usdMyri: arm.usdMyri.toFixed(2),
+    usdJONY: arm.usdJONY.toFixed(2),
+    comiARS: arm.comiARS,
+    comiUSD: arm.comiUSD.toFixed(2)
+  });
+  invalidarCache();
+  let data;
+  try { data = await fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString()); }
+  catch { showToast('⚠️ Sin conexión — no se levantó. Reintentá.'); if (btn) { btn.textContent = '↩️ Levantar con lo que hay'; btn.disabled = false; } return; }
+  if (!data || !data.ok) {
+    // El backend miró el stock REAL y había menos del que figuraba en el panel: rehacemos la
+    // radiografía con ese número (no se escribió nada) para que confirmes la cuenta corregida.
+    if (data && data.recalcular && Array.isArray(data.faltantes)) {
+      data.faltantes.forEach(f => { _lvStockOverride[String(f.id)] = parseInt(f.hay) || 0; });
+      const cat = _stockHoyPorId();
+      _lvLineas = _planLevantarPedido(_lvLineas.map(l => Object.assign({}, l, { qty: l.pedida })), cat);
+      _renderLevantar();
+      showToast('⚠️ Había menos stock del que figuraba — recalculé el pedido, revisalo');
+      return;
+    }
+    showToast('⚠️ ' + ((data && data.error) || 'No se pudo levantar'));
+    if (btn) { btn.textContent = '↩️ Levantar con lo que hay'; btn.disabled = false; }
+    return;
+  }
+  // Reflejar el descuento en el catálogo local al instante (el refresco de fondo lo confirma).
+  Object.keys(arm.qtys).forEach(id => {
+    const pl = productos.find(x => String(x.id) === String(id));
+    if (pl) pl.stock = (parseInt(pl.stock) || 0) - arm.qtys[id];
+  });
+  const ov = document.getElementById('levantar-overlay'); if (ov) ov.remove();
+  showToast('↩️ Pedido levantado — vuelve a estar pendiente ✓');
+  _lvPed = null; _lvLineas = [];
+  try { await renderPedidos(); } catch (e) {}
+  renderCaja(); renderCuentaCorriente(); renderCuentaSocios();
+  cargarProductos();
+}
+
+function abrirEditarPedido(v) {
+  _editPedidoActual = v;
+  _editLineas = parsearLineasPedido(v.productos);
+  const _sep = _separarNotasPedido(_editLineas);
+  _editLineas = _sep.lineas;
+  _editNotas = _sep.notas;
+  const _descGuardado = _sep.desc;
+  _identificarLineasPedido(_editLineas, v);
   // El precio y la moneda GUARDADOS en el pedido son la fuente de verdad: es lo que se acordó con
   // el cliente y puede ser un precio ESPECIAL editado a mano (ej. Sarah Kantor #51 — Pitzujim a
   // minorista −10% dentro de un pedido mayorista). Se RESPETAN. Solo se repara desde el catálogo
@@ -17396,9 +17659,11 @@ function abrirEditarPedido(v) {
   if (_epn) {
     let _n = (v.notas || '').toString();
     if (_n.trim() === 'Manual') _n = '';
-    const _pfx = '🟡 COTIZACIÓN · ';
-    _editNotaPrefijo = (_n.indexOf(_pfx) === 0) ? _pfx : '';
-    if (_editNotaPrefijo) _n = _n.slice(_pfx.length);
+    // Marcadores internos que van al principio de la nota (cotización, pedido levantado): se
+    // guardan aparte para que editar el texto libre no los borre.
+    const _mp = _n.match(/^(?:🔁 Levantado el \d{2}\/\d{2}\/\d{4}(?: · )?|🟡 COTIZACIÓN · )+/);
+    _editNotaPrefijo = _mp ? _mp[0] : '';
+    if (_editNotaPrefijo) _n = _n.slice(_editNotaPrefijo.length);
     _epn.value = _n;
     _editNotaOrig = _n.trim();
   }
@@ -17641,7 +17906,7 @@ async function guardarEditPedido() {
   const btn = document.getElementById('ep-btn-save');
   btn.textContent = 'Guardando...'; btn.disabled = true;
 
-  const { totalARS, totalUSD } = recalcularEditTotal();
+  recalcularEditTotal();   // refresca lo que se ve; los totales que se guardan salen de _armarPedidoDesdeLineas
   const tipo = document.getElementById('ep-tipo').value;
   const desc = parseFloat(document.getElementById('ep-descuento').value) || 0;
 
@@ -17658,23 +17923,11 @@ async function guardarEditPedido() {
     }
   }
 
-  // Reconstruir string de productos con nuevos precios
-  const nuevasLineas = _editLineas.map(l => {
-    const descProd = (l.desc || 0) / 100;
-    const precioEf = l.precio * (1 - descProd);
-    const sub = precioEf * l.qty;
-    const unitStr = formatEditVal(precioEf, l.moneda);
-    const subStr = formatEditVal(sub, l.moneda);
-    const descTag = l.desc > 0 ? ` [-${l.desc}%]` : '';
-    const descProducto = l.descripcion ? ` · ${l.descripcion}` : '';
-    return `• ${l.qty}x ${l.nombre}${descProducto}${descTag} — ${l.moneda} ${unitStr} c/u = ${l.moneda} ${subStr}`;
-  });
-  _editNotas.forEach(n => nuevasLineas.push(n));   // notas del pedido que no son productos: se conservan
-  if (desc > 0) nuevasLineas.push(`🏷️ Descuento global: ${desc}%`);
+  // Texto del pedido, totales y reparto 2×2: UNA sola cuenta, compartida con "levantar pedido".
+  const _arm = _armarPedidoDesdeLineas(_editLineas, _editNotas, desc, tipo);
 
   // Ajuste de stock por diferencia con lo que había al abrir (agregados, quitados, cantidades)
-  const qtysAhora = {};
-  _editLineas.forEach(l => { if (l.prodId) qtysAhora[l.prodId] = (qtysAhora[l.prodId] || 0) + (l.qty || 0); });
+  const qtysAhora = _arm.qtys;
   const idsTodos = [...new Set([...Object.keys(_editQtysOrig), ...Object.keys(qtysAhora)])];
   const deltas = [];
   idsTodos.forEach(id => {
@@ -17689,43 +17942,21 @@ async function guardarEditPedido() {
   idsTodos.forEach(id => { suMap[id] = qtysAhora[id] || 0; });
   const suNuevo = Object.keys(suMap).filter(k => suMap[k] > 0).map(k => k + ':' + suMap[k]).join(',');
 
-  // RECALCULAR el split 2×2 (dueño × moneda) desde los productos REALES (no escalar el viejo).
-  // Dueño manda por el catálogo; el nombre ('pitzujim') solo si el producto ya no existe.
-  // La comisión (15%) es SOLO sobre lo de Myri (arsMyri/usdMyri).
-  const _esJonyLinea = l => {
-    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
-    return p ? (p.dueno === 'Jony') : /pitzujim/i.test(l.nombre || '');
-  };
-  let eArsJ = 0, eArsM = 0, eUsdM = 0, eUsdJ = 0;
-  _editLineas.forEach(l => {
-    const sub = (parseFloat(l.precio) || 0) * (l.qty || 0) * (1 - (l.desc || 0) / 100);
-    const esJ = _esJonyLinea(l);
-    // Moneda desde el PRODUCTO real (no la de la línea, que puede venir mal del texto viejo).
-    const p = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
-    const mon = p ? _precioMoneda(p, tipo).moneda : (l.moneda || '$');
-    if (mon === 'U$S') { if (esJ) eUsdJ += sub; else eUsdM += sub; }
-    else if (esJ) eArsJ += sub;
-    else eArsM += sub;
-  });
-  if (desc > 0 && desc <= 100) { const fg = 1 - desc / 100; eArsJ *= fg; eArsM *= fg; eUsdM *= fg; eUsdJ *= fg; }
-  const eComiARS = Math.round(eArsM * 0.15);
-  const eComiUSD = parseFloat((eUsdM * 0.15).toFixed(2));
-
   const params = new URLSearchParams({
     accion: 'actualizarPedido',
     id: _editPedidoActual.id,
     stockUpdatesNuevo: suNuevo,
-    productos: nuevasLineas.join(' || '),
+    productos: _arm.productos,
     tipo,
-    totalARS: Math.round(totalARS),
-    totalUSD: totalUSD.toFixed(2),
+    totalARS: Math.round(_arm.totalARS),
+    totalUSD: _arm.totalUSD.toFixed(2),
     // Split 2×2 recalculado desde los productos reales (dueño × moneda; comisión solo sobre Myri)
-    arsJONY: Math.round(eArsJ),
-    arsMyri: Math.round(eArsM),
-    usdMyri: eUsdM.toFixed(2),
-    usdJONY: eUsdJ.toFixed(2),
-    comiARS: eComiARS,
-    comiUSD: eComiUSD.toFixed(2)
+    arsJONY: Math.round(_arm.arsJONY),
+    arsMyri: Math.round(_arm.arsMyri),
+    usdMyri: _arm.usdMyri.toFixed(2),
+    usdJONY: _arm.usdJONY.toFixed(2),
+    comiARS: _arm.comiARS,
+    comiUSD: _arm.comiUSD.toFixed(2)
   });
   if (reasignar) params.set('cliente', clienteNuevo);
   // Envío cobrado al cliente (puede setearse/editarse acá).

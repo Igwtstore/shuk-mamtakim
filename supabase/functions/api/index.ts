@@ -1445,6 +1445,19 @@ async function moverStockShuk(pid: string, delta: number, motivo: string) {
   return { antes, despues, compartido: false, nombre };
 }
 
+// Stock REAL disponible de un producto del Shuk. Si comparte depósito con Candy (candy_cod),
+// la verdad NO está en productos.stock sino en candy_deposito (mismo pozo que Candy) — leerlo
+// del lado equivocado hace creer que hay mercadería que no existe. Devuelve null si el producto
+// ya no está en el catálogo.
+async function stockRealShuk(pid: string): Promise<number | null> {
+  const pr = await sbGet('productos', 'select=stock,candy_cod&id=eq.' + encodeURIComponent(pid));
+  if (!pr.length) return null;
+  const cc = (pr[0].candy_cod || '').toString().trim();
+  if (!cc) return parseInt(pr[0].stock) || 0;
+  const dep = await sbGet('candy_deposito', 'select=cantidad&codigo=eq.' + encodeURIComponent(cc));
+  return dep.length ? (parseInt(dep[0].cantidad) || 0) : 0;
+}
+
 // Alta automática del cliente al registrar una venta (portado de altaClienteAuto_).
 // No duplica (compara normalizado) y NUNCA rompe la venta.
 async function altaClienteAuto(nombre: string, tipo: string) {
@@ -3531,6 +3544,52 @@ Deno.serve(async (req) => {
         }
       }
       return json({ ok: true });
+    }
+    if (accion === 'levantarPedido') {
+      // ↩️ LEVANTAR UN PEDIDO CANCELADO: vuelve a 'pendiente' y descuenta OTRA VEZ el stock, pero
+      // solo lo que hay de verdad hoy (el front ya recortó el pedido contra el stock que vio y
+      // manda las líneas finales). Acá se vuelve a mirar el stock REAL antes de escribir nada:
+      // si entre la radiografía y el OK cambió (venta en curso, Candy sacó del mismo pozo), NO se
+      // aplica nada y se pide rehacer la cuenta — es preferible repetir el paso a sobrevender.
+      if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
+      const idLv = P(body, 'id');
+      const rowsLv = await sbGet('ventas', 'select=*&id=eq.' + encodeURIComponent(idLv));
+      if (!rowsLv.length) return json({ error: 'no encontrado' });
+      const vLv = rowsLv[0];
+      if ((vLv.estado || '').toString().trim() !== 'cancelado') return json({ error: 'este pedido no está cancelado (¿ya lo levantaste?)' });
+      const suLv = P(body, 'stockUpdatesNuevo').toString();
+      const aDescontar: { pid: string; qty: number }[] = [];
+      for (const u of suLv.split(',')) {
+        const pp = u.split(':'); const pid = (pp[0] || '').trim(); const qty = parseInt(pp[1]) || 0;
+        if (pid && qty > 0) aDescontar.push({ pid, qty });
+      }
+      // Chequeo TODO-O-NADA: se mira todo el stock ANTES de tocar una sola fila.
+      const faltantes: any[] = [];
+      for (const it of aDescontar) {
+        const hay = await stockRealShuk(it.pid);
+        if (hay === null) { faltantes.push({ id: it.pid, pide: it.qty, hay: 0, motivo: 'ya no está en el catálogo' }); continue; }
+        if (hay < it.qty) faltantes.push({ id: it.pid, pide: it.qty, hay });
+      }
+      if (faltantes.length) return json({ error: 'el stock cambió mientras confirmabas — volvé a levantarlo para rehacer la cuenta', recalcular: true, faltantes });
+      const patchLv: any = { estado: 'pendiente', stock_updates: suLv };
+      if (has('productos')) patchLv.productos = P(body, 'productos');
+      if (body.totalARS !== undefined) patchLv.total_ars = N(body, 'totalARS');
+      if (body.totalUSD !== undefined) patchLv.total_usd = N(body, 'totalUSD');
+      if (body.arsJONY !== undefined) patchLv.ars_jony = N(body, 'arsJONY');
+      if (body.arsMyri !== undefined) patchLv.ars_myri = N(body, 'arsMyri');
+      if (body.usdMyri !== undefined) patchLv.usd_myri = N(body, 'usdMyri');
+      if (body.usdJONY !== undefined) patchLv.usd_jony = N(body, 'usdJONY');
+      if (body.comiARS !== undefined) patchLv.comi_ars = N(body, 'comiARS');
+      if (body.comiUSD !== undefined) patchLv.comi_usd = N(body, 'comiUSD');
+      // 🔁 Marcador de "levantado": reinicia el reloj de la reserva de 7 días (la fecha del pedido
+      // y su número NO se tocan: son la historia contable). Va como prefijo de la nota y el panel
+      // lo muestra; el remito y los mensajes al cliente lo esconden.
+      const notaPrevLv = (vLv.notas || '').toString().replace(/^(?:🔁 Levantado el \d{2}\/\d{2}\/\d{4}(?: · )?|🟡 COTIZACIÓN · )+/, '').trim();
+      const restoLv = (notaPrevLv && notaPrevLv !== 'Manual') ? notaPrevLv : '';
+      patchLv.notas = ('🔁 Levantado el ' + fechaAhora().slice(0, 10) + (restoLv ? ' · ' + restoLv : '')).slice(0, 500);
+      await sbPatch('ventas', 'id=eq.' + encodeURIComponent(idLv), patchLv);
+      for (const it of aDescontar) await moverStockShuk(it.pid, -it.qty, 'Pedido levantado #' + (vLv.n_venta || ''));
+      return json({ ok: true, descontados: aDescontar.length, nVenta: vLv.n_venta, notas: patchLv.notas });
     }
 
     if (accion === 'getGanancias') {
