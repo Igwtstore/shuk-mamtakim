@@ -213,6 +213,39 @@ const PEDIDO = {
   chk('"Manual" sigue sin ser una nota', reloj.notaManual === '');
   chk('El prefijo de cotización tampoco llega al remito', reloj.notaCotiz === 'Para el shabat', reloj.notaCotiz);
 
+  // ── 6. Pedido largo: sacar un renglón no puede hacerte perder el lugar en la lista ──
+  // Reclamo del usuario (07/09, pedido real de 37 renglones): "al borrar un artículo me lleva
+  // arriba de todo y después tengo que ver dónde estaba".
+  const LARGO = 30;
+  const catLargo = Array.from({ length: LARGO }, (_, i) => ({ id: i + 1, nombre: 'Producto ' + (i + 1), desc: 'x', dueno: 'Jony', moneda: '$', precioMay: '1000', precioMin: 1000, stock: 9, activo: 'SI', visible: 'Ambos', categoria: 'Varios', imagen: '' }));
+  const pedLargo = { id: 'VL', nVenta: 500, cliente: 'Pedido Largo', tipo: 'Mayorista', estado: 'cancelado', fecha: '01/09/2026 10:00', notas: '', totalARS: LARGO * 2000, totalUSD: 0, stockUpdates: '',
+    productos: catLargo.map(p => `• 2x ${p.nombre} · x — $ 1.000 c/u = $ 2.000`).join(' || ') };
+  await pg.setViewportSize({ width: 420, height: 740 });
+  const lugar = await pg.evaluate(async ({ cat, ped }) => {
+    productos = cat;
+    window.__stockBase = cat.map(p => ({ id: p.id, stock: p.stock }));
+    await abrirLevantarPedido(ped);
+    const caja = document.getElementById('levantar-overlay').firstElementChild;
+    const scrollable = caja.scrollHeight > caja.clientHeight;
+    // Lo que importa no es el scrollTop sino que el renglón quede DONDE ESTABA en la pantalla.
+    const yDe = i => { const el = document.getElementById('lv-fila-' + i); return el.getBoundingClientRect().top - caja.getBoundingClientRect().top; };
+    document.getElementById('lv-fila-23').scrollIntoView({ block: 'center' });
+    const antes = yDe(23);
+    _quitarLineaLevantar(23);
+    const trasQuitar = yDe(23);
+    const resaltada = !!document.getElementById('lv-fila-23').style.boxShadow;
+    _setQtyLevantar(23, 1);
+    const trasQty = yDe(23);
+    document.getElementById('levantar-overlay').remove();
+    window.__stockBase = null;
+    return { scrollable, antes, trasQuitar, trasQty, resaltada };
+  }, { cat: catLargo, ped: pedLargo });
+  console.log('\n── Pedido largo: no perder el lugar ──');
+  chk('La lista scrollea de verdad (si no, no se probaría nada)', lugar.scrollable);
+  chk('Sacar un renglón lo deja donde estaba', Math.abs(lugar.antes - lugar.trasQuitar) <= 2, Math.round(lugar.antes) + 'px → ' + Math.round(lugar.trasQuitar) + 'px');
+  chk('Cambiar la cantidad tampoco mueve la lista', Math.abs(lugar.antes - lugar.trasQty) <= 2, Math.round(lugar.antes) + 'px → ' + Math.round(lugar.trasQty) + 'px');
+  chk('El renglón tocado queda resaltado un momento', lugar.resaltada);
+
   const rel = errs.filter(e => /levantar|Levantar|_arm|_plan|identificarLineas/i.test(e));
   chk('Sin errores JS relevantes', rel.length === 0, rel.join('; '));
   await browser.close();

@@ -17434,7 +17434,7 @@ function _identificarLineasPedido(lineas, v, prods) {
 // parte de eso, así que el pedido se reconstruye con lo que HAY DE VERDAD hoy: lo que no alcanza
 // se ajusta a lo disponible y lo que no queda nada se cae del pedido. Antes de escribir nada se
 // muestra la radiografía para que la decisión sea tuya, no una sorpresa.
-let _lvPed = null, _lvLineas = [], _lvNotas = [], _lvDesc = 0, _lvStockOverride = {}, _lvStockFresco = true;
+let _lvPed = null, _lvLineas = [], _lvNotas = [], _lvDesc = 0, _lvStockOverride = {}, _lvStockFresco = true, _lvUltimo = -1;
 
 // El plan, en limpio (función pura, testeada en tests/unit/levantar_pedido.js): para cada renglón
 // decide qué queda. Varios renglones del mismo producto se sirven por orden de aparición: el
@@ -17482,7 +17482,7 @@ async function abrirLevantarPedido(v) {
   if ((v.estado || '') !== 'cancelado') { showToast('Este pedido no está cancelado'); return; }
   showToast('Revisando el depósito…');
   const _fresco = await _refrescarStockCatalogo();
-  _lvPed = v; _lvStockOverride = {}; _lvStockFresco = _fresco;
+  _lvPed = v; _lvStockOverride = {}; _lvStockFresco = _fresco; _lvUltimo = -1;
   const _sep = _separarNotasPedido(parsearLineasPedido(v.productos));
   _lvNotas = _sep.notas; _lvDesc = _sep.desc;
   _identificarLineasPedido(_sep.lineas, v);
@@ -17542,7 +17542,7 @@ function _renderLevantar() {
       ? `<button onclick="_quitarLineaLevantar(${i})" title="${q > 0 ? 'Sacar este producto del pedido' : 'Volver a ponerlo (hay ' + l.hay + ')'}"
           style="background:${q > 0 ? '#fde8e8' : '#e8f5ee'};border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:${q > 0 ? '#e05c2a' : '#1a7a3a'};font-size:${q > 0 ? '1rem' : '0.85rem'};font-weight:700;flex-shrink:0;font-family:inherit">${q > 0 ? '×' : '↺'}</button>`
       : `<span style="width:26px;flex-shrink:0"></span>`;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:${cfg.bg};border:1px solid ${cfg.bd};margin-bottom:5px">
+    return `<div id="lv-fila-${i}" style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:${cfg.bg};border:1px solid ${cfg.bd};margin-bottom:5px;transition:box-shadow .2s">
       <div style="flex:1;min-width:0">
         <div style="font-size:0.82rem;font-weight:700;color:#2b2b2b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cfg.ico} ${esc(l.nombre || '')}${l.descripcion ? ' · ' + esc(String(l.descripcion).substring(0, 40)) : ''}</div>
         <div style="font-size:0.68rem;color:${cfg.col};font-weight:600">${detalle}</div>
@@ -17554,40 +17554,75 @@ function _renderLevantar() {
     </div>`;
   }).join('');
 
-  const avisoCobro = (typeof esCobradoReal === 'function' && esCobradoReal(v))
-    ? `<div style="background:#fff3d6;border:2px solid #e8a13a;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;color:#7a5a1a">
-        ⚠️ Este pedido ya tenía <b>cobro registrado</b>. Al levantarlo vuelve a contar como venta viva${cambió ? ' y ahora vale menos que lo cobrado — revisá el saldo a favor del cliente' : ''}.
+  const chips = (nAjust || nFuera || nSacadas)
+    ? `<div style="background:#f6f6f6;border-radius:9px;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.78rem;font-weight:700;color:#555">
+        ${[nAjust ? '✏️ ' + nAjust + ' ajustado' + (nAjust > 1 ? 's' : '') : '',
+           nFuera ? '❌ ' + nFuera + ' sin stock' : '',
+           nSacadas ? '🚫 ' + nSacadas + ' que sacaste vos' : ''].filter(Boolean).join(' · ')}
       </div>` : '';
+  const totalHTML = `<div style="font-size:0.72rem;color:var(--texto-suave)">Total del pedido${cambió ? ' <span style="text-decoration:line-through">' + totalTxt(antes) + '</span>' : ''}</div>
+      <div style="font-size:1rem;font-weight:800;color:${cambió ? '#b8730a' : 'var(--verde)'}">${totalTxt(ahora)}</div>`;
 
-  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.1rem 1.2rem;max-width:620px;width:100%;max-height:88vh;overflow-y:auto">
-    <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.12rem">↩️ Levantar pedido ${v.nVenta ? '#' + v.nVenta : ''} — ${esc(v.cliente || '')}</div>
-    <div style="font-size:0.76rem;color:var(--texto-suave);margin:0.25rem 0 0.8rem">Vuelve a quedar <b>pendiente</b> y se descuenta el stock otra vez. Chequeé qué hay hoy en el depósito: <b>solo queda lo que existe de verdad</b>.</div>
-    ${avisoCobro}
-    ${_lvStockFresco ? '' : `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;font-weight:700;color:#c0392b">
-        ⚠️ No pude leer el depósito recién — lo que ves puede estar viejo. Recargá la página antes de levantarlo.
-      </div>`}
-    ${(nAjust || nFuera || nSacadas) ? `<div style="background:#f6f6f6;border-radius:9px;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.78rem;font-weight:700;color:#555">
-      ${[nAjust ? '✏️ ' + nAjust + ' ajustado' + (nAjust > 1 ? 's' : '') : '',
-         nFuera ? '❌ ' + nFuera + ' sin stock' : '',
-         nSacadas ? '🚫 ' + nSacadas + ' que sacaste vos' : ''].filter(Boolean).join(' · ')}
-    </div>` : ''}
-    <div style="margin-bottom:0.7rem">${filas || '<div style="font-size:0.8rem;color:var(--texto-suave)">Este pedido no tiene renglones de productos.</div>'}</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gris);border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.85rem">
-      <div style="font-size:0.72rem;color:var(--texto-suave)">Total del pedido${cambió ? ' <span style="text-decoration:line-through">' + totalTxt(antes) + '</span>' : ''}</div>
-      <div style="font-size:1rem;font-weight:800;color:${cambió ? '#b8730a' : 'var(--verde)'}">${totalTxt(ahora)}</div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="document.getElementById('levantar-overlay').remove()" style="flex:1;padding:0.65rem;background:var(--gris);border:none;border-radius:9px;font-weight:700;cursor:pointer;font-family:inherit">Dejarlo cancelado</button>
-      <button id="lv-btn-ok" ${quedan.length ? '' : 'disabled'} onclick="confirmarLevantarPedido()"
-        style="flex:2;padding:0.65rem;background:${quedan.length ? 'var(--verde)' : '#c9c9c9'};color:#fff;border:none;border-radius:9px;font-weight:700;cursor:${quedan.length ? 'pointer' : 'not-allowed'};font-family:inherit">
-        ${quedan.length ? '↩️ Levantar con lo que hay' : 'No hay stock de nada'}</button>
-    </div>
-  </div>`;
+  // 📍 NO PERDER EL LUGAR (pedido del usuario 07/09): la lista es larga (37 renglones en el caso
+  // real) y redibujar TODO el cuadro mandaba el scroll al principio en cada ✕ — había que buscar
+  // de nuevo dónde estabas. Ya montado, se refresca SOLO lo que cambia (filas, resumen, total y
+  // botón) sin destruir el contenedor que scrollea: la posición ni se entera.
+  const _filasEl = document.getElementById('lv-filas');
+  if (_filasEl) {
+    // ⚓ ANCLA EN EL RENGLÓN QUE TOCASTE: el cartelito de resumen aparece/desaparece según lo que
+    // vas sacando y empuja la lista para abajo. Se mide dónde estaba el renglón EN PANTALLA antes
+    // de redibujar y se corrige el scroll para dejarlo en el mismo lugar: queda bajo el dedo.
+    const _caja = ov.firstElementChild;
+    const _yDe = (el) => (el && _caja) ? (el.getBoundingClientRect().top - _caja.getBoundingClientRect().top) : null;
+    const _yAntes = _yDe(_lvUltimo >= 0 ? document.getElementById('lv-fila-' + _lvUltimo) : null);
+    _filasEl.innerHTML = filas;
+    const _ch = document.getElementById('lv-chips'); if (_ch) _ch.innerHTML = chips;
+    const _to = document.getElementById('lv-total'); if (_to) _to.innerHTML = totalHTML;
+    if (_yAntes !== null) {
+      const _yDespues = _yDe(document.getElementById('lv-fila-' + _lvUltimo));
+      if (_yDespues !== null && Math.abs(_yDespues - _yAntes) > 0.5) _caja.scrollTop += (_yDespues - _yAntes);
+    }
+    const _bt = document.getElementById('lv-btn-ok');
+    if (_bt) {
+      _bt.disabled = !quedan.length;
+      _bt.textContent = quedan.length ? '↩️ Levantar con lo que hay' : 'No hay stock de nada';
+      _bt.style.background = quedan.length ? 'var(--verde)' : '#c9c9c9';
+      _bt.style.cursor = quedan.length ? 'pointer' : 'not-allowed';
+    }
+  } else {
+    const avisoCobro = (typeof esCobradoReal === 'function' && esCobradoReal(v))
+      ? `<div style="background:#fff3d6;border:2px solid #e8a13a;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;color:#7a5a1a">
+          ⚠️ Este pedido ya tenía <b>cobro registrado</b>. Al levantarlo vuelve a contar como venta viva${cambió ? ' y ahora vale menos que lo cobrado — revisá el saldo a favor del cliente' : ''}.
+        </div>` : '';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.1rem 1.2rem;max-width:620px;width:100%;max-height:88vh;overflow-y:auto">
+      <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.12rem">↩️ Levantar pedido ${v.nVenta ? '#' + v.nVenta : ''} — ${esc(v.cliente || '')}</div>
+      <div style="font-size:0.76rem;color:var(--texto-suave);margin:0.25rem 0 0.8rem">Vuelve a quedar <b>pendiente</b> y se descuenta el stock otra vez. Chequeé qué hay hoy en el depósito: <b>solo queda lo que existe de verdad</b>.</div>
+      ${avisoCobro}
+      ${_lvStockFresco ? '' : `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:9px;padding:0.55rem 0.75rem;margin-bottom:0.7rem;font-size:0.76rem;font-weight:700;color:#c0392b">
+          ⚠️ No pude leer el depósito recién — lo que ves puede estar viejo. Recargá la página antes de levantarlo.
+        </div>`}
+      <div id="lv-chips">${chips}</div>
+      <div id="lv-filas" style="margin-bottom:0.7rem">${filas || '<div style="font-size:0.8rem;color:var(--texto-suave)">Este pedido no tiene renglones de productos.</div>'}</div>
+      <div id="lv-total" style="display:flex;justify-content:space-between;align-items:center;background:var(--gris);border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.85rem">${totalHTML}</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('levantar-overlay').remove()" style="flex:1;padding:0.65rem;background:var(--gris);border:none;border-radius:9px;font-weight:700;cursor:pointer;font-family:inherit">Dejarlo cancelado</button>
+        <button id="lv-btn-ok" ${quedan.length ? '' : 'disabled'} onclick="confirmarLevantarPedido()"
+          style="flex:2;padding:0.65rem;background:${quedan.length ? 'var(--verde)' : '#c9c9c9'};color:#fff;border:none;border-radius:9px;font-weight:700;cursor:${quedan.length ? 'pointer' : 'not-allowed'};font-family:inherit">
+          ${quedan.length ? '↩️ Levantar con lo que hay' : 'No hay stock de nada'}</button>
+      </div>
+    </div>`;
+  }
+  // Un destello en el renglón que tocaste, para ubicarlo de un vistazo.
+  if (_lvUltimo >= 0) {
+    const _f = document.getElementById('lv-fila-' + _lvUltimo);
+    if (_f) { _f.style.boxShadow = '0 0 0 3px rgba(0,0,0,0.22)'; setTimeout(() => { _f.style.boxShadow = ''; }, 1400); }
+  }
 }
 
 function _setQtyLevantar(i, valor) {
   const l = _lvLineas[i];
   if (!l) return;
+  _lvUltimo = i;
   let q = parseInt(valor) || 0;
   if (q < 0) q = 0;
   if (q > l.max) { q = l.max; showToast('De ' + l.nombre + ' hay ' + l.hay + ' nomás'); }
@@ -17603,6 +17638,7 @@ function _setQtyLevantar(i, valor) {
 function _quitarLineaLevantar(i) {
   const l = _lvLineas[i];
   if (!l) return;
+  _lvUltimo = i;
   if ((parseInt(l.qty) || 0) > 0) { l.qty = 0; l.motivo = (l.max > 0) ? 'sacada' : 'sin-stock'; }
   else if (l.max > 0) { l.qty = l.max; l.motivo = (l.max < l.pedida) ? 'ajustada' : 'ok'; }
   else { showToast('De ' + l.nombre + ' no hay stock para volver a ponerlo'); return; }
