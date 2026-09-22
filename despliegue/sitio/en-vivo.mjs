@@ -68,7 +68,9 @@ export function paramsParaMotor(ev) {
 export function crearEnVivo({ ahora = () => Date.now() } = {}) {
   const eventos = [];
   const clientes = new Set();
-  let ultimoId = 0;
+  // El id arranca en la hora del arranque: si el contenedor se reinicia, los ids nuevos nunca
+  // repiten a los que un panel abierto ya tenía (los usa para no mostrar dos veces el mismo).
+  let ultimoId = Math.floor(ahora());
   function podar() {
     const corte = ahora() - VENTANA_MS;
     while (eventos.length && eventos[0].t < corte) eventos.shift();
