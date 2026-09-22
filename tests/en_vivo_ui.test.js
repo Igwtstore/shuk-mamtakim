@@ -17,9 +17,12 @@ const DATA = {
   abandonados: [], acciones: [], accionable: { identificados: 1, conTelefono: 1, anonimos: 30, oportunidadARS: 0, oportunidadUSD: 0, carritosContactables: 0 },
   visitantes: [{ vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, apodo: '#VABC', leDijiste: false, etiqueta: 'compró', visitas: 3, dias: 2, productos: [], perfil: {} }],
   visitantesTotal: 1, diasDetalle: [], deseoVsVenta: [], busquedas: [], candado: null, comparativo: null, mironesTop: [], rescate: null, radiografia: null,
+  verMas: { eventos: 3, vistosSinCarrito: [{ nombre: 'Bamba', vistos: 4, personas: 3, stock: 5, dueno: 'Jony' }], nuncaVistos: [{ nombre: 'Escondido', stock: 7, dueno: 'Jony' }], quitados: [{ nombre: 'Klik', veces: 2 }], promos: { oferta: { veces: 1, top: [{ nombre: 'Klik', n: 1 }] }, pack: { veces: 0, top: [] } }, compartidos: [], avisoClics: { veces: 2, personas: 1 }, scroll: { n: 5, promedio: 62, alFinal: 2, pctAlFinal: 40 } },
+  vipAbiertos: [{ token: 'tok1', cliente: 'Sarah G', canal: 'minorista', creado: '19/09/2026 09:00', aperturas: 0, personas: 0, ultima: '' }],
   hoyVsSemana: { hoy: [0, 0, 0, 0, 0, 0, 0, 0, 2, 5, 7, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], hace7: [0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 2, 6, 5, 3, 2, 1, 0, 0, 2, 3, 4, 2, 1, 0], horaActual: 11, diaNombre: 'martes', fechaHoy: '2026-09-22', fechaHace7: '2026-09-15', hace7Disponible: true },
 };
 
+const PRODS_SB = [1, 2, 3, 4].map(i => ({ id: i, nombre: 'Producto de prueba ' + i, descripcion: 'desc', precio_may: '2000', precio_min: 3000, stock: 5, imagen: '', activo: true, categoria: 'Chocolate', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: '$' }));
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
 
@@ -42,6 +45,8 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.route('**/*', route => {
     const u = route.request().url();
     if (u.includes('getAnalitica')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(DATA) });
+    // El catálogo (Supabase REST) con productos de mentira: sin tarjetas no hay vistas que medir.
+    if (/\/rest\/v1\/productos\?/.test(u)) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PRODS_SB) });
     if (u.startsWith(SITIO)) return route.continue();
     if (u.includes('supabase') || u.includes('ipapi') || u.includes('qrserver') || u.includes('onesignal')) return route.fulfill({ contentType: 'application/json', body: '[]' });
     return route.continue();
@@ -56,6 +61,16 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.goto(SITIO + '/tienda', { waitUntil: 'domcontentloaded' });
   ok('la tienda mandó su visita por /api/track y el servidor la reenvió al motor', await hasta(async () => (await recibidos()).some(r => r.evento === 'visita' && r.pagina === 'tienda' && /^v_/.test(r.vid))));
   const vidTienda = (await recibidos()).find(r => r.evento === 'visita').vid;
+  // v4.81: las tarjetas a la vista se anotan (1 s a media altura) y viajan en lote como 'vistas'.
+  // Como una persona: baja un poco para que las tarjetas queden a la vista (la mitad, un segundo).
+  await pg.evaluate(() => window.scrollTo(0, 600));
+  await pg.waitForTimeout(1600);
+  await pg.evaluate(() => _vistasEnviar(false));
+  ok('v4.81: la tienda mandó un lote de VISTAS con las tarjetas que estuvieron a la vista', await hasta(async () => (await recibidos()).some(r => r.evento === 'vistas' && (() => { try { return JSON.parse(r.producto).v.length > 0; } catch { return false; } })())));
+  // v4.81: sacar del carrito se registra como 'quitar'
+  // (en la prueba el catálogo no carga desde Supabase: se inventa un producto)
+  await pg.evaluate(() => { const p = { id: 999001, nombre: 'Klik de prueba', stock: 5, precioMin: 1000, precioMay: 900, desc: '' }; productos.push(p); carrito[p.id] = { ...p, qty: 1 }; eliminarDelCarrito(p.id); });
+  ok('v4.81: sacar algo del carrito manda "quitar"', await hasta(async () => (await recibidos()).some(r => r.evento === 'quitar' && r.total === '0' && r.producto === 'Klik de prueba')));
 
   // ── 2) El PANEL de Jony ──
   await pg.evaluate(() => { adminAuth = true; socioActual = 'jony'; _authToken = 'jony'; localStorage.setItem('shuk_no_track', '1'); });
@@ -63,6 +78,13 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.waitForTimeout(600);
   ok('la pestaña 🔴 En vivo existe y va primera', (await txt()).trim().startsWith('🔴 En vivo'));
   ok('v4.80: hay botón "Hoy" en el período', await pg.evaluate(() => !!document.getElementById('ana-p-hoy')));
+  await pg.evaluate(() => setAnaTab('productos'));
+  await pg.waitForTimeout(200);
+  { const c = await txt();
+    ok('v4.81: Productos muestra "los ven y no los agarran" y "nadie llega a verlos"', c.includes('Los ven y no los agarran') && c.includes('Nadie llega a verlos') && c.includes('Escondido')); }
+  await pg.evaluate(() => setAnaTab('gente'));
+  await pg.waitForTimeout(200);
+  ok('v4.81: Gente muestra los catálogos VIP con "nunca lo abrió"', (await txt()).includes('Catálogos VIP') && (await txt()).includes('nunca lo abrió'));
   await pg.evaluate(() => setAnaTab('canales'));
   await pg.waitForTimeout(200);
   { const c = await txt(); const h = await pg.content();

@@ -558,6 +558,16 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // 🛒 El rescate del carrito: a cuántos se les ofreció, cuántos lo retomaron y —lo único
   // que importa de verdad— cuántos de ésos terminaron comprando.
   const resc: any = { ofrecidos: {}, retomados: {}, descartados: {} };
+  // 👁️ VER MÁS (v4.81): lo que hasta ahora era invisible — qué tarjetas se VIERON (no solo qué se
+  // agarró), qué sacaron del carrito, si el cartel/las ofertas se tocan, qué se comparte, hasta dónde
+  // bajan, y qué catálogo VIP abrió cada cliente.
+  const vistasProd: any = {}; let vistasEventos = 0;
+  const quitados: any = {};
+  const promos: any = { oferta: { veces: 0, productos: {} }, pack: { veces: 0, productos: {} } };
+  const compartidos: any = {};
+  const avisoClics: any = { veces: 0, vids: {} };
+  const scroll: any = { n: 0, suma: 0, alFinal: 0 };
+  const vipAp: any = {};
   const embudoVids: any = { visita: {}, carrito: {}, checkout: {}, pedido: {} };
   const vids: any = {}, carritosPorVid: any = {};
   filas.forEach(({ r, t }) => {
@@ -606,6 +616,17 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       const q = detalle.toLowerCase().trim().slice(0, 40);
       const b = busq[q] = busq[q] || { q: detalle.trim().slice(0, 40), veces: 0, vacias: 0, vids: {} };
       b.veces++; if ((parseInt(totalEv) || 0) === 0) b.vacias++; if (vid) b.vids[vid] = 1;
+    }
+    if (evento === 'vistas' && esJSON(detalle)) {
+      try { const jv = JSON.parse(detalle); (jv.v || []).forEach((it: any) => { const n = String(it.n || '').trim(); if (!n) return; const V = vistasProd[n] = vistasProd[n] || { veces: 0, vids: {} }; V.veces++; if (vid) V.vids[vid] = 1; }); vistasEventos++; } catch { /**/ }
+    }
+    if (evento === 'quitar' && detalle) { const Qd = quitados[detalle] = quitados[detalle] || { sacado: 0, bajado: 0 }; if ((parseInt(totalEv) || 0) === 0) Qd.sacado++; else Qd.bajado++; }
+    if (evento === 'promo' && detalle) { const tipo = detalle.startsWith('pack') ? 'pack' : 'oferta'; const nom = detalle.replace(/^(oferta|pack) · /, ''); promos[tipo].veces++; promos[tipo].productos[nom] = (promos[tipo].productos[nom] || 0) + 1; }
+    if (evento === 'compartir' && detalle) compartidos[detalle] = (compartidos[detalle] || 0) + 1;
+    if (evento === 'aviso') { avisoClics.veces++; if (vid) avisoClics.vids[vid] = 1; }
+    if (evento === 'salida' && esJSON(detalle)) { try { const sx = JSON.parse(detalle); if (typeof sx.sc === 'number') { scroll.n++; scroll.suma += sx.sc; if (sx.sc >= 90) scroll.alFinal++; } } catch { /**/ } }
+    if (evento === 'visita' && esJSON(detalle)) {
+      try { const fv = JSON.parse(detalle); if (fv.vip) { const VA = vipAp[fv.vip] = vipAp[fv.vip] || { aperturas: 0, vids: {}, ultima: '', ultimaTs: 0 }; VA.aperturas++; if (vid) VA.vids[vid] = 1; if (t!.ts >= VA.ultimaTs) { VA.ultimaTs = t!.ts; VA.ultima = r.fecha || ''; } } } catch { /**/ }
     }
     if (embudoVids[evento] && vid) embudoVids[evento][vid] = 1;   // 'salida' no está en el embudo: no infla nada
     if (vid) {
@@ -872,7 +893,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   productos.forEach((p: any) => {
     const k = kAna(p.nombre);
     stockDe[k] = (stockDe[k] || 0) + (parseInt(p.stock) || 0);
-    if (!infoProd[k]) infoProd[k] = { activo: p.activo !== false, dueno: String(p.dueno || '') };
+    if (!infoProd[k]) infoProd[k] = { activo: p.activo !== false, dueno: String(p.dueno || ''), nombre: String(p.nombre || '') };
   });
   const vendidoU: any = {}, nomDeId: any = {};
   productos.forEach((p: any) => { nomDeId[String(p.id)] = String(p.nombre || ''); });
@@ -888,6 +909,13 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       vendidoU[k] = (vendidoU[k] || 0) + q;
     });
   });
+  // Todo se cruza por el nombre recortado a 40 (kAna): las vistas viajan así, y los nombres largos
+  // no cerrarían contra el carrito, que manda el nombre completo.
+  const vistasK: any = {}, quitK: any = {}, compK: any = {};
+  Object.keys(vistasProd).forEach((n) => { const k = kAna(n); const V = vistasK[k] = vistasK[k] || { nombre: n, veces: 0, vids: {} }; V.veces += vistasProd[n].veces; Object.assign(V.vids, vistasProd[n].vids); });
+  Object.keys(quitados).forEach((n) => { const k = kAna(n); quitK[k] = (quitK[k] || 0) + quitados[n].sacado + quitados[n].bajado; });
+  Object.keys(compartidos).forEach((n) => { const k = kAna(n); compK[k] = (compK[k] || 0) + compartidos[n]; });
+  const deseadoK: any = {}; Object.keys(prodDeseados).forEach((n) => { deseadoK[kAna(n)] = 1; });
   const deseoVsVenta = Object.keys(prodDeseados).map((nombre) => {
     const k = kAna(nombre), st = stockDe[k];
     return {
@@ -895,8 +923,30 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       stock: st === undefined ? null : st,
       activo: infoProd[k] ? infoProd[k].activo : true,
       dueno: infoProd[k] ? infoProd[k].dueno : '',
+      vistos: vistasK[k] ? vistasK[k].veces : 0, personasVieron: vistasK[k] ? Object.keys(vistasK[k].vids).length : 0,
+      quitado: quitK[k] || 0, compartido: compK[k] || 0,
     };
   }).sort((a, b) => b.deseado - a.deseado).slice(0, 40);
+  // 👁️ Lo que se ve y no se agarra, y lo que nadie llega a ver (solo si ya hay vistas registradas:
+  // antes de esta versión no existían, y "nadie lo vio" sería mentira).
+  const verMas: any = {
+    eventos: vistasEventos,
+    vistosSinCarrito: Object.keys(vistasK).filter((k) => !deseadoK[k]).map((k) => ({ nombre: vistasK[k].nombre, vistos: vistasK[k].veces, personas: Object.keys(vistasK[k].vids).length, stock: stockDe[k] === undefined ? null : stockDe[k], dueno: infoProd[k] ? infoProd[k].dueno : '' })).sort((a, b) => b.personas - a.personas || b.vistos - a.vistos).slice(0, 15),
+    nuncaVistos: vistasEventos ? Object.keys(stockDe).filter((k) => stockDe[k] > 0 && infoProd[k] && infoProd[k].activo && !vistasK[k]).map((k) => ({ nombre: infoProd[k].nombre, stock: stockDe[k], dueno: infoProd[k].dueno })).slice(0, 30) : null,
+    quitados: Object.keys(quitK).map((k) => ({ nombre: (vistasK[k] && vistasK[k].nombre) || (infoProd[k] && infoProd[k].nombre) || k, veces: quitK[k] })).sort((a, b) => b.veces - a.veces).slice(0, 10),
+    promos: { oferta: { veces: promos.oferta.veces, top: Object.entries(promos.oferta.productos).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([nombre, n]) => ({ nombre, n })) }, pack: { veces: promos.pack.veces, top: Object.entries(promos.pack.productos).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([nombre, n]) => ({ nombre, n })) } },
+    compartidos: Object.entries(compartidos).sort((a: any, b: any) => b[1] - a[1]).slice(0, 10).map(([nombre, n]) => ({ nombre, n })),
+    avisoClics: { veces: avisoClics.veces, personas: Object.keys(avisoClics.vids).length },
+    scroll: scroll.n ? { n: scroll.n, promedio: Math.round(scroll.suma / scroll.n), alFinal: scroll.alFinal, pctAlFinal: Math.round(scroll.alFinal / scroll.n * 100) } : null,
+  };
+  // 🔗 Catálogos VIP: los que existen (config VIP_*) contra las aperturas registradas.
+  const vipCatalogos: any[] = (opciones && opciones.vipCatalogos) || [];
+  const vipVistos: any = {};
+  const vipAbiertos = vipCatalogos.map((c: any) => {
+    const a = vipAp[c.token]; vipVistos[c.token] = 1;
+    return { token: c.token, cliente: c.nombre || '', canal: c.canal || '', creado: c.creado || '', creadoTs: tsDeFecha(c.creado || '') || 0, aperturas: a ? a.aperturas : 0, personas: a ? Object.keys(a.vids).length : 0, ultima: a ? a.ultima : '', ultimaTs: a ? a.ultimaTs : 0 };
+  }).concat(Object.keys(vipAp).filter((tk) => !vipVistos[tk]).map((tk) => ({ token: tk, cliente: '(link borrado)', canal: '', creado: '', creadoTs: 0, aperturas: vipAp[tk].aperturas, personas: Object.keys(vipAp[tk].vids).length, ultima: vipAp[tk].ultima, ultimaTs: vipAp[tk].ultimaTs })))
+    .sort((a: any, b: any) => (b.ultimaTs - a.ultimaTs) || (b.creadoTs - a.creadoTs)).slice(0, 40);
 
   // ── 🔎 QUÉ BUSCAN (y qué buscan y NO encontrás) ────────────────────────────────
   const busquedas = Object.keys(busq).map((k) => {
@@ -939,6 +989,23 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     titulo: deseadoSinStock.length + (deseadoSinStock.length === 1 ? ' producto muy pedido está' : ' productos muy pedidos están') + ' en CERO',
     detalle: deseadoSinStock.slice(0, 3).map((p) => p.nombre + ' (' + p.deseado + ' veces)').join(' · ') + '. Lo quieren y no lo tenés.',
     n: deseadoSinStock.length, ir: 'deseo',
+  });
+
+  // 👁️ v4.81: mucha gente lo ve y nadie lo agarra → el freno es el precio o la foto.
+  const venNoAgarran = verMas.vistosSinCarrito.filter((p: any) => p.personas >= 5 && p.stock !== null && p.stock > 0);
+  if (venNoAgarran.length) acciones.push({
+    id: 'ven-no-agarran', icono: '👁️', urgencia: 'media',
+    titulo: venNoAgarran.length + (venNoAgarran.length === 1 ? ' producto lo ven muchos y nadie lo agarra' : ' productos los ven muchos y nadie los agarra'),
+    detalle: venNoAgarran.slice(0, 3).map((p: any) => p.nombre + ' (' + p.personas + ' personas)').join(' · ') + '. Con stock. Mirá el precio o la foto.',
+    n: venNoAgarran.length, ir: 'deseo',
+  });
+  // 🔗 v4.81: catálogo VIP mandado hace más de 2 días y nunca abierto.
+  const vipSinAbrir = vipAbiertos.filter((c: any) => !c.aperturas && c.creadoTs && (nowT - c.creadoTs) > 2 * 86400000 && (nowT - c.creadoTs) < 30 * 86400000);
+  if (vipSinAbrir.length) acciones.push({
+    id: 'vip-sin-abrir', icono: '🔗', urgencia: 'media',
+    titulo: vipSinAbrir.length + (vipSinAbrir.length === 1 ? ' catálogo VIP nunca se abrió' : ' catálogos VIP nunca se abrieron'),
+    detalle: vipSinAbrir.slice(0, 3).map((c: any) => c.cliente + ' (mandado el ' + String(c.creado).slice(0, 10) + ')').join(' · ') + '. Un recordatorio por WhatsApp cuesta nada.',
+    n: vipSinAbrir.length, ir: 'visitantes',
   });
 
   const vacias = busquedas.filter((b) => b.vacias > 0);
@@ -1133,6 +1200,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     tiempoADecidir, juntos, comparativo, mironesTop, rescate, radiografia,
     hoyVsSemana: hoyVsSemana(todas),   // 🔴 v4.79
     excluidos, soloHoy,                 // 🧹 v4.80
+    verMas, vipAbiertos,                // 👁️ v4.81
   };
 }
 
@@ -3673,14 +3741,18 @@ Deno.serve(async (req) => {
         sbGet('productos', 'select=id,nombre,stock,activo,dueno,moneda'),
       ]);
       // 🏷️ Los nombres que Jony le puso a mano a visitantes que no se identificaron.
-      const aliasRows = await sbGet('config', 'select=clave,valor&clave=like.vid_alias:*');
+      const [aliasRows, vipRows] = await Promise.all([
+        sbGet('config', 'select=clave,valor&clave=like.vid_alias:*'),
+        sbGet('config', 'select=clave,valor&clave=like.VIP_*'),   // 🔗 v4.81
+      ]);
+      const vipCatalogos = vipRows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: String(r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '' }; } catch { return null; } }).filter(Boolean);
       const aliasMap: any = {};
       aliasRows.forEach((r: any) => {
         const vidA = String(r.clave || '').slice('vid_alias:'.length);
         if (!vidA) return;
         try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
       });
-      return json(analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy: url.searchParams.get('hoy') === '1' }));
+      return json(analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy: url.searchParams.get('hoy') === '1', vipCatalogos }));
     }
     // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
     // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.

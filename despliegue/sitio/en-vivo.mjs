@@ -59,7 +59,7 @@ export function paramsParaMotor(ev) {
   const p = new URLSearchParams({ accion: 'track', vid: ev.vid, pagina: ev.pagina, evento: ev.evento, origen: ev.origen, dispositivo: ev.dispositivo, ciudad: ev.ciudad, region: ev.region, pais: ev.pais, nombre: ev.nombre, telefono: ev.telefono });
   if (ev.detalle) p.set('producto', ev.detalle);
   if (ev.carrito) p.set('carrito', ev.carrito);
-  if (ev.total) p.set('total', String(ev.total));
+  p.set('total', String(ev.total || 0));   // siempre: en 'quitar', 0 significa "lo sacó" (y no "bajó la cantidad")
   if (ev.totalUSD) p.set('totalUSD', String(ev.totalUSD));
   return p;
 }

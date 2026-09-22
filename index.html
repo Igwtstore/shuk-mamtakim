@@ -2666,6 +2666,7 @@ function pintarAvisoTienda() {
   if (!a) {
     a = document.createElement('div');
     a.id = 'aviso-tienda';
+    a.addEventListener('click', () => { try { track('aviso', { producto: String(_avisoCfg.txt || '').substring(0, 40) }); } catch { /**/ } });   // 📣 v4.81: ¿el cartel se toca?
     const cont = document.getElementById('catalogo-section');
     if (!cont) return;
     // Debajo del banner de la marca: primero del catálogo, salvo que ya esté el cartel de estado.
@@ -3890,6 +3891,7 @@ function renderCatalogo() {
     html += sinStock.map(card).join('');
   }
   catalogo.innerHTML = html;
+  _observarVistas();   // 👁️ v4.81: qué tarjetas se ven de verdad
   document.getElementById('carrito-btn-header').style.display = 'flex';
   setTimeout(initCarousels, 100);
   _aplicarDeepLinkProducto();
@@ -4371,6 +4373,8 @@ function agregarAlCarrito(id) {
   showToast(`${p.nombre} agregado ✓`);
   _contarInteraccion(p.nombre);
   track('carrito', { producto: p.nombre, ..._cartParaTrack() });
+  // 🏷️ v4.81: si lo agarró con oferta o pack, queda dicho (¿el cartel vende?).
+  try { if (ofertaActiva(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p)) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
 }
 
 function actualizarBadge() {
@@ -4551,12 +4555,15 @@ function cambiarCarritoQty(id, delta) {
   const nueva = carrito[id].qty + delta;
   if (nueva <= 0) { eliminarDelCarrito(id); return; }
   if (nueva > (p ? p.stock : 999)) { showToast('No hay más stock'); return; }
+  if (delta < 0 && p) track('quitar', { producto: p.nombre, total: String(nueva) });   // 🗑️ bajó la cantidad
   carrito[id].qty = nueva;
   actualizarBadge();
   renderCarrito();
 }
 
 function eliminarDelCarrito(id) {
+  // 🗑️ v4.81: sacar algo del carrito es la señal de "me pareció caro" (o se arrepintió). Se registra.
+  try { const pq = productos.find(x => x.id === id); if (pq && carrito[id]) track('quitar', { producto: pq.nombre, total: '0' }); } catch { /**/ }
   delete carrito[id];
   actualizarBadge();
   renderCarrito();
@@ -12170,6 +12177,7 @@ function compartirProducto(id) {
   const base = modo === 'mayorista' ? SITIO + '/mayorista' : SITIO + '/';
   const link = `${base}?p=${p.id}`;
   const msg = `🛍️ *${p.nombre}*\n${p.desc || ''}\n💰 *${precio}*\n\n👉 Mirá este producto: ${link}`;
+  try { track('compartir', { producto: p.nombre }); } catch { /**/ }   // 📤 v4.81
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -14174,7 +14182,14 @@ async function renderAnalitica() {
     d.busquedas = [];                                   // no se puede saber de quién buscaban
     d.visitantes = (d.visitantes || []).map(v => ({ ...v, productos: (v.productos || []).filter(n => !soloJony(n)) }));
     d.diasDetalle = (d.diasDetalle || []).map(x => ({ ...x, top: (x.top || []).filter(t => !soloJony(t.nombre)) }));
-    d.acciones = (d.acciones || []).filter(a => a.id !== 'sin-stock' && a.id !== 'busquedas-vacias');
+    d.acciones = (d.acciones || []).filter(a => a.id !== 'sin-stock' && a.id !== 'busquedas-vacias' && a.id !== 'ven-no-agarran' && a.id !== 'vip-sin-abrir');
+    if (d.verMas) {   // 👁️ v4.81: mismas reglas para lo que se ve, se saca o se comparte
+      d.verMas.vistosSinCarrito = (d.verMas.vistosSinCarrito || []).filter(x => !soloJony(x.nombre));
+      d.verMas.nuncaVistos = d.verMas.nuncaVistos ? d.verMas.nuncaVistos.filter(x => !soloJony(x.nombre)) : null;
+      d.verMas.quitados = (d.verMas.quitados || []).filter(x => !soloJony(x.nombre));
+      d.verMas.compartidos = (d.verMas.compartidos || []).filter(x => !soloJony(x.nombre));
+    }
+    d.vipAbiertos = [];   // los catálogos VIP son una herramienta de Jony
     d.abandonados = (d.abandonados || []).map(a => {
       const items = (a.items || []).filter(it => !soloJony(it.n));
       const nombres = (a.productos || []).filter(n => !soloJony(n));
@@ -14789,12 +14804,28 @@ function _anaSecRadiografia(d) {
     ${r.sinFicha ? `<div style="font-size:0.66rem;color:var(--texto-suave);margin-top:8px">ℹ️ ${r.sinFicha} visitantes son anteriores a esta mejora y no tienen ficha técnica. Los nuevos la traen desde ahora.</div>` : ''}`);
 }
 
+// 🔗 v4.81: ¿abrió el catálogo VIP que le mandaste?
+function _anaSecVip(d) {
+  const vs = d.vipAbiertos || [];
+  if (!vs.length) return '';
+  const filas = vs.map(c => {
+    const abierto = c.aperturas > 0;
+    const hace = c.creado ? 'mandado el ' + esc(String(c.creado).slice(0, 10)) : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--gris-medio);font-size:0.78rem;flex-wrap:wrap">
+      <span style="min-width:0"><b>${esc(c.cliente || '(sin nombre)')}</b>${c.canal ? ' <span style="font-size:0.62rem;color:var(--texto-suave)">' + (c.canal === 'mayorista' ? '📦' : '🛍️') + '</span>' : ''}<div style="font-size:0.66rem;color:var(--texto-suave)">${hace}</div></span>
+      <span style="flex-shrink:0;font-size:0.72rem;font-weight:700;color:${abierto ? 'var(--verde)' : '#c0392b'}">${abierto ? `✅ lo abrió ${c.aperturas}× (${c.personas} aparato${c.personas !== 1 ? 's' : ''}) · últ. ${esc(String(c.ultima).slice(0, 16))}` : '⏳ nunca lo abrió'}</span>
+    </div>`;
+  }).join('');
+  return _anaCard(`<div class="admin-titulo">🔗 Catálogos VIP: ¿los abrieron? (${vs.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada link privado que armaste, contra las veces que lo abrieron <b>en el período que estás mirando</b>. Un "nunca lo abrió" de hace días merece un recordatorio.</div>
+    ${filas}`);
+}
 function _anaSecGente(d) {
   const vs = d.visitantes || [];
   const filtros = [['todos', 'Todos', vs.length], ['tel', '📞 Con teléfono', vs.filter(v => v.telefono).length],
     ['clientes', '⭐ Ya compraron', vs.filter(v => v.esCliente).length], ['casi', '🛒 Armaron carrito', vs.filter(v => v.armoCarrito || v.checkout).length],
     ['vuelven', '🔄 Vuelven', vs.filter(v => v.dias >= 2).length], ['anon', '👤 Sin nombre', vs.filter(v => !v.nombre).length]];
-  return _anaSecMirones(d) + _anaSecRadiografia(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
+  return _anaSecVip(d) + _anaSecMirones(d) + _anaSecRadiografia(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada persona que pisó la tienda, con lo que miró y cómo contactarla. Tocá 👤 para ver su historia completa.</div>
     <input type="text" oninput="buscarGente(this.value)" placeholder="Buscar por nombre, teléfono, ciudad o producto…" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.82rem;margin-bottom:7px">
     <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;margin-bottom:8px">
@@ -14858,7 +14889,7 @@ function _anaSecProductos(d) {
       return `<div style="margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;gap:6px">
           <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nombre)} ${alerta}</span>
-          <span style="color:var(--texto-suave);flex-shrink:0">${x.deseado} 👀 · ${x.vendido} 🛍️${x.stock !== null ? ` · stock ${x.stock}` : ''}</span>
+          <span style="color:var(--texto-suave);flex-shrink:0">${x.personasVieron ? `${x.personasVieron} 👁️ · ` : ''}${x.deseado} 🛒 · ${x.vendido} 🛍️${x.quitado ? ` · <span style="color:#c0392b" title="lo sacaron del carrito o bajaron la cantidad">${x.quitado} 🗑️</span>` : ''}${x.stock !== null ? ` · stock ${x.stock}` : ''}</span>
         </div>
         <div style="background:var(--gris-medio);border-radius:5px;height:9px;overflow:hidden;position:relative">
           <div style="width:${_anaPct(x.deseado, maxD)}%;height:100%;background:#e08a2a;border-radius:5px"></div>
@@ -14867,8 +14898,29 @@ function _anaSecProductos(d) {
       </div>`;
     }).join('');
     html += _anaCard(`<div class="admin-titulo">🔥 Lo que quieren contra lo que se vendió</div>
-      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">🟠 veces que lo agregaron al carrito · 🟢 unidades vendidas de verdad. Si la barra naranja es larga y la verde corta, algo lo está frenando: precio, stock o foto.</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">👁️ personas que lo vieron · 🛒 veces que lo agregaron · 🛍️ unidades vendidas · 🗑️ veces que lo sacaron del carrito. 🟠 veces que lo agregaron al carrito · 🟢 unidades vendidas de verdad. Si la barra naranja es larga y la verde corta, algo lo está frenando: precio, stock o foto.</div>
       ${rows}`);
+  }
+  // 👁️ v4.81: lo que se ve y no se agarra, y lo que nadie llega a ver
+  const vm = d.verMas || {};
+  const vsc = vm.vistosSinCarrito || [];
+  if (vm.eventos) {
+    html += _anaCard(`<div class="admin-titulo">👁️ Los ven y no los agarran (${vsc.length})</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Tarjetas que estuvieron a la vista (la mitad visible, un segundo seguido) y <b>nadie puso en el carrito</b> en el período. Si tiene stock y lo vieron muchos, el freno es el precio o la foto.</div>
+      ${vsc.length ? vsc.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:5px 0;border-bottom:1px solid var(--gris-medio);gap:6px">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nombre)}${x.stock !== null && x.stock <= 0 ? ' <span style="font-size:0.6rem;background:#fdeaea;color:#c0392b;border-radius:5px;padding:1px 6px;font-weight:700">SIN STOCK</span>' : ''}</span>
+        <span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem"><b>${x.personas}</b> pers · ${x.vistos} vistas${x.stock !== null ? ' · stock ' + x.stock : ''}</span>
+      </div>`).join('') : '<div class="sinpedidos">Todo lo que se vio, alguien lo agarró ✓</div>'}`);
+    const nv = vm.nuncaVistos || [];
+    html += _anaCard(`<div class="admin-titulo">🙈 Nadie llega a verlos (${nv.length})</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Productos <b>con stock</b> que en todo el período no estuvieron a la vista de nadie. Están muy abajo, en una categoría que nadie abre, o el nombre no ayuda. Subilos, destacalos o cambiales la foto.</div>
+      ${nv.length ? nv.map(x => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio);gap:6px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nombre)}</span><span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem">stock ${x.stock}</span></div>`).join('') : '<div class="sinpedidos">Todo lo que tiene stock fue visto por alguien ✓</div>'}`);
+    const qs = vm.quitados || [];
+    if (qs.length) html += _anaCard(`<div class="admin-titulo">🗑️ Lo que sacan del carrito</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo agarraron y después lo sacaron o bajaron la cantidad. Es la señal más directa de "me pareció caro".</div>
+      ${qs.map(x => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio);gap:6px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nombre)}</span><span style="color:#c0392b;flex-shrink:0;font-size:0.72rem;font-weight:700">${x.veces}×</span></div>`).join('')}`);
+  } else {
+    html += _anaCard(`<div class="admin-titulo">👁️ Qué se ve de verdad</div><div class="sinpedidos">Desde la v4.81 la tienda anota qué tarjetas estuvieron a la vista. En cuanto haya visitas nuevas, acá aparece qué se ve y no se agarra, y qué nadie llega a ver.</div>`);
   }
   const bs = d.busquedas || [];
   const vacias = bs.filter(b => b.vacias > 0);
@@ -14939,6 +14991,29 @@ function _anaSecCanales(d) {
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px;line-height:1.5">WhatsApp e Instagram <b>no dicen de dónde viene</b> la gente: hoy ${sinEtiqueta ? '<b>' + sinEtiqueta + '</b> visitas' : 'casi todo'} figura${sinEtiqueta === 1 ? '' : 'n'} como "directo". Compartí <b>estos</b> links (tocá para copiar) y cada visita queda con su canal. Los links viejos siguen andando, solo que cuentan como directo. Los QR de la pestaña Inicio ya salen etiquetados.</div>
     ${filasCanal}`);
   html += _anaCard(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
+  // 📣 v4.81: ¿el cartel se toca? ¿las ofertas y packs se agarran? ¿qué comparten? ¿hasta dónde bajan?
+  const vm = d.verMas || {};
+  if (vm.eventos !== undefined) {
+    const pr = vm.promos || { oferta: { veces: 0, top: [] }, pack: { veces: 0, top: [] } };
+    const cp = vm.compartidos || [];
+    const ac = vm.avisoClics || { veces: 0, personas: 0 };
+    html += _anaCard(`<div class="admin-titulo">📣 Aviso, ofertas y compartir</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${_anaKpi(ac.veces, 'Toques al aviso', '#e08a2a')}
+        ${_anaKpi(pr.oferta.veces, 'Agarrados con oferta', '#c0392b')}
+        ${_anaKpi(pr.pack.veces, 'Agarrados como pack', 'var(--dorado, #b8860b)')}
+        ${_anaKpi(cp.reduce((a, x) => a + x.n, 0), 'Compartidos', 'var(--verde)')}
+      </div>
+      ${pr.oferta.top.length ? `<div style="font-size:0.74rem;margin-top:8px"><b>🔥 Con oferta:</b> ${pr.oferta.top.map(x => esc(x.nombre) + ' <span style="color:var(--texto-suave)">×' + x.n + '</span>').join(' · ')}</div>` : ''}
+      ${pr.pack.top.length ? `<div style="font-size:0.74rem;margin-top:4px"><b>🎁 Como pack:</b> ${pr.pack.top.map(x => esc(x.nombre) + ' <span style="color:var(--texto-suave)">×' + x.n + '</span>').join(' · ')}</div>` : ''}
+      ${cp.length ? `<div style="font-size:0.74rem;margin-top:4px"><b>📤 Lo más compartido:</b> ${cp.slice(0, 5).map(x => esc(x.nombre) + ' <span style="color:var(--texto-suave)">×' + x.n + '</span>').join(' · ')}</div>` : ''}
+      <div style="font-size:0.68rem;color:var(--texto-suave);margin-top:8px">Se registra desde la v4.81: el toque en el cartel de la tienda, cada producto agarrado con oferta o pack, y cada 📤 compartir.</div>`);
+    const sc = vm.scroll;
+    html += _anaCard(`<div class="admin-titulo">📜 Hasta dónde bajan</div>
+      ${sc ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${_anaKpi(sc.promedio + '%', 'De la página recorren, en promedio')}${_anaKpi(sc.pctAlFinal + '%', 'Llegan al final', 'var(--verde)')}${_anaKpi(sc.n, 'Salidas medidas', 'var(--texto-suave)')}</div>
+        <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:8px">Si pocos llegan al final, lo de abajo casi no existe: subí lo que querés vender o achicá el catálogo.</div>`
+        : '<div class="sinpedidos">Se mide desde la v4.81, con cada salida de la tienda. En cuanto haya visitas nuevas, aparece.</div>'}`);
+  }
 
   const cpo = (d.conversionPorOrigen || []).filter(x => x.visitantes > 0);
   if (cpo.length) {
@@ -16961,6 +17036,8 @@ function _fichaTecnica() {
   // 🔑 ¿Entró con el link con pase (el que saltea el candado geográfico)? Si alguien de afuera
   // aparece con esto, ya no hay misterio: le pasaron el link privilegiado.
   try { f.pase = _tienePase() ? 1 : 0; } catch { f.pase = 0; }
+  // 🔗 v4.81: si entró por un catálogo VIP, con cuál. Así se sabe si el cliente al que se lo mandaste lo abrió.
+  try { f.vip = _vipToken || ''; } catch { f.vip = ''; }
   return f;
 }
 
@@ -16978,9 +17055,10 @@ function _mandarSalida() {
   _salidaMandada = true;
   try {
     if (localStorage.getItem('shuk_no_track') || navigator.webdriver) return;
+    _vistasEnviar(true);   // 👁️ lo que vio y todavía no se mandó
     const params = new URLSearchParams({
       accion: 'track', vid: _vid(), pagina: (modo === 'mayorista' ? 'mayorista' : 'tienda'),
-      evento: 'salida', producto: JSON.stringify({ seg, int: _interacciones, prod: Object.keys(_vistos).length }),
+      evento: 'salida', producto: JSON.stringify({ seg, int: _interacciones, prod: Object.keys(_vistos).length, sc: _scrollMax, vp: Object.keys(_vistasVistos).length }),
     });
     // sendBeacon es el único que sobrevive al cierre de la pestaña.
     // Por el servidor del sitio si está (así el panel en vivo ve la salida); si no, al motor.
@@ -17026,6 +17104,56 @@ function _cartParaTrack() {
   // `total` sigue siendo el de PESOS (lo que esperaba el panel de siempre); los dólares van aparte.
   return { carrito: JSON.stringify(arr), total: String(Math.round(total)), totalUSD: String(Math.round(totalUSD * 100) / 100) };
 }
+// 👁️ VISTAS DE PRODUCTO (v4.81). Hasta acá solo se sabía qué ponían en el carrito; de 316 de cada 400
+// personas no se sabía NADA de lo que miraron. Ahora cada tarjeta que estuvo a la vista (la mitad
+// visible, un segundo seguido) se anota, y se mandan de a lotes: al juntar 12, cada 45 s, o al irse.
+// Da dos cosas nuevas: "lo ven y no lo agarran" (precio) y "nadie llega a verlo" (está muy abajo).
+let _vistasObs = null, _vistasVistos = {}, _vistasPendientes = [], _vistasTimer = null, _vistasTs = {};
+function _observarVistas() {
+  try {
+    if (!('IntersectionObserver' in window) || modo === 'admin' || localStorage.getItem('shuk_no_track') || navigator.webdriver) return;
+    if (_vistasObs) _vistasObs.disconnect();
+    Object.keys(_vistasTs).forEach(k => { clearTimeout(_vistasTs[k]); delete _vistasTs[k]; });
+    _vistasObs = _vistasObs || new IntersectionObserver(entradas => {
+      entradas.forEach(e => {
+        const id = (e.target.id || '').replace('card-', '');
+        if (!id || _vistasVistos[id]) return;
+        if (e.isIntersecting) { if (!_vistasTs[id]) _vistasTs[id] = setTimeout(() => _vistaRegistrar(id), 1000); }
+        else if (_vistasTs[id]) { clearTimeout(_vistasTs[id]); delete _vistasTs[id]; }
+      });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('#catalogo .producto-card').forEach(el => _vistasObs.observe(el));
+  } catch { /**/ }
+}
+function _vistaRegistrar(id) {
+  delete _vistasTs[id];
+  if (_vistasVistos[id]) return;
+  const p = (productos || []).find(x => String(x.id) === String(id));
+  if (!p) return;
+  _vistasVistos[id] = 1;
+  _vistasPendientes.push({ i: String(id), n: String(p.nombre || '').substring(0, 40) });
+  if (_vistasPendientes.length >= 12) _vistasEnviar(false);
+  else if (!_vistasTimer) _vistasTimer = setTimeout(() => _vistasEnviar(false), 45000);
+}
+function _vistasEnviar(alSalir) {
+  if (_vistasTimer) { clearTimeout(_vistasTimer); _vistasTimer = null; }
+  if (!_vistasPendientes.length) return;
+  const lote = _vistasPendientes.splice(0, 60);
+  const detalle = JSON.stringify({ v: lote });
+  if (!alSalir) { track('vistas', { producto: detalle }); return; }
+  // Al irse no hay tiempo para nada: sendBeacon es lo único que sobrevive al cierre.
+  try {
+    if (localStorage.getItem('shuk_no_track') || navigator.webdriver) return;
+    const params = new URLSearchParams({ accion: 'track', vid: _vid(), pagina: (modo === 'mayorista' ? 'mayorista' : 'tienda'), evento: 'vistas', origen: _origen(), dispositivo: _dispositivo(), producto: detalle });
+    const destino = (_vpsDisponible() ? '/api/track' : APPS_SCRIPT_URL) + '?' + params.toString();
+    if (navigator.sendBeacon) navigator.sendBeacon(destino); else fetch(destino, { mode: 'no-cors', keepalive: true }).catch(() => {});
+  } catch { /**/ }
+}
+// 📜 Hasta dónde bajó (porcentaje de la página recorrido). Viaja con la salida.
+let _scrollMax = 0;
+window.addEventListener('scroll', () => {
+  try { const h = document.documentElement.scrollHeight - window.innerHeight; if (h > 0) _scrollMax = Math.max(_scrollMax, Math.min(100, Math.round(window.scrollY / h * 100))); } catch { /**/ }
+}, { passive: true });
 async function track(evento, extra = {}) {
   try {
     // Precisión: los navegadores del equipo (entraron al panel alguna vez) no cuentan como visitantes
