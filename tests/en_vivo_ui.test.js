@@ -31,6 +31,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   const pg = await b.newPage();
   // El cliente de Supabase no carga desde el CDN en la prueba: se stubea (igual que en ana_vuelta_rosca).
   await pg.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });   // v4.80: los automatizados no cuentan; acá queremos contar
     window.supabase = { createClient: () => ({ auth: {
       getSession: async () => ({ data: { session: null } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
@@ -61,6 +62,12 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => setAdminTab('analitica'));
   await pg.waitForTimeout(600);
   ok('la pestaña 🔴 En vivo existe y va primera', (await txt()).trim().startsWith('🔴 En vivo'));
+  ok('v4.80: hay botón "Hoy" en el período', await pg.evaluate(() => !!document.getElementById('ana-p-hoy')));
+  await pg.evaluate(() => setAnaTab('canales'));
+  await pg.waitForTimeout(200);
+  { const c = await txt(); const h = await pg.content();
+    ok('v4.80: Canales arranca con el generador de links etiquetados (copiar minorista/mayorista)', c.includes('Links por canal') && h.includes('/tienda?c=wa') && h.includes('/mayorista?c=estado'));
+    ok('v4.80: "directo" se explica como "sin etiqueta"', c.includes('Directo (sin etiqueta)')); }
   await pg.evaluate(() => setAnaTab('vivo'));
   ok('se conecta por SSE (punto verde "En vivo")', await hasta(async () => (await txt()).includes('En vivo ·') && (await pg.evaluate(() => _vivo.fuente)) === 'sse'));
   let t = await txt();

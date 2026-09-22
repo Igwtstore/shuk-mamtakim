@@ -1165,6 +1165,7 @@
         <a href="diagnostico.html" target="_blank" style="font-size:0.72rem;font-weight:700;color:var(--azul);text-decoration:none;border:1.5px solid var(--azul);border-radius:8px;padding:0.3rem 0.6rem;white-space:nowrap">🩺 Diagnóstico del sistema</a>
       </div>
       <div style="display:flex;gap:6px;margin:0.5rem 0 0.25rem">
+        <button class="psec-btn" id="ana-p-hoy" onclick="setAnaPeriodo('hoy',this)">Hoy</button>
         <button class="psec-btn activo" id="ana-p-7" onclick="setAnaPeriodo(7,this)">7 días</button>
         <button class="psec-btn" id="ana-p-30" onclick="setAnaPeriodo(30,this)">30 días</button>
         <button class="psec-btn" id="ana-p-0" onclick="setAnaPeriodo(0,this)">Todo</button>
@@ -2864,9 +2865,9 @@ const SITIO_DOM = SITIO.replace(/^https?:\/\//, '');
 function _sincronizarSitio() {
   const qr = u => 'https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=' + encodeURIComponent(u);
   const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
-  set('qr-img-may', el => el.src = qr(SITIO + '/mayorista'));
+  set('qr-img-may', el => el.src = qr(SITIO + '/mayorista?c=qr'));   // 🧭 etiquetado: el que escanea cuenta como QR
   set('qr-txt-may', el => el.textContent = SITIO_DOM + '/mayorista');
-  set('qr-img-min', el => el.src = qr(SITIO + '/#min-pL3q7'));
+  set('qr-img-min', el => el.src = qr(SITIO + '/?c=qr#min-pL3q7'));
   set('qr-txt-min', el => el.textContent = SITIO_DOM + '/#min-pL3q7');
   set('og-url', el => el.setAttribute('content', SITIO + '/tienda?v=2'));
 }
@@ -14153,7 +14154,8 @@ async function renderAnalitica() {
   cont.innerHTML = '<div class="sinpedidos">Cargando...</div>';
   let d;
   try {
-    const res = await fetch(APPS_SCRIPT_URL + '?accion=getAnalitica&dias=' + _anaPeriodo);
+    // 'hoy' = desde las 00:00 de hoy (hora de Buenos Aires), comparado con ayer. Los otros son días hacia atrás.
+    const res = await fetch(APPS_SCRIPT_URL + '?accion=getAnalitica&' + (_anaPeriodo === 'hoy' ? 'dias=1&hoy=1' : 'dias=' + _anaPeriodo));
     d = await res.json();
   } catch { cont.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕</div>'; return; }
   if (!d || d.error) { cont.innerHTML = '<div class="sinpedidos">No se pudo cargar 😕</div>'; return; }
@@ -14195,7 +14197,8 @@ const _anaPlata = n => '$ ' + Math.round(n || 0).toLocaleString('es-AR');
 // 💵 Un carrito mayorista puede estar en dólares. Se muestran SEPARADOS (nunca sumados):
 // mezclarlos hacía que un pedido de U$S 85 apareciera como "$ 86".
 const _anaPlataMix = (ars, usd) => _anaPlata(ars) + (usd > 0 ? ' + U$S ' + (Math.round(usd * 100) / 100).toLocaleString('es-AR') : '');
-const _anaIconoOrigen = { whatsapp: '🟢 WhatsApp', instagram: '📸 Instagram', facebook: '🔵 Facebook', google: '🔍 Google', directo: '🔗 Directo', interno: '↩️ Interno', otro: '🌐 Otro' };
+const _anaIconoOrigen = { whatsapp: '🟢 WhatsApp', estado: '📣 Estado de WhatsApp', instagram: '📸 Instagram', facebook: '🔵 Facebook', google: '🔍 Google', qr: '🔲 QR', flyer: '🖼️ Flyer', email: '✉️ Email', telegram: '✈️ Telegram', directo: '🔗 Directo (sin etiqueta)', interno: '↩️ Interno', otro: '🌐 Otro' };
+const _anaNombreOrigen = k => _anaIconoOrigen[k] || (String(k || '').startsWith('otro:') ? '🌐 ' + esc(String(k).slice(5)) : esc(k));
 const _anaKpi = (num, lbl, color = 'var(--azul)') => `<div style="flex:1;min-width:0;text-align:center">
   <div style="font-size:1.5rem;font-weight:800;color:${color}">${num}</div>
   <div style="font-size:0.68rem;color:var(--texto-suave);font-weight:600">${lbl}</div></div>`;
@@ -14587,7 +14590,7 @@ function _anaSecHoy(d) {
         <div style="font-size:0.58rem;color:var(--texto-suave)">antes: ${o.anterior}</div>
       </div>`;
     };
-    html += _anaCard(`<div class="admin-titulo">📊 Comparado con el período anterior</div>
+    html += _anaCard(`<div class="admin-titulo">📊 Comparado con ${_anaPeriodo === 'hoy' ? 'ayer (el día completo)' : 'el período anterior'}</div>
       <div style="display:flex;gap:8px">${chip('Visitas', c.visitas)}${chip('Únicos', c.unicos)}${chip('Pedidos', c.pedidos)}</div>`);
   }
 
@@ -14907,25 +14910,42 @@ function _anaSecProductos(d) {
 }
 
 // ═══ 📊 CANALES, aparatos, lugares y horarios ═══════════════════════════════
+function copiarLinkCanal(url) {
+  const listo = () => showToast('🔗 Copiado: ' + url.replace(/^https?:\/\//, ''));
+  try { navigator.clipboard.writeText(url).then(listo, () => prompt('Copiá el link:', url)); } catch { prompt('Copiá el link:', url); }
+}
 function _anaSecCanales(d) {
   const totOrigen = Object.values(d.porOrigen).reduce((s, n) => s + n, 0) || 1;
   const origenRows = Object.entries(d.porOrigen).sort((a, b) => b[1] - a[1]).map(([k, n]) => `
     <div style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px">
-        <span>${_anaIconoOrigen[k] || esc(k)}</span><span style="color:var(--texto-suave)">${n} · ${_anaPct(n, totOrigen)}%</span>
+        <span>${_anaNombreOrigen(k)}</span><span style="color:var(--texto-suave)">${n} · ${_anaPct(n, totOrigen)}%</span>
       </div>
       <div style="background:var(--gris-medio);border-radius:5px;height:10px;overflow:hidden">
         <div style="width:${_anaPct(n, totOrigen)}%;height:100%;background:#2c6fad;border-radius:5px"></div>
       </div>
     </div>`).join('');
-  let html = _anaCard(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
+  // 🧭 Los links etiquetados: la única forma de que "de dónde vienen" diga la verdad.
+  const canales = [['wa', '🟢 WhatsApp (mensaje)'], ['estado', '📣 Estado de WhatsApp'], ['ig', '📸 Instagram (bio / historia)'], ['fb', '🔵 Facebook'], ['qr', '🔲 QR impreso'], ['flyer', '🖼️ Flyer'], ['mail', '✉️ Email']];
+  const linkDe = (c, may) => SITIO + (may ? '/mayorista' : '/tienda') + '?c=' + c;
+  const filasCanal = canales.map(([c, lbl]) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--gris-medio);font-size:0.78rem;flex-wrap:wrap">
+      <span style="font-weight:600;min-width:150px">${lbl}</span>
+      <span style="display:flex;gap:5px;flex-wrap:wrap">
+        <button onclick="copiarLinkCanal('${linkDe(c, false)}')" style="background:var(--gris-claro);border:none;border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:700;cursor:pointer;color:var(--azul)">🛍️ minorista</button>
+        <button onclick="copiarLinkCanal('${linkDe(c, true)}')" style="background:var(--gris-claro);border:none;border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:700;cursor:pointer;color:#2c6fad">📦 mayorista</button>
+      </span></div>`).join('');
+  const sinEtiqueta = d.porOrigen.directo || 0;
+  let html = _anaCard(`<div class="admin-titulo">🧭 Links por canal (para que esto no mienta)</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px;line-height:1.5">WhatsApp e Instagram <b>no dicen de dónde viene</b> la gente: hoy ${sinEtiqueta ? '<b>' + sinEtiqueta + '</b> visitas' : 'casi todo'} figura${sinEtiqueta === 1 ? '' : 'n'} como "directo". Compartí <b>estos</b> links (tocá para copiar) y cada visita queda con su canal. Los links viejos siguen andando, solo que cuentan como directo. Los QR de la pestaña Inicio ya salen etiquetados.</div>
+    ${filasCanal}`);
+  html += _anaCard(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
 
   const cpo = (d.conversionPorOrigen || []).filter(x => x.visitantes > 0);
   if (cpo.length) {
     html += _anaCard(`<div class="admin-titulo">🎯 Conversión por canal</div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:6px">De cada canal, cuántos visitantes terminaron pidiendo. Te dice dónde conviene invertir.</div>
       ${cpo.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio)">
-        <span>${_anaIconoOrigen[x.origen] || esc(x.origen)}</span>
+        <span>${_anaNombreOrigen(x.origen)}</span>
         <span style="color:var(--texto-suave)">${x.pedidos}/${x.visitantes} · <b style="color:${x.pct >= 20 ? 'var(--verde)' : (x.pct >= 8 ? '#e08a2a' : '#c0392b')}">${x.pct}%</b></span>
       </div>`).join('')}`);
   }
@@ -16878,7 +16898,16 @@ function _vid() {
   if (!v) { v = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('shuk_vid', v); }
   return v;
 }
-function _origen() {
+// 🧭 DE DÓNDE VIENE (v4.80). Medido 30 días: el 96 % del tráfico figuraba "directo", porque
+// WhatsApp e Instagram abren el link sin decirle al navegador de dónde salió (no mandan referrer).
+// La única forma de saberlo es que el LINK lo diga: shukmamtakim.com.ar/tienda?c=wa. El panel
+// genera esos links (pestaña Canales). Orden: la etiqueta del link > lo que ya se sabía de esta
+// persona (primer toque, guardado en su navegador) > el referrer, que sirve para Google y poco más.
+const _CANALES = { wa: 'whatsapp', whatsapp: 'whatsapp', estado: 'estado', ig: 'instagram', instagram: 'instagram', fb: 'facebook', facebook: 'facebook', qr: 'qr', flyer: 'flyer', mail: 'email', email: 'email', tg: 'telegram', telegram: 'telegram', google: 'google' };
+function _canalDelLink() {
+  try { const c = (new URLSearchParams(location.search).get('c') || '').toLowerCase().trim(); return c ? (_CANALES[c] || ('otro:' + c.replace(/[^a-z0-9_-]/g, '').slice(0, 20))) : ''; } catch { return ''; }
+}
+function _origenReferrer() {
   const r = (document.referrer || '').toLowerCase();
   if (!r) return 'directo';
   if (r.includes('whatsapp') || r.includes('wa.me')) return 'whatsapp';
@@ -16887,6 +16916,17 @@ function _origen() {
   if (r.includes('google')) return 'google';
   if (r.includes(location.host)) return 'interno';
   return 'otro';
+}
+function _origen() {
+  const tag = _canalDelLink();
+  const ref = _origenReferrer();
+  const nuevo = tag || ((ref !== 'directo' && ref !== 'interno') ? ref : '');
+  let guardado = '';
+  try {
+    guardado = localStorage.getItem('shuk_canal') || '';
+    if (nuevo && !guardado) { localStorage.setItem('shuk_canal', nuevo); guardado = nuevo; }   // primer toque: el que lo trajo
+  } catch { /**/ }
+  return nuevo || guardado || ref;
 }
 function _dispositivo() {
   return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'celular' : 'compu';
@@ -16937,7 +16977,7 @@ function _mandarSalida() {
   if (seg < 1) return;
   _salidaMandada = true;
   try {
-    if (localStorage.getItem('shuk_no_track')) return;
+    if (localStorage.getItem('shuk_no_track') || navigator.webdriver) return;
     const params = new URLSearchParams({
       accion: 'track', vid: _vid(), pagina: (modo === 'mayorista' ? 'mayorista' : 'tienda'),
       evento: 'salida', producto: JSON.stringify({ seg, int: _interacciones, prod: Object.keys(_vistos).length }),
@@ -16990,6 +17030,9 @@ async function track(evento, extra = {}) {
   try {
     // Precisión: los navegadores del equipo (entraron al panel alguna vez) no cuentan como visitantes
     if (localStorage.getItem('shuk_no_track')) return;
+    // 🤖 Tampoco los navegadores automatizados (las pruebas de cada versión y los robots que se
+    // presentan como tales): el pico de "visitas a la medianoche" del 25/08 y 27/08 eran esas pruebas.
+    if (navigator.webdriver) return;
     const g = await _geo();
     const params = new URLSearchParams({
       accion: 'track', vid: _vid(),
@@ -17014,7 +17057,13 @@ async function _enviarTrack(params, soloVivo) {
   if (_vpsDisponible()) {
     try {
       const r = await fetch('/api/track', { method: 'POST', body: params, keepalive: true });
-      if (r.ok) return;
+      if (r.ok) {
+        // 🍪 Safari (iPhone) borra lo guardado por la página a los 7 días sin visitas y la persona
+        // volvía como "nueva". El servidor recuerda su identificador en una cookie propia que Safari
+        // sí respeta, y si la página trajo otro, contesta con el de siempre: acá se adopta.
+        try { const j = await r.json(); if (j && j.vid && j.vid !== localStorage.getItem('shuk_vid')) localStorage.setItem('shuk_vid', j.vid); } catch { /**/ }
+        return;
+      }
       if (r.status !== 502) _trackSinVpsHasta = Date.now() + 5 * 60000;   // no existe acá (404): no insistir 5 min
     } catch { _trackSinVpsHasta = Date.now() + 5 * 60000; }
   }

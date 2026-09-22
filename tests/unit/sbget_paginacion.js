@@ -40,6 +40,9 @@ function baseFalsa(filas) {
     const off = parseInt(q.get('offset') || '0') || 0;
     const lim = Math.min(parseInt(q.get('limit') || String(TOPE)) || TOPE, TOPE);   // ← el tope manda
     let datos = filas.slice();
+    // v4.80: la analítica filtra por la fecha real → or=(ts.gte.<iso>,ts.is.null)
+    const mTs = (q.get('or') || '').match(/ts\.gte\.([^,)]+)/);
+    if (mTs) { const corte = decodeURIComponent(mTs[1]); datos = datos.filter(r => !r.ts || r.ts >= corte); }
     if ((q.get('order') || '').includes('id.desc')) datos = datos.slice().reverse();
     return { ok: true, json: async () => datos.slice(off, off + lim) };
   };
@@ -95,13 +98,17 @@ async function run() {
     const hoy = Date.now();
     const dd = (t) => { const d = new Date(t), p = n => String(n).padStart(2, '0'); return p(d.getUTCDate()) + '/' + p(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear() + ' 12:00'; };
     // 5.000 filas: una por hora hacia atrás (≈208 días). Las últimas 1000 cubren ~41 días.
-    const filas = Array.from({ length: 5000 }, (_, i) => ({ id: 5000 - i, fecha: dd(hoy - i * 3600000) })).reverse();
+    const filas = Array.from({ length: 5000 }, (_, i) => ({ id: 5000 - i, fecha: dd(hoy - i * 3600000), ts: new Date(hoy - i * 3600000).toISOString() })).reverse();
     const { traficoParaAnalitica } = hacer(filas);
     const r = await traficoParaAnalitica(7);
     ok('7 días: trae la fila más reciente', r.some(x => x.id === 5000));
-    ok('7 días: cubre la ventana completa (168 h)', r.length >= 168);
+    ok('7 días: cubre la ventana completa (168 h) y la anterior (336 h)', r.length >= 336);
     ok('7 días: NO se trae los 6 meses enteros', r.length < 5000);
-    ok('7 días: cortó rápido (pocas consultas)', pedidos.length <= 3);
+    ok('7 días: una sola consulta (la base filtra por ts)', pedidos.length <= 1);
+    ok('7 días: la consulta filtra por la fecha real (ts)', (new URL(pedidos[0]).searchParams.get('or') || '').includes('ts.gte.'));
+    // Una fila vieja SIN ts (no debería existir) entra igual: no se pierde por las dudas.
+    const { traficoParaAnalitica: t2 } = hacer(filas.concat([{ id: 9999, fecha: '01/01/2026 10:00' }]));
+    ok('7 días: una fila sin ts entra igual (no se descarta a ciegas)', (await t2(7)).some(x => x.id === 9999));
   }
 
   // 7) dias=0 ("todo") sí trae el historial completo.

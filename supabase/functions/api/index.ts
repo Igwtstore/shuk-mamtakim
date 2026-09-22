@@ -492,17 +492,12 @@ function tsDeFecha(f: string): number | null {
 }
 async function traficoParaAnalitica(dias: number) {
   if (dias <= 0) return await sbGet('trafico', 'select=*&order=id.asc');
-  const corte = Date.now() - 2 * dias * 86400000;   // 2× la ventana: la comparativa mira el período anterior
-  const filas: any[] = [];
-  for (let off = 0; off <= 500000; off += SB_MAX_FILAS) {
-    const pag = await sbGet('trafico', 'select=*&order=id.desc&limit=' + SB_MAX_FILAS + '&offset=' + off);
-    if (!Array.isArray(pag) || !pag.length) break;
-    for (const fila of pag) filas.push(fila);
-    if (pag.length < SB_MAX_FILAS) break;
-    const ult = tsDeFecha(pag[pag.length - 1].fecha);   // la más vieja de esta página
-    if (ult !== null && ult < corte) break;             // ya nos pasamos de la ventana → basta
-  }
-  return filas;
+  // 🗓️ v4.80: `trafico.ts` es una fecha de verdad, con índice: la base filtra sola el período y
+  // ya no hace falta leer de a páginas desde lo más nuevo adivinando dónde frenar. Se piden 2× la
+  // ventana porque la comparativa mira el período anterior. Una fila sin ts (no debería haber
+  // ninguna: se completaron todas) entra igual, por las dudas.
+  const corte = new Date(Date.now() - 2 * dias * 86400000).toISOString();
+  return await sbGet('trafico', 'select=*&or=(ts.gte.' + encodeURIComponent(corte) + ',ts.is.null)&order=id.asc');
 }
 // 🔴 HOY CONTRA EL MISMO DÍA DE LA SEMANA PASADA, hora por hora (v4.79, pestaña En vivo).
 // "Comparado con el período anterior" mezcla un jueves con un lunes; esto compara el jueves con
@@ -526,12 +521,29 @@ function hoyVsSemana(todas: any[]) {
   // ¿Los datos que se leyeron llegan hasta hace 7 días? Con "1 día" no (se leen 2), con 7 sí (se leen 14).
   return { hoy, hace7, horaActual: +m[4], diaNombre: nombres[new Date(hoyTs).getUTCDay()], fechaHoy: kHoy, fechaHace7: kHace7, hace7Disponible: masViejo <= hoyTs - 7 * 86400000 };
 }
-function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[] = [], productos: any[] = [], aliasPuestos: any = null) {
+function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[] = [], productos: any[] = [], aliasPuestos: any = null, opciones: any = null) {
   const alias = aliasPuestos || {};
-  if (!rows.length) return { vacio: true };
+  const soloHoy = !!(opciones && opciones.soloHoy);
+  // 🧹 Lo que NO es tráfico del Shuk (v4.80): las visitas de los chicos (Candy, `pagina` candy-*) se
+  // contaban como minorista del Shuk, y la página de diagnóstico se contaba como visita. Se apartan y
+  // se informa cuánto se apartó, para que el número que se mira sea el de la tienda y nada más.
+  const excluidos: any = { candy: 0, diagnostico: 0 };
+  rows = rows.filter((r: any) => {
+    if (String(r.pagina || '').startsWith('candy-')) { excluidos.candy++; return false; }
+    if (String(r.origen || '') === 'diagnostico') { excluidos.diagnostico++; return false; }
+    return true;
+  });
+  if (!rows.length) return { vacio: true, excluidos };
   const pf = (f: string) => { const m = (f || '').toString().match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/); return m ? { ts: Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)), hora: +(m[4] || 0), dow: new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])).getUTCDay(), dk: m[3] + '-' + m[2] + '-' + m[1], ddmm: m[1] + '/' + m[2] + ' ' + (m[4] || '00') + ':' + (m[5] || '00') } : null; };
   const todas = rows.map((r: any) => ({ r, t: pf(r.fecha) })).filter((x) => x.t);
-  const nowT = Date.now(), desdeT = dias > 0 ? nowT - dias * 86400000 : null, prevT = dias > 0 ? nowT - 2 * dias * 86400000 : null;
+  const nowT = Date.now();
+  // "Hoy" = desde las 00:00 de Buenos Aires; el período anterior es ayer completo. Las fechas de
+  // `trafico` están en hora de Buenos Aires y se parsean como si fueran UTC, así que el corte de
+  // "hoy" se arma en ese mismo sistema (de fechaAhora, no de Date.now()).
+  const mH = fechaAhora().match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+  const hoy00 = mH ? Date.UTC(+mH[3], +mH[2] - 1, +mH[1]) : nowT - 86400000;
+  const desdeT = soloHoy ? hoy00 : (dias > 0 ? nowT - dias * 86400000 : null);
+  const prevT = soloHoy ? hoy00 - 86400000 : (dias > 0 ? nowT - 2 * dias * 86400000 : null);
   const filas = desdeT ? todas.filter((x) => x.t!.ts >= desdeT) : todas;
   const resumen: any = { visitas: 0, unicos: 0, nuevos: 0, recurrentes: 0, tienda: 0, mayorista: 0 };
   const porOrigen: any = {}, porDispositivo: any = {}, porCiudad: any = {}, porPais: any = {}, porHora = new Array(24).fill(0), porDia: any = {}, porDiaSemana = new Array(7).fill(0);
@@ -618,6 +630,17 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     }
   });
   const listaVids = Object.keys(vids); resumen.unicos = listaVids.length;
+  // 🧮 SESIONES (v4.80): una "visita" es cada carga de la página (recargar cuenta dos). Una sesión es
+  // una venida de verdad: los eventos de la misma persona con menos de 30 minutos entre uno y otro.
+  const tsPorVid: any = {};
+  filas.forEach(({ r, t }) => { if (r.vid) (tsPorVid[r.vid] = tsPorVid[r.vid] || []).push(t!.ts); });
+  let sesiones = 0;
+  Object.keys(tsPorVid).forEach((v) => {
+    const ts = tsPorVid[v].sort((a: number, b: number) => a - b);
+    let ult = -Infinity;
+    ts.forEach((x: number) => { if (x - ult > 30 * 60000) sesiones++; ult = x; });
+  });
+  resumen.sesiones = sesiones;
   listaVids.forEach((v) => { if (Object.keys(vids[v].fechas).length >= 2) resumen.recurrentes++; else resumen.nuevos++; });
   const fmtU = (ts: number) => { const d = new Date(ts); const p = (n: number) => String(n).padStart(2, '0'); return p(d.getUTCDate()) + '/' + p(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear() + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); };
   const leads = listaVids.filter((v) => vids[v].nombre || vids[v].telefono).map((v) => ({ nombre: vids[v].nombre || '(sin nombre)', telefono: vids[v].telefono || '', ciudad: vids[v].ciudad, origen: vids[v].origen, pagina: vids[v].pagina, visitas: vids[v].visitas, ultima: fmtU(vids[v].ultima) })).sort((a, b) => b.visitas - a.visitas);
@@ -1107,6 +1130,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     diasDetalle, deseoVsVenta, busquedas, candado,
     tiempoADecidir, juntos, comparativo, mironesTop, rescate, radiografia,
     hoyVsSemana: hoyVsSemana(todas),   // 🔴 v4.79
+    excluidos, soloHoy,                 // 🧹 v4.80
   };
 }
 
@@ -3654,7 +3678,7 @@ Deno.serve(async (req) => {
         if (!vidA) return;
         try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
       });
-      return json(analitica(trA, dias, vtA, clA, prA, aliasMap));
+      return json(analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy: url.searchParams.get('hoy') === '1' }));
     }
     // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
     // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.

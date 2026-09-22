@@ -76,10 +76,27 @@ function geoDe(req) {
 const vivo = crearEnVivo();
 const portero = crearPortero({ sbUrl: SB_URL, anon: SB_ANON, mailMiri: MAIL_MIRI });
 const leerParams = [express.urlencoded({ extended: false, limit: '64kb' }), express.json({ limit: '64kb' })];
+// 🍪 La identidad anónima que Safari no borra (v4.80). El iPhone tira lo que la página guarda a
+// los 7 días sin visitas, y la persona volvía como "nueva" (los "nuevos" estaban inflados). Una
+// cookie puesta por el SERVIDOR no tiene ese límite: acá se recuerda el identificador del aparato
+// y, si la página trae otro, manda el de siempre (la página lo adopta). Sigue siendo anónimo:
+// no dice quién es, solo permite reconocer al mismo aparato. Nada nuevo se guarda en la base.
+const COOKIE_VID = 'shuk_vid';
+function cookieDe(req, nombre) {
+  const c = req.headers.cookie || '';
+  for (const parte of c.split(';')) { const [k, ...v] = parte.trim().split('='); if (k === nombre) return decodeURIComponent(v.join('=')); }
+  return '';
+}
+const vidValido = (v) => /^v_[a-z0-9]{6,40}$/i.test(v || '');
 app.all('/api/track', ...leerParams, async (req, res) => {
   const q = { ...req.query, ...(req.body && typeof req.body === 'object' ? req.body : {}) };
+  const enCookie = cookieDe(req, COOKIE_VID);
+  if (vidValido(enCookie)) q.vid = enCookie;                      // el aparato ya era conocido: manda ese
   const ev = normalizarEvento(q, { geo: geoDe(req) });
   if (!ev) return res.status(400).json({ error: 'falta el visitante' });
+  if (!vidValido(enCookie) && vidValido(ev.vid)) {
+    res.setHeader('Set-Cookie', COOKIE_VID + '=' + encodeURIComponent(ev.vid) + '; Path=/; Max-Age=63072000; SameSite=Lax; Secure; HttpOnly');
+  }
   // Primero al motor (la verdad histórica). Si el motor no contesta, se avisa con 502 para que
   // la tienda le pegue directo, como hacía siempre: el dato no se pierde.
   let guardado = true;
@@ -88,7 +105,7 @@ app.all('/api/track', ...leerParams, async (req, res) => {
     catch { guardado = false; }
   }
   vivo.registrar(ev);   // al panel va igual: lo que pasa, pasa, aunque el motor esté con hipo
-  res.status(guardado ? 200 : 502).json({ ok: guardado });
+  res.status(guardado ? 200 : 502).json({ ok: guardado, vid: ev.vid });
 });
 // La conexión abierta (SSE). El token viaja en la URL porque EventSource no admite cabeceras.
 app.get('/api/en-vivo', async (req, res) => {
