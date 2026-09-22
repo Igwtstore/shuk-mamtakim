@@ -19,10 +19,17 @@ import geoip from 'geoip-lite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { crearEnVivo, crearPortero, normalizarEvento, paramsParaMotor, SOLO_VIVO } from './en-vivo.mjs';
 
 const RAIZ = path.resolve(process.env.RAIZ || path.join(import.meta.dirname, '..', '..'));
 const PUERTO = parseInt(process.env.PUERTO || '3100', 10);
 const ARRANQUE = new Date();
+// 🔴 EN VIVO (v4.79): el motor al que se reenvía cada evento y el Auth que valida la sesión del panel.
+// MOTOR_URL se puede pisar por variable de entorno (las pruebas locales apuntan a un motor de mentira).
+const MOTOR_URL = process.env.MOTOR_URL || 'https://soarkknjewgcewryxqac.supabase.co/functions/v1/api';
+const SB_URL = process.env.SUPABASE_URL || 'https://soarkknjewgcewryxqac.supabase.co';
+const SB_ANON = process.env.SUPABASE_ANON || 'sb_publishable_aAZNID-NdaGERYQWe9Uk6w_rmlYSCj2';   // clave pública (la misma del navegador)
+const MAIL_MIRI = 'myri@shukmamtakim.com';
 
 // ── vercel.json = la única verdad de reescrituras y cabeceras ────────────────
 // El `source` de Vercel es un patrón "path-to-regexp": lo anclamos y listo.
@@ -59,6 +66,50 @@ app.set('etag', 'weak');
 
 // Salud (antes del candado: los monitores no son del Mercosur).
 app.get('/_salud', (_req, res) => res.json({ ok: true, desde: ARRANQUE.toISOString(), raiz: RAIZ }));
+
+// ── 🔴 EN VIVO: la tienda manda sus eventos acá; el panel se queda escuchando ─────────
+// Van ANTES del candado: no son páginas, y al que el candado no dejó entrar nunca le carga la
+// tienda, así que tampoco llega a mandar nada.
+function geoDe(req) {
+  try { const g = geoip.lookup(ipDe(req)); return g ? { city: g.city || '', region: g.region || '', country: g.country || '' } : null; } catch { return null; }
+}
+const vivo = crearEnVivo();
+const portero = crearPortero({ sbUrl: SB_URL, anon: SB_ANON, mailMiri: MAIL_MIRI });
+const leerParams = [express.urlencoded({ extended: false, limit: '64kb' }), express.json({ limit: '64kb' })];
+app.all('/api/track', ...leerParams, async (req, res) => {
+  const q = { ...req.query, ...(req.body && typeof req.body === 'object' ? req.body : {}) };
+  const ev = normalizarEvento(q, { geo: geoDe(req) });
+  if (!ev) return res.status(400).json({ error: 'falta el visitante' });
+  // Primero al motor (la verdad histórica). Si el motor no contesta, se avisa con 502 para que
+  // la tienda le pegue directo, como hacía siempre: el dato no se pierde.
+  let guardado = true;
+  if (!SOLO_VIVO.has(ev.evento)) {
+    try { const r = await fetch(MOTOR_URL + '?' + paramsParaMotor(ev).toString(), { signal: AbortSignal.timeout(8000) }); guardado = r.ok; }
+    catch { guardado = false; }
+  }
+  vivo.registrar(ev);   // al panel va igual: lo que pasa, pasa, aunque el motor esté con hipo
+  res.status(guardado ? 200 : 502).json({ ok: guardado });
+});
+// La conexión abierta (SSE). El token viaja en la URL porque EventSource no admite cabeceras.
+app.get('/api/en-vivo', async (req, res) => {
+  const p = await portero.puedeVer(String(req.query.token || ''));
+  if (!p.ok) return res.status(401).json({ error: p.motivo });
+  res.status(200).set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Content-Encoding': 'identity',    // que el proxy no lo comprima ni lo retenga
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  const salir = vivo.suscribir(res);
+  req.on('close', salir);
+});
+// La foto de los últimos 30 minutos, para el panel que no logra sostener la conexión abierta.
+app.get('/api/en-vivo/ahora', async (req, res) => {
+  const p = await portero.puedeVer(String(req.query.token || ''));
+  if (!p.ok) return res.status(401).json({ error: p.motivo });
+  res.set('Cache-Control', 'no-store').json({ eventos: vivo.recientes(), conectados: vivo.conectados(), ahora: Date.now() });
+});
 
 // Registro compacto de cada pedido.
 app.use((req, res, next) => {

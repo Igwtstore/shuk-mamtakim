@@ -106,6 +106,7 @@
     --dorado-claro: #292013;
     --rojo-claro: #2d0a0a;
   }
+  @keyframes vivoPulso { 0% { box-shadow: 0 0 0 0 rgba(46,158,91,.45); } 70% { box-shadow: 0 0 0 7px rgba(46,158,91,0); } 100% { box-shadow: 0 0 0 0 rgba(46,158,91,0); } }
   body.dark .header { background: #0d0d1a; }
   body.dark .admin-card, body.dark .producto-card { background: #1f2937; border: 1px solid #374151; }
   body.dark .producto-card { border: 2px dashed #6b5a35; }
@@ -12187,6 +12188,7 @@ function setAdminTab(tab) {
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'clientes') renderClientes();
   if (tab === 'analitica') renderAnalitica();
+  if (tab !== 'analitica') _vivoDesconectar();   // 🔴 la conexión en vivo no queda abierta de fondo
   if (tab === 'ganancias') renderGanancias();
   if (tab === 'panel') setPanelSeccion(_panelSeccion);
 }
@@ -14135,9 +14137,15 @@ function setAnaPeriodo(dias, btn) {
 }
 
 function setAnaTab(t) {
+  if (t === 'vivo' && esVistaMiri()) t = 'hoy';   // ⚠️ regla sagrada: Miri no ve lo de Jony en tiempo real
   _anaTab = t;
   _anaDiaAbierto = null;
-  pintarAnalitica();
+  if (t === 'vivo') {
+    // El toque en la pestaña es el gesto que el navegador exige para poder hacer sonar algo después.
+    try { _vivo.audio = _vivo.audio || new (window.AudioContext || window.webkitAudioContext)(); } catch { /**/ }
+    pintarAnalitica();
+    _vivoConectar();
+  } else { _vivoDesconectar(); pintarAnalitica(); }
 }
 
 async function renderAnalitica() {
@@ -14224,21 +14232,291 @@ function pintarAnalitica() {
   const d = window._anaData; if (!d) return;
   const cont = document.getElementById('analitica-contenido');
   const tabs = [['hoy', '🎯 Qué hacer'], ['carritos', '🛒 Carritos'], ['gente', '👥 Gente'], ['dias', '📅 Día a día'], ['productos', '🔥 Productos'], ['canales', '📊 Canales']];
+  if (!esVistaMiri()) tabs.unshift(['vivo', '🔴 En vivo']);   // solo Jony (ver _anaSecVivo)
   const nAcc = (d.acciones || []).length, nCar = (d.abandonados || []).length;
+  const nVivo = _anaTab === 'vivo' || _vivo.fuente === 'off' ? 0 : _vivoAgrupar(_vivo.eventos, Date.now()).activos.length;
   const badge = t => t === 'hoy' && nAcc ? ` <span style="background:#c0392b;color:#fff;border-radius:8px;padding:0 5px;font-size:0.62rem">${nAcc}</span>`
-    : (t === 'carritos' && nCar ? ` <span style="background:var(--azul);color:#fff;border-radius:8px;padding:0 5px;font-size:0.62rem">${nCar}</span>` : '');
+    : (t === 'carritos' && nCar ? ` <span style="background:var(--azul);color:#fff;border-radius:8px;padding:0 5px;font-size:0.62rem">${nCar}</span>`
+    : (t === 'vivo' && nVivo ? ` <span id="ana-badge-vivo" style="background:var(--verde);color:#fff;border-radius:8px;padding:0 5px;font-size:0.62rem">${nVivo}</span>` : ''));
   const barra = `<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:0.7rem;-webkit-overflow-scrolling:touch">
     ${tabs.map(([t, lbl]) => `<button onclick="setAnaTab('${t}')" class="psec-btn ${_anaTab === t ? 'activo' : ''}" style="font-size:0.78rem;padding:0.42rem 0.8rem;flex-shrink:0">${lbl}${badge(t)}</button>`).join('')}
   </div>`;
 
   let html = barra;
-  if (_anaTab === 'hoy') html += _anaSecHoy(d);
+  if (_anaTab === 'vivo') html += '<div id="vivo-cont">' + _anaSecVivo(d) + '</div>';
+  else if (_anaTab === 'hoy') html += _anaSecHoy(d);
   else if (_anaTab === 'carritos') html += _anaSecCarritos(d);
   else if (_anaTab === 'gente') html += _anaSecGente(d);
   else if (_anaTab === 'dias') html += _anaSecDias(d);
   else if (_anaTab === 'productos') html += _anaSecProductos(d);
   else html += _anaSecCanales(d);
   cont.innerHTML = html;
+}
+
+// ═══ 🔴 EN VIVO (v4.79) ═══════════════════════════════════════════════════════
+// Quién está en la tienda AHORA y qué está haciendo, sin apretar nada. El servidor del sitio
+// (el VPS, que ya sirve la tienda) recibe cada evento y lo empuja acá por SSE: una conexión
+// que queda abierta y por la que el navegador recibe avisos. Si la conexión no se sostiene,
+// se pide una foto de los últimos 30 minutos cada 15 s. Si tampoco, se dice con todas las
+// letras. La pestaña no existe en vista Miri (muestra productos y clientes de Jony en vivo)
+// y el servidor tampoco se la da a su sesión.
+const _VIVO_ACTIVO_MS = 5 * 60000;      // sin señales en 5 minutos = ya no está
+const _VIVO_VENTANA_MS = 30 * 60000;    // lo mismo que recuerda el servidor
+const _VIVO_TICKER = 80;                // renglones del ticker
+const _VIVO_COL = { hoy: '#2c6fad', hace7: '#e08a2a', hoyOscuro: '#4f8fcc', hace7Oscuro: '#cf7f2a' };
+const _vivo = { eventos: [], es: null, timer: null, reloj: null, fuente: 'off', error: '', conectados: 0, ticks: 0,
+  semana: null, semanaPedida: 0, audio: null, sonido: localStorage.getItem('shuk_vivo_sonido') !== '0' };
+
+function _vivoApodo(vid) { return '#' + String(vid || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(); }
+function _vivoDur(seg) { seg = Math.round(seg || 0); if (seg < 60) return seg + ' s'; const m = Math.floor(seg / 60), r = seg % 60; return m + ' min' + (r ? ' ' + r + ' s' : ''); }
+function _vivoHace(ms, ahora) { const sg = Math.max(0, Math.round((ahora - ms) / 1000)); if (sg < 60) return 'hace ' + sg + ' s'; const m = Math.round(sg / 60); return m < 60 ? 'hace ' + m + ' min' : 'hace ' + Math.round(m / 60) + ' h'; }
+function _vivoHora(ms) { const dt = new Date(ms), p = n => String(n).padStart(2, '0'); return p(dt.getHours()) + ':' + p(dt.getMinutes()) + ':' + p(dt.getSeconds()); }
+
+// Lo que dice cada evento, en criollo.
+function _vivoTexto(ev) {
+  const det = ev.detalle || '';
+  const plata = (ev.total || ev.totalUSD) ? ' · <b>' + _anaPlataMix(ev.total || 0, ev.totalUSD || 0) + '</b>' : '';
+  if (ev.evento === 'visita') return ev.pagina === 'mayorista' ? '📦 entró a la <b>mayorista</b>' : '🛍️ entró a la tienda';
+  if (ev.evento === 'carrito') return '🛒 agregó <b>' + esc(det) + '</b>';
+  if (ev.evento === 'checkout') return '🔥 <b>llegó al checkout</b>' + plata;
+  if (ev.evento === 'pedido') return '✅ <b>envió el pedido</b>' + plata;
+  if (ev.evento === 'busqueda') return '🔎 buscó "<b>' + esc(det) + '</b>"' + (Number(ev.total) === 0 ? ' <span style="color:#c0392b;font-weight:700">sin resultados</span>' : '');
+  if (ev.evento === 'registro') return '📝 dejó sus datos';
+  if (ev.evento === 'salida') { let sg = 0; try { sg = JSON.parse(det).seg || 0; } catch { /**/ } return '👋 se fue' + (sg ? ' después de ' + _vivoDur(sg) : ''); }
+  if (ev.evento === 'latido') return '👀 sigue mirando';
+  if (ev.evento === 'rescate') return '↩️ carrito guardado: ' + esc(det);
+  return esc(ev.evento);
+}
+
+// Agrupa los eventos por visitante: quién está ahora, qué carrito trae, hace cuánto entró.
+// Un visitante "está" si dio alguna señal en los últimos 5 minutos y su última señal no fue irse.
+function _vivoAgrupar(eventos, ahora) {
+  const por = {};
+  eventos.slice().sort((a, b) => (a.t - b.t) || ((a.id || 0) - (b.id || 0))).forEach(ev => {
+    if (!ev.vid || ev.evento === 'bloqueado' || ev.evento === 'geo') return;
+    const p = por[ev.vid] = por[ev.vid] || { vid: ev.vid, primero: ev.t, ultimo: ev.t, pagina: ev.pagina || 'tienda', ciudad: '', dispositivo: '', origen: ev.origen || 'directo', nombre: '', telefono: '', ultimoEvento: ev, items: null, total: 0, totalUSD: 0, etapa: '', seFue: false, productos: [], seg: 0, eventos: 0 };
+    p.eventos++;
+    p.ultimo = ev.t; p.ultimoEvento = ev; if (ev.pagina) p.pagina = ev.pagina;
+    if (ev.ciudad && !p.ciudad) p.ciudad = ev.ciudad;
+    if (ev.dispositivo && !p.dispositivo) p.dispositivo = ev.dispositivo;
+    if (ev.nombre && !p.nombre) p.nombre = ev.nombre;
+    if (ev.telefono && !p.telefono) p.telefono = ev.telefono;
+    if (ev.carrito) { try { const arr = JSON.parse(ev.carrito); if (Array.isArray(arr)) { p.items = arr; p.total = parseFloat(ev.total) || 0; p.totalUSD = parseFloat(ev.totalUSD) || 0; } } catch { /**/ } }
+    if (ev.evento === 'carrito' && ev.detalle && !p.productos.includes(ev.detalle)) p.productos.push(ev.detalle);
+    if (ev.evento === 'carrito' && p.etapa !== 'checkout') p.etapa = 'carrito';
+    if (ev.evento === 'checkout') p.etapa = 'checkout';
+    if (ev.evento === 'pedido') { p.etapa = 'pedido'; p.items = null; p.total = 0; p.totalUSD = 0; }   // el carrito ya es pedido
+    if (ev.evento === 'salida' || ev.evento === 'latido') { try { p.seg = Math.max(p.seg, JSON.parse(ev.detalle || '{}').seg || 0); } catch { /**/ } }
+    p.seFue = ev.evento === 'salida';
+  });
+  const todos = Object.values(por);
+  const activos = todos.filter(p => !p.seFue && ahora - p.ultimo <= _VIVO_ACTIVO_MS).sort((a, b) => b.ultimo - a.ultimo);
+  return { activos, todos };
+}
+
+// 🔔 Sonido + vibración + aviso, solo por lo que vale la pena: pedido, checkout, cliente conocido.
+function _vivoBeep(tipo) {
+  try {
+    const ctx = _vivo.audio; if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const notas = tipo === 'pedido' ? [660, 880, 1100] : tipo === 'checkout' ? [880, 660] : [520];
+    notas.forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      const t0 = ctx.currentTime + i * 0.16;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.15);
+      o.start(t0); o.stop(t0 + 0.16);
+    });
+  } catch { /**/ }
+}
+function _vivoAvisar(ev, mapa) {
+  if (!_vivo.sonido || ev.t < Date.now() - 60000) return;   // lo viejo (la foto inicial) no suena
+  const c = (mapa && mapa[ev.vid]) || {};
+  const nombre = ev.nombre || c.nombre || '';
+  let tipo = '';
+  if (ev.evento === 'pedido') tipo = 'pedido';
+  else if (ev.evento === 'checkout') tipo = 'checkout';
+  else if (ev.evento === 'visita' && (c.esCliente || nombre)) tipo = 'conocido';
+  if (!tipo) return;
+  _vivoBeep(tipo);
+  try { if (navigator.vibrate) navigator.vibrate(tipo === 'pedido' ? [120, 60, 120] : 80); } catch { /**/ }
+  showToast(tipo === 'pedido' ? '✅ ¡Pedido nuevo, en vivo!' : tipo === 'checkout' ? '🔥 Alguien llegó al checkout' : '👋 ' + (nombre || 'Un cliente conocido') + ' entró a la tienda');
+}
+function vivoSonido() { _vivo.sonido = !_vivo.sonido; localStorage.setItem('shuk_vivo_sonido', _vivo.sonido ? '1' : '0'); if (_vivo.sonido) _vivoBeep('conocido'); _vivoPintar(); }
+
+// Quién es quién: lo que ya sabe la Analítica (nombre, cliente, teléfono) por identificador de aparato.
+function _vivoMapa() {
+  const mapa = {};
+  [(window._anaData && window._anaData.visitantes) || [], (_vivo.semana && _vivo.semana.visitantes) || []].forEach(l => l.forEach(v => { if (v && v.vid && !mapa[v.vid]) mapa[v.vid] = v; }));
+  return mapa;
+}
+function _vivoPintar() {
+  if (_anaTab !== 'vivo' || _adminTabActual !== 'analitica') return;
+  const c = document.getElementById('vivo-cont');
+  if (c) c.innerHTML = _anaSecVivo(window._anaData || {}); else pintarAnalitica();
+  const b = document.getElementById('ana-badge-vivo'); if (b) b.remove();
+}
+function _vivoRecibir(ev) {
+  if (!ev || _vivo.eventos.some(e => e.id === ev.id)) return;
+  _vivo.eventos.push(ev);
+  const corte = Date.now() - _VIVO_VENTANA_MS; _vivo.eventos = _vivo.eventos.filter(e => e.t >= corte);
+  _vivoAvisar(ev, _vivoMapa());
+  _vivoPintar();
+}
+function _vivoAbrirSSE() {
+  if (_vivo.es || !window.EventSource) return;
+  const es = new EventSource('/api/en-vivo?token=' + encodeURIComponent(_authToken || ''));
+  _vivo.es = es;
+  es.addEventListener('inicio', e => {
+    try { const j = JSON.parse(e.data); _vivo.eventos = j.eventos || []; _vivo.conectados = j.conectados || 0; } catch { /**/ }
+    _vivo.fuente = 'sse'; _vivo.error = '';
+    if (_vivo.timer) { clearInterval(_vivo.timer); _vivo.timer = null; }   // la foto cada 15 s ya no hace falta
+    _vivoPintar();
+  });
+  es.addEventListener('evento', e => { try { _vivoRecibir(JSON.parse(e.data)); } catch { /**/ } });
+  es.onerror = () => {
+    if (_vivo.es !== es) return;
+    if (es.readyState === EventSource.CLOSED) _vivo.es = null;   // rechazada (401) o cortada: la foto decide qué pasó
+    if (_vivo.fuente === 'sse') _vivo.fuente = 'poll';
+    _vivoPolling();
+  };
+}
+function _vivoFoto() {
+  fetch('/api/en-vivo/ahora?token=' + encodeURIComponent(_authToken || ''), { cache: 'no-store' }).then(async r => {
+    if (r.status === 401) {
+      const j = await r.json().catch(() => ({}));
+      _vivoDesconectar(false); _vivo.fuente = 'off'; _vivo.error = 'Esta pantalla no está disponible para tu sesión' + (j.error ? ' (' + j.error + ')' : '');
+      _vivoPintar(); return;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const vistos = new Set(_vivo.eventos.map(e => e.id)), mapa = _vivoMapa();
+    (j.eventos || []).forEach(ev => { if (!vistos.has(ev.id)) { _vivo.eventos.push(ev); _vivoAvisar(ev, mapa); } });
+    const corte = Date.now() - _VIVO_VENTANA_MS; _vivo.eventos = _vivo.eventos.filter(e => e.t >= corte);
+    _vivo.conectados = j.conectados || 0;
+    if (_vivo.fuente !== 'sse') { _vivo.fuente = 'poll'; _vivo.error = ''; }
+    _vivoPintar();
+  }).catch(() => { if (_vivo.fuente !== 'sse') { _vivo.fuente = 'off'; _vivo.error = 'No hay conexión con el servidor del sitio. Reintentando…'; _vivoPintar(); } });
+}
+function _vivoPolling() {
+  if (_vivo.timer) return;
+  _vivoFoto();
+  _vivo.timer = setInterval(() => { _vivoFoto(); if (!_vivo.es && _vivo.ticks % 4 === 0) _vivoAbrirSSE(); }, 15000);
+}
+// El "hoy contra la semana pasada" necesita 7 días de datos; si la pestaña está en "1 día" se
+// piden aparte, una vez cada 10 minutos (también refresca quién es quién).
+async function _vivoCargarSemana() {
+  if ((window._anaData && window._anaData.hoyVsSemana && window._anaData.hoyVsSemana.hace7Disponible) || Date.now() - _vivo.semanaPedida < 10 * 60000) return;
+  _vivo.semanaPedida = Date.now();
+  try { const j = await (await fetch(APPS_SCRIPT_URL + '?accion=getAnalitica&dias=7')).json(); if (j && !j.error) { _vivo.semana = j; _vivoPintar(); } } catch { /**/ }
+}
+function _vivoConectar() {
+  _vivoDesconectar(false);
+  _vivo.error = '';
+  if (!/^https?:$/.test(location.protocol)) { _vivo.fuente = 'off'; _vivo.error = 'Solo funciona en el sitio publicado'; _vivoPintar(); return; }
+  _vivoCargarSemana();
+  if (window.EventSource) _vivoAbrirSSE(); else _vivoPolling();
+  if (!_vivo.reloj) _vivo.reloj = setInterval(() => { _vivo.ticks++; if (_vivo.ticks % 40 === 0) _vivoCargarSemana(); _vivoPintar(); }, 15000);   // los "hace X s" envejecen
+}
+function _vivoDesconectar(todo = true) {
+  if (_vivo.es) { const es = _vivo.es; _vivo.es = null; try { es.close(); } catch { /**/ } }
+  if (_vivo.timer) { clearInterval(_vivo.timer); _vivo.timer = null; }
+  if (todo) { if (_vivo.reloj) { clearInterval(_vivo.reloj); _vivo.reloj = null; } _vivo.fuente = 'off'; }
+}
+
+// 📊 Hoy contra el mismo día de la semana pasada, hora por hora. Dos series: hoy (azul, sólida)
+// y hace 7 días (naranja, más fina y detrás). Cada barra dice su valor al pasar el dedo/mouse.
+function _vivoGrafHoy(hv) {
+  const oscuro = document.body.classList.contains('dark');
+  const cHoy = oscuro ? _VIVO_COL.hoyOscuro : _VIVO_COL.hoy, cH7 = oscuro ? _VIVO_COL.hace7Oscuro : _VIVO_COL.hace7;
+  const h = hv.horaActual;
+  const totHoy = hv.hoy.reduce((a, n) => a + n, 0), totH7 = hv.hace7.reduce((a, n) => a + n, 0);
+  const h7HastaAhora = hv.hace7.slice(0, h + 1).reduce((a, n) => a + n, 0);
+  const max = Math.max(1, ...hv.hoy, ...hv.hace7);
+  const alto = 64;
+  const cols = hv.hoy.map((n, i) => {
+    const n7 = hv.hace7[i];
+    const futuro = i > h;
+    const tip = esc(String(i).padStart(2, '0') + ':00 · hoy ' + (futuro ? '—' : n) + ' · ' + hv.diaNombre + ' pasado ' + n7);
+    return `<div title="${tip}" style="flex:1;min-width:0;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:${alto}px;position:relative">
+      <div style="width:45%;height:${Math.round(n7 / max * alto)}px;background:${cH7};opacity:${futuro ? '.45' : '.85'};border-radius:2px 2px 0 0;min-height:${n7 ? 2 : 0}px"></div>
+      <div style="width:45%;height:${Math.round(n / max * alto)}px;background:${cHoy};border-radius:2px 2px 0 0;min-height:${n ? 2 : 0}px;${i === h ? 'outline:2px solid ' + cHoy + ';outline-offset:1px' : ''}"></div>
+    </div>`;
+  }).join('');
+  const ejes = [0, 3, 6, 9, 12, 15, 18, 21].map(x => `<span style="flex:1;font-size:0.6rem;color:var(--texto-suave);text-align:left">${x}h</span>`).join('');
+  const delta = h7HastaAhora > 0 ? Math.round((totHoy - h7HastaAhora) / h7HastaAhora * 100) : (totHoy > 0 ? 100 : 0);
+  const colDelta = delta === 0 ? 'var(--texto-suave)' : (delta > 0 ? 'var(--verde)' : '#c0392b');
+  const hace7Fecha = hv.fechaHace7 ? hv.fechaHace7.split('-').reverse().slice(0, 2).join('/') : '';
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px;font-size:0.74rem">
+      <span><span style="display:inline-block;width:10px;height:10px;background:${cHoy};border-radius:2px;vertical-align:middle;margin-right:4px"></span>Hoy: <b>${totHoy}</b> visitas hasta las ${String(h).padStart(2, '0')}:59</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:${cH7};border-radius:2px;vertical-align:middle;margin-right:4px"></span>El ${esc(hv.diaNombre)} pasado (${hace7Fecha}): <b>${h7HastaAhora}</b> a esta hora · ${totH7} en todo el día</span>
+      <span style="font-weight:800;color:${colDelta}">${delta === 0 ? '=' : (delta > 0 ? '▲' : '▼')} ${Math.abs(delta)}%</span>
+    </div>
+    <div style="display:flex;gap:2px;align-items:flex-end;border-bottom:1px solid var(--gris-medio);padding-bottom:1px">${cols}</div>
+    <div style="display:flex;gap:2px;margin-top:2px">${ejes}</div>`;
+}
+
+function _anaSecVivo(d) {
+  const ahora = Date.now();
+  const { activos } = _vivoAgrupar(_vivo.eventos, ahora);
+  const mapa = _vivoMapa();
+  const quien = p => { const c = mapa[p.vid] || {}; return { ...p, nombre: p.nombre || c.nombre || '', telefono: p.telefono || c.telefono || '', esCliente: !!c.esCliente, compras: c.compras || 0, gastadoARS: c.gastadoARS || 0, apodo: _vivoApodo(p.vid), leDijiste: !!c.leDijiste }; };
+  const estado = _vivo.fuente === 'sse' ? ['var(--verde)', 'En vivo'] : _vivo.fuente === 'poll' ? ['#e08a2a', 'Actualizando cada 15 s'] : ['#c0392b', _vivo.error || 'Sin conexión'];
+  const btn = (fn, txt, col = 'var(--texto-suave)') => `<button onclick="${fn}" style="background:var(--gris-claro);color:${col};border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  let html = `<div class="admin-card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:0.6rem 0.9rem">
+    <div style="font-size:0.8rem;font-weight:700;display:flex;align-items:center;gap:8px;min-width:0">
+      <span style="width:10px;height:10px;border-radius:50%;background:${estado[0]};display:inline-block;flex-shrink:0;${_vivo.fuente === 'sse' ? 'animation:vivoPulso 1.6s infinite' : ''}"></span>
+      <span>${esc(estado[1])}${_vivo.fuente !== 'off' ? ` · <span style="color:var(--texto-suave);font-weight:600">${activos.length} ${activos.length === 1 ? 'persona' : 'personas'} en la tienda ahora</span>` : ''}</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">${btn('vivoSonido()', _vivo.sonido ? '🔔 Sonido' : '🔕 Sin sonido')}${_vivo.fuente === 'off' ? btn('_vivoConectar()', '↻ Reintentar', 'var(--azul)') : ''}</div>
+  </div>`;
+
+  // 🟢 Quién está ahora
+  const tarjeta = p0 => {
+    const p = quien(p0), ev = p.ultimoEvento;
+    const chip = (txt, bg, col) => ` <span style="font-size:0.62rem;background:${bg};color:${col};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${txt}</span>`;
+    const chipEtapa = p.etapa === 'checkout' ? chip('🔥 en el checkout', '#fdeaea', '#c0392b') : p.etapa === 'pedido' ? chip('✅ ya pidió', '#e8f5ee', 'var(--verde)') : p.etapa === 'carrito' ? chip('🛒 armando carrito', '#eef4fb', '#2c6fad') : '';
+    const chipMay = p.pagina === 'mayorista' ? chip('📦 mayorista', '#eef4fb', '#2c6fad') : '';
+    const carrito = p.items && p.items.length ? `<div style="font-size:0.74rem;color:#444;margin-top:4px;line-height:1.5">${p.items.map(it => '<b>' + it.q + '×</b> ' + esc(it.n)).join(' · ')} · 💰 <b>${_anaPlataMix(p.total, p.totalUSD)}</b></div>` : '';
+    const msg = `¡Hola${p.nombre ? ' ' + p.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬 Vi que estás mirando la tienda${p.productos.length ? ' (' + p.productos[0] + ')' : ''}. ¿Te ayudo con algo?`;
+    const caliente = p.etapa === 'checkout';
+    return `<div style="border:1.5px solid ${caliente ? '#f0c9c9' : 'var(--gris-medio)'};border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem;background:${caliente ? '#fffafa' : 'transparent'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap">
+        <div style="font-weight:700;color:var(--azul);font-size:0.86rem;min-width:0">${_anaQuien(p)}${chipEtapa}${chipMay} ${_anaChipCliente(p)}</div>
+        <span style="font-size:0.66rem;font-weight:700;color:var(--verde);flex-shrink:0">${_vivoHace(p.ultimo, ahora)}</span>
+      </div>
+      <div style="font-size:0.76rem;color:#2d1a0a;margin-top:3px">${_vivoTexto(ev)}</div>
+      ${carrito}
+      <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:2px">entró ${_vivoHace(p.primero, ahora)}${p.seg ? ' · lleva ' + _vivoDur(p.seg) : ''}${p.ciudad ? ' · 📍 ' + esc(p.ciudad) : ''}${p.dispositivo ? ' · ' + (p.dispositivo === 'celular' ? '📱' : '💻') : ''}${p.telefono ? ' · 📞 ' + esc(p.telefono) : ''}</div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">${_anaBtnWA(p.telefono, msg, '💬 Escribirle ahora')}${btn(`abrirFichaVisitante('${esc(p.vid)}')`, '👤 Su historia')}</div>
+    </div>`;
+  };
+  html += _anaCard(`<div class="admin-titulo">🟢 En la tienda ahora (${activos.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Gente que dio alguna señal en los últimos 5 minutos. Si tiene teléfono, le podés escribir <b>mientras está mirando</b>.</div>
+    ${activos.length ? activos.map(tarjeta).join('') : `<div class="sinpedidos">${_vivo.fuente === 'off' ? 'Sin conexión: no se puede saber quién está ahora.' : 'Nadie en este momento. Apenas entre alguien, aparece acá solo. 👀'}</div>`}`);
+
+  // 📡 El ticker
+  const lineas = _vivo.eventos.filter(ev => ev.evento !== 'latido' && ev.evento !== 'geo' && ev.evento !== 'bloqueado')
+    .sort((a, b) => (b.t - a.t) || ((b.id || 0) - (a.id || 0))).slice(0, _VIVO_TICKER).map(ev => {
+      const p = quien({ vid: ev.vid, nombre: ev.nombre, telefono: ev.telefono, productos: [] });
+      return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem">
+        <span style="flex-shrink:0;color:var(--texto-suave);font-variant-numeric:tabular-nums">${_vivoHora(ev.t)}</span>
+        <div style="min-width:0;flex:1"><span style="font-weight:700;color:var(--azul)">${_anaQuien(p)}</span> ${_vivoTexto(ev)}</div>
+      </div>`;
+    }).join('');
+  html += _anaCard(`<div class="admin-titulo">📡 Últimos 30 minutos</div>
+    ${lineas || '<div class="sinpedidos">Todavía no pasó nada en la última media hora.</div>'}`);
+
+  // 📊 Hoy contra el mismo día de la semana pasada
+  const hv = (d && d.hoyVsSemana && d.hoyVsSemana.hace7Disponible) ? d.hoyVsSemana : (_vivo.semana && _vivo.semana.hoyVsSemana) || (d && d.hoyVsSemana) || null;
+  if (hv) {
+    html += _anaCard(`<div class="admin-titulo">📊 Hoy contra el ${esc(hv.diaNombre)} pasado, hora por hora</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Un jueves se compara con el jueves anterior, no con "el período anterior". La barra con borde es la hora actual.${hv.hace7Disponible ? '' : ' <b>Cargando los datos de la semana pasada…</b>'}</div>
+      ${_vivoGrafHoy(hv)}`);
+  } else if (d && d.resumen && d.hoyVsSemana === undefined) {
+    html += _anaCard(`<div class="admin-titulo">📊 Hoy contra la semana pasada</div><div class="sinpedidos">Esta comparación la calcula el motor a partir de la v4.79. Cuando el motor esté publicado, aparece sola.</div>`);
+  }
+  return html;
 }
 
 // ═══ 🎯 QUÉ HACER — lo accionable primero ═══════════════════════════════════
@@ -16665,8 +16943,10 @@ function _mandarSalida() {
       evento: 'salida', producto: JSON.stringify({ seg, int: _interacciones, prod: Object.keys(_vistos).length }),
     });
     // sendBeacon es el único que sobrevive al cierre de la pestaña.
-    if (navigator.sendBeacon) navigator.sendBeacon(APPS_SCRIPT_URL + '?' + params.toString());
-    else fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors', keepalive: true }).catch(() => {});
+    // Por el servidor del sitio si está (así el panel en vivo ve la salida); si no, al motor.
+    const destino = (_vpsDisponible() ? '/api/track' : APPS_SCRIPT_URL) + '?' + params.toString();
+    if (navigator.sendBeacon) navigator.sendBeacon(destino);
+    else fetch(destino, { mode: 'no-cors', keepalive: true }).catch(() => {});
   } catch { /**/ }
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _mandarSalida(); });
@@ -16720,9 +17000,40 @@ async function track(evento, extra = {}) {
       telefono: localStorage.getItem('shuk_may_tel') || '',
       ...extra
     });
-    fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
+    _enviarTrack(params, evento === 'latido');
   } catch {}
 }
+// 🔴 EN VIVO (v4.79): cada evento va primero al servidor del sitio (mismo dominio, /api/track),
+// que lo guarda en el motor y lo muestra al instante en el panel. Si ese servidor no contesta
+// (espejo de Vercel, prueba local, VPS caído) se le pega directo al motor como siempre: no se
+// pierde nada. Un 502 es el servidor avisando "el motor no me contestó": ahí también se reintenta
+// directo. El latido es SOLO para la pantalla en vivo: si no hay servidor, no se manda a ningún lado.
+let _trackSinVpsHasta = 0;
+function _vpsDisponible() { return /^https?:$/.test(location.protocol) && Date.now() > _trackSinVpsHasta; }
+async function _enviarTrack(params, soloVivo) {
+  if (_vpsDisponible()) {
+    try {
+      const r = await fetch('/api/track', { method: 'POST', body: params, keepalive: true });
+      if (r.ok) return;
+      if (r.status !== 502) _trackSinVpsHasta = Date.now() + 5 * 60000;   // no existe acá (404): no insistir 5 min
+    } catch { _trackSinVpsHasta = Date.now() + 5 * 60000; }
+  }
+  if (soloVivo) return;
+  fetch(APPS_SCRIPT_URL + '?' + params.toString(), { mode: 'no-cors' }).catch(() => {});
+}
+// 💓 LATIDO: mientras la tienda está a la vista y la persona tocó algo en los últimos 10 minutos,
+// cada 60 s le avisa al servidor que sigue ahí y qué carrito trae. Una pestaña olvidada abierta
+// no es "estar mirando": por eso mira la última actividad, no solo si está visible.
+let _ultimaActividad = Date.now();
+['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(evn => document.addEventListener(evn, () => { _ultimaActividad = Date.now(); }, { passive: true }));
+setInterval(() => {
+  try {
+    if (document.visibilityState !== 'visible' || modo === 'admin' || !_vpsDisponible()) return;
+    if (Date.now() - _ultimaActividad > 10 * 60000) return;
+    const cart = _cartParaTrack();
+    track('latido', { producto: JSON.stringify({ seg: Math.round((Date.now() - _entroA) / 1000), int: _interacciones, prod: Object.keys(_vistos).length }), carrito: cart.carrito || '[]', total: cart.total || '0', totalUSD: cart.totalUSD || '0' });
+  } catch { /**/ }
+}, 60000);
 // 🌎 CONTROL DEL CANDADO GEOGRÁFICO (v4.71)
 // El candado (middleware de Vercel) mira la IP que ve el servidor; la analítica mira lo que
 // dice ipapi.co DESDE EL NAVEGADOR. Son dos fuentes distintas y pueden no coincidir: VPN,

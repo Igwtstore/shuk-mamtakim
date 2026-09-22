@@ -504,6 +504,28 @@ async function traficoParaAnalitica(dias: number) {
   }
   return filas;
 }
+// 🔴 HOY CONTRA EL MISMO DÍA DE LA SEMANA PASADA, hora por hora (v4.79, pestaña En vivo).
+// "Comparado con el período anterior" mezcla un jueves con un lunes; esto compara el jueves con
+// el jueves anterior. Las fechas de `trafico` ya están en hora de Buenos Aires, así que "hoy"
+// es el día de Buenos Aires aunque el servidor viva en otro huso.
+function hoyVsSemana(todas: any[]) {
+  const m = fechaAhora().match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+  if (!m) return null;
+  const hoyTs = Date.UTC(+m[3], +m[2] - 1, +m[1]);
+  const dk = (ts: number) => { const d = new Date(ts); const p = (n: number) => String(n).padStart(2, '0'); return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()); };
+  const kHoy = dk(hoyTs), kHace7 = dk(hoyTs - 7 * 86400000);
+  const hoy = new Array(24).fill(0), hace7 = new Array(24).fill(0);
+  let masViejo = Infinity;
+  todas.forEach((x: any) => {
+    const t = x.t; if (!t) return;
+    if (t.ts < masViejo) masViejo = t.ts;
+    if (x.r.evento !== 'visita') return;
+    if (t.dk === kHoy) hoy[t.hora]++; else if (t.dk === kHace7) hace7[t.hora]++;
+  });
+  const nombres = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  // ¿Los datos que se leyeron llegan hasta hace 7 días? Con "1 día" no (se leen 2), con 7 sí (se leen 14).
+  return { hoy, hace7, horaActual: +m[4], diaNombre: nombres[new Date(hoyTs).getUTCDay()], fechaHoy: kHoy, fechaHace7: kHace7, hace7Disponible: masViejo <= hoyTs - 7 * 86400000 };
+}
 function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[] = [], productos: any[] = [], aliasPuestos: any = null) {
   const alias = aliasPuestos || {};
   if (!rows.length) return { vacio: true };
@@ -1084,6 +1106,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     acciones, accionable, visitantes, visitantesTotal: visitantesTodos.length,
     diasDetalle, deseoVsVenta, busquedas, candado,
     tiempoADecidir, juntos, comparativo, mironesTop, rescate, radiografia,
+    hoyVsSemana: hoyVsSemana(todas),   // 🔴 v4.79
   };
 }
 
