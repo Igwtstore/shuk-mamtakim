@@ -14190,6 +14190,7 @@ async function renderAnalitica() {
       d.verMas.compartidos = (d.verMas.compartidos || []).filter(x => !soloJony(x.nombre));
     }
     d.vipAbiertos = [];   // los catálogos VIP son una herramienta de Jony
+    d.dormidos = [];      // la cartera mayorista es de Jony (v4.83)
     d.abandonados = (d.abandonados || []).map(a => {
       const items = (a.items || []).filter(it => !soloJony(it.n));
       const nombres = (a.productos || []).filter(n => !soloJony(n));
@@ -14590,7 +14591,9 @@ function _anaSecHoy(d) {
     <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--gris-medio);padding-top:10px">
       ${_anaKpi(r.tienda, '🛍️ Minorista')}
       ${_anaKpi(r.mayorista, '📦 Mayorista')}
-    </div>`);
+      ${r.sesiones !== undefined ? _anaKpi(r.sesiones, 'Sesiones', '#5c3d1e') : ''}
+    </div>
+    ${d.proyeccion ? `<div style="background:var(--gris-claro);border-radius:9px;padding:0.5rem 0.7rem;margin-top:10px;font-size:0.76rem;line-height:1.5">📈 <b>A este ritmo, la semana cierra con ${d.proyeccion.pedidosProy} pedido${d.proyeccion.pedidosProy !== 1 ? 's' : ''} y ${d.proyeccion.visitasProy} visitas.</b> Van ${d.proyeccion.diasTranscurridos} días desde el lunes: ${d.proyeccion.pedidos} pedido${d.proyeccion.pedidos !== 1 ? 's' : ''} y ${d.proyeccion.visitas} visitas.${d.proyeccion.cubierta ? '' : ' <span style="color:#c0392b">(el período elegido no llega hasta el lunes: el número es parcial)</span>'}</div>` : ''}`);
 
   if (d.comparativa) {
     const c = d.comparativa;
@@ -14746,10 +14749,12 @@ function _anaFilasGente(d) {
     if (_anaFiltroGente === 'casi' && !(v.armoCarrito || v.checkout) ) return false;
     if (_anaFiltroGente === 'anon' && v.nombre) return false;
     if (_anaFiltroGente === 'vuelven' && v.dias < 2) return false;
+    if (_anaFiltroGente === 'calor' && (v.calor || 0) < 40) return false;
     if (!q) return true;
     return (v.nombre || '').toLowerCase().includes(q) || (v.telefono || '').includes(q)
       || (v.ciudad || '').toLowerCase().includes(q) || (v.productos || []).some(p => p.toLowerCase().includes(q));
   });
+  if (_anaFiltroGente === 'calor') lista = lista.slice().sort((a, b) => (b.calor || 0) - (a.calor || 0));   // 🌡️ v4.83: del más cerca de comprar al más lejos
   if (!lista.length) return '<div class="sinpedidos">Nadie coincide con ese filtro</div>';
   const colorEtq = { 'compró': 'var(--verde)', 'cliente que volvió': '#7b2ff7', 'casi compra': '#c0392b', 'armó carrito': '#e08a2a', 'mirón que vuelve': '#2c6fad', 'miró y se fue': 'var(--texto-suave)' };
   return lista.slice(0, 150).map(v => {
@@ -14759,6 +14764,7 @@ function _anaFilasGente(d) {
         <div style="min-width:0;flex:1">
           <div style="font-weight:700;color:var(--azul);font-size:0.86rem">${_anaQuien(v)}
             <span style="font-size:0.6rem;background:var(--gris-claro);color:${colorEtq[v.etiqueta] || 'var(--texto-suave)'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${v.etiqueta}</span>
+            ${v.calor ? `<span style="font-size:0.6rem;background:${v.calor >= 70 ? '#fdeaea' : v.calor >= 40 ? '#fdf3e6' : 'var(--gris-claro)'};color:${v.calor >= 70 ? '#c0392b' : v.calor >= 40 ? '#e08a2a' : 'var(--texto-suave)'};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle" title="Qué tan cerca está de comprar (0-100)">🌡️ ${v.calor}</span>` : ''}
             ${v.perfil && v.perfil.pareceRobot ? '<span style="font-size:0.6rem;background:#fdeaea;color:#c0392b;border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle" title="No parece una persona">🤖 robot</span>' : ''}
             ${_anaChipCliente(v)}
           </div>
@@ -14868,6 +14874,40 @@ function _anaSecRadiografia(d) {
     ${r.sinFicha ? `<div style="font-size:0.66rem;color:var(--texto-suave);margin-top:8px">ℹ️ ${r.sinFicha} visitantes son anteriores a esta mejora y no tienen ficha técnica. Los nuevos la traen desde ahora.</div>` : ''}`);
 }
 
+// 😴 v4.83: mayoristas que no entran ni compran
+function _anaSecDormidos(d) {
+  const ds = d.dormidos || [];
+  if (!ds.length) return '';
+  const filas = ds.map(c => {
+    const msg = `¡Hola ${c.nombre.split(' ')[0]}! 👋 Te escribo de *Shuk Mamtakim* 🍬 Hace un tiempo que no nos vemos: tengo novedades para revendedores, ¿te paso la lista?`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--gris-medio);font-size:0.78rem;flex-wrap:wrap">
+      <span style="min-width:0"><b>${esc(c.nombre)}</b><div style="font-size:0.66rem;color:var(--texto-suave)">última compra ${esc(String(c.ultimaCompra).slice(0, 10))} · hace <b>${c.diasSinComprar}</b> días${c.telefono ? ' · 📞 ' + esc(c.telefono) : ''}</div></span>
+      <span style="flex-shrink:0">${_anaBtnWA(c.telefono, msg, '💬 Despertarlo')}</span></div>`;
+  }).join('');
+  return _anaCard(`<div class="admin-titulo">😴 Mayoristas dormidos (${ds.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Clientes mayoristas que <b>no entraron ni compraron</b> en el período y cuya última compra fue hace 30 días o más. Un mensaje a tiempo recupera a un revendedor antes de que compre en otro lado.</div>
+    ${filas}`);
+}
+// 🔁 v4.83: cohortes — de los que aparecieron por primera vez cada semana, cuántos volvieron y cuántos compraron.
+function _anaSecCohortes(d) {
+  const cs = d.cohortes || [];
+  if (!cs.length) return '';
+  const maxN = Math.max(...cs.map(c => c.nuevos), 1);
+  const filas = cs.map((c, i) => {
+    const reciente = i >= cs.length - 1;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--gris-medio);font-size:0.74rem">
+      <span style="width:66px;flex-shrink:0;font-weight:600">${esc(c.semana)}</span>
+      <div style="flex:1;min-width:0"><div style="background:var(--gris-medio);border-radius:4px;height:9px;overflow:hidden"><div style="width:${Math.round(c.nuevos / maxN * 100)}%;height:100%;background:#2c6fad;border-radius:4px"></div></div></div>
+      <span style="width:52px;flex-shrink:0;text-align:right"><b>${c.nuevos}</b> <span style="color:var(--texto-suave)">new</span></span>
+      <span style="width:66px;flex-shrink:0;text-align:right;color:${c.pctVolvieron >= 30 ? 'var(--verde)' : 'var(--texto-suave)'}">${c.pctVolvieron}% <span style="font-size:0.62rem">volv.</span></span>
+      <span style="width:66px;flex-shrink:0;text-align:right;color:${c.pctCompraron >= 5 ? 'var(--verde)' : 'var(--texto-suave)'}">${c.pctCompraron}% <span style="font-size:0.62rem">compr.</span></span>
+      ${reciente ? '<span style="font-size:0.6rem;color:var(--texto-suave)" title="Todavía no tuvieron tiempo de volver">⏳</span>' : ''}
+    </div>`;
+  }).join('');
+  return _anaCard(`<div class="admin-titulo">🔁 ¿Vuelven? (por semana de llegada)</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">De la gente que entró <b>por primera vez</b> cada semana: cuántos <b>volvieron otro día</b> y cuántos <b>compraron</b>. La retención de verdad. Las últimas semanas todavía no tuvieron tiempo (⏳).</div>
+    ${filas}`);
+}
 // 🔗 v4.81: ¿abrió el catálogo VIP que le mandaste?
 function _anaSecVip(d) {
   const vs = d.vipAbiertos || [];
@@ -14889,8 +14929,9 @@ function _anaSecGente(d) {
   const vs = d.visitantes || [];
   const filtros = [['todos', 'Todos', vs.length], ['tel', '📞 Con teléfono', vs.filter(v => v.telefono).length],
     ['clientes', '⭐ Ya compraron', vs.filter(v => v.esCliente).length], ['casi', '🛒 Armaron carrito', vs.filter(v => v.armoCarrito || v.checkout).length],
-    ['vuelven', '🔄 Vuelven', vs.filter(v => v.dias >= 2).length], ['anon', '👤 Sin nombre', vs.filter(v => !v.nombre).length]];
-  return _anaSecVip(d) + _anaSecMirones(d) + _anaSecRadiografia(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
+    ['vuelven', '🔄 Vuelven', vs.filter(v => v.dias >= 2).length], ['anon', '👤 Sin nombre', vs.filter(v => !v.nombre).length],
+    ['calor', '🌡️ Más calientes', vs.filter(v => (v.calor || 0) >= 40).length]];
+  return _anaSecDormidos(d) + _anaSecCohortes(d) + _anaSecVip(d) + _anaSecMirones(d) + _anaSecRadiografia(d) + _anaSecComparativo(d) + _anaCard(`<div class="admin-titulo">👥 Toda la gente que entró (${d.visitantesTotal || vs.length})</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada persona que pisó la tienda, con lo que miró y cómo contactarla. Tocá 👤 para ver su historia completa.</div>
     <input type="text" oninput="buscarGente(this.value)" placeholder="Buscar por nombre, teléfono, ciudad o producto…" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.82rem;margin-bottom:7px">
     <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;margin-bottom:8px">
@@ -15056,6 +15097,19 @@ function _anaSecCanales(d) {
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px;line-height:1.5">WhatsApp e Instagram <b>no dicen de dónde viene</b> la gente: hoy ${sinEtiqueta ? '<b>' + sinEtiqueta + '</b> visitas' : 'casi todo'} figura${sinEtiqueta === 1 ? '' : 'n'} como "directo". Compartí <b>estos</b> links (tocá para copiar) y cada visita queda con su canal. Los links viejos siguen andando, solo que cuentan como directo. Los QR de la pestaña Inicio ya salen etiquetados.</div>
     ${filasCanal}`);
   html += _anaCard(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
+  // 🗓️ v4.83: mapa de calor día × hora — cuándo entran, para saber cuándo publicar.
+  if (d.heatmap) {
+    const hm = d.heatmap, max = Math.max(1, ...hm.flat());
+    const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const orden = [1, 2, 3, 4, 5, 6, 0];   // lunes primero, como la semana de laburo
+    let mejor = { v: 0, d: 0, h: 0 };
+    hm.forEach((fila, di) => fila.forEach((v, h) => { if (v > mejor.v) mejor = { v, d: di, h }; }));
+    const celdas = orden.map(di => `<div style="display:flex;gap:1px;align-items:center"><span style="width:26px;font-size:0.6rem;color:var(--texto-suave);flex-shrink:0">${dias[di]}</span>${hm[di].map((v, h) => `<div title="${dias[di]} ${String(h).padStart(2, '0')}:00 · ${v} visita${v !== 1 ? 's' : ''}" style="flex:1;height:14px;border-radius:2px;background:#2c6fad;opacity:${v ? (0.15 + 0.85 * v / max).toFixed(2) : 0.04}"></div>`).join('')}</div>`).join('');
+    html += _anaCard(`<div class="admin-titulo">🗓️ Cuándo entran (día × hora)</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:6px">Cuanto más oscuro, más visitas. Publicá el estado de WhatsApp <b>justo antes</b> del momento más oscuro. Pico: <b>${dias[mejor.d]} a las ${String(mejor.h).padStart(2, '0')}:00</b> (${mejor.v} visitas).</div>
+      <div style="display:flex;flex-direction:column;gap:2px">${celdas}</div>
+      <div style="display:flex;margin-left:27px;margin-top:2px">${[0, 3, 6, 9, 12, 15, 18, 21].map(x => `<span style="flex:1;font-size:0.58rem;color:var(--texto-suave)">${x}h</span>`).join('')}</div>`);
+  }
   // 📣 v4.81: ¿el cartel se toca? ¿las ofertas y packs se agarran? ¿qué comparten? ¿hasta dónde bajan?
   const vm = d.verMas || {};
   if (vm.eventos !== undefined) {
@@ -15083,10 +15137,10 @@ function _anaSecCanales(d) {
   const cpo = (d.conversionPorOrigen || []).filter(x => x.visitantes > 0);
   if (cpo.length) {
     html += _anaCard(`<div class="admin-titulo">🎯 Conversión por canal</div>
-      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:6px">De cada canal, cuántos visitantes terminaron pidiendo. Te dice dónde conviene invertir.</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:6px">De cada canal, cuántos visitantes terminaron pidiendo y <b>cuánta plata</b> dejó (ventas del período, atribuidas al canal por el que entró ese aparato). Te dice dónde conviene invertir.</div>
       ${cpo.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:4px 0;border-bottom:1px solid var(--gris-medio)">
         <span>${_anaNombreOrigen(x.origen)}</span>
-        <span style="color:var(--texto-suave)">${x.pedidos}/${x.visitantes} · <b style="color:${x.pct >= 20 ? 'var(--verde)' : (x.pct >= 8 ? '#e08a2a' : '#c0392b')}">${x.pct}%</b></span>
+        <span style="color:var(--texto-suave)">${(x.plataARS || x.plataUSD) ? '<b style="color:var(--verde)">' + _anaPlataMix(x.plataARS || 0, x.plataUSD || 0) + '</b> · ' : ''}${x.pedidos}/${x.visitantes} · <b style="color:${x.pct >= 20 ? 'var(--verde)' : (x.pct >= 8 ? '#e08a2a' : '#c0392b')}">${x.pct}%</b></span>
       </div>`).join('')}`);
   }
 

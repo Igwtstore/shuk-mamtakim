@@ -17,6 +17,10 @@ const DATA = {
   abandonados: [], acciones: [], accionable: { identificados: 1, conTelefono: 1, anonimos: 30, oportunidadARS: 0, oportunidadUSD: 0, carritosContactables: 0 },
   visitantes: [{ vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, apodo: '#VABC', leDijiste: false, etiqueta: 'compró', visitas: 3, dias: 2, productos: [], perfil: {} }],
   visitantesTotal: 1, diasDetalle: [], deseoVsVenta: [], busquedas: [], candado: null, comparativo: null, mironesTop: [], rescate: null, radiografia: null,
+  heatmap: Array.from({ length: 7 }, (_, d) => Array.from({ length: 24 }, (_, h) => (d === 4 && h === 20) ? 30 : (h % 5))),
+  cohortes: [{ semana: '08/09', nuevos: 40, volvieron: 12, compraron: 2, pctVolvieron: 30, pctCompraron: 5 }, { semana: '15/09', nuevos: 55, volvieron: 9, compraron: 1, pctVolvieron: 16, pctCompraron: 2 }],
+  proyeccion: { visitas: 300, visitasProy: 700, pedidos: 3, pedidosProy: 7, diasTranscurridos: 3, cubierta: true },
+  dormidos: [{ nombre: 'Fabio Pallero', telefono: '1130001111', ultimaCompra: '10/08/2026 12:00', diasSinComprar: 43, activo: false }],
   verMas: { eventos: 3, vistosSinCarrito: [{ nombre: 'Bamba', vistos: 4, personas: 3, stock: 5, dueno: 'Jony' }], nuncaVistos: [{ nombre: 'Escondido', stock: 7, dueno: 'Jony' }], quitados: [{ nombre: 'Klik', veces: 2 }], promos: { oferta: { veces: 1, top: [{ nombre: 'Klik', n: 1 }] }, pack: { veces: 0, top: [] } }, compartidos: [], avisoClics: { veces: 2, personas: 1 }, scroll: { n: 5, promedio: 62, alFinal: 2, pctAlFinal: 40 } },
   vipAbiertos: [{ token: 'tok1', cliente: 'Sarah G', canal: 'minorista', creado: '19/09/2026 09:00', aperturas: 0, personas: 0, ultima: '' }],
   hoyVsSemana: { hoy: [0, 0, 0, 0, 0, 0, 0, 0, 2, 5, 7, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], hace7: [0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 2, 6, 5, 3, 2, 1, 0, 0, 2, 3, 4, 2, 1, 0], horaActual: 11, diaNombre: 'martes', fechaHoy: '2026-09-22', fechaHace7: '2026-09-15', hace7Disponible: true },
@@ -90,6 +94,14 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => setAnaTab('gente'));
   await pg.waitForTimeout(200);
   ok('v4.81: Gente muestra los catálogos VIP con "nunca lo abrió"', (await txt()).includes('Catálogos VIP') && (await txt()).includes('nunca lo abrió'));
+  { const c = await txt(); const h = await pg.content();
+    ok('v4.83: Gente muestra mayoristas dormidos con botón para despertarlo y las cohortes', c.includes('Mayoristas dormidos') && c.includes('Fabio Pallero') && h.includes('wa.me/5491130001111') && c.includes('¿Vuelven?') && c.includes('30%')); }
+  await pg.evaluate(() => setAnaTab('canales'));
+  await pg.waitForTimeout(200);
+  ok('v4.83: Canales muestra el mapa de calor con el pico (jueves 20:00)', (await txt()).includes('Cuándo entran') && (await txt()).includes('Jue a las 20:00'));
+  await pg.evaluate(() => setAnaTab('hoy'));
+  await pg.waitForTimeout(200);
+  ok('v4.83: Qué hacer muestra la proyección de la semana', (await txt()).includes('la semana cierra con 7 pedidos y 700 visitas'));
   await pg.evaluate(() => setAnaTab('canales'));
   await pg.waitForTimeout(200);
   { const c = await txt(); const h = await pg.content();

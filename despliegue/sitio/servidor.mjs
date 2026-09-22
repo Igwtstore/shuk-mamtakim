@@ -92,7 +92,7 @@ app.all('/api/track', ...leerParams, async (req, res) => {
   const q = { ...req.query, ...(req.body && typeof req.body === 'object' ? req.body : {}) };
   const enCookie = cookieDe(req, COOKIE_VID);
   if (vidValido(enCookie)) q.vid = enCookie;                      // el aparato ya era conocido: manda ese
-  const ev = normalizarEvento(q, { geo: geoDe(req) });
+  const ev = normalizarEvento(q, { geo: geoDe(req), ua: String(req.headers['user-agent'] || '') });   // 🤖 v4.83: marca robots
   if (!ev) return res.status(400).json({ error: 'falta el visitante' });
   if (!vidValido(enCookie) && vidValido(ev.vid)) {
     res.setHeader('Set-Cookie', COOKIE_VID + '=' + encodeURIComponent(ev.vid) + '; Path=/; Max-Age=63072000; SameSite=Lax; Secure; HttpOnly');

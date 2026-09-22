@@ -547,6 +547,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const filas = desdeT ? todas.filter((x) => x.t!.ts >= desdeT) : todas;
   const resumen: any = { visitas: 0, unicos: 0, nuevos: 0, recurrentes: 0, tienda: 0, mayorista: 0 };
   const porOrigen: any = {}, porDispositivo: any = {}, porCiudad: any = {}, porPais: any = {}, porHora = new Array(24).fill(0), porDia: any = {}, porDiaSemana = new Array(7).fill(0);
+  const heatmap: any = Array.from({ length: 7 }, () => new Array(24).fill(0));   // 🗓️ v4.83 día × hora
   const prodDeseados: any = {}, origenVisitaVids: any = {}, origenPedidoVids: any = {};
   // 🔎 Lo que se agregó en la vuelta de rosca: el día a día en detalle, qué buscan en la
   // tienda, y qué tocó cada visitante (para poder contar SU historia, no solo el total).
@@ -602,7 +603,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       if (disp) porDispositivo[disp] = (porDispositivo[disp] || 0) + 1;
       if (ciudad) porCiudad[ciudad] = (porCiudad[ciudad] || 0) + 1;
       if (pais) porPais[pais] = (porPais[pais] || 0) + 1;
-      porHora[t!.hora]++; porDiaSemana[t!.dow]++; porDia[t!.dk] = (porDia[t!.dk] || 0) + 1;
+      porHora[t!.hora]++; porDiaSemana[t!.dow]++; porDia[t!.dk] = (porDia[t!.dk] || 0) + 1; heatmap[t!.dow][t!.hora]++;
     }
     // Día a día en detalle: no solo "cuántas visitas" sino qué pasó ese día.
     const dk = t!.dk;
@@ -847,7 +848,8 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       if (!f.tz) señales.push('el navegador no dice ni en qué huso horario está');
       if (f.px && /^(0x0|1x1)$/.test(f.px)) señales.push('pantalla de 0 píxeles');
     }
-    const bot = juzgable && señales.length >= 2 && o.inter === 0;
+    if (f.bot === 1) señales.push('su navegador se presenta como programa automático');   // 🤖 v4.83 (lo marca el servidor del sitio)
+    const bot = (juzgable && señales.length >= 2 && o.inter === 0) || f.bot === 1;
     return {
       dondeEsta, tz: f.tz || '', idioma: idiomaLegible(f.idi || ''), aparato: f.ap || '',
       pantalla: f.px || '', tactil: f.toq === 1, appInstalada: f.pwa === 1, aceptaAvisos: f.push === 1,
@@ -870,11 +872,66 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       productos: Object.keys(o.productos).slice(0, 10),
       armoCarrito: !!o.eventos.carrito, checkout: !!o.eventos.checkout, pidio: !!o.eventos.pedido,
       valorCarrito: c ? (c.total || 0) : 0,
+      // 🌡️ v4.83: qué tan cerca está de comprar (0-100). El que ya pidió no está "cerca": ya llegó (0).
+      calor: o.eventos.pedido ? 0 : Math.min(100, (o.eventos.checkout ? 45 : 0) + (o.eventos.carrito ? 25 : 0) + (q.esCliente ? 15 : 0) + (Object.keys(o.fechas).length >= 2 ? 10 : 0) + (q.telefono ? 5 : 0) + (o.visitas >= 3 ? 5 : 0) + (o.seg > 60 ? 5 : 0)),
       // La etiqueta que resume qué es esta persona para el negocio.
       etiqueta: o.eventos.pedido ? 'compró' : (q.esCliente ? 'cliente que volvió' : (o.eventos.checkout ? 'casi compra' : (o.eventos.carrito ? 'armó carrito' : (Object.keys(o.fechas).length >= 2 ? 'mirón que vuelve' : 'miró y se fue')))),
     };
   }).sort((a, b) => b.ultimaTs - a.ultimaTs);
   const visitantes = visitantesTodos.slice(0, 400);
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  🧠 MÁS INTELIGENTE (v4.83): cohortes, plata por canal, proyección de la semana, mayoristas dormidos.
+  // ══════════════════════════════════════════════════════════════════════════════
+  const lunesDe = (ts: number) => { const d = new Date(ts); const dow = (d.getUTCDay() + 6) % 7; return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dow); };
+  // 🔁 COHORTES: de los que aparecieron por primera vez cada semana, cuántos volvieron otro día y cuántos compraron.
+  // "Primera vez" = primera aparición dentro de lo leído (2× la ventana): quien ya venía de antes no es nuevo.
+  const primeraDe: any = {}, diasDe: any = {}, pidioAlguna: any = {};
+  todas.forEach(({ r, t }) => { if (!r.vid) return; if (primeraDe[r.vid] === undefined || t!.ts < primeraDe[r.vid]) primeraDe[r.vid] = t!.ts; (diasDe[r.vid] = diasDe[r.vid] || {})[t!.dk] = 1; if (r.evento === 'pedido') pidioAlguna[r.vid] = 1; });
+  const cohMap: any = {};
+  Object.keys(primeraDe).forEach((v) => {
+    if (desdeT !== null && primeraDe[v] < desdeT) return;
+    const wk = lunesDe(primeraDe[v]);
+    const C = cohMap[wk] = cohMap[wk] || { semana: wk, nuevos: 0, volvieron: 0, compraron: 0 };
+    C.nuevos++; if (Object.keys(diasDe[v]).length >= 2) C.volvieron++; if (pidioAlguna[v]) C.compraron++;
+  });
+  const cohortes = Object.values(cohMap).map((x: any) => x).sort((a: any, b: any) => a.semana - b.semana).slice(-8)
+    .map((C: any) => ({ semana: fmtU(C.semana).slice(0, 5), semanaTs: C.semana, nuevos: C.nuevos, volvieron: C.volvieron, compraron: C.compraron, pctVolvieron: C.nuevos ? Math.round(C.volvieron / C.nuevos * 100) : 0, pctCompraron: C.nuevos ? Math.round(C.compraron / C.nuevos * 100) : 0 }));
+  // 💰 PLATA POR CANAL: las ventas del período (no canceladas ni cotizaciones), atribuidas al canal por el que entró ese aparato.
+  const plataOrigen: any = {};
+  ventas.forEach((v: any) => {
+    const est = (v.estado || '').toString(); if (est === 'cancelado' || est === 'cotizacion') return;
+    const tsV = tsDeFecha(v.fecha); if (tsV === null || (desdeT !== null && tsV < desdeT)) return;
+    const o = vids[String(v.vid || '').trim()]; if (!o) return;
+    const og = o.origen || 'directo';
+    const Pl = plataOrigen[og] = plataOrigen[og] || { ars: 0, usd: 0, n: 0 };
+    Pl.ars += parseFloat(v.total_ars) || 0; Pl.usd += parseFloat(v.total_usd) || 0; Pl.n++;
+  });
+  conversionPorOrigen.forEach((c: any) => { const Pl = plataOrigen[c.origen]; c.plataARS = Pl ? Math.round(Pl.ars) : 0; c.plataUSD = Pl ? Math.round(Pl.usd * 100) / 100 : 0; c.ventas = Pl ? Pl.n : 0; });
+  // 📈 PROYECCIÓN: lo que va de la semana (desde el lunes 00:00, hora de Buenos Aires) estirado a 7 días.
+  let proyeccion: any = null;
+  if (mH) {
+    const ahoraBA = Date.UTC(+mH[3], +mH[2] - 1, +mH[1], +mH[4], +mH[5]);
+    const lunes = lunesDe(hoy00);
+    const transcurrido = (ahoraBA - lunes) / (7 * 86400000);
+    let masViejo = Infinity; todas.forEach((x) => { if (x.t!.ts < masViejo) masViejo = x.t!.ts; });
+    const cubierta = masViejo <= lunes;
+    if (transcurrido >= 1 / 7) {
+      let vis = 0; const ped: any = {};
+      todas.forEach(({ r, t }) => { if (t!.ts < lunes) return; if (r.evento === 'visita') vis++; if (r.evento === 'pedido' && r.vid) ped[r.vid] = 1; });
+      const nPed = Object.keys(ped).length;
+      proyeccion = { visitas: vis, visitasProy: Math.round(vis / transcurrido), pedidos: nPed, pedidosProy: Math.round(nPed / transcurrido), diasTranscurridos: Math.round(transcurrido * 70) / 10, cubierta };
+    }
+  }
+  // 😴 MAYORISTAS DORMIDOS: clientes mayoristas sin visita ni compra en el período, con última compra hace 30 días o más.
+  const ultimaCompraDe: any = {};
+  ventas.forEach((v: any) => { const est = (v.estado || '').toString(); if (est === 'cancelado' || est === 'cotizacion') return; const k = normNom(v.cliente); if (!k) return; const tsV = tsDeFecha(v.fecha) || 0; if (!ultimaCompraDe[k] || tsV > ultimaCompraDe[k].ts) ultimaCompraDe[k] = { ts: tsV, fecha: String(v.fecha || '') }; });
+  const activosNombre: any = {};
+  listaVids.forEach((v) => { const qn = quienEs(v); if (qn.nombre) activosNombre[normNom(qn.nombre)] = 1; });
+  const dormidos = clientes.filter((c: any) => String(c.tipo || '') === 'Mayorista' && c.nombre)
+    .map((c: any) => { const k = normNom(c.nombre); const uc = ultimaCompraDe[k]; return { nombre: String(c.nombre), telefono: String(c.telefono || ''), ultimaCompra: uc ? uc.fecha : '', diasSinComprar: uc ? Math.round((nowT - uc.ts) / 86400000) : null, activo: !!activosNombre[k] }; })
+    .filter((c: any) => !c.activo && c.diasSinComprar !== null && c.diasSinComprar >= 30)
+    .sort((a: any, b: any) => a.diasSinComprar - b.diasSinComprar).slice(0, 30);
 
   // ── 📅 EL DÍA A DÍA, en detalle ────────────────────────────────────────────────
   const diasDetalle = Object.keys(porDiaDet).sort().map((dk) => {
@@ -1208,6 +1265,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     hoyVsSemana: hoyVsSemana(todas),   // 🔴 v4.79
     excluidos, soloHoy,                 // 🧹 v4.80
     verMas, vipAbiertos,                // 👁️ v4.81
+    heatmap, cohortes, proyeccion, dormidos,   // 🧠 v4.83
   };
 }
 
@@ -1347,6 +1405,7 @@ async function setConfig(clave: string, valor: string) {
   await fetch(SB_URL + '/rest/v1/config?on_conflict=clave', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ clave, valor }) });
 }
 // Fecha 'dd/MM/yyyy HH:mm' en zona Argentina (igual formato que el motor viejo).
+const _cacheAna = new Map<string, { t: number; data: any }>();   // ⚡ v4.83
 // La Analítica completa para un período: la usa la pantalla (getAnalitica) y el cron (avisos e informe).
 async function calcularAnalitica(dias: number, soloHoy = false) {
   // La analítica ya no mira solo el tráfico: lo cruza con las ventas (para saber QUIÉN es
@@ -3911,8 +3970,14 @@ Deno.serve(async (req) => {
     if (accion === 'getProveedoresHijos') return json((await sbGet('candy_proveedores', 'select=*')).map((r: any) => ({ id: r.id, nombre: r.nombre || '', telefono: r.telefono || '', notas: r.notas || '' })));
     if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id,precio_candy')).map((r: any) => ({ id: (r.shuk_id || '').toString().trim(), precio: parseFloat(r.precio_candy) || 0 })).filter((r: any) => r.id));
     if (accion === 'getAnalitica') {
-      const dias = parseInt(url.searchParams.get('dias') || '0') || 0;
-      return json(await calcularAnalitica(dias, url.searchParams.get('hoy') === '1'));
+      // ⚡ v4.83: la misma pregunta dentro de 45 s se contesta de memoria (cambiar de pestaña, volver, recargar).
+      const dias = parseInt(url.searchParams.get('dias') || '0') || 0, soloHoyQ = url.searchParams.get('hoy') === '1';
+      const kC = dias + ':' + (soloHoyQ ? 1 : 0);
+      const cC = _cacheAna.get(kC);
+      if (cC && Date.now() - cC.t < 45000) return json(cC.data);
+      const dataC = await calcularAnalitica(dias, soloHoyQ);
+      _cacheAna.set(kC, { t: Date.now(), data: dataC });
+      return json(dataC);
     }
     // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
     // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.
@@ -3935,6 +4000,7 @@ Deno.serve(async (req) => {
       if (!vidB) return json({ error: 'falta el visitante' });
       const claveB = 'vid_alias:' + vidB;
       const valorB = JSON.stringify({ alias: (P(body, 'alias') || Q('alias')).slice(0, 60), nota: (P(body, 'nota') || Q('nota')).slice(0, 300) });
+      _cacheAna.clear();   // el nombre nuevo tiene que verse ya
       const exB = await sbGet('config', 'select=clave&clave=eq.' + encodeURIComponent(claveB));
       if (exB.length) await sbPatch('config', 'clave=eq.' + encodeURIComponent(claveB), { valor: valorB });
       else await sbInsert('config', { clave: claveB, valor: valorB });

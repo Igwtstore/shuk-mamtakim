@@ -24,13 +24,16 @@ export const SOLO_VIVO = new Set(['latido']); // eventos que NO se mandan al mot
 const TOPES = { vid: 60, pagina: 30, evento: 30, origen: 40, dispositivo: 20, ciudad: 80, region: 80, pais: 60, nombre: 80, telefono: 30, detalle: 700, carrito: 6000 };
 const NOMBRE_PAIS = { AR: 'Argentina', UY: 'Uruguay', BR: 'Brazil', CL: 'Chile', PY: 'Paraguay', BO: 'Bolivia', IL: 'Israel', US: 'United States', ES: 'Spain', MX: 'Mexico' };
 
+// 🤖 Un navegador que se presenta como programa (rastreadores, pruebas automatizadas). Se MARCA, no se
+// descarta: los números siguen siendo los reales y la Analítica lo muestra como robot.
+export const esBot = (ua) => /bot|crawl|spider|slurp|headless|phantom|puppeteer|playwright|python-requests|curl\/|wget|scrapy|httpclient|java\/|go-http|libwww/i.test(ua || '');
 const txt = (v, tope) => (v == null ? '' : String(v)).trim().slice(0, tope);
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 
 // Un evento tal como lo manda la tienda (query o body) → el objeto que viaja a los paneles.
 // `geo` es lo que dice geoip-lite de la IP ({city, region, country}) y solo se usa si la
 // tienda no trajo ciudad. Devuelve null si no hay visitante (sin vid no hay a quién seguir).
-export function normalizarEvento(q, { geo = null, ahora = Date.now(), id = 0 } = {}) {
+export function normalizarEvento(q, { geo = null, ahora = Date.now(), id = 0, ua = '' } = {}) {
   const vid = txt(q.vid, TOPES.vid);
   if (!vid) return null;
   const ev = {
@@ -49,6 +52,14 @@ export function normalizarEvento(q, { geo = null, ahora = Date.now(), id = 0 } =
     ev.region = ev.region || txt(geo.region, TOPES.region);
     ev.pais = ev.pais || NOMBRE_PAIS[geo.country] || txt(geo.country, TOPES.pais);
     ev.geoServidor = true;   // para saber de dónde salió la ciudad
+  }
+  if (ua && esBot(ua) && ev.evento === 'visita') {
+    // La marca viaja dentro de la ficha técnica de la visita (el JSON del detalle), que es lo que la Analítica lee.
+    let ficha = {};
+    try { ficha = JSON.parse(ev.detalle || '{}'); if (!ficha || typeof ficha !== 'object') ficha = {}; } catch { ficha = {}; }
+    ficha.bot = 1;
+    ev.detalle = JSON.stringify(ficha).slice(0, TOPES.detalle);
+    ev.bot = true;
   }
   return ev;
 }

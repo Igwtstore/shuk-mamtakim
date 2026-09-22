@@ -21,6 +21,13 @@ async function run() {
   const p = paramsParaMotor(ev);
   t.eq('al motor viaja con los nombres de siempre (producto = detalle)', [p.get('accion'), p.get('producto'), p.get('carrito'), p.get('total')], ['track', 'Klik', '[{"n":"Klik","q":2,"p":1000}]', '2000']);
   t.ok('el latido es solo para la pantalla en vivo', SOLO_VIVO.has('latido') && !SOLO_VIVO.has('visita'));
+  // 🤖 v4.83: un navegador que se presenta como programa queda marcado en la ficha de la visita
+  const bot = normalizarEvento({ vid: 'v_r', evento: 'visita', producto: '{"tz":"UTC"}' }, { ua: 'Mozilla/5.0 (compatible; Googlebot/2.1)' });
+  t.ok('robot: la marca bot:1 entra en la ficha técnica sin perder lo que traía', JSON.parse(bot.detalle).bot === 1 && JSON.parse(bot.detalle).tz === 'UTC' && bot.bot === true);
+  const humano = normalizarEvento({ vid: 'v_h', evento: 'visita', producto: '{"tz":"UTC"}' }, { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1' });
+  t.ok('humano: no se lo marca', !humano.bot && !('bot' in JSON.parse(humano.detalle)));
+  t.ok('robot en un evento que no es visita: no toca el detalle', normalizarEvento({ vid: 'v_r', evento: 'carrito', producto: 'Klik' }, { ua: 'HeadlessChrome' }).detalle === 'Klik');
+  t.ok('esBot reconoce a las pruebas automatizadas', mod.esBot('Mozilla/5.0 HeadlessChrome/120') && mod.esBot('python-requests/2.31') && !mod.esBot('Mozilla/5.0 (Windows NT 10.0) Chrome/120'));
 
   // ── memoria + suscriptores ──
   let reloj = 1_000_000;
