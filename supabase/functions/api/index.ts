@@ -944,7 +944,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const vipTotales: any = (opciones && opciones.vipTotales) || {};
   // Las aperturas se registran desde el 22/09/2026 (v4.81): de un catálogo anterior no se puede
   // decir "nunca lo abrió" — a lo sumo "sin aperturas desde que se mide". Solo los posteriores son medibles.
-  const VIP_DESDE = Date.UTC(2026, 8, 22);
+  const VIP_DESDE = (opciones && opciones.vipDesde) || Date.UTC(2026, 8, 22);   // (las pruebas lo corren hacia atrás)
   const vipVistos: any = {};
   const vipAbiertos = vipCatalogos.map((c: any) => {
     const a = vipAp[c.token], tt = vipTotales[c.token]; vipVistos[c.token] = 1;

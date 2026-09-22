@@ -63,7 +63,7 @@ async function run() {
     { token: 'tokreciente', nombre: 'Recién mandado', canal: 'minorista', creado: dia(0) + ' 08:00' },
     { token: 'tokviejo', nombre: 'Del año pasado', canal: 'minorista', creado: '10/06/2026 09:00' },   // anterior a la medición
   ];
-  const d = analitica(rows, 7, [], [], productos, null, { vipCatalogos, vipTotales: { tokviejo: { aperturas: 3, vids: { v_z: 1 }, ultima: '01/09/2026 10:00', ultimaTs: 0 } } });
+  const d = analitica(rows, 7, [], [], productos, null, { vipCatalogos, vipDesde: Date.UTC(2026, 6, 1), vipTotales: { tokviejo: { aperturas: 3, vids: { v_z: 1 }, ultima: '01/09/2026 10:00', ultimaTs: 0 } } });
   const vm = d.verMas;
   t.eq('se contaron los lotes de vistas', vm.eventos, 2);
   const klik = d.deseoVsVenta.find(x => x.nombre === 'Klik');
