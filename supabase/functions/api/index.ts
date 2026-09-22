@@ -1347,6 +1347,177 @@ async function setConfig(clave: string, valor: string) {
   await fetch(SB_URL + '/rest/v1/config?on_conflict=clave', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ clave, valor }) });
 }
 // Fecha 'dd/MM/yyyy HH:mm' en zona Argentina (igual formato que el motor viejo).
+// La Analítica completa para un período: la usa la pantalla (getAnalitica) y el cron (avisos e informe).
+async function calcularAnalitica(dias: number, soloHoy = false) {
+  // La analítica ya no mira solo el tráfico: lo cruza con las ventas (para saber QUIÉN es
+  // cada visitante), con los clientes (para el teléfono) y con los productos (stock real).
+  const [trA, vtA, clA, prA] = await Promise.all([
+    traficoParaAnalitica(dias),
+    sbGet('ventas', 'select=id,fecha,cliente,estado,total_ars,total_usd,vid,stock_updates,tipo_cambio&order=n_venta'),
+    sbGet('clientes', 'select=nombre,telefono,tipo'),
+    sbGet('productos', 'select=id,nombre,stock,activo,dueno,moneda'),
+  ]);
+  // 🏷️ Los nombres que Jony le puso a mano a visitantes que no se identificaron.
+  const [aliasRows, vipRows] = await Promise.all([
+    sbGet('config', 'select=clave,valor&clave=like.vid_alias:*'),
+    sbGet('config', 'select=clave,valor&clave=like.VIP_*'),   // 🔗 v4.81
+  ]);
+  // 🔗 Las aperturas VIP de toda la historia (no solo del período): "nunca lo abrió" tiene que
+  // mirar todo. Son pocas filas: solo visitas que traen "vip" en la ficha técnica (desde v4.81).
+  const vipVisitas = await sbGet('trafico', 'select=detalle,fecha,vid&evento=eq.visita&detalle=like.' + encodeURIComponent('*"vip":"*') + '&order=id.asc');
+  const vipTotales: any = {};
+  vipVisitas.forEach((r: any) => {
+    try { const fv = JSON.parse(String(r.detalle || '')); if (!fv.vip) return; const T = vipTotales[fv.vip] = vipTotales[fv.vip] || { aperturas: 0, vids: {}, ultima: '', ultimaTs: 0 }; T.aperturas++; if (r.vid) T.vids[r.vid] = 1; const ts = tsDeFecha(String(r.fecha || '')) || 0; if (ts >= T.ultimaTs) { T.ultimaTs = ts; T.ultima = String(r.fecha || ''); } } catch { /**/ }
+  });
+  const vipCatalogos = vipRows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: String(r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '' }; } catch { return null; } }).filter(Boolean);
+  const aliasMap: any = {};
+  aliasRows.forEach((r: any) => {
+    const vidA = String(r.clave || '').slice('vid_alias:'.length);
+    if (!vidA) return;
+    try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
+  });
+  return analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy, vipCatalogos, vipTotales });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  🔔 AVISOS AL CELULAR DE JONY (v4.82) — que la Analítica avise sola.
+//  Van por OneSignal SOLO a los aparatos con la etiqueta rol=jony (el panel la pone al entrar).
+//  NUNCA a "All": hay clientes suscriptos a las novedades de la tienda y no tienen por qué ver esto.
+// ══════════════════════════════════════════════════════════════════════════════
+const ALERTAS_DEF: any = { checkout: 1, conocido: 1, busqueda: 1, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1 };
+async function alertasCfg() {
+  try { return { ...ALERTAS_DEF, ...JSON.parse(await getConfig('ALERTAS_PUSH', '{}')) }; } catch { return { ...ALERTAS_DEF }; }
+}
+async function pushJony(titulo: string, mensaje: string) {
+  try {
+    const r = await fetch('https://api.onesignal.com/notifications', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + osKey() },
+      body: JSON.stringify({ app_id: OS_APP_ID, filters: [{ field: 'tag', key: 'rol', relation: '=', value: 'jony' }], headings: { es: titulo, en: titulo }, contents: { es: mensaje, en: mensaje }, url: SITIO_PUSH + '#adm-wR7j4' }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.errors) return { ok: false, error: Array.isArray(d.errors) ? d.errors.join(' · ') : JSON.stringify(d.errors || ('HTTP ' + r.status)) };
+    return { ok: true, id: d.id || '', destinatarios: d.recipients != null ? d.recipients : null };
+  } catch (e) { return { ok: false, error: String((e as Error).message || e) }; }
+}
+// Para no repetir el mismo aviso: clave + horas de silencio (config PUSHDEDUP_*, se limpian en el cron).
+async function avisoReciente(clave: string, horas: number) {
+  const k = 'PUSHDEDUP_' + clave.replace(/[^a-z0-9_:.-]/gi, '').slice(0, 80);
+  const v = parseInt(await getConfig(k, '0')) || 0;
+  if (v && Date.now() - v < horas * 3600000) return true;
+  await setConfig(k, String(Date.now()));
+  return false;
+}
+const plataCorta = (ars: number, usd: number) => '$ ' + Math.round(ars || 0).toLocaleString('es-AR') + (usd > 0 ? ' + U$S ' + (Math.round(usd * 100) / 100).toLocaleString('es-AR') : '');
+function itemsCortos(carritoJson: string) {
+  try { const arr = JSON.parse(carritoJson || '[]'); if (!Array.isArray(arr) || !arr.length) return ''; return arr.slice(0, 3).map((it: any) => it.q + '× ' + String(it.n || '').slice(0, 28)).join(' · ') + (arr.length > 3 ? ' · +' + (arr.length - 3) : ''); } catch { return ''; }
+}
+// Quién es un visitante, para nombrarlo en un aviso: lo que dejó, lo que compró desde ese aparato, o el nombre que le puso Jony.
+async function quienEsVid(vid: string, nombreEv: string) {
+  if (nombreEv) return { nombre: nombreEv, como: 'se registró' };
+  if (!vid) return { nombre: '', como: '' };
+  const v = await sbGet('ventas', 'select=cliente,estado&vid=eq.' + encodeURIComponent(vid) + '&order=n_venta.desc&limit=3');
+  const c = v.find((x: any) => (x.estado || '') !== 'cancelado' && (x.estado || '') !== 'cotizacion' && x.cliente);
+  if (c) return { nombre: String(c.cliente), como: 'ya compró desde este aparato' };
+  try { const a = JSON.parse(await getConfig('vid_alias:' + vid, '{}')); if (a.alias) return { nombre: String(a.alias), como: 'se lo pusiste vos' }; } catch { /**/ }
+  return { nombre: '', como: '' };
+}
+// Los avisos instantáneos: se evalúan en cada evento que llega de la tienda (acción track).
+async function avisosInstantaneos(ev: any) {
+  const cfg = await alertasCfg();
+  const apodo = '#' + String(ev.vid || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+  if (ev.evento === 'checkout' && cfg.checkout) {
+    if (await avisoReciente('co:' + ev.vid, 2)) return { silenciado: 'checkout' };
+    const q = await quienEsVid(ev.vid, ev.nombre);
+    return await pushJony('🔥 ' + (q.nombre || 'Visitante ' + apodo) + ' llegó al checkout', plataCorta(ev.total, ev.totalUSD) + (ev.carrito ? ' · ' + itemsCortos(ev.carrito) : '') + (ev.telefono ? ' · 📞 ' + ev.telefono : ''));
+  }
+  if (ev.evento === 'busqueda' && cfg.busqueda && (parseInt(ev.total) || 0) === 0 && ev.detalle) {
+    const qb = String(ev.detalle).trim().toLowerCase().slice(0, 40);
+    if (qb.length < 3 || await avisoReciente('bu:' + qb, 24)) return { silenciado: 'busqueda' };
+    return await pushJony('🔎 Buscaron "' + qb + '" y no había', 'Si lo tenés o lo conseguís, es una venta. Mirá "Qué buscan" en Analítica.');
+  }
+  if (ev.evento === 'visita') {
+    const res: any = {};
+    if (cfg.conocido) {
+      const q = await quienEsVid(ev.vid, ev.nombre);
+      if (q.nombre && !(await avisoReciente('vi:' + ev.vid, 6))) res.conocido = await pushJony('👋 ' + q.nombre + ' entró a la tienda', 'Ahora mismo (' + q.como + '). Desde 🔴 En vivo le podés escribir mientras mira.');
+    }
+    if (cfg.pico) {
+      const desde = new Date(Date.now() - 10 * 60000).toISOString();
+      const rec = await sbGet('trafico', 'select=vid&evento=eq.visita&ts=gte.' + encodeURIComponent(desde));
+      const n = new Set(rec.map((r: any) => r.vid).filter(Boolean)).size;
+      if (n >= (cfg.picoMin || 15) && !(await avisoReciente('pico', 1))) res.pico = await pushJony('📈 ' + n + ' personas en la tienda en 10 minutos', 'Algo pasó: ¿mandaste algo? Miralo en 🔴 En vivo.');
+    }
+    return res;
+  }
+  return {};
+}
+// El informe de la semana, en un mensaje corto.
+function textoInforme(a: any) {
+  const r = a.resumen || {}, c = a.comparativa, e = a.embudo || {};
+  const d = c && c.visitas ? ' (' + (c.visitas.delta >= 0 ? '▲' : '▼') + Math.abs(c.visitas.delta) + '%)' : '';
+  const ab = a.abandonados || [];
+  const plata = ab.reduce((t: number, x: any) => t + (x.total || 0), 0);
+  const acc = (a.acciones || []).slice(0, 3).map((x: any, i: number) => (i + 1) + ') ' + x.titulo).join(' ');
+  return (r.visitas || 0) + ' visitas' + d + ' · ' + (r.sesiones || 0) + ' sesiones · ' + (r.unicos || 0) + ' personas · ' + (e.pedido || 0) + ' pedidos · '
+    + ab.length + ' carritos sin terminar (' + plataCorta(plata, 0) + '). ' + (acc ? 'Para el lunes: ' + acc : 'Nada urgente.');
+}
+// ¿Hoy es un día raro? Compara las visitas de hoy hasta esta hora con el mismo día de las últimas
+// 4 semanas hasta la misma hora. Devuelve null si no hay con qué comparar (promedio < 10).
+function rarezaCalc(filas: any[], hoyK: string, horaAR: number) {
+  const m = hoyK.match(/(\d{4})-(\d{2})-(\d{2})/); if (!m) return null;
+  const hoyTs = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const dk = (ts: number) => { const d = new Date(ts); const p = (n: number) => String(n).padStart(2, '0'); return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()); };
+  const cuenta: any = {};
+  filas.forEach((r: any) => { const t = tsDeFecha(r.fecha); if (t === null) return; const h = new Date(t).getUTCHours(); if (h > horaAR) return; const k = dk(t); cuenta[k] = (cuenta[k] || 0) + 1; });
+  const hoy = cuenta[hoyK] || 0;
+  const pasados = [1, 2, 3, 4].map((k) => cuenta[dk(hoyTs - k * 7 * 86400000)]).filter((x) => x !== undefined);
+  if (!pasados.length) return null;
+  const prom = pasados.reduce((a: number, b: number) => a + b, 0) / pasados.length;
+  if (prom < 10) return null;
+  const pct = Math.round((hoy - prom) / prom * 100);
+  const nombres = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  return { hoy, promedio: Math.round(prom), pct, dia: nombres[new Date(hoyTs).getUTCDay()], semanas: pasados.length };
+}
+// Lo que el cron de cada hora revisa: carritos colgados, el informe del domingo, y si hoy es raro.
+async function avisosDelCron() {
+  const cfg = await alertasCfg();
+  const out: any = { carritos: 0, informe: false, rareza: null };
+  const f = fechaAhora();
+  const horaAR = parseInt(f.slice(11, 13), 10);
+  const [dd, mm, yy] = f.slice(0, 10).split('/');
+  const hoyK = yy + '-' + mm + '-' + dd;
+  const dow = new Date(Date.UTC(+yy, +mm - 1, +dd)).getUTCDay();
+  if (cfg.carrito) {
+    const a = await calcularAnalitica(1, false);
+    for (const c of (a.abandonados || [])) {
+      if (!c.telefono || c.horas < 1 || c.horas > 3 || (c.totalEquiv || 0) < (cfg.carritoMin || 0)) continue;
+      if (await avisoReciente('cc:' + c.vid, 24)) continue;
+      const r = await pushJony('🛒 ' + (c.nombre || 'Visitante ' + c.apodo) + ' dejó ' + plataCorta(c.total, c.totalUSD) + ' en el carrito hace ' + c.horas + ' h', '📞 ' + c.telefono + (c.items && c.items.length ? ' · ' + c.items.slice(0, 3).map((it: any) => it.q + '× ' + String(it.n || '').slice(0, 28)).join(' · ') : '') + '. Escribile desde 🛒 Carritos.');
+      if (r.ok) out.carritos++;
+    }
+  }
+  if (cfg.informe && dow === 0 && horaAR === 20 && !(await avisoReciente('informe:' + hoyK, 20))) {
+    const a7 = await calcularAnalitica(7, false);
+    const r = await pushJony('📊 La semana en el Shuk', textoInforme(a7));
+    out.informe = !!r.ok;
+  }
+  if (cfg.rareza && (horaAR === 13 || horaAR === 20)) {
+    const desde = new Date(Date.now() - 29 * 86400000).toISOString();
+    const filas = await sbGet('trafico', 'select=fecha&evento=eq.visita&ts=gte.' + encodeURIComponent(desde));
+    const rz = rarezaCalc(filas, hoyK, horaAR);
+    out.rareza = rz;
+    if (rz && (rz.pct <= -50 || rz.pct >= 100) && !(await avisoReciente('rar:' + hoyK + ':' + horaAR, 20))) {
+      await pushJony(rz.pct < 0 ? '📉 Hoy vas ' + Math.abs(rz.pct) + '% abajo de un ' + rz.dia + ' normal' : '📈 Hoy vas ' + rz.pct + '% arriba de un ' + rz.dia + ' normal',
+        rz.hoy + ' visitas hasta las ' + String(horaAR).padStart(2, '0') + ':00 contra ' + rz.promedio + ' de promedio (' + rz.semanas + ' semanas). ' + (rz.pct < 0 ? '¿Mandaste algo esta semana?' : 'Aprovechá: mirá quién está en 🔴 En vivo.'));
+    }
+  }
+  // Limpieza: las claves de "no repetir" de más de 3 días no protegen nada.
+  try {
+    const viejas = await sbGet('config', 'select=clave,valor&clave=like.PUSHDEDUP_*');
+    for (const c of viejas) { if (Date.now() - (parseInt(c.valor) || 0) > 3 * 86400000) await sbDelete('config', 'clave=eq.' + encodeURIComponent(c.clave)); }
+  } catch { /**/ }
+  return out;
+}
 function fechaAhora() {
   const p: any = {};
   new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date()).forEach((x) => p[x.type] = x.value);
@@ -2476,7 +2647,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -2653,6 +2824,8 @@ Deno.serve(async (req) => {
       await sbInsert('trafico', { fecha: fechaAhora(), vid: Q('vid'), pagina: Q('pagina') || 'tienda', evento: Q('evento') || 'visita', origen: Q('origen') || 'directo', dispositivo: Q('dispositivo'), ciudad: Q('ciudad'), region: Q('region'), pais: Q('pais'), nombre: Q('nombre'), telefono: Q('telefono'), detalle: Q('producto'), carrito: Q('carrito'), total: QN('total') });
       // Compatibilidad con el contador simple de visitas existente.
       if ((Q('evento') || 'visita') === 'visita') await sbInsert('visitas', { fecha: fechaAhora(), pagina: Q('pagina') || 'tienda' });
+      // 🔔 v4.82: ¿esto merece un aviso al celular de Jony? (checkout, cliente conocido, búsqueda vacía, pico)
+      try { await avisosInstantaneos({ vid: Q('vid'), evento: Q('evento') || 'visita', detalle: Q('producto'), nombre: Q('nombre'), telefono: Q('telefono'), total: QN('total'), totalUSD: QN('totalUSD'), carrito: Q('carrito') }); } catch { /* un aviso nunca frena el registro */ }
       return json({ ok: true });
     }
     if (accion === 'visitas') return json((await sbGet('visitas', 'select=fecha,pagina&order=id.asc')).map((r: any) => ({ fecha: (r.fecha || '').toString(), pagina: (r.pagina || '').toString() })));
@@ -3738,38 +3911,25 @@ Deno.serve(async (req) => {
     if (accion === 'getProveedoresHijos') return json((await sbGet('candy_proveedores', 'select=*')).map((r: any) => ({ id: r.id, nombre: r.nombre || '', telefono: r.telefono || '', notas: r.notas || '' })));
     if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id,precio_candy')).map((r: any) => ({ id: (r.shuk_id || '').toString().trim(), precio: parseFloat(r.precio_candy) || 0 })).filter((r: any) => r.id));
     if (accion === 'getAnalitica') {
-      // La analítica ya no mira solo el tráfico: lo cruza con las ventas (para saber QUIÉN es
-      // cada visitante), con los clientes (para el teléfono) y con los productos (stock real).
       const dias = parseInt(url.searchParams.get('dias') || '0') || 0;
-      const [trA, vtA, clA, prA] = await Promise.all([
-        traficoParaAnalitica(dias),
-        sbGet('ventas', 'select=id,fecha,cliente,estado,total_ars,total_usd,vid,stock_updates,tipo_cambio&order=n_venta'),
-        sbGet('clientes', 'select=nombre,telefono,tipo'),
-        sbGet('productos', 'select=id,nombre,stock,activo,dueno,moneda'),
-      ]);
-      // 🏷️ Los nombres que Jony le puso a mano a visitantes que no se identificaron.
-      const [aliasRows, vipRows] = await Promise.all([
-        sbGet('config', 'select=clave,valor&clave=like.vid_alias:*'),
-        sbGet('config', 'select=clave,valor&clave=like.VIP_*'),   // 🔗 v4.81
-      ]);
-      // 🔗 Las aperturas VIP de toda la historia (no solo del período): "nunca lo abrió" tiene que
-      // mirar todo. Son pocas filas: solo visitas que traen "vip" en la ficha técnica (desde v4.81).
-      const vipVisitas = await sbGet('trafico', 'select=detalle,fecha,vid&evento=eq.visita&detalle=like.' + encodeURIComponent('*"vip":"*') + '&order=id.asc');
-      const vipTotales: any = {};
-      vipVisitas.forEach((r: any) => {
-        try { const fv = JSON.parse(String(r.detalle || '')); if (!fv.vip) return; const T = vipTotales[fv.vip] = vipTotales[fv.vip] || { aperturas: 0, vids: {}, ultima: '', ultimaTs: 0 }; T.aperturas++; if (r.vid) T.vids[r.vid] = 1; const ts = tsDeFecha(String(r.fecha || '')) || 0; if (ts >= T.ultimaTs) { T.ultimaTs = ts; T.ultima = String(r.fecha || ''); } } catch { /**/ }
-      });
-      const vipCatalogos = vipRows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: String(r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '' }; } catch { return null; } }).filter(Boolean);
-      const aliasMap: any = {};
-      aliasRows.forEach((r: any) => {
-        const vidA = String(r.clave || '').slice('vid_alias:'.length);
-        if (!vidA) return;
-        try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
-      });
-      return json(analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy: url.searchParams.get('hoy') === '1', vipCatalogos, vipTotales }));
+      return json(await calcularAnalitica(dias, url.searchParams.get('hoy') === '1'));
     }
     // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
     // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.
+    // 🔔 v4.82: los avisos al celular (solo Jony)
+    if (accion === 'getAlertasPush') return json({ ok: true, cfg: await alertasCfg() });
+    if (accion === 'setAlertasPush') {
+      let nueva: any = {};
+      try { nueva = JSON.parse(P(body, 'cfg') || Q('cfg') || '{}'); } catch { return json({ error: 'config inválida' }); }
+      const cfg: any = {};
+      for (const k of Object.keys(ALERTAS_DEF)) { if (nueva[k] === undefined) continue; cfg[k] = (k === 'carritoMin' || k === 'picoMin') ? Math.max(0, parseInt(nueva[k]) || 0) : (nueva[k] ? 1 : 0); }
+      await setConfig('ALERTAS_PUSH', JSON.stringify(cfg));
+      return json({ ok: true, cfg: { ...ALERTAS_DEF, ...cfg } });
+    }
+    if (accion === 'probarPushJony') {
+      const r = await pushJony('🔔 Prueba del Shuk', 'Los avisos del negocio llegan a este aparato ✓');
+      return json(r);
+    }
     if (accion === 'ponerAliasVisitante') {
       const vidB = P(body, 'vid') || Q('vid');
       if (!vidB) return json({ error: 'falta el visitante' });
@@ -4560,7 +4720,9 @@ Deno.serve(async (req) => {
           for (const c of claves) { if ((c.valor || '').toString().slice(0, 10) !== hoyCfg) await sbDelete('config', 'clave=eq.' + encodeURIComponent(c.clave)); }
         }
       } catch { /**/ }
-      return json({ ok: true, backup: rBk, cierre: rCierre, bandeja: rBand });
+      let rAvisos: any = {};
+      try { rAvisos = await avisosDelCron(); } catch (e) { rAvisos = { error: String(e) }; }   // 🔔 v4.82
+      return json({ ok: true, backup: rBk, cierre: rCierre, bandeja: rBand, avisos: rAvisos });
     }
     return json({ error: 'acción no soportada aún: ' + accion });
   } catch (e) {

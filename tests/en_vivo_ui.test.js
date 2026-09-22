@@ -45,6 +45,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.route('**/*', route => {
     const u = route.request().url();
     if (u.includes('getAnalitica')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(DATA) });
+    if (u.includes('getAlertasPush')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, cfg: { checkout: 1, conocido: 1, busqueda: 0, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1 } }) });
     // El catálogo (Supabase REST) con productos de mentira: sin tarjetas no hay vistas que medir.
     if (/\/rest\/v1\/productos\?/.test(u)) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PRODS_SB) });
     if (u.startsWith(SITIO)) return route.continue();
@@ -78,6 +79,10 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.waitForTimeout(600);
   ok('la pestaña 🔴 En vivo existe y va primera', (await txt()).trim().startsWith('🔴 En vivo'));
   ok('v4.80: hay botón "Hoy" en el período', await pg.evaluate(() => !!document.getElementById('ana-p-hoy')));
+  await pg.evaluate(() => setAnaTab('hoy'));
+  await pg.waitForTimeout(500);
+  { const c = await txt(); const h = await pg.content();
+    ok('v4.82: "Qué hacer" termina con la tarjeta de avisos al celular, con la config cargada', c.includes('Avisos al celular') && c.includes('Informe del domingo') && h.includes('data-alerta="busqueda"') && !h.includes('data-alerta="busqueda" checked') && h.includes('data-alerta="checkout" checked')); }
   await pg.evaluate(() => setAnaTab('productos'));
   await pg.waitForTimeout(200);
   { const c = await txt();
@@ -129,6 +134,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.waitForTimeout(300);
   t = await txt();
   ok('en vista Miri no hay pestaña En vivo y cae en "Qué hacer"', !t.includes('🔴 En vivo') && t.includes('Resumen del período'));
+  ok('v4.82: en vista Miri NO está la tarjeta de avisos', !t.includes('Avisos al celular'));
   ok('al salir de la pestaña se corta la conexión', (await pg.evaluate(() => !_vivo.es && !_vivo.timer)));
   ok('sin errores de JavaScript en toda la recorrida', errs.length === 0);
 

@@ -14627,7 +14627,71 @@ function _anaSecHoy(d) {
       </div>`;
     }).join('') +
     `<div style="font-size:0.72rem;color:var(--texto-suave);margin-top:4px">Conversión final: <b>${_anaPct(e.pedido, base)}%</b> de los que entran terminan pidiendo.</div>`);
+  if (!esVistaMiri()) html += _anaCardAlertas();   // 🔔 v4.82
   return html;
+}
+
+// ═══ 🔔 AVISOS AL CELULAR (v4.82) ═══════════════════════════════════════════
+// La Analítica avisa sola: checkout, cliente conocido adentro, búsqueda sin resultado, pico de
+// gente, carrito colgado con teléfono (cada hora), informe del domingo 20:00 y días raros.
+// Llegan SOLO a los aparatos marcados como de Jony (etiqueta rol=jony en OneSignal, la pone el
+// panel al entrar): los clientes suscriptos a las novedades no ven nada de esto.
+let _alertasCfg = null, _alertasEstado = '';
+function _marcarPushJony() {
+  try {
+    if (socioActual !== 'jony' || typeof OneSignalDeferred === 'undefined') return;
+    OneSignalDeferred.push(async OS => { try { await OS.User.addTag('rol', 'jony'); } catch { /**/ } });
+  } catch { /**/ }
+}
+async function _alertasCargar() {
+  if (_alertasCfg) return;
+  try { const j = await (await fetch(APPS_SCRIPT_URL + '?accion=getAlertasPush')).json(); _alertasCfg = (j && j.cfg) || null; } catch { /**/ }
+  try {
+    if (typeof OneSignalDeferred !== 'undefined') OneSignalDeferred.push(async OS => {
+      try { const ok = await OS.User.PushSubscription.optedIn; const tags = await OS.User.getTags(); _alertasEstado = ok ? (tags && tags.rol === 'jony' ? 'ok' : 'sin-marca') : 'sin-push'; } catch { _alertasEstado = ''; }
+      _alertasRepintar();
+    });
+  } catch { /**/ }
+  _alertasRepintar();
+}
+function _alertasRepintar() { const c = document.getElementById('card-alertas'); if (c) c.outerHTML = _anaCardAlertas(); }
+async function alertasGuardar() {
+  const cfg = {};
+  document.querySelectorAll('#card-alertas [data-alerta]').forEach(el => { cfg[el.dataset.alerta] = el.type === 'checkbox' ? (el.checked ? 1 : 0) : (parseInt(el.value) || 0); });
+  const r = await apiWrite(new URLSearchParams({ accion: 'setAlertasPush', cfg: JSON.stringify(cfg) }), '🔔 Avisos guardados ✓');
+  if (r && r.cfg) { _alertasCfg = r.cfg; _alertasRepintar(); }
+}
+async function alertasProbar() {
+  _marcarPushJony();
+  const r = await apiWrite(new URLSearchParams({ accion: 'probarPushJony' }), null);
+  if (!r) return;
+  if (r.ok && r.destinatarios) showToast('🔔 Enviada a ' + r.destinatarios + ' aparato' + (r.destinatarios !== 1 ? 's' : '') + ' tuyo' + (r.destinatarios !== 1 ? 's' : '') + ' ✓');
+  else if (r.ok) showToast('⚠️ Se mandó pero ningún aparato está marcado como tuyo: activá las notificaciones acá y volvé a probar');
+  else showToast('❌ No salió: ' + (r.error || 'sin detalle'));
+}
+function _anaCardAlertas() {
+  if (!_alertasCfg) { setTimeout(_alertasCargar, 0); return `<div class="admin-card" id="card-alertas"><div class="admin-titulo">🔔 Avisos al celular</div><div class="sinpedidos">Cargando…</div></div>`; }
+  const c = _alertasCfg;
+  const sw = (k, lbl, desc) => `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--gris-medio);cursor:pointer;font-size:0.8rem">
+      <input type="checkbox" data-alerta="${k}" ${c[k] ? 'checked' : ''} onchange="alertasGuardar()" style="margin-top:3px;flex-shrink:0">
+      <span><b>${lbl}</b><div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.4">${desc}</div></span></label>`;
+  const estado = _alertasEstado === 'ok' ? '<span style="color:var(--verde);font-weight:700">✓ Este aparato recibe los avisos</span>'
+    : _alertasEstado === 'sin-marca' ? '<span style="color:#e08a2a;font-weight:700">Notificaciones activas, falta marcar este aparato: tocá "Probar".</span>'
+    : _alertasEstado === 'sin-push' ? `<span style="color:#c0392b;font-weight:700">Este aparato no tiene las notificaciones activadas.</span> <button onclick="activarNotificaciones();setTimeout(_marcarPushJony,3000)" style="background:var(--azul);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">Activar acá</button>`
+    : '<span style="color:var(--texto-suave)">Estado de este aparato: sin datos.</span>';
+  return `<div class="admin-card" id="card-alertas">
+    <div class="admin-titulo" style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">🔔 Avisos al celular
+      <button onclick="alertasProbar()" style="background:var(--gris-claro);color:var(--azul);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">📲 Probar en este aparato</button></div>
+    <div style="font-size:0.72rem;margin-bottom:6px">${estado}</div>
+    <div style="font-size:0.7rem;color:var(--texto-suave);margin-bottom:6px;line-height:1.4">Llegan solo a tus aparatos, nunca a los clientes suscriptos. Cada aviso se manda una vez (no se repite el mismo en horas).</div>
+    ${sw('checkout', '🔥 Alguien llegó al checkout', 'Con nombre si se sabe, la plata y los productos. Al instante.')}
+    ${sw('conocido', '👋 Un cliente conocido entró a mirar', 'Alguien que ya te compró, se registró o bautizaste vos. Una vez cada 6 h por persona.')}
+    ${sw('busqueda', '🔎 Buscaron algo y no había', 'Una búsqueda sin resultado es un pedido que no pudiste cumplir. Una vez por día por palabra.')}
+    ${sw('pico', '📈 Pico de gente', `<span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">Más de <input type="number" data-alerta="picoMin" value="${c.picoMin}" min="3" onchange="alertasGuardar()" style="width:52px;padding:2px 4px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.72rem"> personas en 10 minutos. Una vez por hora.</span>`)}
+    ${sw('carrito', '🛒 Carrito colgado con teléfono', `<span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">Entre 1 y 3 horas sin terminar, de al menos $ <input type="number" data-alerta="carritoMin" value="${c.carritoMin}" min="0" step="1000" onchange="alertasGuardar()" style="width:80px;padding:2px 4px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.72rem">. Se revisa cada hora.</span>`)}
+    ${sw('informe', '📊 Informe del domingo a las 20:00', 'La semana en un mensaje: visitas, sesiones, personas, pedidos, carritos sin terminar y 3 cosas para el lunes.')}
+    ${sw('rareza', '📉📈 Días raros', 'A las 13 y a las 20: si hoy vas 50 % abajo o el doble de un día igual de las últimas 4 semanas.')}
+  </div>`;
 }
 
 // ═══ 🛒 CARRITOS SIN TERMINAR ═══════════════════════════════════════════════
@@ -16951,7 +17015,7 @@ function init() {
       // Esperar a que el token de sesión esté listo antes de los primeros renders (clave para Etapa B)
       _sb.auth.getSession()
         .then(r => { _authToken = r.data.session?.access_token || ''; })
-        .finally(() => { setModo('admin'); cargarAccesoMiri(); });   // 🎚️ interruptor (solo Jony)
+        .finally(() => { setModo('admin'); cargarAccesoMiri(); _marcarPushJony(); });   // 🎚️ interruptor (solo Jony) · 🔔 avisos (v4.82)
     } else {
       document.getElementById('admin-login').style.display = 'flex';
     }
