@@ -602,14 +602,17 @@
   <div class="nota verde">✅ Pestaña "📈 Analítica" en el panel admin. Registro <strong>anónimo y legal</strong> (Ley 25.326): cada visitante recibe un ID aleatorio en su navegador que permite reconocer al mismo dispositivo cuando vuelve, sin saber quién es. La identidad (nombre/teléfono) se ata a su historial <strong>solo cuando él la deja</strong> (pedido o registro). No se guarda la IP cruda; la ciudad es aproximada. Incluye aviso de cookies.</div>
   <br>
   <div class="subsection">
-    <h3>Qué muestra (selector 7 días / 30 días / Todo)</h3>
+    <h3>Qué muestra (selector Hoy / 7 días / 30 días / Todo) — al 22/09/2026, v4.83</h3>
     <ul style="font-size:0.85rem;line-height:1.7;margin:0.5rem 0 0.5rem 1.2rem">
-      <li><strong>Resumen:</strong> visitantes únicos, visitas totales, nuevos vs. recurrentes, split minorista/mayorista.</li>
-      <li><strong>Embudo de conversión:</strong> entraron → carrito → iniciaron pedido → pedido enviado, con % por etapa.</li>
-      <li><strong>Origen del tráfico:</strong> WhatsApp, Instagram, Facebook, Google, directo.</li>
-      <li><strong>Dispositivo</strong> (celular/compu), <strong>ciudades top</strong> y <strong>horarios pico</strong> (gráfico por hora).</li>
-      <li><strong>Visitantes identificados:</strong> quienes dejaron sus datos, con historial de visitas atado y botón 💬 WhatsApp directo.</li>
+      <li><strong>🔴 En vivo:</strong> quién está en la tienda ahora (nombre o apodo, aparato, ciudad, hace cuánto entró, etapa, el carrito que va armando con la plata, 💬 escribirle mientras mira), ticker de los últimos 30 minutos, 🔔 sonido/vibración por pedido, checkout o cliente conocido, y hoy contra el mismo día de la semana pasada hora por hora. Va por el servidor propio del sitio (SSE); si se cae, foto cada 15 s. Solo Jony.</li>
+      <li><strong>🎯 Qué hacer:</strong> la plata en carritos sin cerrar, el rescate del carrito, la lista de acciones por urgencia (carritos calientes, clientes que volvieron sin comprar, productos pedidos en cero, búsquedas vacías, los que ven y no agarran, catálogos VIP sin abrir), resumen del período con sesiones, comparativa, embudo, proyección de la semana y la tarjeta <strong>🔔 Avisos al celular</strong>.</li>
+      <li><strong>🛒 Carritos:</strong> sin terminar, ordenados por lo que conviene atacar primero, con nombre (cruce con quién compró desde ese aparato), plata en $ y U$S separados, botón de WhatsApp con el pedido escrito y "cargar como pedido".</li>
+      <li><strong>👥 Gente:</strong> mayoristas dormidos (💬 despertarlo), cohortes ¿vuelven?, catálogos VIP abiertos o no, mirones para tentar, radiografía y comparativo, y toda la gente con etiqueta, 🌡️ termómetro (0-100), filtros (teléfono, clientes, carrito, vuelven, sin nombre, más calientes), buscador, ✏️ bautizar y 👤 ficha completa.</li>
+      <li><strong>📅 Día a día:</strong> visitas, personas, carritos, checkouts, pedidos y conversión de cada día; tocás uno y ves qué miraron.</li>
+      <li><strong>🔥 Productos:</strong> lo que quieren contra lo que se vendió (👁️ vistos · 🛒 agregados · 🛍️ vendidos · 🗑️ sacados), los ven y no los agarran, nadie llega a verlos, lo que sacan del carrito, qué buscan (y qué no encuentran), qué se llevan juntos, más deseados.</li>
+      <li><strong>📊 Canales:</strong> generador de links etiquetados por canal (?c=wa, estado, ig, fb, qr, flyer, mail), de dónde vienen, conversión y plata por canal, 🗓️ mapa de calor día × hora, aviso/ofertas/compartir, hasta dónde bajan, aparatos, ciudades, países, candado geográfico y visitantes identificados con CSV.</li>
     </ul>
+    <p style="font-size:0.82rem;margin-top:0.5rem"><strong>Cómo llega el dato:</strong> la tienda manda cada evento al servidor propio del sitio (<code>/api/track</code>), que lo reenvía al motor (tabla <code>trafico</code>, con fecha real <code>ts</code>), lo empuja al panel en vivo y evalúa los avisos. Si el servidor no contesta, la tienda le pega directo al motor. Los navegadores del equipo y los automatizados no cuentan. Ver el historial de versiones v4.79 a v4.83 para el detalle de cada pieza.</p>
   </div>
 </div>
 
