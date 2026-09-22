@@ -28,6 +28,17 @@ const DATA = {
 
 const PRODS_SB = [1, 2, 3, 4].map(i => ({ id: i, nombre: 'Producto de prueba ' + i, descripcion: 'desc', precio_may: '2000', precio_min: 3000, stock: 5, imagen: '', activo: true, categoria: 'Chocolate', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: '$' }));
 const esperar = ms => new Promise(r => setTimeout(r, ms));
+// v4.84: lo que devuelve el motor para "todo el día": una visita de hace 2 horas que terminó en pedido.
+const HACE2H = Date.now() - 2 * 3600000;
+const hoyBA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+const DIA = { dia: hoyBA, esHoy: true, eventos: [
+  { id: 'm1', t: HACE2H, vid: 'v_rivka', pagina: 'tienda', evento: 'visita', ciudad: 'Once', dispositivo: 'celular', aparato: 'iPhone', nombre: 'Rivka Mañana', telefono: '1144448888', total: 0 },
+  { id: 'm2', t: HACE2H + 20000, vid: 'v_rivka', pagina: 'tienda', evento: 'vistas', vistos: ['Klik', 'Bamba', 'Elite'], total: 0 },
+  { id: 'm3', t: HACE2H + 40000, vid: 'v_rivka', pagina: 'tienda', evento: 'vistas', vistos: ['Elite'], total: 0 },
+  { id: 'm4', t: HACE2H + 60000, vid: 'v_rivka', pagina: 'tienda', evento: 'carrito', detalle: 'Klik', carrito: '[{"n":"Klik","q":2,"p":7999}]', total: 15998 },
+  { id: 'm5', t: HACE2H + 90000, vid: 'v_rivka', pagina: 'tienda', evento: 'pedido', total: 15998 },
+] };
+const pedidosDia = [];
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
 
 (async () => {
@@ -49,6 +60,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.route('**/*', route => {
     const u = route.request().url();
     if (u.includes('getAnalitica')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(DATA) });
+    if (u.includes('eventosDelDia')) { const m = u.match(/dia=(\d{4}-\d{2}-\d{2})/); pedidosDia.push(m ? m[1] : ''); return route.fulfill({ contentType: 'application/json', body: JSON.stringify(m && m[1] !== hoyBA ? { dia: m[1], esHoy: false, eventos: [] } : DIA) }); }
     if (u.includes('getAlertasPush')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, cfg: { checkout: 1, conocido: 1, busqueda: 0, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1 } }) });
     // El catálogo (Supabase REST) con productos de mentira: sin tarjetas no hay vistas que medir.
     if (/\/rest\/v1\/productos\?/.test(u)) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PRODS_SB) });
@@ -110,7 +122,9 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => setAnaTab('vivo'));
   ok('se conecta por SSE (punto verde "En vivo")', await hasta(async () => (await txt()).includes('En vivo ·') && (await pg.evaluate(() => _vivo.fuente)) === 'sse'));
   let t = await txt();
-  ok('la visita de la tienda de recién ya figura como persona en la tienda ahora', t.includes('1 persona en la tienda ahora') && t.includes('entró a la tienda'));
+  ok('la visita de la tienda de recién ya figura como persona en la tienda ahora', t.includes('1 persona en la tienda ahora'));
+  ok('v4.84: "Todo el día de hoy" trae la visita de la mañana desde el motor, con su resumen', await hasta(async () => { const x = await txt(); return x.includes('Todo el día de hoy') && x.includes('Rivka Mañana') && x.includes('miró 3 productos') && x.includes('pidió'); }));
+  ok('v4.84: y junta lo de la mañana con lo de recién (la visita de la tienda de esta prueba)', (await txt()).includes('entró') && (await txt()).includes('sacó Klik de prueba'));
   ok('el gráfico hoy vs semana pasada se dibuja con sus totales', t.includes('Hoy: 18 visitas') && t.includes('martes pasado') && t.includes('16 a esta hora'));
 
   // ── 3) Llegan eventos en vivo ──
@@ -118,12 +132,22 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   ok('el carrito de Débora aparece al instante, CON NOMBRE (cruce con la Analítica) y sus compras', await hasta(async () => { const x = await txt(); return x.includes('Débora Levy') && x.includes('3 compras') && x.includes('2× Klik') && x.includes('$ 2.000'); }));
   await track({ vid: 'v_abc', evento: 'checkout', carrito: '[{"n":"Klik","q":2,"p":1000}]', total: '2000', nombre: 'Débora Levy', telefono: '1144556677' });
   ok('al llegar al checkout cambia el chip y hay botón para escribirle ahora', await hasta(async () => { const x = await txt(); return x.includes('en el checkout') && x.includes('Escribirle ahora'); }));
-  ok('el ticker cuenta la historia con hora', await hasta(async () => /\d\d:\d\d:\d\d/.test(await txt()) && (await txt()).includes('llegó al checkout')));
+  ok('todo el día: la visita de Débora aparece con hora y el checkout', await hasta(async () => /\d\d:\d\d/.test(await txt()) && (await txt()).includes('llegó al checkout')));
   ok('personas ahora = 2 (la de la tienda + Débora)', (await txt()).includes('2 personas en la tienda ahora'));
   await track({ vid: 'v_abc', evento: 'busqueda', producto: 'Gum', total: '0' });
-  ok('una búsqueda sin resultados se marca en rojo en el ticker', await hasta(async () => (await txt()).includes('sin resultados')));
+  ok('una búsqueda sin resultados se marca en rojo en el resumen de la visita', await hasta(async () => (await txt()).includes('sin resultados')));
   await track({ vid: vidTienda, evento: 'salida', producto: '{"seg":42,"int":1,"prod":2}' });
-  ok('el que se fue deja de contar como "ahora" pero queda en el ticker', await hasta(async () => { const x = await txt(); return x.includes('1 persona en la tienda ahora') && x.includes('se fue después de 42 s'); }));
+  ok('el que se fue deja de contar como "ahora" pero queda en el día', await hasta(async () => { const x = await txt(); return x.includes('1 persona en la tienda ahora') && x.includes('se fue a los 42 s'); }));
+  // v4.84: filtros, paso a paso y otro día
+  await pg.evaluate(() => vivoDiaFiltro('pidieron'));
+  { const x = await pg.evaluate(() => document.getElementById('vivo-dia').innerText); ok('v4.84: filtro "Pidieron" deja solo la visita que pidió (en la lista del día)', x.includes('Rivka Mañana') && !x.includes('Débora Levy')); }
+  await pg.evaluate(() => vivoDiaFiltro('todas'));
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#vivo-dia button')].find(x => x.textContent.includes('Paso a paso') && x.closest('div[style*="border-bottom"]').textContent.includes('Rivka')); if (b) b.click(); });
+  { const x = await txt(); ok('v4.84: el paso a paso junta las dos tandas de vistas en un renglón, con hora y segundos', x.includes('miró 3: Klik, Bamba, Elite') && /\d\d:\d\d:\d\d/.test(x)); }
+  await pg.evaluate(() => vivoDiaIr(-1));
+  ok('v4.84: "Día anterior" le pide al motor el día de ayer y lo muestra', await hasta(async () => pedidosDia.length >= 2 && pedidosDia[pedidosDia.length - 1] < hoyBA && (await txt()).includes('Todo el ')));
+  await pg.evaluate(() => vivoDiaIr(0));
+  ok('v4.84: "Hoy" vuelve al día de hoy', await hasta(async () => (await txt()).includes('Todo el día de hoy')));
   if (process.env.CAPTURA) {
     // Para la foto: hacer visible el panel (en la prueba no se entra al panel de verdad) y capturar solo la pestaña.
     await pg.setViewportSize({ width: 420, height: 1600 });

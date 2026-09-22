@@ -21,7 +21,9 @@ export const MAX_EVENTOS = 800;               // techo de seguridad por si hay u
 export const SOLO_VIVO = new Set(['latido']); // eventos que NO se mandan al motor
 
 // Cuánto puede medir cada campo (un evento es un renglón, no un archivo).
-const TOPES = { vid: 60, pagina: 30, evento: 30, origen: 40, dispositivo: 20, ciudad: 80, region: 80, pais: 60, nombre: 80, telefono: 30, detalle: 700, carrito: 6000 };
+// detalle: 4000 (v4.84). Con 700, una tanda de productos vistos (12 o, al irse, hasta 60 nombres) llegaba cortada
+// y se perdía entera: pasó con 30 de 452 tandas el 22/09.
+const TOPES = { vid: 60, pagina: 30, evento: 30, origen: 40, dispositivo: 20, ciudad: 80, region: 80, pais: 60, nombre: 80, telefono: 30, detalle: 4000, carrito: 6000 };
 const NOMBRE_PAIS = { AR: 'Argentina', UY: 'Uruguay', BR: 'Brazil', CL: 'Chile', PY: 'Paraguay', BO: 'Bolivia', IL: 'Israel', US: 'United States', ES: 'Spain', MX: 'Mexico' };
 
 // 🤖 Un navegador que se presenta como programa (rastreadores, pruebas automatizadas). Se MARCA, no se
@@ -79,6 +81,10 @@ export function paramsParaMotor(ev) {
 export function crearEnVivo({ ahora = () => Date.now() } = {}) {
   const eventos = [];
   const clientes = new Set();
+  const creado = ahora();
+  // Desde cuándo esta memoria tiene TODO: si el servidor arrancó hace 10 minutos, lo anterior hay que
+  // pedírselo al motor (el panel usa este corte para no perder ni repetir nada).
+  const desde = () => Math.max(creado, ahora() - VENTANA_MS);
   // El id arranca en la hora del arranque: si el contenedor se reinicia, los ids nuevos nunca
   // repiten a los que un panel abierto ya tenía (los usa para no mostrar dos veces el mismo).
   let ultimoId = Math.floor(ahora());
@@ -101,14 +107,14 @@ export function crearEnVivo({ ahora = () => Date.now() } = {}) {
     // Si el panel ya se cortó antes de recibir la primera línea, no hay a quién suscribir.
     try {
       res.write('retry: 5000\n');
-      res.write('event: inicio\ndata: ' + JSON.stringify({ eventos: recientes(), conectados: clientes.size + 1, ahora: ahora() }) + '\n\n');
+      res.write('event: inicio\ndata: ' + JSON.stringify({ eventos: recientes(), conectados: clientes.size + 1, ahora: ahora(), desde: desde() }) + '\n\n');
     } catch { return () => {}; }
     clientes.add(res);
     // Un comentario cada 25 s mantiene viva la conexión a través del proxy.
     const latido = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* se cierra abajo */ } }, 25000);
     return () => { clearInterval(latido); clientes.delete(res); };
   }
-  return { registrar, recientes, suscribir, conectados: () => clientes.size, siguienteId: () => ultimoId + 1 };
+  return { registrar, recientes, suscribir, desde, conectados: () => clientes.size, siguienteId: () => ultimoId + 1 };
 }
 
 // El portero de la pantalla: hay que tener sesión válida en Supabase Auth, y la cuenta de

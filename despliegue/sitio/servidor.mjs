@@ -125,7 +125,7 @@ app.get('/api/en-vivo', async (req, res) => {
 app.get('/api/en-vivo/ahora', async (req, res) => {
   const p = await portero.puedeVer(String(req.query.token || ''));
   if (!p.ok) return res.status(401).json({ error: p.motivo });
-  res.set('Cache-Control', 'no-store').json({ eventos: vivo.recientes(), conectados: vivo.conectados(), ahora: Date.now() });
+  res.set('Cache-Control', 'no-store').json({ eventos: vivo.recientes(), conectados: vivo.conectados(), ahora: Date.now(), desde: vivo.desde() });
 });
 
 // Registro compacto de cada pedido.

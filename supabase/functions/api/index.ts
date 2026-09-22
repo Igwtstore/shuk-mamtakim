@@ -499,6 +499,43 @@ async function traficoParaAnalitica(dias: number) {
   const corte = new Date(Date.now() - 2 * dias * 86400000).toISOString();
   return await sbGet('trafico', 'select=*&or=(ts.gte.' + encodeURIComponent(corte) + ',ts.is.null)&order=id.asc');
 }
+// 👁️ LOS PRODUCTOS DE UNA TANDA DE VISTAS (v4.84). La tanda llega como {"v":[{"i":..,"n":..}]}.
+// Hasta v4.84 el servidor del sitio recortaba cada evento a 700 caracteres y 30 de 452 tandas del
+// 22/09 llegaron cortadas (JSON inválido): acá se rescatan los productos que llegaron completos,
+// en vez de perder la tanda entera.
+function leerVistas(detalle: string) {
+  const d = String(detalle || '');
+  try { const j = JSON.parse(d); return (j.v || []).map((it: any) => String(it.n || '').trim()).filter(Boolean); } catch { /**/ }
+  const out: any[] = [];
+  const re = /"n":"((?:[^"\\]|\\.)*)"/g;
+  let m = null as any;
+  while ((m = re.exec(d))) { try { out.push(String(JSON.parse('"' + m[1] + '"')).trim()); } catch { out.push(m[1]); } }
+  return out.filter(Boolean);
+}
+// 📅 TODO EL DÍA en la pestaña En vivo (v4.84): cada evento, livianito. La tanda de vistas viaja
+// como lista de nombres y la ficha técnica de la visita solo con el aparato: el día entero pesa poco.
+function compactarEvento(r: any) {
+  const ev = String(r.evento || ''), det = String(r.detalle || '');
+  const o: any = { id: 'm' + r.id, t: Date.parse(String(r.ts || '')) || 0, vid: String(r.vid || ''), pagina: String(r.pagina || 'tienda'), evento: ev,
+    origen: String(r.origen || ''), dispositivo: String(r.dispositivo || ''), ciudad: String(r.ciudad || ''), pais: String(r.pais || ''),
+    nombre: String(r.nombre || ''), telefono: String(r.telefono || ''), total: parseFloat(r.total) || 0 };
+  if (ev === 'vistas') o.vistos = leerVistas(det);
+  else if (ev === 'visita') { if (esJSON(det)) { try { const f = JSON.parse(det); o.aparato = String(f.ap || ''); if (f.vip) o.vip = 1; if (f.bot) o.bot = 1; } catch { /**/ } } }
+  else o.detalle = det.slice(0, 400);
+  if (r.carrito && (ev === 'carrito' || ev === 'checkout' || ev === 'pedido')) o.carrito = String(r.carrito);
+  return o;
+}
+async function eventosDelDia(dia: string, hoyK: string) {
+  const [y, mo, d] = dia.split('-').map((x) => parseInt(x, 10));
+  const sig = new Date(Date.UTC(y, mo - 1, d + 1));
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const diaSig = sig.getUTCFullYear() + '-' + p2(sig.getUTCMonth() + 1) + '-' + p2(sig.getUTCDate());
+  // Argentina no tiene horario de verano desde 2009: el día de Buenos Aires va de 00:00 a 00:00 en -03:00.
+  const desde = dia + 'T00:00:00-03:00', hasta = diaSig + 'T00:00:00-03:00';
+  const filas = await sbGet('trafico', 'select=id,ts,vid,pagina,evento,origen,dispositivo,ciudad,pais,nombre,telefono,detalle,carrito,total'
+    + '&ts=gte.' + encodeURIComponent(desde) + '&ts=lt.' + encodeURIComponent(hasta) + '&evento=not.in.(bloqueado,geo)&order=id.asc');
+  return { dia, esHoy: dia === hoyK, eventos: filas.map(compactarEvento) };
+}
 // 🔴 HOY CONTRA EL MISMO DÍA DE LA SEMANA PASADA, hora por hora (v4.79, pestaña En vivo).
 // "Comparado con el período anterior" mezcla un jueves con un lunes; esto compara el jueves con
 // el jueves anterior. Las fechas de `trafico` ya están en hora de Buenos Aires, así que "hoy"
@@ -618,8 +655,10 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       const b = busq[q] = busq[q] || { q: detalle.trim().slice(0, 40), veces: 0, vacias: 0, vids: {} };
       b.veces++; if ((parseInt(totalEv) || 0) === 0) b.vacias++; if (vid) b.vids[vid] = 1;
     }
-    if (evento === 'vistas' && esJSON(detalle)) {
-      try { const jv = JSON.parse(detalle); (jv.v || []).forEach((it: any) => { const n = String(it.n || '').trim(); if (!n) return; const V = vistasProd[n] = vistasProd[n] || { veces: 0, vids: {} }; V.veces++; if (vid) V.vids[vid] = 1; }); vistasEventos++; } catch { /**/ }
+    if (evento === 'vistas') {
+      const nombresV = leerVistas(detalle);   // v4.84: también rescata las tandas que llegaron cortadas
+      nombresV.forEach((n: string) => { const V = vistasProd[n] = vistasProd[n] || { veces: 0, vids: {} }; V.veces++; if (vid) V.vids[vid] = 1; });
+      if (nombresV.length) vistasEventos++;
     }
     if (evento === 'quitar' && detalle) { const Qd = quitados[detalle] = quitados[detalle] || { sacado: 0, bajado: 0 }; if ((parseInt(totalEv) || 0) === 0) Qd.sacado++; else Qd.bajado++; }
     if (evento === 'promo' && detalle) { const tipo = detalle.startsWith('pack') ? 'pack' : 'oferta'; const nom = detalle.replace(/^(oferta|pack) · /, ''); promos[tipo].veces++; promos[tipo].productos[nom] = (promos[tipo].productos[nom] || 0) + 1; }
@@ -3969,6 +4008,16 @@ Deno.serve(async (req) => {
     if (accion === 'getDepositoHijos') return json((await sbGet('candy_deposito', 'select=*')).map((d: any) => ({ codigo: d.codigo, producto: d.nombre || '', cantidad: parseInt(d.cantidad) || 0 })));
     if (accion === 'getProveedoresHijos') return json((await sbGet('candy_proveedores', 'select=*')).map((r: any) => ({ id: r.id, nombre: r.nombre || '', telefono: r.telefono || '', notas: r.notas || '' })));
     if (accion === 'getShukEnCandy') return json((await sbGet('shuk_en_candy', 'select=shuk_id,precio_candy')).map((r: any) => ({ id: (r.shuk_id || '').toString().trim(), precio: parseFloat(r.precio_candy) || 0 })).filter((r: any) => r.id));
+    // 📅 v4.84: todo lo que pasó en la tienda un día (hoy por defecto), evento por evento, para la
+    // pestaña En vivo. Misma regla que el servidor del sitio: la cuenta de Miri no lo ve.
+    if (accion === 'eventosDelDia') {
+      if (usuario && usuario.email === MAIL_MIRI) return json({ error: 'no disponible para esta cuenta' });
+      const fH = fechaAhora();
+      const hoyK = fH.slice(6, 10) + '-' + fH.slice(3, 5) + '-' + fH.slice(0, 2);
+      const diaQ = url.searchParams.get('dia') || '';
+      const dia = /^\d{4}-\d{2}-\d{2}$/.test(diaQ) && diaQ <= hoyK ? diaQ : hoyK;
+      return json(await eventosDelDia(dia, hoyK));
+    }
     if (accion === 'getAnalitica') {
       // ⚡ v4.83: la misma pregunta dentro de 45 s se contesta de memoria (cambiar de pestaña, volver, recargar).
       const dias = parseInt(url.searchParams.get('dias') || '0') || 0, soloHoyQ = url.searchParams.get('hoy') === '1';

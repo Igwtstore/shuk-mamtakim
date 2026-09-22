@@ -16,8 +16,13 @@ async function run() {
   t.eq('la ciudad que manda la tienda se respeta', [ev.ciudad, !!ev.geoServidor], ['Castelar', false]);
   const sinCiudad = normalizarEvento({ vid: 'v_x' }, { geo: { city: 'Rosario', region: 'S', country: 'AR' } });
   t.eq('sin ciudad, la pone geoip (y el país con nombre)', [sinCiudad.ciudad, sinCiudad.pais, sinCiudad.geoServidor], ['Rosario', 'Argentina', true]);
-  const largo = normalizarEvento({ vid: 'v_x', producto: 'a'.repeat(5000), nombre: 'b'.repeat(500) });
+  const largo = normalizarEvento({ vid: 'v_x', producto: 'a'.repeat(700), nombre: 'b'.repeat(500) });
   t.ok('los campos tienen tope', largo.detalle.length === 700 && largo.nombre.length === 80);
+  // v4.84: una tanda de vistas grande (al irse manda hasta 60 productos, ~3.500 letras) llega ENTERA
+  const tanda = JSON.stringify({ v: Array.from({ length: 60 }, (_, i) => ({ i: String(1000 + i), n: 'Chocolate Elite · Blanco con galletitas ' + i })) });
+  const tv = normalizarEvento({ vid: 'v_x', evento: 'vistas', producto: tanda });
+  t.ok('una tanda de 60 productos llega entera y se puede leer (antes se cortaba en 700)', tv.detalle.length === tanda.length && JSON.parse(tv.detalle).v.length === 60);
+  t.ok('el tope sigue existiendo (4000)', normalizarEvento({ vid: 'v_x', producto: 'a'.repeat(9000) }).detalle.length === 4000);
   const p = paramsParaMotor(ev);
   t.eq('al motor viaja con los nombres de siempre (producto = detalle)', [p.get('accion'), p.get('producto'), p.get('carrito'), p.get('total')], ['track', 'Klik', '[{"n":"Klik","q":2,"p":1000}]', '2000']);
   t.ok('el latido es solo para la pantalla en vivo', SOLO_VIVO.has('latido') && !SOLO_VIVO.has('visita'));
@@ -41,6 +46,7 @@ async function run() {
   reloj += VENTANA_MS + 1;
   vivo.registrar(normalizarEvento({ vid: 'v_2', evento: 'visita' }, { ahora: reloj }));
   t.eq('lo de hace más de 30 minutos se olvida', vivo.recientes().map(e => e.vid), ['v_2']);
+  t.ok('desde: la memoria dice desde cuándo tiene todo (nunca antes de arrancar, nunca más de 30 min)', vivo.desde() === reloj - VENTANA_MS && crearEnVivo({ ahora: () => 5000 }).desde() === 5000);
   salir();
   t.eq('al cerrar la pestaña, deja de contar como conectado', vivo.conectados(), 0);
   let vivoRoto = false;

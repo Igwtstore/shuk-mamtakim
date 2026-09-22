@@ -12,7 +12,7 @@ function cuerpo(nombre) {
   return SRC.slice(m.index, i);
 }
 const stubs = "const esc = s => String(s == null ? '' : s).replace(/[<>const esc = s => String(s == null ? '' : s);]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]); const _anaPlataMix = (a, u) => '$ ' + a + (u ? ' + U$S ' + u : ''); const _VIVO_ACTIVO_MS = 5 * 60000;\n";
-const F = new Function(stubs + ['_vivoApodo', '_vivoDur', '_vivoHace', '_vivoTexto', '_vivoAgrupar'].map(cuerpo).join('\n') + '\nreturn { _vivoApodo, _vivoDur, _vivoHace, _vivoTexto, _vivoAgrupar };')();
+const F = new Function(stubs + ['_vivoApodo', '_vivoDur', '_vivoHace', '_vivoVistos', '_vivoTexto', '_vivoAgrupar'].map(cuerpo).join('\n') + '\nreturn { _vivoApodo, _vivoDur, _vivoHace, _vivoVistos, _vivoTexto, _vivoAgrupar };')();
 
 async function run() {
   const t = suite();

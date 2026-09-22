@@ -14278,18 +14278,25 @@ function pintarAnalitica() {
 // que queda abierta y por la que el navegador recibe avisos. Si la conexión no se sostiene,
 // se pide una foto de los últimos 30 minutos cada 15 s. Si tampoco, se dice con todas las
 // letras. La pestaña no existe en vista Miri (muestra productos y clientes de Jony en vivo)
-// y el servidor tampoco se la da a su sesión.
+// y el servidor tampoco se la da a su sesión. Desde v4.84 muestra TODO el día, no solo la
+// última media hora: lo anterior lo trae el motor (ver "TODO EL DÍA" más abajo).
 const _VIVO_ACTIVO_MS = 5 * 60000;      // sin señales en 5 minutos = ya no está
-const _VIVO_VENTANA_MS = 30 * 60000;    // lo mismo que recuerda el servidor
-const _VIVO_TICKER = 80;                // renglones del ticker
+const _VIVO_SESION_MS = 30 * 60000;     // más de 30 minutos sin señales = otra visita (v4.84)
+const _VIVO_PAGINA = 40;                // visitas por tanda en "Todo el día"
 const _VIVO_COL = { hoy: '#2c6fad', hace7: '#e08a2a', hoyOscuro: '#4f8fcc', hace7Oscuro: '#cf7f2a' };
 const _vivo = { eventos: [], es: null, timer: null, reloj: null, fuente: 'off', error: '', conectados: 0, ticks: 0,
-  semana: null, semanaPedida: 0, audio: null, sonido: localStorage.getItem('shuk_vivo_sonido') !== '0' };
+  semana: null, semanaPedida: 0, audio: null, sonido: localStorage.getItem('shuk_vivo_sonido') !== '0',
+  // 📅 Todo el día (v4.84): el día elegido ('' = hoy), lo que trajo el motor y cómo se está mirando.
+  dia: null, diaSel: '', diaCargando: false, diaError: '', diaPedido: 0, filtro: 'todas', mostrar: _VIVO_PAGINA, abiertas: {} };
 
 function _vivoApodo(vid) { return '#' + String(vid || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(); }
 function _vivoDur(seg) { seg = Math.round(seg || 0); if (seg < 60) return seg + ' s'; const m = Math.floor(seg / 60), r = seg % 60; return m + ' min' + (r ? ' ' + r + ' s' : ''); }
 function _vivoHace(ms, ahora) { const sg = Math.max(0, Math.round((ahora - ms) / 1000)); if (sg < 60) return 'hace ' + sg + ' s'; const m = Math.round(sg / 60); return m < 60 ? 'hace ' + m + ' min' : 'hace ' + Math.round(m / 60) + ' h'; }
-function _vivoHora(ms) { const dt = new Date(ms), p = n => String(n).padStart(2, '0'); return p(dt.getHours()) + ':' + p(dt.getMinutes()) + ':' + p(dt.getSeconds()); }
+function _vivoHora(ms) {
+  // Siempre la hora de la tienda (Buenos Aires), aunque el panel se mire desde otro país.
+  try { _vivoHora.f = _vivoHora.f || new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); return _vivoHora.f.format(new Date(ms)); }
+  catch { const dt = new Date(ms), p = n => String(n).padStart(2, '0'); return p(dt.getHours()) + ':' + p(dt.getMinutes()) + ':' + p(dt.getSeconds()); }
+}
 
 // Lo que dice cada evento, en criollo.
 function _vivoTexto(ev) {
@@ -14304,6 +14311,11 @@ function _vivoTexto(ev) {
   if (ev.evento === 'salida') { let sg = 0; try { sg = JSON.parse(det).seg || 0; } catch { /**/ } return '👋 se fue' + (sg ? ' después de ' + _vivoDur(sg) : ''); }
   if (ev.evento === 'latido') return '👀 sigue mirando';
   if (ev.evento === 'rescate') return '↩️ carrito guardado: ' + esc(det);
+  if (ev.evento === 'vistas') { const ns = _vivoVistos(ev); return '👁️ miró ' + (ns.length ? ns.length + ' producto' + (ns.length !== 1 ? 's' : '') + ': ' + ns.slice(0, 3).map(esc).join(', ') + (ns.length > 3 ? '…' : '') : 'productos'); }
+  if (ev.evento === 'quitar') return Number(ev.total) > 0 ? '🗑️ bajó <b>' + esc(det) + '</b> a ' + Number(ev.total) : '🗑️ sacó <b>' + esc(det) + '</b> del carrito';
+  if (ev.evento === 'promo') return '🏷️ agarró con ' + esc(det);
+  if (ev.evento === 'compartir') return '📤 compartió <b>' + esc(det) + '</b>';
+  if (ev.evento === 'aviso') return '📣 tocó el aviso de la tienda';
   return esc(ev.evento);
 }
 
@@ -14331,6 +14343,219 @@ function _vivoAgrupar(eventos, ahora) {
   const todos = Object.values(por);
   const activos = todos.filter(p => !p.seFue && ahora - p.ultimo <= _VIVO_ACTIVO_MS).sort((a, b) => b.ultimo - a.ultimo);
   return { activos, todos };
+}
+
+// ═══ 📅 TODO EL DÍA (v4.84) ═══════════════════════════════════════════════════
+// El pedido: "quiero que se vea TODO lo del día". El servidor del sitio recuerda 30 minutos; el
+// resto del día lo trae el motor (acción eventosDelDia) y acá se juntan las dos fuentes sin
+// repetir nada. Se muestra visita por visita, no evento por evento: una persona que mira 40
+// productos manda varias tandas de "vistas", y sueltas eran puro ruido.
+function _vivoHoyK() {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+  catch { const n = new Date(), p = v => String(v).padStart(2, '0'); return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate()); }
+}
+function _vivoInicioDe(diaK) { return Date.parse(diaK + 'T00:00:00-03:00'); }
+function _vivoPodar() { const corte = _vivoInicioDe(_vivoHoyK()); _vivo.eventos = _vivo.eventos.filter(e => e.t >= corte); }
+// Los productos de una tanda de vistas: la lista ya armada (motor) o el JSON del evento en vivo,
+// rescatando lo que se pueda si llegó cortado.
+function _vivoVistos(ev) {
+  if (Array.isArray(ev.vistos)) return ev.vistos;
+  const d = String(ev.detalle || '');
+  try { const j = JSON.parse(d); return (j.v || []).map(it => String(it.n || '').trim()).filter(Boolean); } catch { /**/ }
+  const out = [], re = /"n":"((?:[^"\\]|\\.)*)"/g; let m;
+  while ((m = re.exec(d))) { try { out.push(String(JSON.parse('"' + m[1] + '"')).trim()); } catch { out.push(m[1]); } }
+  return out.filter(Boolean);
+}
+// Junta lo del motor con lo que llegó en vivo. Cada evento en vivo tiene su gemelo guardado en el
+// motor (el servidor lo reenvía): se emparejan uno a uno por visitante, tipo y hora (hasta 30 s)
+// y queda el de en vivo. Lo que llegó al motor por otro camino (servidor caído) queda igual.
+function _vivoUnir(motor, vivos) {
+  const libres = {};
+  vivos.forEach(e => { if (e.evento === 'latido') return; const k = e.vid + '|' + e.evento; (libres[k] = libres[k] || []).push(e.t); });
+  const quedan = motor.filter(e => {
+    const l = libres[e.vid + '|' + e.evento];
+    if (!l || !l.length) return true;
+    let mejor = -1, dist = Infinity;
+    l.forEach((t, i) => { const dd = Math.abs(t - e.t); if (dd < dist) { dist = dd; mejor = i; } });
+    if (mejor >= 0 && dist <= 30000) { l.splice(mejor, 1); return false; }
+    return true;
+  });
+  return quedan.concat(vivos.filter(e => e.evento !== 'latido'));
+}
+function _vivoSesionNueva(vid, ev) {
+  return { key: vid + '@' + ev.t, vid, inicio: ev.t, fin: ev.t, eventos: [], nombre: '', telefono: '', ciudad: '', dispositivo: '', aparato: '', pagina: '', origen: '',
+    visitas: 0, vistos: new Set(), agregados: [], quitados: [], busquedas: [], compartidos: [], aviso: 0, registro: false, checkout: null, pedido: null, seg: 0, seFue: false, bot: false };
+}
+function _vivoSesionSumar(s, ev) {
+  s.eventos.push(ev);
+  if (ev.t > s.fin) s.fin = ev.t;
+  ['nombre', 'telefono', 'ciudad', 'dispositivo', 'origen'].forEach(k => { if (ev[k] && !s[k]) s[k] = String(ev[k]); });
+  if (ev.pagina && (!s.pagina || ev.evento === 'visita')) s.pagina = ev.pagina;
+  const det = String(ev.detalle || '');
+  switch (ev.evento) {
+    case 'visita': {
+      s.visitas++;
+      let ap = ev.aparato || '', bot = !!ev.bot;
+      if (!ap && det.charCodeAt(0) === 123) { try { const f = JSON.parse(det); ap = f.ap || ''; bot = bot || !!f.bot; } catch { /**/ } }
+      if (ap && !s.aparato) s.aparato = ap;
+      if (bot) s.bot = true;
+      break;
+    }
+    case 'vistas': _vivoVistos(ev).forEach(n => s.vistos.add(n)); break;
+    case 'carrito': if (det && !s.agregados.includes(det)) s.agregados.push(det); break;
+    case 'quitar': if (det) s.quitados.push(det); break;
+    case 'busqueda': if (det) s.busquedas.push({ q: det, vacia: Number(ev.total) === 0 }); break;
+    case 'compartir': if (det) s.compartidos.push(det); break;
+    case 'aviso': s.aviso++; break;
+    case 'registro': s.registro = true; break;
+    case 'checkout': s.checkout = { total: parseFloat(ev.total) || 0 }; break;
+    case 'pedido': s.pedido = { total: parseFloat(ev.total) || 0 }; break;
+    case 'salida': { try { s.seg = Math.max(s.seg, parseInt(JSON.parse(det).seg) || 0); } catch { /**/ } break; }
+  }
+  s.seFue = ev.evento === 'salida';
+}
+// Visita por visita: los eventos de un mismo aparato con menos de 30 minutos entre uno y otro.
+// Las más nuevas primero, por la hora en que entraron: una visita que sigue activa no salta de lugar.
+function _vivoSesiones(eventos) {
+  const porVid = {};
+  eventos.forEach(ev => { if (!ev.vid || ev.evento === 'latido' || ev.evento === 'bloqueado' || ev.evento === 'geo') return; (porVid[ev.vid] = porVid[ev.vid] || []).push(ev); });
+  const ses = [];
+  Object.keys(porVid).forEach(vid => {
+    let s = null;
+    porVid[vid].sort((a, b) => a.t - b.t).forEach(ev => {
+      if (!s || ev.t - s.fin > _VIVO_SESION_MS) { s = _vivoSesionNueva(vid, ev); ses.push(s); }
+      _vivoSesionSumar(s, ev);
+    });
+  });
+  return ses.sort((a, b) => b.inicio - a.inicio);
+}
+// Lo que hizo en esa visita, en una línea.
+function _vivoResumenSesion(s) {
+  const f = [];
+  const varios = arr => arr.length <= 3 ? arr.map(esc).join(', ') : arr.slice(0, 3).map(esc).join(', ') + ' y ' + (arr.length - 3) + ' más';
+  if (s.visitas) f.push(s.pagina === 'mayorista' ? '📦 entró a la mayorista' : '🛍️ entró' + (s.visitas > 1 ? ' ' + s.visitas + ' veces' : ''));
+  if (s.vistos.size) f.push('👁️ miró ' + s.vistos.size + ' producto' + (s.vistos.size !== 1 ? 's' : ''));
+  if (s.busquedas.length) f.push('🔎 buscó ' + s.busquedas.map(b => '"' + esc(b.q) + '"' + (b.vacia ? ' <span style="color:#c0392b;font-weight:700">sin resultados</span>' : '')).join(', '));
+  if (s.agregados.length) f.push('🛒 agregó ' + varios(s.agregados));
+  if (s.quitados.length) f.push('🗑️ sacó ' + varios([...new Set(s.quitados)]));
+  if (s.pedido) f.push('✅ <b>pidió</b>' + (s.pedido.total ? ' <b>' + _anaPlata(s.pedido.total) + '</b>' : ''));
+  else if (s.checkout) f.push('🔥 <b>llegó al checkout</b>' + (s.checkout.total ? ' <b>' + _anaPlata(s.checkout.total) + '</b>' : ''));
+  if (s.registro) f.push('📝 dejó sus datos');
+  if (s.compartidos.length) f.push('📤 compartió ' + varios(s.compartidos));
+  if (s.aviso) f.push('📣 tocó el aviso');
+  if (s.seFue) f.push('👋 se fue' + (s.seg ? ' a los ' + _vivoDur(s.seg) : ''));
+  return f;
+}
+// El paso a paso de una visita. Las tandas de vistas seguidas se juntan en un solo renglón.
+function _vivoPasos(s) {
+  const lineas = []; let tanda = null;
+  s.eventos.slice().sort((a, b) => a.t - b.t).forEach(ev => {
+    if (ev.evento === 'vistas') {
+      const ns = _vivoVistos(ev);
+      if (tanda) { ns.forEach(n => { if (!tanda.nombres.includes(n)) tanda.nombres.push(n); }); return; }
+      tanda = { t: ev.t, nombres: ns.slice() }; lineas.push(tanda); return;
+    }
+    tanda = null;
+    lineas.push({ t: ev.t, ev });
+  });
+  return lineas.map(l => `<div style="display:flex;gap:8px;font-size:0.72rem;padding:2px 0;line-height:1.45"><span style="flex-shrink:0;color:var(--texto-suave);font-variant-numeric:tabular-nums">${_vivoHora(l.t)}</span><span style="min-width:0">${l.ev ? _vivoTexto(l.ev) : '👁️ miró ' + (l.nombres.length ? l.nombres.length + ': ' + l.nombres.map(esc).join(', ') : 'productos')}</span></div>`).join('');
+}
+function _vivoDiaEventos() {
+  const d = _vivo.dia;
+  if (!d) return [];
+  return d.esHoy ? _vivoUnir(d.eventos || [], _vivo.eventos) : (d.eventos || []);
+}
+function _vivoFechaLinda(diaK) {
+  const [y, m, dd] = diaK.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, dd)).getUTCDay();
+  return ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][dow] + ' ' + String(dd).padStart(2, '0') + '/' + String(m).padStart(2, '0');
+}
+function _vivoHtmlDia() {
+  const hoyK = _vivoHoyK(), diaK = _vivo.diaSel || hoyK, esHoy = diaK === hoyK;
+  const btn = (fn, txt) => `<button onclick="${fn}" style="background:var(--gris-claro);color:var(--azul);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const nav = `<div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap">${btn('vivoDiaIr(-1)', '◀ Día anterior')}${esHoy ? '' : btn('vivoDiaIr(1)', 'Siguiente ▶') + btn('vivoDiaIr(0)', 'Hoy')}</div>`;
+  const titulo = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+    <div class="admin-titulo" style="margin:0">📅 ${esHoy ? 'Todo el día de hoy' : 'Todo el ' + esc(_vivoFechaLinda(diaK))}</div>${nav}</div>`;
+  if (!_vivo.dia || _vivo.dia.fecha !== diaK) {
+    return _anaCard(titulo + (_vivo.diaError && !_vivo.diaCargando
+      ? `<div class="sinpedidos">No se pudo cargar el día: ${esc(_vivo.diaError)} ${btn('_vivoCargarDia(true)', '↻ Reintentar')}</div>`
+      : '<div class="sinpedidos">Cargando todo lo del día…</div>'));
+  }
+  const evs = _vivoDiaEventos();
+  const ses = _vivoSesiones(evs);
+  const mapa = _vivoMapa();
+  const ahora = Date.now();
+  const conocido = s => !!(s.nombre || (mapa[s.vid] && (mapa[s.vid].nombre || mapa[s.vid].esCliente)));
+  const conCarrito = s => !!(s.agregados.length || s.checkout || s.pedido);
+  const filtros = [
+    ['todas', 'Todas', ses.length],
+    ['carrito', '🛒 Con carrito', ses.filter(conCarrito).length],
+    ['pidieron', '✅ Pidieron', ses.filter(s => s.pedido).length],
+    ['conocidos', '👤 Conocidos', ses.filter(conocido).length],
+    ['buscaron', '🔎 Buscaron', ses.filter(s => s.busquedas.length).length],
+  ];
+  const pasa = s => _vivo.filtro === 'carrito' ? conCarrito(s) : _vivo.filtro === 'pidieron' ? !!s.pedido
+    : _vivo.filtro === 'conocidos' ? conocido(s) : _vivo.filtro === 'buscaron' ? s.busquedas.length > 0 : true;
+  const lista = ses.filter(pasa);
+  const visitas = evs.filter(e => e.evento === 'visita').length;
+  const personas = new Set(evs.map(e => e.vid).filter(Boolean)).size;
+  const pedidos = evs.filter(e => e.evento === 'pedido').length;
+  const stats = `<div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:8px"><b style="color:#2d1a0a">${visitas}</b> visitas · <b style="color:#2d1a0a">${personas}</b> personas · <b style="color:#2d1a0a">${filtros[1][2]}</b> con carrito · <b style="color:var(--verde)">${pedidos}</b> pedido${pedidos !== 1 ? 's' : ''}${esHoy ? ' · se actualiza solo' : ''}</div>`;
+  const chips = `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">${filtros.map(([k, lbl, n]) => `<button onclick="vivoDiaFiltro('${k}')" class="psec-btn ${_vivo.filtro === k ? 'activo' : ''}" style="font-size:0.72rem;padding:0.3rem 0.65rem">${lbl} <span style="opacity:.7">${n}</span></button>`).join('')}</div>`;
+  const nov = `<button id="vivo-dia-nov" hidden onclick="_vivoPintar(true)" style="width:100%;margin-bottom:6px;background:#eef4fb;color:#2c6fad;border:none;border-radius:8px;padding:6px;font-size:0.74rem;font-weight:700;cursor:pointer">↻ Hay novedades · tocá para verlas</button>`;
+  const chip = (txt, bg, col) => ` <span style="font-size:0.6rem;background:${bg};color:${col};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${txt}</span>`;
+  const fila = s => {
+    const c = mapa[s.vid] || {};
+    const p = { vid: s.vid, nombre: s.nombre || c.nombre || '', telefono: s.telefono || c.telefono || '', esCliente: !!c.esCliente, compras: c.compras || 0, gastadoARS: c.gastadoARS || 0, apodo: _vivoApodo(s.vid), leDijiste: !!c.leDijiste };
+    const abierta = !!_vivo.abiertas[s.key];
+    const activa = esHoy && !s.seFue && ahora - s.fin <= _VIVO_ACTIVO_MS;
+    const dur = s.seg || Math.round((s.fin - s.inicio) / 1000);
+    const meta = [s.ciudad ? '📍 ' + esc(s.ciudad) : '', s.aparato ? esc(s.aparato) : (s.dispositivo ? (s.dispositivo === 'celular' ? '📱' : '💻') : ''),
+      s.origen && s.origen !== 'directo' ? _anaNombreOrigen(s.origen) : '', s.bot ? '🤖 parece robot' : ''].filter(Boolean).join(' · ');
+    const msg = `¡Hola${p.nombre ? ' ' + p.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬 ¿Te puedo ayudar con algo?`;
+    const resumen = _vivoResumenSesion(s);
+    return `<div style="border-bottom:1px solid var(--gris-medio);padding:8px 0;display:flex;gap:10px;align-items:flex-start">
+      <div style="width:50px;flex-shrink:0;font-variant-numeric:tabular-nums;font-size:0.8rem;font-weight:700;color:#2d1a0a">${_vivoHora(s.inicio).slice(0, 5)}<div style="font-weight:500;color:var(--texto-suave);font-size:0.64rem">${dur ? _vivoDur(dur) : ''}</div></div>
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:700;color:var(--azul);font-size:0.84rem">${_anaQuien(p)}${activa ? chip('🟢 ahora', '#e8f5ee', 'var(--verde)') : ''}${s.pedido ? chip('✅ pidió', '#e8f5ee', 'var(--verde)') : (s.checkout ? chip('🔥 checkout', '#fdeaea', '#c0392b') : '')}${s.pagina === 'mayorista' ? chip('📦 mayorista', '#eef4fb', '#2c6fad') : ''} ${_anaChipCliente(p)}</div>
+        <div style="font-size:0.76rem;color:#2d1a0a;margin-top:2px;line-height:1.5">${resumen.length ? resumen.join(' · ') : 'sin movimientos'}</div>
+        ${meta ? `<div style="font-size:0.66rem;color:var(--texto-suave);margin-top:2px">${meta}</div>` : ''}
+        ${abierta ? `<div style="margin-top:6px;padding:6px 8px;background:var(--gris-claro);border-radius:8px">${_vivoPasos(s)}</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${btn(`vivoDiaAbrir('${esc(s.key)}')`, abierta ? '▲ Cerrar' : '▼ Paso a paso')}${_anaBtnWA(p.telefono, msg, '💬')}${btn(`abrirFichaVisitante('${esc(s.vid)}')`, '👤 Su historia')}</div>
+      </div>
+    </div>`;
+  };
+  const visibles = lista.slice(0, _vivo.mostrar);
+  const quedan = lista.length - visibles.length;
+  const mas = quedan > 0 ? `<button onclick="vivoDiaMas()" style="width:100%;margin-top:8px;background:var(--gris-claro);color:var(--azul);border:none;border-radius:8px;padding:8px;font-size:0.78rem;font-weight:700;cursor:pointer">Ver ${Math.min(_VIVO_PAGINA, quedan)} más · quedan ${quedan}</button>` : '';
+  return _anaCard(titulo + nov + stats + chips + (visibles.length ? visibles.map(fila).join('') : '<div class="sinpedidos">Nada con ese filtro en este día.</div>') + mas);
+}
+function vivoDiaFiltro(f) { _vivo.filtro = f; _vivo.mostrar = _VIVO_PAGINA; _vivoPintar(true); }
+function vivoDiaMas() { _vivo.mostrar += _VIVO_PAGINA; _vivoPintar(true); }
+function vivoDiaAbrir(k) { if (_vivo.abiertas[k]) delete _vivo.abiertas[k]; else _vivo.abiertas[k] = 1; _vivoPintar(true); }
+function vivoDiaIr(delta) {
+  const hoy = _vivoHoyK();
+  let f = _vivo.diaSel || hoy;
+  if (delta === 0) f = hoy;
+  else { const [y, m, d] = f.split('-').map(Number); f = new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10); }
+  if (f > hoy) f = hoy;
+  _vivo.diaSel = f === hoy ? '' : f;
+  _vivo.mostrar = _VIVO_PAGINA; _vivo.abiertas = {}; _vivo.filtro = 'todas';
+  _vivoCargarDia(true);
+}
+async function _vivoCargarDia(forzar) {
+  const dia = _vivo.diaSel || _vivoHoyK();
+  if (_vivo.diaCargando) return;
+  if (!forzar && _vivo.dia && _vivo.dia.fecha === dia && Date.now() - _vivo.diaPedido < 5 * 60000) return;
+  _vivo.diaCargando = true; _vivo.diaError = '';
+  if (forzar && (!_vivo.dia || _vivo.dia.fecha !== dia)) _vivoPintar(true);
+  try {
+    const j = await (await fetch(APPS_SCRIPT_URL + '?accion=eventosDelDia&dia=' + dia)).json();
+    if (!j || j.error) throw new Error((j && j.error) || 'sin respuesta');
+    if ((_vivo.diaSel || _vivoHoyK()) === dia) { _vivo.dia = { fecha: j.dia || dia, esHoy: j.esHoy !== undefined ? !!j.esHoy : dia === _vivoHoyK(), eventos: Array.isArray(j.eventos) ? j.eventos : [] }; _vivo.diaPedido = Date.now(); }
+  } catch (e) { _vivo.diaError = String((e && e.message) || e); }
+  _vivo.diaCargando = false;
+  _vivoPintar(!!forzar);
 }
 
 // 🔔 Sonido + vibración + aviso, solo por lo que vale la pena: pedido, checkout, cliente conocido.
@@ -14369,16 +14594,26 @@ function _vivoMapa() {
   [(window._anaData && window._anaData.visitantes) || [], (_vivo.semana && _vivo.semana.visitantes) || []].forEach(l => l.forEach(v => { if (v && v.vid && !mapa[v.vid]) mapa[v.vid] = v; }));
   return mapa;
 }
-function _vivoPintar() {
+function _vivoPintar(forzarDia) {
   if (_anaTab !== 'vivo' || _adminTabActual !== 'analitica') return;
   const c = document.getElementById('vivo-cont');
-  if (c) c.innerHTML = _anaSecVivo(window._anaData || {}); else pintarAnalitica();
+  if (!c) { pintarAnalitica(); return; }
+  const a = document.getElementById('vivo-ahora'), dd = document.getElementById('vivo-dia'), g = document.getElementById('vivo-graf');
+  if (!a || !dd || !g) c.innerHTML = _anaSecVivo(window._anaData || {});
+  else {
+    a.innerHTML = _vivoHtmlAhora();
+    g.innerHTML = _vivoHtmlGraf(window._anaData || {});
+    // La lista del día no se redibuja mientras la estás leyendo (se te movería todo): si ya bajaste
+    // hasta ella, aparece "hay novedades" y se actualiza cuando lo tocás.
+    if (forzarDia || dd.getBoundingClientRect().top > -40) dd.innerHTML = _vivoHtmlDia();
+    else { const n = document.getElementById('vivo-dia-nov'); if (n) n.hidden = false; }
+  }
   const b = document.getElementById('ana-badge-vivo'); if (b) b.remove();
 }
 function _vivoRecibir(ev) {
   if (!ev || _vivo.eventos.some(e => e.id === ev.id)) return;
   _vivo.eventos.push(ev);
-  const corte = Date.now() - _VIVO_VENTANA_MS; _vivo.eventos = _vivo.eventos.filter(e => e.t >= corte);
+  _vivoPodar();
   _vivoAvisar(ev, _vivoMapa());
   _vivoPintar();
 }
@@ -14387,7 +14622,8 @@ function _vivoAbrirSSE() {
   const es = new EventSource('/api/en-vivo?token=' + encodeURIComponent(_authToken || ''));
   _vivo.es = es;
   es.addEventListener('inicio', e => {
-    try { const j = JSON.parse(e.data); _vivo.eventos = j.eventos || []; _vivo.conectados = j.conectados || 0; } catch { /**/ }
+    // Al (re)conectar se SUMA lo que tiene el servidor: reemplazarlo borraba lo que ya se había visto.
+    try { const j = JSON.parse(e.data); const ya = new Set(_vivo.eventos.map(x => x.id)); (j.eventos || []).forEach(x => { if (!ya.has(x.id)) _vivo.eventos.push(x); }); _vivoPodar(); _vivo.conectados = j.conectados || 0; } catch { /**/ }
     _vivo.fuente = 'sse'; _vivo.error = '';
     if (_vivo.timer) { clearInterval(_vivo.timer); _vivo.timer = null; }   // la foto cada 15 s ya no hace falta
     _vivoPintar();
@@ -14411,7 +14647,7 @@ function _vivoFoto() {
     const j = await r.json();
     const vistos = new Set(_vivo.eventos.map(e => e.id)), mapa = _vivoMapa();
     (j.eventos || []).forEach(ev => { if (!vistos.has(ev.id)) { _vivo.eventos.push(ev); _vivoAvisar(ev, mapa); } });
-    const corte = Date.now() - _VIVO_VENTANA_MS; _vivo.eventos = _vivo.eventos.filter(e => e.t >= corte);
+    _vivoPodar();
     _vivo.conectados = j.conectados || 0;
     if (_vivo.fuente !== 'sse') { _vivo.fuente = 'poll'; _vivo.error = ''; }
     _vivoPintar();
@@ -14434,8 +14670,14 @@ function _vivoConectar() {
   _vivo.error = '';
   if (!/^https?:$/.test(location.protocol)) { _vivo.fuente = 'off'; _vivo.error = 'Solo funciona en el sitio publicado'; _vivoPintar(); return; }
   _vivoCargarSemana();
+  _vivoCargarDia(false);   // 📅 todo lo del día, desde el motor
   if (window.EventSource) _vivoAbrirSSE(); else _vivoPolling();
-  if (!_vivo.reloj) _vivo.reloj = setInterval(() => { _vivo.ticks++; if (_vivo.ticks % 40 === 0) _vivoCargarSemana(); _vivoPintar(); }, 15000);   // los "hace X s" envejecen
+  if (!_vivo.reloj) _vivo.reloj = setInterval(() => {
+    _vivo.ticks++;
+    if (_vivo.ticks % 40 === 0) _vivoCargarSemana();
+    if (_vivo.ticks % 20 === 0 && !_vivo.diaSel) _vivoCargarDia(false);   // cada 5 minutos, lo que llegó al motor por otro camino
+    _vivoPintar();
+  }, 15000);   // los "hace X s" envejecen
 }
 function _vivoDesconectar(todo = true) {
   if (_vivo.es) { const es = _vivo.es; _vivo.es = null; try { es.close(); } catch { /**/ } }
@@ -14476,6 +14718,9 @@ function _vivoGrafHoy(hv) {
 }
 
 function _anaSecVivo(d) {
+  return `<div id="vivo-ahora">${_vivoHtmlAhora()}</div><div id="vivo-dia">${_vivoHtmlDia()}</div><div id="vivo-graf">${_vivoHtmlGraf(d)}</div>`;
+}
+function _vivoHtmlAhora() {
   const ahora = Date.now();
   const { activos } = _vivoAgrupar(_vivo.eventos, ahora);
   const mapa = _vivoMapa();
@@ -14514,17 +14759,10 @@ function _anaSecVivo(d) {
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Gente que dio alguna señal en los últimos 5 minutos. Si tiene teléfono, le podés escribir <b>mientras está mirando</b>.</div>
     ${activos.length ? activos.map(tarjeta).join('') : `<div class="sinpedidos">${_vivo.fuente === 'off' ? 'Sin conexión: no se puede saber quién está ahora.' : 'Nadie en este momento. Apenas entre alguien, aparece acá solo. 👀'}</div>`}`);
 
-  // 📡 El ticker
-  const lineas = _vivo.eventos.filter(ev => ev.evento !== 'latido' && ev.evento !== 'geo' && ev.evento !== 'bloqueado')
-    .sort((a, b) => (b.t - a.t) || ((b.id || 0) - (a.id || 0))).slice(0, _VIVO_TICKER).map(ev => {
-      const p = quien({ vid: ev.vid, nombre: ev.nombre, telefono: ev.telefono, productos: [] });
-      return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem">
-        <span style="flex-shrink:0;color:var(--texto-suave);font-variant-numeric:tabular-nums">${_vivoHora(ev.t)}</span>
-        <div style="min-width:0;flex:1"><span style="font-weight:700;color:var(--azul)">${_anaQuien(p)}</span> ${_vivoTexto(ev)}</div>
-      </div>`;
-    }).join('');
-  html += _anaCard(`<div class="admin-titulo">📡 Últimos 30 minutos</div>
-    ${lineas || '<div class="sinpedidos">Todavía no pasó nada en la última media hora.</div>'}`);
+  return html;
+}
+function _vivoHtmlGraf(d) {
+  let html = '';
 
   // 📊 Hoy contra el mismo día de la semana pasada
   const hv = (d && d.hoyVsSemana && d.hoyVsSemana.hace7Disponible) ? d.hoyVsSemana : (_vivo.semana && _vivo.semana.hoyVsSemana) || (d && d.hoyVsSemana) || null;

@@ -21,7 +21,7 @@ function fnReal(nombre) {
     .replace(/(\w+)!\[/g, '$1[')
     .replace(/\)!\./g, ').');
 }
-const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('fechaAhora') + '\n' + fnReal('hoyVsSemana') + '\n' + fnReal('analitica') + '\nreturn { analitica, fechaAhora };';
+const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('leerVistas') + '\n' + fnReal('fechaAhora') + '\n' + fnReal('hoyVsSemana') + '\n' + fnReal('analitica') + '\nreturn { analitica, fechaAhora };';
 const { analitica, fechaAhora } = new Function(codigo)();
 const hoyBA = fechaAhora().slice(0, 10), horaBA = +fechaAhora().slice(11, 13);
 const [dd, mm, yy] = hoyBA.split('/');
