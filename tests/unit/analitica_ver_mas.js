@@ -61,8 +61,9 @@ async function run() {
     { token: 'tokabc', nombre: 'David Cohen', canal: 'mayorista', creado: dia(3) + ' 09:00' },
     { token: 'toknunca', nombre: 'Sarah G', canal: 'minorista', creado: dia(5) + ' 09:00' },
     { token: 'tokreciente', nombre: 'Recién mandado', canal: 'minorista', creado: dia(0) + ' 08:00' },
+    { token: 'tokviejo', nombre: 'Del año pasado', canal: 'minorista', creado: '10/06/2026 09:00' },   // anterior a la medición
   ];
-  const d = analitica(rows, 7, [], [], productos, null, { vipCatalogos });
+  const d = analitica(rows, 7, [], [], productos, null, { vipCatalogos, vipTotales: { tokviejo: { aperturas: 3, vids: { v_z: 1 }, ultima: '01/09/2026 10:00', ultimaTs: 0 } } });
   const vm = d.verMas;
   t.eq('se contaron los lotes de vistas', vm.eventos, 2);
   const klik = d.deseoVsVenta.find(x => x.nombre === 'Klik');
@@ -81,7 +82,9 @@ async function run() {
   t.eq('VIP de Sarah: nunca abierto', d.vipAbiertos.find(c => c.token === 'toknunca').aperturas, 0);
   t.ok('el abierto va primero', d.vipAbiertos[0].token === 'tokabc');
   const accVip = d.acciones.find(a => a.id === 'vip-sin-abrir');
-  t.ok('acción: catálogo VIP sin abrir hace más de 2 días (Sarah sí, el de hoy no)', accVip && accVip.n === 1 && accVip.detalle.includes('Sarah'));
+  t.ok('acción: catálogo VIP sin abrir hace más de 2 días (Sarah sí, el de hoy no, el viejo no es medible)', accVip && accVip.n === 1 && accVip.detalle.includes('Sarah'));
+  const viejo = d.vipAbiertos.find(c => c.token === 'tokviejo');
+  t.eq('catálogo anterior al 22/09: no medible, pero trae sus aperturas históricas', [viejo.medible, viejo.aperturas, viejo.aperturasTotal], [false, 0, 3]);
   const sinVistas = analitica(rows.filter(r => r.evento !== 'vistas'), 7, [], [], productos, null, {});
   t.eq('sin lotes de vistas, "nadie llega a verlos" es null (no se acusa sin datos)', sinVistas.verMas.nuncaVistos, null);
   // Acción "los ven y no los agarran" pide 5 personas: con 2 no salta.

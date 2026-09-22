@@ -941,11 +941,18 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   };
   // 🔗 Catálogos VIP: los que existen (config VIP_*) contra las aperturas registradas.
   const vipCatalogos: any[] = (opciones && opciones.vipCatalogos) || [];
+  const vipTotales: any = (opciones && opciones.vipTotales) || {};
+  // Las aperturas se registran desde el 22/09/2026 (v4.81): de un catálogo anterior no se puede
+  // decir "nunca lo abrió" — a lo sumo "sin aperturas desde que se mide". Solo los posteriores son medibles.
+  const VIP_DESDE = Date.UTC(2026, 8, 22);
   const vipVistos: any = {};
   const vipAbiertos = vipCatalogos.map((c: any) => {
-    const a = vipAp[c.token]; vipVistos[c.token] = 1;
-    return { token: c.token, cliente: c.nombre || '', canal: c.canal || '', creado: c.creado || '', creadoTs: tsDeFecha(c.creado || '') || 0, aperturas: a ? a.aperturas : 0, personas: a ? Object.keys(a.vids).length : 0, ultima: a ? a.ultima : '', ultimaTs: a ? a.ultimaTs : 0 };
-  }).concat(Object.keys(vipAp).filter((tk) => !vipVistos[tk]).map((tk) => ({ token: tk, cliente: '(link borrado)', canal: '', creado: '', creadoTs: 0, aperturas: vipAp[tk].aperturas, personas: Object.keys(vipAp[tk].vids).length, ultima: vipAp[tk].ultima, ultimaTs: vipAp[tk].ultimaTs })))
+    const a = vipAp[c.token], tt = vipTotales[c.token]; vipVistos[c.token] = 1;
+    const creadoTs = tsDeFecha(c.creado || '') || 0;
+    return { token: c.token, cliente: c.nombre || '', canal: c.canal || '', creado: c.creado || '', creadoTs, medible: creadoTs >= VIP_DESDE,
+      aperturas: a ? a.aperturas : 0, personas: a ? Object.keys(a.vids).length : 0, ultima: a ? a.ultima : '', ultimaTs: a ? a.ultimaTs : 0,
+      aperturasTotal: tt ? tt.aperturas : (a ? a.aperturas : 0), ultimaTotal: tt ? tt.ultima : (a ? a.ultima : '') };
+  }).concat(Object.keys(vipAp).filter((tk) => !vipVistos[tk]).map((tk) => ({ token: tk, cliente: '(link borrado)', canal: '', creado: '', creadoTs: 0, medible: false, aperturas: vipAp[tk].aperturas, personas: Object.keys(vipAp[tk].vids).length, ultima: vipAp[tk].ultima, ultimaTs: vipAp[tk].ultimaTs, aperturasTotal: vipAp[tk].aperturas, ultimaTotal: vipAp[tk].ultima })))
     .sort((a: any, b: any) => (b.ultimaTs - a.ultimaTs) || (b.creadoTs - a.creadoTs)).slice(0, 40);
 
   // ── 🔎 QUÉ BUSCAN (y qué buscan y NO encontrás) ────────────────────────────────
@@ -1000,7 +1007,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     n: venNoAgarran.length, ir: 'deseo',
   });
   // 🔗 v4.81: catálogo VIP mandado hace más de 2 días y nunca abierto.
-  const vipSinAbrir = vipAbiertos.filter((c: any) => !c.aperturas && c.creadoTs && (nowT - c.creadoTs) > 2 * 86400000 && (nowT - c.creadoTs) < 30 * 86400000);
+  const vipSinAbrir = vipAbiertos.filter((c: any) => c.medible && !c.aperturasTotal && c.creadoTs && (nowT - c.creadoTs) > 2 * 86400000 && (nowT - c.creadoTs) < 30 * 86400000);
   if (vipSinAbrir.length) acciones.push({
     id: 'vip-sin-abrir', icono: '🔗', urgencia: 'media',
     titulo: vipSinAbrir.length + (vipSinAbrir.length === 1 ? ' catálogo VIP nunca se abrió' : ' catálogos VIP nunca se abrieron'),
@@ -3745,6 +3752,13 @@ Deno.serve(async (req) => {
         sbGet('config', 'select=clave,valor&clave=like.vid_alias:*'),
         sbGet('config', 'select=clave,valor&clave=like.VIP_*'),   // 🔗 v4.81
       ]);
+      // 🔗 Las aperturas VIP de toda la historia (no solo del período): "nunca lo abrió" tiene que
+      // mirar todo. Son pocas filas: solo visitas que traen "vip" en la ficha técnica (desde v4.81).
+      const vipVisitas = await sbGet('trafico', 'select=detalle,fecha,vid&evento=eq.visita&detalle=like.' + encodeURIComponent('*"vip":"*') + '&order=id.asc');
+      const vipTotales: any = {};
+      vipVisitas.forEach((r: any) => {
+        try { const fv = JSON.parse(String(r.detalle || '')); if (!fv.vip) return; const T = vipTotales[fv.vip] = vipTotales[fv.vip] || { aperturas: 0, vids: {}, ultima: '', ultimaTs: 0 }; T.aperturas++; if (r.vid) T.vids[r.vid] = 1; const ts = tsDeFecha(String(r.fecha || '')) || 0; if (ts >= T.ultimaTs) { T.ultimaTs = ts; T.ultima = String(r.fecha || ''); } } catch { /**/ }
+      });
       const vipCatalogos = vipRows.map((r: any) => { try { const d = JSON.parse(r.valor || '{}'); return { token: String(r.clave || '').slice(4), nombre: d.nombre || '', canal: d.canal || 'minorista', creado: d.creado || '' }; } catch { return null; } }).filter(Boolean);
       const aliasMap: any = {};
       aliasRows.forEach((r: any) => {
@@ -3752,7 +3766,7 @@ Deno.serve(async (req) => {
         if (!vidA) return;
         try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
       });
-      return json(analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy: url.searchParams.get('hoy') === '1', vipCatalogos }));
+      return json(analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy: url.searchParams.get('hoy') === '1', vipCatalogos, vipTotales }));
     }
     // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
     // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.

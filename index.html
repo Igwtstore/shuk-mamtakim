@@ -14813,11 +14813,12 @@ function _anaSecVip(d) {
     const hace = c.creado ? 'mandado el ' + esc(String(c.creado).slice(0, 10)) : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--gris-medio);font-size:0.78rem;flex-wrap:wrap">
       <span style="min-width:0"><b>${esc(c.cliente || '(sin nombre)')}</b>${c.canal ? ' <span style="font-size:0.62rem;color:var(--texto-suave)">' + (c.canal === 'mayorista' ? '📦' : '🛍️') + '</span>' : ''}<div style="font-size:0.66rem;color:var(--texto-suave)">${hace}</div></span>
-      <span style="flex-shrink:0;font-size:0.72rem;font-weight:700;color:${abierto ? 'var(--verde)' : '#c0392b'}">${abierto ? `✅ lo abrió ${c.aperturas}× (${c.personas} aparato${c.personas !== 1 ? 's' : ''}) · últ. ${esc(String(c.ultima).slice(0, 16))}` : '⏳ nunca lo abrió'}</span>
+      <span style="flex-shrink:0;font-size:0.72rem;font-weight:700;color:${abierto ? 'var(--verde)' : (c.aperturasTotal ? 'var(--texto-suave)' : (c.medible ? '#c0392b' : 'var(--texto-suave)'))}">${abierto ? `✅ lo abrió ${c.aperturas}× (${c.personas} aparato${c.personas !== 1 ? 's' : ''}) · últ. ${esc(String(c.ultima).slice(0, 16))}`
+        : (c.aperturasTotal ? `✅ lo abrió antes (${c.aperturasTotal}×, últ. ${esc(String(c.ultimaTotal).slice(0, 16))}), no en este período` : (c.medible ? '⏳ nunca lo abrió' : '⏳ sin aperturas desde que se mide (22/09)'))}</span>
     </div>`;
   }).join('');
   return _anaCard(`<div class="admin-titulo">🔗 Catálogos VIP: ¿los abrieron? (${vs.length})</div>
-    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada link privado que armaste, contra las veces que lo abrieron <b>en el período que estás mirando</b>. Un "nunca lo abrió" de hace días merece un recordatorio.</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Cada link privado que armaste, contra las veces que lo abrieron <b>en el período que estás mirando</b>. Las aperturas se registran desde el 22/09: de un catálogo anterior no se puede decir que nunca se abrió. Un "nunca lo abrió" de hace días merece un recordatorio.</div>
     ${filas}`);
 }
 function _anaSecGente(d) {
