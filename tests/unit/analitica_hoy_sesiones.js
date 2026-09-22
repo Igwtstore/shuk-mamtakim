@@ -48,6 +48,10 @@ async function run() {
   t.eq('HOY: solo las visitas de hoy (Ana ×3; Beto era ayer)', hoy.resumen.visitas, 3);
   t.eq('HOY: 1 persona única', hoy.resumen.unicos, 1);
   t.eq('HOY: 2 sesiones de Ana (10 min seguidos = 1; vuelve 2 h después = otra)', hoy.resumen.sesiones, 2);
+  // El que entra una vez y toca el carrito 40 minutos después NO "volvió": sigue en la misma sesión.
+  const largo = analitica([ev('v_lento', 'visita', dia(0) + ' ' + hhmm(h - 1, 0)), ev('v_lento', 'carrito', dia(0) + ' ' + hhmm(h - 1, 40), { detalle: 'Klik' }), ev('v_lento', 'salida', dia(0) + ' ' + hhmm(h - 1, 55), { detalle: '{"seg":3300}' })], 1, [], [], [], null, { soloHoy: true });
+  t.eq('una visita larga (carrito a los 40 min, salida a los 55) = 1 sesión, no 3', largo.resumen.sesiones, 1);
+  t.ok('sesiones nunca supera a visitas', largo.resumen.sesiones <= largo.resumen.visitas && hoy.resumen.sesiones <= hoy.resumen.visitas);
   t.eq('HOY: Candy y diagnóstico apartados, y se informa cuánto', hoy.excluidos, { candy: 1, diagnostico: 1 });
   t.ok('HOY: la comparativa es contra ayer completo (2 visitas de Beto)', hoy.comparativa && hoy.comparativa.visitas.anterior === 2 && hoy.comparativa.visitas.actual === 3);
   t.eq('HOY: viene marcado como soloHoy', hoy.soloHoy, true);

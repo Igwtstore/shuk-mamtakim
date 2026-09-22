@@ -631,9 +631,11 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   });
   const listaVids = Object.keys(vids); resumen.unicos = listaVids.length;
   // 🧮 SESIONES (v4.80): una "visita" es cada carga de la página (recargar cuenta dos). Una sesión es
-  // una venida de verdad: los eventos de la misma persona con menos de 30 minutos entre uno y otro.
+  // una venida de verdad: las ENTRADAS de la misma persona con menos de 30 minutos entre una y otra
+  // son la misma sesión. Solo una entrada abre sesión: el que se quedó 40 minutos en la página y
+  // recién ahí tocó el carrito no "volvió", sigue en la misma. Por eso sesiones ≤ visitas, siempre.
   const tsPorVid: any = {};
-  filas.forEach(({ r, t }) => { if (r.vid) (tsPorVid[r.vid] = tsPorVid[r.vid] || []).push(t!.ts); });
+  filas.forEach(({ r, t }) => { if (r.vid && r.evento === 'visita') (tsPorVid[r.vid] = tsPorVid[r.vid] || []).push(t!.ts); });
   let sesiones = 0;
   Object.keys(tsPorVid).forEach((v) => {
     const ts = tsPorVid[v].sort((a: number, b: number) => a - b);
