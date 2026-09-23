@@ -564,6 +564,27 @@ function productosQueVolvieron(pendientes: any[], productos: any[]) {
   });
   return Object.values(grupos).sort((a: any, b: any) => b.esperan - a.esperan);
 }
+// 🗓️ FIESTAS Y SHABAT EN LA TIENDA (v4.88). Lo que Jony elige una vez y queda para siempre: qué va en
+// la vidriera de cada fiesta (vacío = automático, lo más pedido de sus categorías), el texto del
+// cartel y la franja "pedí hasta el jueves y llega para Shabat". Todo pasa por lista blanca: un valor
+// raro cae a su default y la tienda nunca se rompe. Las fechas no se guardan: la tienda trae el
+// calendario (calculado con Hebcal para la diáspora).
+const FIESTAS_IDS = ['roshhashana', 'sucot', 'januca', 'tubishvat', 'purim', 'pesaj', 'shavuot'];
+function normFiestas(raw: any) {
+  const c = raw && typeof raw === 'object' ? raw : {};
+  const s = c.shabat && typeof c.shabat === 'object' ? c.shabat : {};
+  const prendido = (v: any) => v !== false && v !== 'false' && v !== 0 && v !== '0';
+  const entero = (v: any, min: number, max: number, def: number) => { const n = parseInt(v); return Number.isFinite(n) && n >= min && n <= max ? n : def; };
+  const texto = (v: any, max: number) => String(v == null ? '' : v).replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const out: any = { shabat: { on: prendido(s.on), dia: entero(s.dia, 0, 5, 4), hora: entero(s.hora, 0, 23, 20), txt: texto(s.txt, 120) }, fiestas: {} };
+  const f = c.fiestas && typeof c.fiestas === 'object' ? c.fiestas : {};
+  FIESTAS_IDS.forEach((id) => {
+    const x = f[id] && typeof f[id] === 'object' ? f[id] : {};
+    const ids = Array.isArray(x.ids) ? x.ids.map((v: any) => parseInt(v)).filter((n: number) => n > 0) : [];
+    out.fiestas[id] = { on: prendido(x.on), txt: texto(x.txt, 160), ids: Array.from(new Set(ids)).slice(0, 24) };
+  });
+  return out;
+}
 // 🔥 LA VIDRIERA SE ORDENA SOLA (v4.87), a partir de los pedidos (no de las visitas):
 //  · orden: lo que tuvo pedidos en 30 días, de más a menos. Con eso la tienda pone primero, en
 //    cada categoría, lo que se vende.
@@ -720,7 +741,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const recom: any = { ofrecidos: {}, cargados: {}, descartados: {} };
   const encuesta: any = { canales: {}, respuestas: 0, pushSi: 0 };
   // 🔥 v4.87: lo que se suma desde la fila "Lo más pedido" y desde "Completá los sabores".
-  const vidr: any = { fila: {}, filaN: 0, sabOfr: {}, sabSum: {}, sabN: 0 };
+  const vidr: any = { fila: {}, filaN: 0, sabOfr: {}, sabSum: {}, sabN: 0, fiesta: {}, fiestaN: 0 };
   // 👁️ VER MÁS (v4.81): lo que hasta ahora era invisible — qué tarjetas se VIERON (no solo qué se
   // agarró), qué sacaron del carrito, si el cartel/las ofertas se tocan, qué se comparte, hasta dónde
   // bajan, y qué catálogo VIP abrió cada cliente.
@@ -763,6 +784,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     if (evento === 'vidriera') {
       const [dondeV, queV] = detalle.split(' · ');                 // fila · <producto> | sabores · ofrecido | sabores · <producto>
       if (dondeV === 'fila' && queV) { vidr.filaN++; if (vid) vidr.fila[vid] = 1; }
+      else if (dondeV === 'fiesta' && queV) { vidr.fiestaN++; if (vid) vidr.fiesta[vid] = 1; }   // 🗓️ v4.88
       else if (dondeV === 'sabores' && queV === 'ofrecido') { if (vid) vidr.sabOfr[vid] = 1; }
       else if (dondeV === 'sabores' && queV) { vidr.sabN++; if (vid) vidr.sabSum[vid] = 1; }
       return;
@@ -1391,10 +1413,11 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
 
   // 🔥 ¿VENDEN LA VIDRIERA Y LOS SABORES? (v4.87) Cuánto se sumó al carrito desde cada lugar y
   // cuántas de esas personas terminaron pidiendo.
-  const vFila = Object.keys(vidr.fila), vSabO = Object.keys(vidr.sabOfr), vSabS = Object.keys(vidr.sabSum);
-  const vSumaron = Array.from(new Set(vFila.concat(vSabS)));
-  const vidriera = vidr.filaN || vSabO.length || vidr.sabN ? {
+  const vFila = Object.keys(vidr.fila), vSabO = Object.keys(vidr.sabOfr), vSabS = Object.keys(vidr.sabSum), vFie = Object.keys(vidr.fiesta);
+  const vSumaron = Array.from(new Set(vFila.concat(vSabS, vFie)));
+  const vidriera = vidr.filaN || vSabO.length || vidr.sabN || vidr.fiestaN ? {
     fila: { sumados: vidr.filaN, personas: vFila.length },
+    fiesta: { sumados: vidr.fiestaN, personas: vFie.length },
     sabores: { ofrecidos: vSabO.length, sumados: vidr.sabN, personas: vSabS.length },
     compraron: vSumaron.filter((v) => embudoVids.pedido[v]).length,   // de los que sumaron algo desde ahí, cuántos pidieron
   } : null;
@@ -3032,7 +3055,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4417,7 +4440,7 @@ Deno.serve(async (req) => {
     if (accion === 'getEstadoTienda') {
       // Una sola consulta para las 5 claves (antes eran 4 SELECT secuenciales en la ruta
       // que abre la tienda: sumar campos de a uno la hacía más lenta a cada release).
-      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG,TIENDA_VIDRIERA)');
+      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG,TIENDA_VIDRIERA,TIENDA_FIESTAS)');
       const C: any = {};
       filasCfg.forEach((f: any) => { C[f.clave] = f.valor; });
       // 🔥 v4.87: la vidriera viaja en esta misma consulta. Si todavía no existe o quedó vieja
@@ -4438,7 +4461,16 @@ Deno.serve(async (req) => {
         aviso: avisoTxt, avisoColor: avisoCol,                                  // ← compat: front viejo en la calle
         avisoCfg: avNorm(avisoCfg || { txt: avisoTxt, color: avisoCol }),
         vidriera: vidriera ? { t: vidriera.t, dias: vidriera.dias, top: vidriera.top, orden: vidriera.orden, agota: vidriera.agota } : null,
+        fiestas: (() => { try { return normFiestas(C.TIENDA_FIESTAS ? JSON.parse(C.TIENDA_FIESTAS) : null); } catch { return normFiestas(null); } })(),   // 🗓️ v4.88
       });
+    }
+    // 🗓️ v4.88: fiestas y Shabat. Llega por POST (la lista de productos de cada fiesta puede ser larga).
+    if (accion === 'setFiestasTienda') {
+      let rawF: any = body.cfg;
+      if (typeof rawF === 'string') { try { rawF = JSON.parse(rawF); } catch { return json({ error: 'configuración inválida' }); } }
+      const cfgF = normFiestas(rawF);
+      await setConfig('TIENDA_FIESTAS', JSON.stringify(cfgF));
+      return json({ ok: true, fiestas: cfgF });
     }
     if (accion === 'setAvisoTienda') {
       // Lista blanca en TODO campo enumerado: un payload raro cae a su default y el

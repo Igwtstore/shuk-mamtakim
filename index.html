@@ -129,7 +129,7 @@
   .dark-toggle:hover { background:rgba(255,255,255,0.1); }
 
   @media print {
-    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section, #admin-tab-panel, .recato-banner, #banner-wrap, .share-btn, .carousel-btn, .vitrina, .sellos-foto, #sabores-pop { display:none !important; }
+    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section, #admin-tab-panel, .recato-banner, #banner-wrap, .share-btn, .carousel-btn, .vitrina, .sellos-foto, #sabores-pop, .fiesta, #shabat-franja { display:none !important; }
     .catalogo { grid-template-columns: repeat(3,1fr) !important; }
     .producto-card { break-inside:avoid; box-shadow:none !important; border:1px solid #ddd; }
     body { background:#fff !important; }
@@ -512,6 +512,22 @@
   body.recato .sellos-foto { position: static; justify-content: center; padding: 8px 8px 0; }
   body.dark .vitrina-card { background: #1f2937; border-color: #6b5a35; }
   body.dark .vitrina-foto { background: #ece5d3; }
+  /* 🗓️ v4.88 · el cartel de la fiesta (cuenta regresiva + colección) y la franja de Shabat */
+  .fiesta { grid-column: 1 / -1; min-width: 0; margin: 0.1rem 0 0.5rem; }
+  .fiesta-cartel { display: flex; align-items: center; gap: 0.85rem; background: linear-gradient(135deg, #fff8e6, #fdf0d8); border: 2px solid #d4a017; border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; box-shadow: var(--sombra); }
+  .fiesta-cuenta { flex: 0 0 auto; min-width: 58px; height: 58px; border-radius: 10px; background: var(--azul); color: #f3d27a; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .fiesta-cuenta b { font-family: 'Fraunces', serif; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  .fiesta-cuenta small { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 3px; }
+  .fiesta-cuenta span { font-size: 1.7rem; }
+  .fiesta-txt { min-width: 0; }
+  .fiesta-tit { font-family: 'Fraunces', serif; font-weight: 700; font-size: 1.05rem; color: var(--azul); line-height: 1.25; text-wrap: balance; }
+  .fiesta-sub { font-size: 0.8rem; color: #6b5a48; line-height: 1.4; margin-top: 2px; }
+  body.dark .fiesta-cartel { background: linear-gradient(135deg, #2a2418, #231e14); border-color: #8a6a1e; }
+  body.dark .fiesta-tit { color: #f3d27a; }
+  body.dark .fiesta-sub { color: #d8c8a8; }
+  #shabat-franja { max-width: 900px; margin: 0.75rem auto 0; padding: 0.5rem 1rem; box-sizing: border-box; text-align: center; font-weight: 700; font-size: 0.86rem; color: #3b2a12; background: #fdf3e3; border: 1.5px solid #ecd9b4; border-radius: 10px; width: calc(100% - 2rem); }
+  body.dark #shabat-franja { background: #2a2418; border-color: #6b5a35; color: #f0dfb8; }
+
   /* 🎨 Completá los sabores: en el carrito y al agregar desde la tarjeta */
   .sabores-box { background: #fbf6ec; border: 1.5px dashed #d9b77a; border-radius: 10px; padding: 0.6rem 0.75rem; margin: 0.7rem 0 0.2rem; }
   .sabores-tit { font-weight: 800; font-size: 0.86rem; color: #5c3d1e; margin-bottom: 2px; }
@@ -1172,6 +1188,7 @@
     </div>
   </div>
 
+  <div id="shabat-franja" hidden></div>
   <div class="buscador-wrap">
     <input type="text" class="buscador" placeholder="Buscar producto..." id="buscador" oninput="filtrar()" />
   </div>
@@ -1414,6 +1431,12 @@
     <div style="font-size:0.72rem;color:var(--texto-suave);margin:0.5rem 0 0.25rem">Así lo va a ver el cliente:</div>
     <div id="aviso-preview" style="padding:0.65rem 1rem;border-radius:10px;font-size:0.9rem;font-weight:700;text-align:center;line-height:1.35;background:#f7f5f0;border:1px dashed var(--gris-medio);color:var(--texto-suave)">(sin aviso)</div>
     <button class="guardar-stock-btn" onclick="guardarAvisoTienda()" style="margin-top:0.6rem">Guardar aviso</button>
+  </div>
+  <!-- 🗓️ v4.88 · Fiestas y Shabat en la tienda. SOLO la ve Jony (la muestra cargarAccesoMiri). -->
+  <div class="admin-card" data-seccion="inicio" id="card-fiestas" style="display:none">
+    <div class="admin-titulo">🗓️ Fiestas y Shabat en la tienda</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Dos semanas antes de cada fiesta, la tienda muestra sola su cartel con la cuenta regresiva y sus productos. Elegís una vez qué va en cada una y queda para todos los años; si no elegís, van los más pedidos de sus categorías.</div>
+    <div id="fiestas-panel"><div class="sinpedidos">Cargando…</div></div>
   </div>
   <!-- 🎚️ Interruptor del acceso de Miri (v4.52). SOLO la ve Jony: cargarAccesoMiri() la muestra
        únicamente si socioActual==='jony' (en la sesión de Miri ni se dibuja ni se consulta). -->
@@ -2571,8 +2594,10 @@ async function cargarEstadoTienda() {
       : { txt: _tiendaAviso, color: _tiendaAvisoColor });
     // 🔥 v4.87: la vidriera llega con el estado. Si el catálogo ya se dibujó con otra (o sin ninguna),
     // se redibuja solo si la persona sigue arriba de todo: nunca se le mueve la página mientras mira.
-    if (_vidGuardar(d.vidriera) && productos.length && window.scrollY < 300) renderCatalogo();
+    const cambioF = _fiestasGuardar(d.fiestas);   // 🗓️ v4.88: fiestas y Shabat
+    if ((_vidGuardar(d.vidriera) || cambioF) && productos.length && window.scrollY < 300) renderCatalogo();
   } catch (e) { _estadoTienda = 'abierta'; }
+  pintarShabat();
   pintarBannerTienda();
   pintarAvisoTienda();
   marcarEstadoTiendaBtn();
@@ -2756,12 +2781,96 @@ function marcarEstadoTiendaBtn() {
   const lbl = { abierta: '🟢 Abierta', cotizacion: '🟡 Solo cotización', cerrada: '🔴 Cerrada' };
   const el = document.getElementById('estado-tienda-actual'); if (el) el.textContent = lbl[_estadoTienda] || _estadoTienda;
   cargarAvisoEnPanel();   // 📣 el aviso viaja en la misma respuesta → se refleja acá
+  if (adminAuth && socioActual === 'jony') renderFiestasPanel(true);   // 🗓️ v4.88: idem fiestas y Shabat
   document.querySelectorAll('.estado-t-btn').forEach(b => {
     const activo = b.dataset.est === _estadoTienda;
     b.style.background = activo ? 'var(--azul)' : '#fff';
     b.style.color = activo ? '#fff' : 'var(--texto)';
   });
   const inp = document.getElementById('estado-tienda-msg'); if (inp && _tiendaMsg && !inp.value) inp.value = _tiendaMsg;
+}
+
+// 🗓️ v4.88 · FIESTAS Y SHABAT (panel, solo Jony). Se edita una copia y se guarda con un botón.
+let _fiestasEdit = null, _fiestasTocado = false, _fiestaElige = null;
+const _fiestasDefault = () => ({ shabat: { on: true, dia: 4, hora: 20, txt: '' }, fiestas: Object.fromEntries(Object.keys(FIESTAS_DEF).filter(k => !FIESTAS_DEF[k].sinVidriera).map(k => [k, { on: true, txt: '', ids: [] }])) });
+function renderFiestasPanel(forzar) {
+  const cont = document.getElementById('fiestas-panel');
+  if (!cont || socioActual !== 'jony') return;
+  if (!_fiestasEdit || (forzar && !_fiestasTocado)) {
+    const base = _fiestasDefault(), g = _fiestasCfg || {};
+    _fiestasEdit = { shabat: Object.assign(base.shabat, g.shabat || {}), fiestas: base.fiestas };
+    Object.keys(base.fiestas).forEach(k => { if (g.fiestas && g.fiestas[k]) _fiestasEdit.fiestas[k] = { on: g.fiestas[k].on !== false, txt: g.fiestas[k].txt || '', ids: (g.fiestas[k].ids || []).slice() }; });
+  }
+  const E = _fiestasEdit, sh = E.shabat, hoyK = _hoyAR();
+  const inp = 'padding:0.4rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.82rem';
+  const chk = (on, fn) => `<label style="display:inline-flex;align-items:center;gap:5px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap"><input type="checkbox" ${on ? 'checked' : ''} onchange="${fn}"> Mostrar</label>`;
+  let html = `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.65rem 0.75rem;margin-bottom:0.7rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:0.9rem">🕯️ Cierre para Shabat</b>${chk(sh.on, "_fiestasSet('shabat','on',this.checked)")}</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:0.8rem">Pedí hasta el
+      <select style="${inp}" onchange="_fiestasSet('shabat','dia',+this.value)">${[0, 1, 2, 3, 4, 5].map(d => `<option value="${d}" ${d === sh.dia ? 'selected' : ''}>${_DIAS_SEMANA[d]}</option>`).join('')}</select> a las
+      <input type="number" min="0" max="23" value="${sh.hora}" style="${inp};width:64px" onchange="_fiestasSet('shabat','hora',Math.max(0,Math.min(23,parseInt(this.value)||0)))"> h</div>
+    <input type="text" maxlength="120" value="${esc(sh.txt)}" placeholder="${esc(_shabatTexto({ dia: sh.dia, hora: sh.hora, txt: '' }))}" oninput="_fiestasSet('shabat','txt',this.value,true)" style="${inp};width:100%;box-sizing:border-box;margin-top:6px">
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:5px">${sh.on ? `Se ve del domingo hasta el ${_DIAS_SEMANA[sh.dia]} a las ${sh.hora} h. <b>Es una promesa al cliente:</b> apagalo la semana que no se pueda cumplir.` : 'Apagado: la tienda no lo muestra.'}</div>
+  </div>`;
+  // Las fiestas, de la más cercana a la más lejana (la próxima de cada una).
+  const proximas = [];
+  Object.keys(E.fiestas).forEach(id => { const x = FIESTAS_FECHAS.find(f => f[0] === id && f[2] >= hoyK); if (x) proximas.push({ id, erev: x[1], hasta: x[2] }); });
+  proximas.sort((a, b) => (a.erev < b.erev ? -1 : 1));
+  if (!proximas.length) html += '<div class="ojo">⚠️ El calendario de fiestas se terminó: hay que sumarle años.</div>';
+  const activa = _fiestaActiva(hoyK);
+  proximas.forEach(({ id, erev }) => {
+    const def = FIESTAS_DEF[id], cf = E.fiestas[id], d = _diasEntre(hoyK, erev);
+    const cuando = d > 1 ? 'en ' + d + ' días' : d === 1 ? 'mañana' : d === 0 ? 'hoy' : 'ya empezó';
+    const ahora = activa && activa.id === id && cf.on;
+    const auto = !cf.ids.length;
+    const topP = _vidTopIds(), lista = _fiestaProductos({ def, cfg: cf }, 8, topP.length >= 3 ? new Set(topP) : null).map(pid => (productos.find(p => p.id === pid) || {}).nombre).filter(Boolean);
+    const detalleLista = def.soloAMano && auto
+      ? '<span style="color:#b3401a">Solo a mano (kosher le-Pésaj): elegí los productos o no se muestra.</span>'
+      : (auto ? 'Automático: lo más pedido de ' + (def.lacteo ? 'lo lácteo' : def.cats.join(', ')) : 'Elegidos a mano: ' + cf.ids.length) + (lista.length ? ' · <span style="color:var(--texto-suave)">' + lista.slice(0, 4).map(esc).join(' · ') + (lista.length > 4 ? '…' : '') + '</span>' : '');
+    html += `<div style="border:1.5px solid ${ahora ? '#d4a017' : 'var(--gris-medio)'};border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.5rem;${ahora ? 'background:#fffaf0' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <b style="font-size:0.88rem">${def.emoji} ${def.nombre} <span style="font-weight:500;color:var(--texto-suave);font-size:0.76rem">· ${erev.slice(8, 10)}/${erev.slice(5, 7)}/${erev.slice(0, 4)} (${cuando})</span>${ahora ? ' <span style="background:#d4a017;color:#fff;border-radius:6px;padding:1px 7px;font-size:0.66rem">EN LA TIENDA AHORA</span>' : ''}</b>
+        ${chk(cf.on, `_fiestasSet('${id}','on',this.checked)`)}</div>
+      <div style="font-size:0.74rem;margin-top:4px;line-height:1.45">${detalleLista}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+        <button onclick="fiestaElegir('${id}')" style="background:var(--gris-claro);color:var(--azul);border:none;border-radius:7px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">${_fiestaElige === id ? 'Listo' : '✏️ Elegir productos'}</button>
+        ${auto ? '' : `<button onclick="_fiestasSet('${id}','ids',[])" style="background:transparent;color:var(--texto-suave);border:1.5px solid var(--gris-medio);border-radius:7px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">Volver a automático</button>`}
+      </div>
+      ${_fiestaElige === id ? _fiestaElegirHtml(id) : ''}
+      <input type="text" maxlength="160" value="${esc(cf.txt)}" placeholder="${esc(def.txt)}" oninput="_fiestasSet('${id}','txt',this.value,true)" style="${inp};width:100%;box-sizing:border-box;margin-top:6px">
+    </div>`;
+  });
+  html += `<button class="guardar-stock-btn" onclick="guardarFiestas()" style="margin-top:0.3rem">Guardar fiestas y Shabat</button>`;
+  cont.innerHTML = html;
+}
+let _fiestaBusca = '';
+function _fiestaElegirHtml(id) {
+  const cf = _fiestasEdit.fiestas[id], q = _normTxt(_fiestaBusca).trim();
+  const elegidos = cf.ids.map(pid => productos.find(p => p.id === pid)).filter(Boolean);
+  const resto = productosVisibles().filter(p => p.activo !== false && !cf.ids.includes(p.id) && (!q || _normTxt(p.nombre).includes(q)))
+    .sort((a, b) => (b.stock > 0) - (a.stock > 0) || a.nombre.localeCompare(b.nombre)).slice(0, 30);
+  const fila = (p, on) => `<label style="display:flex;align-items:center;gap:7px;font-size:0.76rem;padding:3px 0;cursor:pointer"><input type="checkbox" ${on ? 'checked' : ''} onchange="fiestaTilde('${id}',${p.id},this.checked)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</span><span style="margin-left:auto;color:var(--texto-suave);flex-shrink:0">stock ${p.stock}</span></label>`;
+  return `<div style="background:var(--gris-claro);border-radius:8px;padding:0.5rem 0.6rem;margin-top:6px">
+    <input type="text" value="${esc(_fiestaBusca)}" placeholder="Buscar producto…" oninput="_fiestaBusca=this.value;renderFiestasPanel();const i=document.querySelector('#fiestas-panel input[placeholder=&quot;Buscar producto…&quot;]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}" style="width:100%;box-sizing:border-box;padding:0.4rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.8rem;margin-bottom:4px">
+    ${elegidos.length ? '<div style="font-size:0.7rem;font-weight:800;margin:3px 0">Elegidos (' + elegidos.length + '/24), en este orden:</div>' + elegidos.map(p => fila(p, true)).join('') + '<div style="border-top:1px solid var(--gris-medio);margin:5px 0"></div>' : ''}
+    ${resto.map(p => fila(p, false)).join('') || '<div style="font-size:0.74rem;color:var(--texto-suave)">No encontré productos con ese nombre.</div>'}
+  </div>`;
+}
+function _fiestasSet(que, campo, valor, sinRedibujar) {
+  _fiestasTocado = true;
+  if (que === 'shabat') _fiestasEdit.shabat[campo] = valor; else _fiestasEdit.fiestas[que][campo] = valor;
+  if (!sinRedibujar) renderFiestasPanel();
+}
+function fiestaElegir(id) { _fiestaElige = _fiestaElige === id ? null : id; _fiestaBusca = ''; renderFiestasPanel(); }
+function fiestaTilde(id, pid, on) {
+  const cf = _fiestasEdit.fiestas[id];
+  if (on && !cf.ids.includes(pid)) { if (cf.ids.length >= 24) { showToast('Hasta 24 productos por fiesta'); renderFiestasPanel(); return; } cf.ids.push(pid); }
+  if (!on) cf.ids = cf.ids.filter(x => x !== pid);
+  _fiestasSet(id, 'ids', cf.ids);
+}
+async function guardarFiestas() {
+  const r = await apiWritePost({ accion: 'setFiestasTienda', cfg: _fiestasEdit }, '🗓️ Fiestas y Shabat guardados ✓');
+  if (r && r.ok && r.fiestas) { _fiestasGuardar(r.fiestas); _fiestasTocado = false; _fiestaElige = null; renderFiestasPanel(true); pintarShabat(); try { renderCatalogo(); } catch { /**/ } }
 }
 
 // 🎚️ ACCESO DE MIRI (v4.52): interruptor ON/OFF de su entrada al panel. Solo lo ve Jony.
@@ -2771,6 +2880,7 @@ let _accesoMiri = null;   // true=encendido, false=apagado, null=sin dato todav�
 async function cargarAccesoMiri() {
   if (typeof socioActual !== 'undefined' && socioActual !== 'jony') return;   // en sesión de Miri: nada
   const card = document.getElementById('card-acceso-miri'); if (card) card.style.display = '';
+  const cardF = document.getElementById('card-fiestas'); if (cardF) { cardF.style.display = ''; renderFiestasPanel(true); }   // 🗓️ v4.88
   try {
     const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=accesoMiri');
     if (d && d.acceso !== undefined) _accesoMiri = String(d.acceso) !== '0';
@@ -3077,8 +3187,9 @@ const _precioCorto = p => {
   const v = (ofertaActiva(p) ? parseFloat(p.precioOferta) || 0 : 0) || _precioDelModo(p);
   return esPesos(p) ? '$ ' + Math.round(v).toLocaleString('es-AR') : 'U$S ' + v.toFixed(2);
 };
-function _vitrinaHtml(ids) {
-  const cards = ids.map(id => {
+// Las tarjetitas de una fila (lo más pedido, la fiesta): foto, nombre, precio y "+ Agregar".
+function _miniCards(ids, fnSumar) {
+  return ids.map(id => {
     const p = productos.find(x => x.id === id);
     if (!p) return '';
     const foto = (p.imagen || '').split(',').map(s => s.trim()).filter(x => x && !esVideo(x))[0];
@@ -3088,12 +3199,173 @@ function _vitrinaHtml(ids) {
       <button class="vitrina-foto" onclick="vitrinaIr(${id})" aria-label="Ver ${esc(p.nombre)}">${img}</button>
       <div class="vitrina-nombre" onclick="vitrinaIr(${id})">${esc(p.nombre)}</div>
       <div class="vitrina-precio">${_precioCorto(p)}</div>
-      <button class="vitrina-btn${enC ? ' en' : ''}" onclick="vitrinaSumar(${id})">${enC ? '✓ ' + enC + ' · sumar otro' : '+ Agregar'}</button>
+      <button class="vitrina-btn${enC ? ' en' : ''}" onclick="${fnSumar}(${id})">${enC ? '✓ ' + enC + ' · sumar otro' : '+ Agregar'}</button>
     </div>`;
   }).join('');
-  const cuando = _vidriera && _vidriera.dias === 14 ? 'en las últimas dos semanas' : 'esta semana';
-  return `<div class="vitrina"><div class="vitrina-tit">🔥 Lo más pedido <small>${cuando}</small></div><div class="vitrina-fila">${cards}</div></div>`;
 }
+function _vitrinaHtml(ids) {
+  const cuando = _vidriera && _vidriera.dias === 14 ? 'en las últimas dos semanas' : 'esta semana';
+  return `<div class="vitrina"><div class="vitrina-tit">🔥 Lo más pedido <small>${cuando}</small></div><div class="vitrina-fila">${_miniCards(ids, 'vitrinaSumar')}</div></div>`;
+}
+
+// 🗓️ v4.88 · LA VIDRIERA SIGUE EL CALENDARIO JUDÍO. Dos semanas antes de cada fiesta aparece arriba
+// de la tienda su cartel con la cuenta regresiva y su colección; durante la fiesta, el saludo. Solo,
+// todos los años. Jony elige una vez qué productos van en cada fiesta (panel → Inicio); si no eligió,
+// va lo más pedido de las categorías de esa fiesta, intercalado. Pésaj va solo a mano: nunca se
+// adivina qué es kosher le-Pésaj. Iom Kipur no tiene vidriera: está para anotarlo en la Analítica.
+// Fechas: calendario de la diáspora calculado con Hebcal (erev = el día que empieza, a la noche;
+// hasta = el último día). Alcanza hasta diciembre de 2031: después hay que sumar años.
+const FIESTAS_DEF = {
+  roshhashana: { nombre: 'Rosh Hashaná', emoji: '🍎', saludo: '¡Shaná Tová!', txt: 'Dulces para un año dulce: chocolates y golosinas para la mesa de las fiestas.', cats: ['Chocolate', 'Galletita', 'Caramelo'] },
+  iomkipur: { nombre: 'Iom Kipur', emoji: '🕯️', sinVidriera: true },
+  sucot: { nombre: 'Sucot', emoji: '🌿', saludo: '¡Jag Sameaj!', txt: 'Pitzujim, chocolates y golosinas para la sucá y para Simjat Torá.', cats: ['Pitzujim', 'Chocolate', 'Snacks', 'Caramelo'] },
+  januca: { nombre: 'Janucá', emoji: '🕎', saludo: '¡Janucá Sameaj!', txt: 'Chocolates y golosinas para las ocho noches.', cats: ['Chocolate', 'Caramelo', 'Chupetín', 'Yumi'] },
+  tubishvat: { nombre: 'Tu Bishvat', emoji: '🌳', saludo: '¡Tu Bishvat Sameaj!', txt: 'Pitzujim y frutos secos para la mesa de Tu Bishvat.', cats: ['Pitzujim'] },
+  purim: { nombre: 'Purim', emoji: '🎭', saludo: '¡Purim Sameaj!', txt: 'Todo para armar el mishloaj manot.', cats: ['Chocolate', 'Caramelo', 'Chupetín', 'Yumi', 'Snacks'] },
+  pesaj: { nombre: 'Pésaj', emoji: '🍷', saludo: '¡Jag Kasher VeSameaj!', txt: 'Productos kosher le-Pésaj.', cats: [], soloAMano: true },
+  shavuot: { nombre: 'Shavuot', emoji: '🌾', saludo: '¡Jag Sameaj!', txt: 'Lácteos y dulces para Shavuot.', cats: [], lacteo: true },
+};
+const FIESTAS_FECHAS = [
+  ['tubishvat', '2026-02-01', '2026-02-02'],
+  ['purim', '2026-03-02', '2026-03-03'],
+  ['pesaj', '2026-04-01', '2026-04-09'],
+  ['shavuot', '2026-05-21', '2026-05-23'],
+  ['roshhashana', '2026-09-11', '2026-09-13'],
+  ['iomkipur', '2026-09-20', '2026-09-21'],
+  ['sucot', '2026-09-25', '2026-10-04'],
+  ['januca', '2026-12-04', '2026-12-12'],
+  ['tubishvat', '2027-01-22', '2027-01-23'],
+  ['purim', '2027-03-22', '2027-03-23'],
+  ['pesaj', '2027-04-21', '2027-04-29'],
+  ['shavuot', '2027-06-10', '2027-06-12'],
+  ['roshhashana', '2027-10-01', '2027-10-03'],
+  ['iomkipur', '2027-10-10', '2027-10-11'],
+  ['sucot', '2027-10-15', '2027-10-24'],
+  ['januca', '2027-12-24', '2028-01-01'],
+  ['tubishvat', '2028-02-11', '2028-02-12'],
+  ['purim', '2028-03-11', '2028-03-12'],
+  ['pesaj', '2028-04-10', '2028-04-18'],
+  ['shavuot', '2028-05-30', '2028-06-01'],
+  ['roshhashana', '2028-09-20', '2028-09-22'],
+  ['iomkipur', '2028-09-29', '2028-09-30'],
+  ['sucot', '2028-10-04', '2028-10-13'],
+  ['januca', '2028-12-12', '2028-12-20'],
+  ['tubishvat', '2029-01-30', '2029-01-31'],
+  ['purim', '2029-02-28', '2029-03-01'],
+  ['pesaj', '2029-03-30', '2029-04-07'],
+  ['shavuot', '2029-05-19', '2029-05-21'],
+  ['roshhashana', '2029-09-09', '2029-09-11'],
+  ['iomkipur', '2029-09-18', '2029-09-19'],
+  ['sucot', '2029-09-23', '2029-10-02'],
+  ['januca', '2029-12-01', '2029-12-09'],
+  ['tubishvat', '2030-01-18', '2030-01-19'],
+  ['purim', '2030-03-18', '2030-03-19'],
+  ['pesaj', '2030-04-17', '2030-04-25'],
+  ['shavuot', '2030-06-06', '2030-06-08'],
+  ['roshhashana', '2030-09-27', '2030-09-29'],
+  ['iomkipur', '2030-10-06', '2030-10-07'],
+  ['sucot', '2030-10-11', '2030-10-20'],
+  ['januca', '2030-12-20', '2030-12-28'],
+  ['tubishvat', '2031-02-07', '2031-02-08'],
+  ['purim', '2031-03-08', '2031-03-09'],
+  ['pesaj', '2031-04-07', '2031-04-15'],
+  ['shavuot', '2031-05-27', '2031-05-29'],
+  ['roshhashana', '2031-09-17', '2031-09-19'],
+  ['iomkipur', '2031-09-26', '2031-09-27'],
+  ['sucot', '2031-10-01', '2031-10-10'],
+  ['januca', '2031-12-09', '2031-12-17']
+];
+const FIESTAS_KEY = 'shuk_fiestas';
+let _fiestasCfg = null;
+try { const g = JSON.parse(localStorage.getItem(FIESTAS_KEY) || 'null'); if (g && g.fiestas && g.shabat) _fiestasCfg = g; } catch { /**/ }
+function _fiestasGuardar(c) {
+  if (!c || !c.fiestas || !c.shabat) return false;
+  const cambio = JSON.stringify(c) !== JSON.stringify(_fiestasCfg);
+  _fiestasCfg = c;
+  try { localStorage.setItem(FIESTAS_KEY, JSON.stringify(c)); } catch { /**/ }
+  return cambio;
+}
+// Días entre dos fechas 'yyyy-mm-dd' (b − a), y una fecha corrida n días.
+const _diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400000);
+const _diaMas = (k, n) => new Date(Date.parse(k + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+// La fiesta que va en la vidriera hoy: la que está pasando, o la que empieza en 14 días o menos.
+function _fiestaActiva(hoyK) {
+  for (const [id, erev, hasta] of FIESTAS_FECHAS) {
+    const def = FIESTAS_DEF[id];
+    if (!def || def.sinVidriera) continue;
+    const cfg = _fiestasCfg && _fiestasCfg.fiestas ? _fiestasCfg.fiestas[id] : null;
+    if (cfg && cfg.on === false) continue;
+    if (hoyK > hasta || _diasEntre(hoyK, erev) > 14) continue;
+    return { id, def, erev, hasta, dias: _diasEntre(hoyK, erev), cfg: cfg || { on: true, txt: '', ids: [] } };
+  }
+  return null;
+}
+// Los productos de la fiesta: los que eligió Jony (en su orden) o, si no eligió, lo más pedido de sus
+// categorías intercalado (uno de cada una por vuelta, así no son 8 del mismo tipo). Solo lo que se
+// puede comprar ahora en este canal; nada repetido entre gemelos. La lista automática saltea lo que
+// ya está en "Lo más pedido" (`excluir`), si igual le quedan 3: más productos distintos a la vista.
+function _fiestaProductos(f, max = 8, excluir = null) {
+  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  const comprable = p => p && p.stock > 0 && p.activo !== false && _precioDelModo(p) > 0
+    && ['Ambos', tipoActual].includes((p.visible || 'Ambos').trim());
+  const nombres = new Set(), out = [];
+  const sumar = p => { const n = _normTxt(p.nombre).trim(); if (nombres.has(n)) return; nombres.add(n); out.push(p.id); };
+  const elegidos = (f.cfg.ids || []).map(id => productosVisibles().find(p => p.id === Number(id))).filter(comprable);
+  if (elegidos.length || f.def.soloAMano) { elegidos.forEach(sumar); return out.slice(0, max); }
+  const V = _vidIdx();
+  const puesto = p => (V && V.rank.has(p.id) ? V.rank.get(p.id) : 1e6);
+  let cands = productosVisibles().filter(p => comprable(p) && (f.def.lacteo ? (p.kosherTipo || '') === 'Lácteo' : f.def.cats.includes(p.categoria || 'Varios')))
+    .sort((a, b) => puesto(a) - puesto(b) || a.nombre.localeCompare(b.nombre));
+  if (excluir && excluir.size) { const sin = cands.filter(p => !excluir.has(p.id)); if (sin.length >= 3) cands = sin; }
+  const grupos = f.def.lacteo ? [cands] : f.def.cats.map(c => cands.filter(p => (p.categoria || 'Varios') === c));
+  for (let vuelta = 0; out.length < max && grupos.some(g => g.length > vuelta); vuelta++) {
+    grupos.forEach(g => { if (g[vuelta] && out.length < max) sumar(g[vuelta]); });
+  }
+  return out;
+}
+function _fiestaTitulo(f) {
+  if (f.dias > 1) return `Faltan ${f.dias} días para ${f.def.nombre}`;
+  if (f.dias === 1) return `Mañana empieza ${f.def.nombre}`;
+  if (f.dias === 0) return `Hoy empieza ${f.def.nombre}`;
+  return `${f.def.saludo} Estamos en ${f.def.nombre}`;
+}
+function _fiestaHtml(excluir) {
+  const f = _fiestaActiva(_hoyAR());
+  if (!f) return '';
+  const ids = _fiestaProductos(f, 8, excluir);
+  if (!ids.length) return '';                          // sin productos no hay cartel: nunca una promesa vacía
+  const cuenta = f.dias > 0 ? `<b>${f.dias}</b><small>${f.dias === 1 ? 'día' : 'días'}</small>` : `<span>${f.def.emoji}</span>`;
+  return `<div class="fiesta">
+    <div class="fiesta-cartel"><div class="fiesta-cuenta">${cuenta}</div>
+      <div class="fiesta-txt"><div class="fiesta-tit">${f.def.emoji} ${esc(_fiestaTitulo(f))}</div><div class="fiesta-sub">${esc(f.cfg.txt || f.def.txt)}</div></div></div>
+    <div class="vitrina-fila">${_miniCards(ids, 'fiestaSumar')}</div>
+  </div>`;
+}
+function fiestaSumar(id) { _sumarUnidad(id, 'fiesta'); }
+
+// 🕯️ v4.88 · CIERRE PARA SHABAT. "Pedí hasta el jueves a las 20 h y llega para Shabat": arriba de la
+// tienda de domingo hasta la hora de corte (hora de Buenos Aires). Es una promesa: el día, la hora y
+// el texto se cambian (o se apaga) desde el panel → Inicio.
+const _DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+function _shabatTexto(c) {
+  return (c.txt || '').trim() || `🕯️ Pedí hasta el ${_DIAS_SEMANA[c.dia]} a las ${c.hora} h y llega para Shabat`;
+}
+function _shabatVisible(c, ahora = new Date()) {
+  if (!c || !c.on || _estadoTienda === 'cerrada') return false;
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).formatToParts(ahora);
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf((partes.find(x => x.type === 'weekday') || {}).value);
+  const hora = parseInt((partes.find(x => x.type === 'hour') || {}).value) || 0;
+  return dow >= 0 && (dow < c.dia || (dow === c.dia && hora < c.hora));
+}
+function pintarShabat() {
+  const el = document.getElementById('shabat-franja');
+  if (!el) return;
+  const c = _fiestasCfg && _fiestasCfg.shabat;
+  const ver = !adminAuth && _shabatVisible(c);
+  el.hidden = !ver;
+  if (ver) el.textContent = _shabatTexto(c);
+}
+setInterval(pintarShabat, 10 * 60000);   // a la hora de corte se va sola, aunque la página siga abierta
 // Tocar la foto o el nombre lleva a la tarjeta completa, en su categoría.
 function vitrinaIr(id) {
   const c = document.getElementById('card-' + id);
@@ -4046,6 +4318,7 @@ function renderCatalogo() {
   let html = '';
   // 🔥 v4.87: "Lo más pedido" arriba de todo, en la vista completa (sin búsqueda, filtros ni link VIP,
   // que es una selección armada a mano). Con menos de 3, no hay fila: una fila flaca no vende.
+  if (_categoriaActiva === 'Todos' && !query && !_vipIds && !_kosherSup && !_kosherTipo) html += _fiestaHtml(topIds.length >= 3 ? topSet : null);   // 🗓️ v4.88
   if (_categoriaActiva === 'Todos' && !query && !_vipIds && !_kosherSup && !_kosherTipo && topIds.length >= 3) html += _vitrinaHtml(topIds);
   // 🏷️ Ofertas arriba de todo (solo en la vista completa: sin búsqueda ni filtro de categoría). Se repiten abajo en su lugar.
   if (_categoriaActiva === 'Todos' && !query) {
@@ -15592,6 +15865,41 @@ function _anaSecGente(d) {
 
 // ═══ 📅 DÍA A DÍA ═══════════════════════════════════════════════════════════
 function abrirDiaAna(f) { _anaDiaAbierto = _anaDiaAbierto === f ? null : f; pintarAnalitica(); }
+// 🗓️ v4.88 · CADA FIESTA, ANOTADA. Qué fiesta fue (o viene) ese día, para leer la Analítica con el
+// calendario al lado y saber el año que viene cuánto se movió la semana previa. Manda lo que está
+// pasando (la fiesta o su víspera), después el día siguiente y por último los días que faltan.
+function _fiestaEtiqueta(diaK) {
+  for (const [id, erev, hasta] of FIESTAS_FECHAS) {
+    const def = FIESTAS_DEF[id];
+    if (diaK === erev) return { txt: id === 'januca' ? '🕎 1ª vela de Janucá' : def.emoji + ' víspera de ' + def.nombre, fuerte: true };
+    if (diaK > erev && diaK <= hasta) {
+      if (id === 'sucot' && diaK === hasta) return { txt: '🌿 Simjat Torá', fuerte: true };
+      if (id === 'sucot' && diaK === _diaMas(hasta, -1)) return { txt: '🌿 Shminí Atzeret', fuerte: true };
+      return { txt: def.emoji + ' ' + def.nombre, fuerte: true };
+    }
+  }
+  for (const [id, , hasta] of FIESTAS_FECHAS) if (diaK === _diaMas(hasta, 1)) return { txt: 'el día después de ' + FIESTAS_DEF[id].nombre, fuerte: false };
+  for (const [id, erev] of FIESTAS_FECHAS) {
+    const n = _diasEntre(diaK, erev);
+    if (n > 0 && n <= 7) return { txt: 'faltan ' + n + (n === 1 ? ' día' : ' días') + ' para ' + FIESTAS_DEF[id].nombre, fuerte: false };
+  }
+  return null;
+}
+// La semana antes de cada fiesta del período contra una semana normal (el promedio de todos los días).
+function _fiestasSemanaPrevia(dias) {
+  if (!dias.length) return [];
+  const porDia = Object.fromEntries(dias.map(x => [x.fecha, x]));
+  const prom = { v: dias.reduce((t, x) => t + x.visitas, 0) / dias.length * 7, p: dias.reduce((t, x) => t + x.pedidos, 0) / dias.length * 7 };
+  const primero = dias.map(x => x.fecha).sort()[0], hoyK = _hoyAR();
+  const out = [];
+  FIESTAS_FECHAS.forEach(([id, erev]) => {
+    if (FIESTAS_DEF[id].sinVidriera || erev < _diaMas(primero, 5) || _diaMas(erev, -7) > hoyK) return;
+    let v = 0, pe = 0, n = 0;
+    for (let k = 7; k >= 1; k--) { const x = porDia[_diaMas(erev, -k)]; if (x) { v += x.visitas; pe += x.pedidos; n++; } }
+    if (n >= 3) out.push({ id, erev, v, p: pe, n, prom, futuro: erev > hoyK, pct: prom.v ? Math.round((v / n * 7 - prom.v) / prom.v * 100) : 0 });
+  });
+  return out.reverse();   // la más reciente primero
+}
 function _anaSecDias(d) {
   const dias = (d.diasDetalle || []).slice().reverse();   // del más reciente al más viejo
   if (!dias.length) return _anaCard('<div class="sinpedidos">Sin días con datos en el período</div>');
@@ -15614,6 +15922,7 @@ function _anaSecDias(d) {
         </div>
       </div>
       <div style="display:flex;gap:9px;margin-top:3px;padding-left:84px;font-size:0.68rem;color:var(--texto-suave);flex-wrap:wrap">
+        ${(() => { const fe = _fiestaEtiqueta(x.fecha); return fe ? `<span style="background:${fe.fuerte ? '#fdf3e3' : 'transparent'};color:#8a5a1e;border-radius:5px;padding:0 6px;font-weight:${fe.fuerte ? 800 : 600}">${esc(fe.txt)}</span>` : ''; })()}
         <span>🛒 ${x.carritos}</span><span>🔥 ${x.checkouts}</span>
         <span style="color:${x.pedidos ? 'var(--verde)' : 'inherit'};font-weight:${x.pedidos ? '700' : '400'}">✅ ${x.pedidos} pedido${x.pedidos !== 1 ? 's' : ''}</span>
         <span>· conversión <b>${x.conv}%</b></span>
@@ -15626,7 +15935,14 @@ function _anaSecDias(d) {
   }).join('');
   const tot = dias.reduce((a, x) => ({ v: a.v + x.visitas, u: a.u + x.unicos, p: a.p + x.pedidos }), { v: 0, u: 0, p: 0 });
   const mejor = dias.slice().sort((a, b) => b.visitas - a.visitas)[0];
-  return _anaCard(`<div class="admin-titulo">📅 Día por día (${dias.length} días)</div>
+  const fs = _fiestasSemanaPrevia(dias);
+  const fiestasCard = fs.length ? _anaCard(`<div class="admin-titulo">🗓️ La semana antes de cada fiesta</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Queda anotado para decidir el año que viene qué traer y cuánto. Se compara con una semana normal del período (<b>${Math.round(fs[0].prom.v)}</b> visitas y <b>${Math.round(fs[0].prom.p)}</b> pedidos).</div>
+    ${fs.map(x => { const def = FIESTAS_DEF[x.id]; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:0.78rem;padding:6px 0;border-bottom:1px solid var(--gris-medio);flex-wrap:wrap">
+      <span><b>${def.emoji} ${def.nombre} ${x.erev.slice(0, 4)}</b> <span style="color:var(--texto-suave)">· ${x.futuro ? 'empieza' : 'empezó'} el ${x.erev.slice(8, 10)}/${x.erev.slice(5, 7)}${x.n < 7 ? ' · van ' + x.n + ' de 7 días' : ''}</span></span>
+      <span style="color:var(--texto-suave)"><b style="color:#2d1a0a">${x.v}</b> visitas · <b style="color:#2d1a0a">${x.p}</b> pedidos · <b style="color:${x.pct >= 0 ? 'var(--verde)' : '#c0392b'}">${x.pct >= 0 ? '+' : ''}${x.pct}%</b></span>
+    </div>`; }).join('')}`) : '';
+  return fiestasCard + _anaCard(`<div class="admin-titulo">📅 Día por día (${dias.length} días)</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Tocá cualquier día para ver qué miraron. Promedio: <b>${Math.round(tot.v / dias.length)}</b> visitas y <b>${Math.round(tot.u / dias.length)}</b> personas por día${mejor ? ` · mejor día: <b>${mejor.fecha.slice(8, 10)}/${mejor.fecha.slice(5, 7)}</b> con ${mejor.visitas}` : ''}.</div>
     ${filas}`);
 }

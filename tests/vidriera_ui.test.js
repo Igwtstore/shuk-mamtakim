@@ -36,6 +36,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   const nueva = async (ruta, { antes, estado = { estado: 'abierta', vidriera: VIDRIERA }, analitica = null, ficha = null, prods = PRODS_SB } = {}) => {
     const ctx = await b.newContext({ viewport: { width: 420, height: 900 } });
     const pg = await ctx.newPage();
+    await pg.clock.setFixedTime(new Date('2026-10-20T15:00:00-03:00'));   // sin fiestas cerca: la tanda 3 tiene su propia prueba
     await pg.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); window.supabase = { createClient: () => ({ auth: { getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) } }) }; });
     if (antes) await pg.addInitScript(antes);
     pg.on('pageerror', e => errs.push(e.message));
@@ -78,7 +79,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   // 2) Sumar desde la fila
   await pg.evaluate(() => vitrinaSumar(10));
   ok('"+ Agregar" de la fila suma 1 al carrito', await pg.evaluate(() => carrito[10] && carrito[10].qty === 1));
-  ok('y el botón pasa a "✓ 1 · sumar otro"', (await pg.evaluate(() => [...document.querySelectorAll('.vitrina-btn')][0].textContent)).includes('✓ 1'));
+  ok('y el botón pasa a "✓ 1 · sumar otro"', (await pg.evaluate(() => [...document.querySelectorAll('#catalogo .vitrina .vitrina-btn')][0].textContent)).includes('✓ 1'));
   ok('queda registrado que salió de la fila', await hasta(async () => (await recibidos()).some(x => x.evento === 'vidriera' && x.producto === 'fila · Pitzujim-Mani Sabor Grill')));
   ok('al sumar desde la fila no salta el aviso de sabores (eso es al elegir en la tarjeta)', await pg.evaluate(() => !document.getElementById('sabores-pop')));
 
@@ -108,7 +109,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await ctx.close();
 
   // 6) Vuelve otro día y el servidor no contesta: abre igual ordenada, con lo que guardó el aparato
-  const { pg: pg2, ctx: ctx2 } = await nueva('/tienda', { estado: null, antes: `localStorage.setItem('shuk_vidriera', ${JSON.stringify(JSON.stringify(VIDRIERA))})` });
+  const { pg: pg2, ctx: ctx2 } = await nueva('/tienda', { estado: null, antes: `localStorage.setItem('shuk_vidriera', ${JSON.stringify(JSON.stringify({ ...VIDRIERA, t: Date.parse('2026-10-19T14:00:00-03:00') }))})` });
   ok('con la vidriera guardada en el aparato, la fila sale aunque el servidor no conteste', await hasta(async () => pg2.evaluate(() => !!document.querySelector('#catalogo .vitrina'))));
   await ctx2.close();
   const { pg: pg3, ctx: ctx3 } = await nueva('/tienda', { estado: { estado: 'abierta' } });
