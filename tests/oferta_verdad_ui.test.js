@@ -21,6 +21,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
 (async () => {
   const mock = spawn('node', [path.join(__dirname, '_mock_motor_auth.mjs')], { stdio: 'ignore' });
   const srv = spawn('node', ['servidor.mjs'], { cwd: path.join(RAIZ, 'despliegue', 'sitio'), stdio: 'ignore', env: { ...process.env, MOTOR_URL: 'http://127.0.0.1:3998/motor', SUPABASE_URL: 'http://127.0.0.1:3998', PUERTO: '3199', RAIZ } });
+  process.on('exit', () => { try { srv.kill(); mock.kill(); } catch { /**/ } });   // aunque la prueba se corte, no quedan servidores prendidos
   await esperar(1500);
   const b = await chromium.launch();
   const checks = [], errs = [], ventas = [], ofertas = [];

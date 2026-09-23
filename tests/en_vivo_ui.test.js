@@ -7,7 +7,7 @@
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const path = require('path');
-const RAIZ = path.resolve(__dirname, '..');
+const RAIZ = process.env.RAIZ_PRUEBA || path.resolve(__dirname, '..');
 const SITIO = 'http://127.0.0.1:3199';
 
 const DATA = {
@@ -31,8 +31,12 @@ const DATA = {
 const PRODS_SB = [1, 2, 3, 4].map(i => ({ id: i, nombre: 'Producto de prueba ' + i, descripcion: 'desc', precio_may: '2000', precio_min: 3000, stock: 5, imagen: '', activo: true, categoria: 'Chocolate', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: '$' }));
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 // v4.84: lo que devuelve el motor para "todo el día": una visita de hace 2 horas que terminó en pedido.
-const HACE2H = Date.now() - 2 * 3600000;
+// Si la prueba corre en las primeras 2 horas del día, "hace 2 horas" cae AYER y el día de hoy queda sin
+// esa visita (5 pasos fallaban de madrugada, con el código bien): se la pone al empezar el día. Solo
+// entre las 00:00 y las 00:06 no alcanza (la visita contaría todavía como "ahora").
 const hoyBA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+const INICIO_HOY_BA = Date.parse(hoyBA + 'T00:00:00-03:00');
+const HACE2H = Math.max(Date.now() - 2 * 3600000, INICIO_HOY_BA + 60000);
 const DIA = { dia: hoyBA, esHoy: true, eventos: [
   { id: 'm1', t: HACE2H, vid: 'v_rivka', pagina: 'tienda', evento: 'visita', ciudad: 'Once', dispositivo: 'celular', aparato: 'iPhone', nombre: 'Rivka Mañana', telefono: '1144448888', total: 0 },
   { id: 'm2', t: HACE2H + 20000, vid: 'v_rivka', pagina: 'tienda', evento: 'vistas', vistos: ['Klik', 'Bamba', 'Elite'], total: 0 },
