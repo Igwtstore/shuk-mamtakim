@@ -19017,7 +19017,7 @@ if ('serviceWorker' in navigator) {
     // computadora se registra, así vuelve el instalador. iOS instala por Compartir → Agregar a
     // pantalla de inicio, que NO necesita service worker.
     if (!_esIOS) {
-      navigator.serviceWorker.register('/sw.js?v=7').catch(() => {});
+      navigator.serviceWorker.register('/sw.js?v=8').catch(() => {});
       return;
     }
     const controlado = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.indexOf('OneSignal') === -1;

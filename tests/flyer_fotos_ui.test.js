@@ -100,7 +100,7 @@ const PRODS = [P(339, 'Carmit Cornflakes', 'shuk-mamtakim/aaa111'), P(340, 'Carm
     return { controla, mini, lienzo, cache };
   }, 1300 + Math.floor(Math.random() * 90));
   ok('con el service worker: la miniatura se ve Y la foto del lienzo entra (antes: 🍬)', sw.controla && sw.mini && sw.lienzo);
-  ok('el cache viejo (con fotos opacas) ya no está: solo shuk-v7', JSON.stringify(sw.cache) === '["shuk-v7"]');
+  ok('el cache viejo (con fotos opacas) ya no está: solo el actual', JSON.stringify(sw.cache) === '["shuk-v8"]');
   await ctx2.close();
 
   ok('sin errores de JavaScript', errs.length === 0);

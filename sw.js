@@ -1,4 +1,4 @@
-const CACHE = 'shuk-v7';   // v7 (v4.97): al activarse borra el cache viejo, que tenía fotos guardadas opacas
+const CACHE = 'shuk-v8';   // v7 (v4.97): al activarse borra el cache viejo, que tenía fotos guardadas opacas
 const STATIC = ['/', '/index.html', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -16,6 +16,9 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // 🛑 v4.98: el SW SOLO atiende lecturas (GET). Una SUBIDA (POST a api.cloudinary.com) pasa de largo: en la v4.97
+  // el SW la rearmaba como GET y se perdía el archivo → "guardado" sin foto (lo vio Jony el 23/09 a la tarde).
+  if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
 
   // VIDEOS → el navegador los maneja SOLO (piden rangos parciales; si el SW los intercepta,
@@ -47,7 +50,7 @@ self.addEventListener('fetch', e => {
   // Antes: la miniatura del selector de flyers (sin permiso) quedaba guardada OPACA; después el flyer pedía la
   // MISMA foto con permiso para su lienzo, el SW le devolvía la opaca, el navegador la rechazaba y el flyer
   // dibujaba 🍬 en vez de la foto (flyer "Directo de Israel" del 22/09). Una respuesta CORS le sirve a los dos.
-  if (url.hostname.includes('cloudinary') || url.hostname.includes('githubusercontent')) {
+  if (url.hostname === 'res.cloudinary.com' || url.hostname.includes('githubusercontent')) {   // solo DESCARGAS de fotos (nunca api.cloudinary.com)
     const req = new Request(e.request.url, { mode: 'cors', credentials: 'omit' });
     e.respondWith(
       caches.open(CACHE).then(cache =>
