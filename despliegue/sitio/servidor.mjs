@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { crearEnVivo, crearPortero, normalizarEvento, paramsParaMotor, SOLO_VIVO } from './en-vivo.mjs';
+import { rutaOculta, CABECERAS_SEGURIDAD } from './rutas.mjs';
 
 const RAIZ = path.resolve(process.env.RAIZ || path.join(import.meta.dirname, '..', '..'));
 const PUERTO = parseInt(process.env.PUERTO || '3100', 10);
@@ -44,8 +45,7 @@ const leerFactura = (await import(pathToFileURL(path.join(RAIZ, 'api', 'leer-fac
 // El matcher del middleware (en qué rutas corre: páginas sí, assets no).
 const MATCHER = aRegex(mw.config.matcher[0]);
 
-// Lo que NO se sirve como archivo (en Vercel tampoco: son funciones, config o infra).
-const OCULTOS = /^\/(despliegue|api|supabase|tests|\.git|middleware\.js$|vercel\.json$|[^/]*\.sql$)/i;
+// Lo que NO se sirve como archivo: rutas.mjs (🔒 v4.94: evaluado sobre la ruta decodificada y normalizada).
 
 // ── De qué país viene la visita ─────────────────────────────────────────────
 // La IP real la pone el proxy Caddy en X-Real-IP (despliegue/shuk.caddy). Solo se le cree si el
@@ -63,6 +63,8 @@ function paisDe(req) {
 const app = express();
 app.disable('x-powered-by');
 app.set('etag', 'weak');
+// 🔒 v4.94: cabeceras de seguridad en TODO lo que sale (antes no había ninguna).
+app.use((_req, res, next) => { for (const [k, v] of Object.entries(CABECERAS_SEGURIDAD)) res.setHeader(k, v); next(); });
 
 // Salud (antes del candado: los monitores no son del Mercosur).
 app.get('/_salud', (_req, res) => res.json({ ok: true, desde: ARRANQUE.toISOString(), raiz: RAIZ }));
@@ -163,7 +165,7 @@ app.use((req, _res, next) => {
 });
 
 // 4) Los archivos del repo, con las cabeceras de Vercel.
-app.use((req, res, next) => (OCULTOS.test(req.path) ? res.status(404).type('text').send('404') : next()));
+app.use((req, res, next) => (rutaOculta(req.path) ? res.status(404).type('text').send('404') : next()));
 app.use(express.static(RAIZ, {
   index: 'index.html',
   dotfiles: 'ignore',

@@ -5,7 +5,7 @@ const { Client } = require('pg');
 let lastId = 26;   // marca de agua: última recepción ya vista
 
 async function conectar() {
-  const c = new Client({ host: 'aws-1-us-east-2.pooler.supabase.com', port: 5432, user: 'postgres.soarkknjewgcewryxqac', password: 'G3b4JpxRgxW0Yvu0', database: 'postgres', ssl: { rejectUnauthorized: false } });
+  const c = new Client({ host: 'aws-1-us-east-2.pooler.supabase.com', port: 5432, user: 'postgres.soarkknjewgcewryxqac', password: process.env.SHUK_DB_PASS /* 🔒 v4.94: nunca escrita acá (el repo es público) */, database: 'postgres', ssl: { rejectUnauthorized: false } });
   c.on('error', () => {});
   await c.connect();
   return c;

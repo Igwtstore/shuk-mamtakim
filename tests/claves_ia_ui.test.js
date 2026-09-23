@@ -9,7 +9,7 @@ const RAIZ = path.resolve(__dirname, '..');
 const SITIO = 'http://127.0.0.1:3199';
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
-const CLAVE_BUENA = 'sk-ant-api03-PRUEBA-BUENA-0123456789abcdef', CLAVE_MALA = 'sk-ant-api03-PRUEBA-MALA-0123456789abcdef';
+const CLAVE_BUENA = 'sk-ant-PRUEBA-BUENA', CLAVE_MALA = 'sk-ant-PRUEBA-MALA';   // cortas a propósito: no tienen forma de clave real (el barrido de seguridad_claves las cazaría)
 
 (async () => {
   const mock = spawn('node', [path.join(__dirname, '_mock_motor_auth.mjs')], { stdio: 'ignore' });

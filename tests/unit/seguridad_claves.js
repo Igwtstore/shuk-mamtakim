@@ -53,7 +53,7 @@ async function run() {
   t.eq('Anthropic: clave que funciona → se guarda con su fecha', [x.r.ok, x.cfg.ANTHROPIC_API_KEY, JSON.parse(x.cfg.CLAVES_IA_FECHAS).anthropic], [true, 'sk-ant-NUEVA', '23/09/2026 10:00']);
   x = await gIA('cualquier-cosa', '');
   t.ok('Anthropic: algo que no es una clave ni se prueba', x.r.error && x.cfg.ANTHROPIC_API_KEY === 'sk-ant-VIEJA');
-  x = await gG('AIzaNUEVA-que-no-anda-000000000000000', 'la clave no funciona (el servicio la rechazó)');
+  x = await gG('AIza.NUEVA-que-no-anda.000000000000000', 'la clave no funciona (el servicio la rechazó)');
   t.eq('Gemini: clave rechazada → error y la vieja queda', [!!x.r.error, x.cfg.GEMINI_API_KEY], [true, 'AIzaVIEJA']);
 
   // estadoClavesIA: dice si está y desde cuándo, NUNCA la clave.
@@ -73,7 +73,7 @@ async function run() {
   t.ok('la tarjeta de claves es solo para Jony (no en la vista de Miri)', /if \(!adminAuth \|\| socioActual !== 'jony' \|\| esVistaMiri\(\)\) \{ box\.hidden = true; return; \}/.test(HTML));
 
   // Ninguna clave escrita en el código que se publica (el repo es público).
-  const PATRONES = [/os_v2_app_[a-z0-9]{20,}/i, /sk-ant-[A-Za-z0-9_-]{20,}/, /AIza[0-9A-Za-z_-]{30,}/, /\bAQ\.[0-9A-Za-z_-]{30,}/, /ghp_[A-Za-z0-9]{30,}/, /github_pat_[A-Za-z0-9_]{30,}/, /\bSK[0-9a-f]{32}\b/, /postgres(ql)?:\/\/[^:\s'"]+:[^@\s'"]{6,}@/];
+  const PATRONES = [/os_v2_app_[a-z0-9]{20,}/i, /sk-ant-[A-Za-z0-9_-]{20,}/, /AIza[0-9A-Za-z_-]{30,}/, /\bAQ\.[0-9A-Za-z_-]{30,}/, /ghp_[A-Za-z0-9]{30,}/, /github_pat_[A-Za-z0-9_]{30,}/, /\bSK[0-9a-f]{32}\b/, /postgres(ql)?:\/\/[^:\s'"]+:[^@\s'"]{6,}@/, /password\s*:\s*['"`][^'"`\s]{8,}['"`]/i];
   const publicados = require('child_process').execSync('git ls-files', { cwd: RAIZ, encoding: 'utf8' }).split('\n')
     .filter((f) => f && /\.(html|js|mjs|ts|json|sql|md|sh|yml|yaml|caddy|env|ejemplo|txt)$/.test(f) && fs.existsSync(path.join(RAIZ, f)));
   const conClave = [];

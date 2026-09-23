@@ -17501,14 +17501,15 @@ async function renderNotificaciones() {
         const hace = d > 0 ? `<span style="color:${d >= 7 ? 'var(--rojo)' : 'var(--dorado)'}">(hace ${d} día${d !== 1 ? 's' : ''})</span>` : '<span style="color:var(--verde)">(hoy)</span>';
         const trucho = _telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px" title="Menos de 10 dígitos o formato raro: probablemente no exista ese WhatsApp">⚠️ número dudoso</span>' : '';
         // La ✕ va SIEMPRE (haya stock o no): un aviso trucho o arrepentido se borra acá
-        const quitar = `<button onclick="eliminarNotificacion('${pid}','${c.telefono}')" title="Sacar de la lista de espera" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:1px 8px;font-size:0.72rem;font-weight:700;cursor:pointer;vertical-align:middle">✕</button>`;
-        return `<div style="font-size:0.75rem;color:var(--texto-suave);display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap"><span>${c.nombre} (${c.telefono})${trucho} · 🕐 pidió el ${c.fecha || 's/fecha'} ${hace}</span>${quitar}</div>`;
+        // 🔒 v4.94: todo lo de acá lo escribió un visitante en el "Avisame" (sin login) → esc() en el texto y jsAttr() en los onclick.
+        const quitar = `<button onclick="eliminarNotificacion('${jsAttr(pid)}','${jsAttr(c.telefono)}')" title="Sacar de la lista de espera" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:1px 8px;font-size:0.72rem;font-weight:700;cursor:pointer;vertical-align:middle">✕</button>`;
+        return `<div style="font-size:0.75rem;color:var(--texto-suave);display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap"><span>${esc(c.nombre)} (${esc(c.telefono)})${trucho} · 🕐 pidió el ${esc(c.fecha || 's/fecha')} ${hace}</span>${quitar}</div>`;
       }).join('');
       const prodEsc = g.nombre.replace(/'/g,'').replace(/"/g,'');
-      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${c.telefono}','${prodEsc}','${nom}','${pid}','${c.modoCliente||'minorista'}')">📱 ${nom}</button>`; }).join(' ');
-      const similarBtns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion" style="background:#fff3e6;color:#9a6b00;font-size:0.72rem" onclick="abrirOfrecerSimilar('${c.telefono}','${nom}','${prodEsc}','${pid}','${c.modoCliente||'minorista'}')">✋ ${nom}</button>`; }).join(' ');
+      const btns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion btn-entregar" style="font-size:0.75rem" onclick="notificarCliente('${jsAttr(c.telefono)}','${jsAttr(prodEsc)}','${jsAttr(nom)}','${jsAttr(pid)}','${jsAttr(c.modoCliente||'minorista')}')">📱 ${esc(nom)}</button>`; }).join(' ');
+      const similarBtns = g.clientes.map(c => { const nom = (c.nombre||'').replace(/'/g,'').replace(/"/g,''); return `<button class="btn-accion" style="background:#fff3e6;color:#9a6b00;font-size:0.72rem" onclick="abrirOfrecerSimilar('${jsAttr(c.telefono)}','${jsAttr(nom)}','${jsAttr(prodEsc)}','${jsAttr(pid)}','${jsAttr(c.modoCliente||'minorista')}')">✋ ${esc(nom)}</button>`; }).join(' ');
       return `<div style="padding:0.75rem 0;border-bottom:1px solid var(--gris-medio)">
-        <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${g.nombre} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
+        <div style="font-weight:600;font-size:0.88rem;color:var(--azul);margin-bottom:0.3rem">${esc(g.nombre)} <span style="color:var(--texto-suave);font-weight:400">(${g.clientes.length} esperando)</span></div>
         <div style="margin-bottom:0.4rem">${clientesHTML}</div>
         ${tieneStock ? `<div style="font-size:0.72rem;color:var(--verde);font-weight:600;margin-bottom:0.4rem">✓ Ya hay stock — notificá:</div><div class="pedido-acciones" style="flex-wrap:wrap">${btns}</div>` : '<div style="font-size:0.72rem;color:var(--dorado)">⏳ Sin stock todavía</div>'}
         <div style="margin-top:0.4rem;display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap"><span style="font-size:0.68rem;color:var(--texto-suave)">Ofrecer similar:</span>${similarBtns}</div>
@@ -17528,14 +17529,14 @@ async function renderNotificaciones() {
         const msgRecordatorio = `¡Hola ${c.nombre}! 🛍️ Recordatorio: todavía tenés *${g.nombre}* disponible en Shuk Mamtakim. ¡No te quedes sin el tuyo! 👉 ${modo === 'minorista' ? SITIO + '/#min-pL3q7' : SITIO + '/mayorista'}`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem;flex-wrap:wrap">
           <div>
-            <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${c.nombre} <span style="font-weight:400;color:var(--texto-suave)">(${c.telefono})</span>${_telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px">⚠️ número dudoso</span>' : ''}</div>
-            <div style="font-size:0.72rem;color:var(--texto-suave)">${g.nombre}</div>
-            <div style="font-size:0.68rem;color:${esViejo?'var(--rojo)':'var(--texto-suave)'}">🕐 pidió el ${c.fecha || 's/fecha'} · hace ${dias} día${dias!==1?'s':''}</div>
+            <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${esc(c.nombre)} <span style="font-weight:400;color:var(--texto-suave)">(${esc(c.telefono)})</span>${_telDudoso(c.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px">⚠️ número dudoso</span>' : ''}</div>
+            <div style="font-size:0.72rem;color:var(--texto-suave)">${esc(g.nombre)}</div>
+            <div style="font-size:0.68rem;color:${esViejo?'var(--rojo)':'var(--texto-suave)'}">🕐 pidió el ${esc(c.fecha || 's/fecha')} · hace ${dias} día${dias!==1?'s':''}</div>
           </div>
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-            ${esViejo ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-size:0.72rem" onclick="window.open('https://wa.me/${c.telefono}?text='+encodeURIComponent('${jsAttr(msgRecordatorio)}'),'_blank')">🔔 Recordatorio</button>` : ''}
-            <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="marcarComprado('${pid}','${c.telefono}')">✓ Compró</button>
-            <button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${pid}','${c.telefono}')">✕ Eliminar</button>
+            ${esViejo ? `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-size:0.72rem" onclick="window.open('https://wa.me/${jsAttr(String(c.telefono||'').replace(/[^\d]/g,''))}?text='+encodeURIComponent('${jsAttr(msgRecordatorio)}'),'_blank')">🔔 Recordatorio</button>` : ''}
+            <button class="btn-accion btn-entregar" style="font-size:0.72rem" onclick="marcarComprado('${jsAttr(pid)}','${jsAttr(c.telefono)}')">✓ Compró</button>
+            <button class="btn-accion btn-cancelar" style="font-size:0.72rem" onclick="eliminarNotificacion('${jsAttr(pid)}','${jsAttr(c.telefono)}')">✕ Eliminar</button>
           </div>
         </div>`;
       }).join('');

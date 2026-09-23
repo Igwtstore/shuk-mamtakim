@@ -9,7 +9,7 @@ const f$ = n => '$ ' + Math.round(n).toLocaleString('es-AR');
 const fU = n => 'U$S ' + (+n).toFixed(2);
 
 async function conectar() {
-  const c = new Client({ host: 'aws-1-us-east-2.pooler.supabase.com', port: 5432, user: 'postgres.soarkknjewgcewryxqac', password: 'G3b4JpxRgxW0Yvu0', database: 'postgres', ssl: { rejectUnauthorized: false } });
+  const c = new Client({ host: 'aws-1-us-east-2.pooler.supabase.com', port: 5432, user: 'postgres.soarkknjewgcewryxqac', password: process.env.SHUK_DB_PASS /* 🔒 v4.94: nunca escrita acá (el repo es público) */, database: 'postgres', ssl: { rejectUnauthorized: false } });
   // el pooler corta sockets ociosos: sin este handler, el 'error' asíncrono voltea el proceso
   c.on('error', () => {});
   await c.connect();
