@@ -18,8 +18,9 @@ const sinTipos = s => s.replace(/: any/g, '');
 const motor = new Function(sinTipos(fnDe(TS, 'normEnvio')) + '\nreturn { normEnvio };')();
 const tienda = new Function(
   'var _envioCfg = { on: true, min: 120000, zona: "CABA" }; let modo = "minorista";\n' +
-  'const esc = s => String(s == null ? "" : s);\n' +
-  ['envioGratisDe', '_envioZonaTxt', '_plataAR', '_envioBarraHtml'].map(n => fnDe(HTML, n)).join('\n') +
+  'const esc = s => String(s == null ? "" : s); const _hoyAR = () => "2026-09-23";\n' +
+  'const _precioDelModo = p => modo === "mayorista" ? (parseFloat(String(p.precioMay || "0").replace(",", ".")) || 0) : (parseFloat(p.precioMin) || 0);\n' +
+  ['envioGratisDe', '_envioZonaTxt', '_plataAR', '_envioBarraHtml', 'ofertaActiva', 'packActivo', 'ofertaVigente', 'precioEfectivo', '_fechaOfertaISO'].map(n => fnDe(HTML, n)).join('\n') +
   '\nreturn { envioGratisDe, _envioBarraHtml, set: o => { if ("cfg" in o) _envioCfg = o.cfg; if ("modo" in o) modo = o.modo; } };')();
 // la medición (motor)
 const analitica = require('./vidriera.js')._motor.analitica;

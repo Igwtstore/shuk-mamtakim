@@ -2336,33 +2336,26 @@
     <div id="oferta-modal-nombre" style="font-size:0.8rem;color:var(--texto-suave);margin-bottom:1rem"></div>
     <div style="display:flex;flex-direction:column;gap:0.75rem">
       <div>
-        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Precio oferta (0 = sin oferta)</label>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Precio de oferta en $ (0 = sin oferta)</label>
         <input type="number" id="oferta-precio" placeholder="Ej: 8500" min="0" step="0.01"
           style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
       </div>
       <div>
-        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Fecha vencimiento oferta (dd/MM/yyyy, vacío = sin vencimiento)</label>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Vale hasta (dd/mm/aaaa, incluido ese día · vacío = sin vencimiento)</label>
         <input type="text" id="oferta-fecha" placeholder="Ej: 30/06/2026"
           style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
       </div>
       <div style="border-top:1px solid var(--gris-medio);padding-top:0.75rem">
-        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado)">Pack — cantidad mínima (0 = sin pack)</label>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado)">Pack: llevando esta cantidad o más… (0 = sin pack)</label>
         <input type="number" id="oferta-cant-pack" placeholder="Ej: 5" min="0"
           style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
       </div>
       <div>
-        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado)">Precio pack por unidad</label>
+        <label style="font-size:0.78rem;font-weight:600;color:var(--dorado)">…cada una sale ($, por unidad)</label>
         <input type="number" id="oferta-precio-pack" placeholder="Ej: 9000" min="0" step="0.01"
           style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box;margin-top:0.25rem">
       </div>
-      <div style="border-top:1px solid var(--gris-medio);padding-top:0.75rem">
-        <label style="font-size:0.78rem;font-weight:600;color:var(--azul)">Visible para</label>
-        <select id="oferta-visible" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;background:white;margin-top:0.25rem">
-          <option value="Ambos">Ambos (Mayorista y Minorista)</option>
-          <option value="Mayorista">Solo Mayorista</option>
-          <option value="Minorista">Solo Minorista</option>
-        </select>
-      </div>
+      <div id="oferta-aviso" style="border-top:1px solid var(--gris-medio);padding-top:0.6rem;font-size:0.74rem;color:var(--texto-suave);line-height:1.45">🏷️ Las ofertas y los packs se muestran <b>y se cobran</b> en la tienda <b>minorista</b>: el carrito, el mensaje y el pedido llevan el precio rebajado. En la mayorista no aparecen. Con link VIP, el cliente paga el más bajo de los dos.</div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarOfertaModal()" style="flex:1;padding:0.65rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:white;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer">Cancelar</button>
@@ -3296,7 +3289,7 @@ function _sellosHtml(p, topSet) {
   return s.join('');
 }
 const _precioCorto = p => {
-  const v = (ofertaActiva(p) ? parseFloat(p.precioOferta) || 0 : 0) || _precioDelModo(p);
+  const v = precioEfectivo(p, 1);
   return esPesos(p) ? '$ ' + Math.round(v).toLocaleString('es-AR') : 'U$S ' + v.toFixed(2);
 };
 // Las tarjetitas de una fila (lo más pedido, la fiesta): foto, nombre, precio y "+ Agregar".
@@ -3478,7 +3471,7 @@ function _pintarVistaToggle() {
   document.getElementById('vista-lista').classList.toggle('on', _vistaLista);
 }
 // Lo que cobra el carrito por unidad (el total del pie tiene que ser el mismo que el del pedido).
-function _precioCobrado(p) { return _precioDelModo(p); }
+function _precioCobrado(p, qty) { return precioEfectivo(p, qty || 1); }
 function _lrFila(p) {
   if (!(p.stock > 0)) return `<div class="lr-fila agotado" id="lr-${p.id}"><div class="lr-info"><div class="lr-nombre">${esc(p.nombre)}</div><div class="lr-sub">Sin stock por ahora</div></div><button class="lr-avisame" onclick="abrirNotifModal(${p.id})">🔔 Avisame</button></div>`;
   const q = carrito[p.id] ? carrito[p.id].qty : 0;
@@ -3531,7 +3524,7 @@ function _lrPintarPie() {
   let usd = 0, ars = 0, u = 0;
   items.forEach(it => {
     const p = productos.find(x => x.id === it.id) || it;
-    const v = _precioCobrado(p) * it.qty;
+    const v = _precioCobrado(p, it.qty) * it.qty;
     if (esPesos(p)) ars += v; else usd += v;
     u += it.qty;
   });
@@ -3562,7 +3555,7 @@ function _plataAR(n) { return '$ ' + Math.round(n || 0).toLocaleString('es-AR');
 // La barra del carrito: cuánto falta (o que ya está). Total igual al del pedido: precio de lista redondeado.
 function _envioBarraHtml(items) {
   if (modo !== 'minorista' || !_envioCfg.on || !(_envioCfg.min > 0) || !items.length) return '';
-  const total = items.reduce((t, it) => t + Math.round(parseFloat(it.precioMin) || 0) * (it.qty || 0), 0);
+  const total = items.reduce((t, it) => t + Math.round(precioEfectivo(it, it.qty)) * (it.qty || 0), 0);
   const falta = _envioCfg.min - total, zona = esc(_envioZonaTxt());
   if (falta <= 0) return `<div class="envio-barra ok"><div class="envio-txt">🚚 <b>¡Tu pedido tiene envío gratis${zona}!</b></div><div class="envio-riel"><div style="width:100%"></div></div></div>`;
   const pct = Math.max(4, Math.min(100, Math.round(total / _envioCfg.min * 100)));
@@ -3572,7 +3565,7 @@ function _envioBarraHtml(items) {
 var _envioVioFalta = false;
 function _envioMedir(items) {
   if (modo !== 'minorista' || !_envioCfg.on || !items.length) return;
-  const total = items.reduce((t, it) => t + Math.round(parseFloat(it.precioMin) || 0) * (it.qty || 0), 0);
+  const total = items.reduce((t, it) => t + Math.round(precioEfectivo(it, it.qty)) * (it.qty || 0), 0);
   if (total < _envioCfg.min) { _envioVioFalta = true; return; }
   try { if (!_envioVioFalta || sessionStorage.getItem('shuk_envio_ok')) return; sessionStorage.setItem('shuk_envio_ok', '1'); } catch { return; }
   track('vidriera', { producto: 'envio · alcanzado' });
@@ -3770,23 +3763,44 @@ function formatPrecio(p) {
   }
 }
 
+// 🏷️ v4.91 · QUE LAS OFERTAS Y PACKS SE COBREN. Hasta acá la tarjeta mostraba la oferta y el carrito
+// cobraba el precio de lista. Ahora hay UNA sola cuenta para la tarjeta, el carrito, el mensaje y la
+// venta: precioEfectivo(). Las decisiones (tablero del 22/09, con lo recomendado en el plan):
+//  · ofertas y packs, solo en la tienda minorista: el precio de oferta no tiene moneda y el mayorista
+//    cobra muchas cosas en dólares (se cobraría cualquier cosa). En mayorista ni se muestran.
+//  · link VIP + oferta: el más bajo de los dos (el VIP ya viene aplicado en el precio de lista).
+//  · pack: "llevando N o más, cada una a $ X" — un renglón por producto, así el editor de pedidos y
+//    el Maaser leen el pedido igual que siempre.
+//  · la oferta vale hasta el final del día que vence (hora de Buenos Aires). Acepta las dos formas de
+//    fecha que conviven (dd/mm/aaaa del formulario y aaaa-mm-dd de la oferta rápida, que nunca vencía).
+function _fechaOfertaISO(f) {
+  const t = String(f || '').trim();
+  let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+}
 function ofertaActiva(p) {
   if (!p.precioOferta || p.precioOferta <= 0) return false;
-  const vis = (p.visibleOferta || 'Ambos').trim();
-  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
-  if (vis !== 'Ambos' && vis !== tipoActual) return false;
-  if (p.fechaOferta) {
-    const parts = p.fechaOferta.split('/');
-    if (parts.length >= 3) {
-      const vence = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
-      if (new Date() > vence) return false;
-    }
-  }
+  if (modo === 'mayorista') return false;
+  const vence = _fechaOfertaISO(p.fechaOferta);
+  if (vence && _hoyAR() > vence) return false;
   return true;
 }
-
 function packActivo(p) {
-  return p.cantPack > 0 && p.precioPack > 0;
+  return modo !== 'mayorista' && p.cantPack > 0 && p.precioPack > 0;
+}
+// La oferta que de verdad baja el precio (una "oferta" más cara que la lista, o que el VIP, no cuenta).
+function ofertaVigente(p) {
+  return ofertaActiva(p) && p.precioOferta < _precioDelModo(p);
+}
+// EL precio por unidad que se cobra, para `qty` unidades de ese producto.
+function precioEfectivo(p, qty) {
+  let v = _precioDelModo(p);
+  if (modo === 'mayorista') return v;
+  if (ofertaVigente(p)) v = p.precioOferta;
+  if (packActivo(p) && (qty || 0) >= p.cantPack && p.precioPack < v) v = p.precioPack;
+  return v;
 }
 
 // 📦 "cuánto sale la unidad": si el producto viene por paquete (unidadesPorPaquete > 1),
@@ -3796,7 +3810,7 @@ function precioUnidadHtml(p) {
   const upp = parseInt(p.unidadesPorPaquete) || 1;
   if (upp <= 1) return '';
   let val;
-  if (ofertaActiva(p)) val = parseFloat(p.precioOferta) || 0;
+  if (ofertaVigente(p)) val = parseFloat(p.precioOferta) || 0;
   else if (modo === 'mayorista') val = parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0;
   else val = parseFloat(p.precioMin) || 0;
   if (!(val > 0)) return '';
@@ -4514,14 +4528,14 @@ function renderCatalogo() {
     <div class="producto-card ${agotado ? 'agotado' : ''}${(p.etiqueta||'').trim() ? ' con-cinta' : ''}" id="card-${p.id}">
       ${(p.etiqueta||'').trim() ? (() => { const _t = p.etiqueta.trim(); const _c = _t.length <= 11 ? 'c-lg' : _t.length <= 16 ? 'c-md' : _t.length <= 24 ? 'c-sm' : 'c-xs'; return `<div class="cinta-wrap"><div class="cinta ${_c}" title="${esc(_t)}">${esc(_t)}</div></div>`; })() : ''}
       ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
-      ${!agotado && ofertaActiva(p) ? '<div class="sello-oferta">¡OFERTA<br>DEL DÍA!</div>' : ''}
+      ${!agotado && ofertaVigente(p) ? '<div class="sello-oferta">¡OFERTA<br>DEL DÍA!</div>' : ''}
       <button class="share-btn" onclick="compartirProducto(${p.id})" title="Compartir">📤</button>
       ${(() => { const sl = _sellosHtml(p, topSet); return sl ? `<div class="foto-con-sellos">${renderImg(p)}<div class="sellos-foto">${sl}</div></div>` : renderImg(p); })()}
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
         <div class="producto-desc">${p.desc}</div>
         ${kosherHtml}
-        ${ofertaActiva(p) ? `
+        ${ofertaVigente(p) ? `
         <div class="precio-cartel" style="border-color:#c0392b">
           <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.8rem;margin-right:0.4rem">${precio}</span><span class="producto-precio" style="color:#c0392b">${esPeso ? '$ '+Math.round(p.precioOferta).toLocaleString('es-AR') : 'U$S '+p.precioOferta.toFixed(2)}</span>
         </div>` : p._vipPct ? `
@@ -4529,7 +4543,7 @@ function renderCatalogo() {
           <span style="text-decoration:line-through;color:var(--texto-suave);font-size:0.8rem;margin-right:0.4rem">${vipAntes}</span><span class="producto-precio" style="color:#1e7a3c">${precio}</span><span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;margin-left:0.35rem;vertical-align:middle">-${p._vipPct}%</span>
         </div>` : `<div class="precio-cartel"><div class="producto-precio ${esPeso ? 'pesos' : ''}">${precio}</div></div>`}
         ${precioUnidadHtml(p)}
-        ${packActivo(p) ? `<div style="background:#fdf3e3;border-radius:6px;padding:3px 8px;font-size:0.75rem;color:var(--dorado);font-weight:600;margin-top:3px">🎁 x${p.cantPack} → ${esPeso ? '$ '+Math.round(p.precioPack).toLocaleString('es-AR') : 'U$S '+p.precioPack.toFixed(2)} c/u</div>` : ''}
+        ${packActivo(p) ? `<div style="background:#fdf3e3;border-radius:6px;padding:3px 8px;font-size:0.75rem;color:var(--dorado);font-weight:600;margin-top:3px">🎁 Llevando ${p.cantPack} o más: $ ${Math.round(p.precioPack).toLocaleString('es-AR')} c/u</div>` : ''}
       </div>
       ${agotado ? `
       <div class="producto-controles">
@@ -4566,7 +4580,7 @@ function renderCatalogo() {
   if (_categoriaActiva === 'Todos' && !query && !_vipIds && !_kosherSup && !_kosherTipo && topIds.length >= 3) html += _vitrinaHtml(topIds);
   // 🏷️ Ofertas arriba de todo (solo en la vista completa: sin búsqueda ni filtro de categoría). Se repiten abajo en su lugar.
   if (_categoriaActiva === 'Todos' && !query) {
-    const promos = conStock.filter(p => ofertaActiva(p) || packActivo(p));
+    const promos = conStock.filter(p => ofertaVigente(p) || packActivo(p));
     if (promos.length) {
       html += `<div style="grid-column:1/-1;margin:0.2rem 0 0.7rem;text-align:center">
         <div style="display:inline-block;background:#fde8e8;color:#c0392b;font-weight:800;font-size:0.9rem;padding:6px 18px;border-radius:20px">🏷️ Ofertas</div></div>`;
@@ -5067,7 +5081,7 @@ function agregarAlCarrito(id) {
   _contarInteraccion(p.nombre);
   track('carrito', { producto: p.nombre, ..._cartParaTrack() });
   // 🏷️ v4.81: si lo agarró con oferta o pack, queda dicho (¿el cartel vende?).
-  try { if (ofertaActiva(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p)) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
+  try { if (ofertaVigente(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p) && (carrito[p.id] ? carrito[p.id].qty : 0) >= p.cantPack) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
 }
 
 // Suma UNA unidad (la fila de lo más pedido y los sabores sugeridos): sin elegir la cantidad antes,
@@ -5086,7 +5100,7 @@ function _sumarUnidad(id, desde) {
   showToast(`${p.nombre} agregado ✓`);
   _contarInteraccion(p.nombre);
   track('carrito', { producto: p.nombre, ..._cartParaTrack() });
-  try { if (ofertaActiva(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p)) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
+  try { if (ofertaVigente(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p) && (carrito[p.id] ? carrito[p.id].qty : 0) >= p.cantPack) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
   track('vidriera', { producto: desde + ' · ' + p.nombre });   // 🔥 de dónde salió: la fila o los sabores
   return true;
 }
@@ -5223,7 +5237,7 @@ function _ofrecerCarritoGuardado() {
     const n = vivos.reduce((t, x) => t + x.q, 0);
     const total = vivos.reduce((t, x) => t + x.q * (modo === 'mayorista'
       ? (parseFloat(String(x.p.precioMay || '0').replace(',', '.')) || 0)
-      : Math.round(x.p.precioMin || 0)), 0);
+      : Math.round(precioEfectivo(x.p, x.q))), 0);
     const hayUSD = modo === 'mayorista' && vivos.some(x => !esPesos(x.p));
     const totalTxt = hayUSD ? '' : ' · ' + (modo === 'mayorista' ? '$ ' : '$ ') + Math.round(total).toLocaleString('es-AR');
     const dias = Math.round((Date.now() - g.ts) / 86400000);
@@ -5267,7 +5281,7 @@ async function _ofrecerLoDeSiempre() {
     if (!vivos.length) return;
     sessionStorage.setItem('shuk_habitual', '1');
     _habitual = vivos;
-    const total = vivos.reduce((t, x) => t + x.q * Math.round(x.p.precioMin || 0), 0);
+    const total = vivos.reduce((t, x) => t + x.q * Math.round(precioEfectivo(x.p, x.q)), 0);
     const nombre = (localStorage.getItem('shuk_may_nombre') || '').trim().split(' ')[0];
     const b = document.createElement('div');
     b.id = 'lo-de-siempre';
@@ -5342,14 +5356,18 @@ function renderCarrito() {
     return;
   }
   const itemsHTML = items.map(item => {
+    // 🏷️ v4.91: el precio que se cobra (oferta o pack), con el de lista tachado si bajó
+    const _unit = Math.round(precioEfectivo(item, item.qty)), _lista = Math.round(item.precioMin);
     const precio = modo === 'mayorista'
       ? (_monedaMay(item) !== 'U$S' ? '$ ' + Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.'))).toLocaleString('es-AR') : 'U$S ' + parseFloat((item.precioMay||'0').toString().replace(',','.')).toFixed(2))
-      : '$ ' + Math.round(item.precioMin).toLocaleString('es-AR');
+      : (_unit < _lista ? `<s style="color:var(--texto-suave);font-weight:400;font-size:0.78em">$ ${_lista.toLocaleString('es-AR')}</s> ` : '') + '$ ' + _unit.toLocaleString('es-AR');
+    const _faltaPack = packActivo(item) && item.qty < item.cantPack && Math.round(item.precioPack) < _unit ? item.cantPack - item.qty : 0;
     return `
     <div class="carrito-item">
       <div class="carrito-item-info">
         <div class="carrito-item-nombre">${item.nombre}</div>
         <div class="carrito-item-desc">${item.desc.substring(0,60)}${item.desc.length>60?'…':''}</div>
+        ${_faltaPack ? `<div style="font-size:0.72rem;color:var(--dorado);font-weight:700;margin-top:2px">🎁 Sumá ${_faltaPack} más y cada una sale $ ${Math.round(item.precioPack).toLocaleString('es-AR')}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:0.5rem">
         <div class="carrito-item-controles">
@@ -5521,7 +5539,7 @@ async function enviarPedido(_stockVerificado) {
 
   // Reparto 2×2: dueño (Jony/Myri) × moneda ($/U$S). En mayorista la moneda la define el producto;
   // en minorista todo es pesos. La comisión (15%) es SOLO sobre lo de Myri.
-  let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0;
+  let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0, ahorroOfertas = 0;
   const lineasMiri = [];   // ⚠️ REGLA SAGRADA: el WhatsApp que el cliente le manda a MIRI lleva SOLO los renglones de ella
   const lineas = items.map(item => {
     const esJony = item.dueno === 'Jony';
@@ -5538,7 +5556,8 @@ async function enviarPedido(_stockVerificado) {
         if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
       }
     } else {
-      precioUnit = Math.round(item.precioMin); moneda = '$';
+      precioUnit = Math.round(precioEfectivo(item, item.qty)); moneda = '$';   // 🏷️ v4.91: oferta o pack, cobrados
+      ahorroOfertas += (Math.round(item.precioMin) - precioUnit) * item.qty;
       if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
     }
     const subtotal = moneda === 'U$S' ? (precioUnit * item.qty).toFixed(2) : Math.round(precioUnit * item.qty).toLocaleString('es-AR');
@@ -5562,7 +5581,8 @@ async function enviarPedido(_stockVerificado) {
   const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
   // 🚚 v4.90: si llegó al mínimo, el mensaje lo dice (y el panel lo marca en el pedido y el remito)
   const envioLine = envioGratisDe(tipoCliente, totalARS, totalUSD) ? `\n🚚 *Envío gratis*${_envioZonaTxt()} (compra de ${_plataAR(_envioCfg.min)} o más)` : '';
-  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${envioLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
+  const ahorroLine = ahorroOfertas > 0 ? `\n🏷️ *Con ofertas y packs ahorrás ${_plataAR(ahorroOfertas)}*` : '';   // v4.91
+  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${ahorroLine}${envioLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
   // ⚠️ REGLA SAGRADA: el mensaje para MIRI lleva SOLO sus renglones y SU total (nada de Jony).
   // Si el pedido no tiene nada de ella → msgMiri = null y el 2º botón NI APARECE.
   const totalMiriLine = arsMyri > 0 && usdMyri > 0
@@ -5693,7 +5713,7 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     .map(i => {
       const precioUnit = tipo === 'Mayorista'
         ? Math.round(parseFloat((i.precioMay||'0').toString().replace(',','.')))
-        : Math.round(i.precioMin);
+        : Math.round(precioEfectivo(i, i.qty));   // 🏷️ v4.91: el mismo precio del renglón
       return `${i.id}:${i.qty}:${precioUnit}`;
     }).join(',');
   const params = new URLSearchParams({
@@ -6434,7 +6454,8 @@ function abrirOfertaModal(id) {
   document.getElementById('oferta-fecha').value = p.fechaOferta || '';
   document.getElementById('oferta-cant-pack').value = p.cantPack || '';
   document.getElementById('oferta-precio-pack').value = p.precioPack || '';
-  document.getElementById('oferta-visible').value = p.visibleOferta || 'Ambos';
+  const lista = Math.round(parseFloat(p.precioMin) || 0);
+  document.getElementById('oferta-aviso').dataset.lista = lista;
   document.getElementById('oferta-modal').style.display = 'flex';
 }
 
@@ -6445,14 +6466,23 @@ function cerrarOfertaModal() {
 
 async function guardarOferta() {
   if (!_ofertaProductoId) return;
+  // 🏷️ v4.91: ahora se cobra → una oferta o un pack más caros que la lista, o una fecha que no se
+  // entiende, no se guardan (antes daban igual porque eran solo cartel).
+  const lista = parseFloat(document.getElementById('oferta-aviso').dataset.lista) || 0;
+  const pOf = parseFloat(document.getElementById('oferta-precio').value) || 0, pPk = parseFloat(document.getElementById('oferta-precio-pack').value) || 0;
+  const cPk = parseInt(document.getElementById('oferta-cant-pack').value) || 0, fOf = (document.getElementById('oferta-fecha').value || '').trim();
+  if (pOf > 0 && lista > 0 && pOf >= lista) { showToast(`La oferta tiene que ser menor que el precio de lista ($ ${lista.toLocaleString('es-AR')})`); return; }
+  if (pPk > 0 && lista > 0 && pPk >= lista) { showToast(`El precio del pack tiene que ser menor que el de lista ($ ${lista.toLocaleString('es-AR')})`); return; }
+  if ((pPk > 0) !== (cPk > 1)) { showToast('Para el pack poné las dos cosas: la cantidad (2 o más) y el precio por unidad'); return; }
+  if (fOf && !_fechaOfertaISO(fOf)) { showToast('La fecha va como 30/09/2026'); return; }
   const params = new URLSearchParams({
     accion: 'actualizarOferta',
     id: _ofertaProductoId,
-    precioOferta: document.getElementById('oferta-precio').value || '0',
-    fechaOferta: document.getElementById('oferta-fecha').value || '',
-    cantPack: document.getElementById('oferta-cant-pack').value || '0',
-    precioPack: document.getElementById('oferta-precio-pack').value || '0',
-    visibleOferta: document.getElementById('oferta-visible').value || 'Ambos'
+    precioOferta: String(pOf || 0),
+    fechaOferta: fOf,
+    cantPack: String(pPk > 0 ? cPk : 0),
+    precioPack: String(pPk || 0),
+    visibleOferta: 'Ambos'
   });
   cerrarOfertaModal();
   showToast('Guardando oferta...');
@@ -8140,11 +8170,11 @@ async function crearOfertaRapida(id, precio) {
 }
 
 function difundirOfertas() {
-  const enOferta = productosVisibles().filter(p => ofertaActiva(p) || packActivo(p));
+  const enOferta = productosVisibles().filter(p => ofertaVigente(p) || packActivo(p));
   if (!enOferta.length) { showToast('No hay ofertas activas para difundir'); return; }
   const lineas = enOferta.map(p => {
-    if (ofertaActiva(p)) return `🔥 *${p.nombre}* — ahora $${Math.round(p.precioOferta).toLocaleString('es-AR')}`;
-    return `🎁 *${p.nombre}* — pack x${p.cantPack} por $${Math.round(p.precioPack).toLocaleString('es-AR')}`;
+    if (ofertaVigente(p)) return `🔥 *${p.nombre}* — ahora $${Math.round(p.precioOferta).toLocaleString('es-AR')}`;
+    return `🎁 *${p.nombre}* — llevando ${p.cantPack} o más, $${Math.round(p.precioPack).toLocaleString('es-AR')} c/u`;
   });
   const msg = `🍬 *¡Ofertas de Shuk Mamtakim!*\n\n${lineas.join('\n')}\n\n👉 Pedí acá: ${SITIO}/tienda\nVálido por tiempo limitado 🏃`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');

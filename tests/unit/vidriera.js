@@ -72,7 +72,8 @@ const tienda = new Function(
   'const esc = s => String(s == null ? "" : s);\n' +
   'const _monedaMay = p => (p.moneda === "U$S" ? "U$S" : "$");\n' +
   ['_normTxt', '_GENERICAS', '_precioDelModo', '_precioCorto'].map(constHTML).join('') +
-  ['esPesos', 'ofertaActiva', '_lineaDe', '_famFina', '_vidIdx', '_vidComparar', '_vidTopIds', '_sellosHtml', '_saboresPara', 'getMarcaIdx', 'getCatIdx'].map(fnHTML).join('\n') +
+  ['esPesos', 'ofertaActiva', 'packActivo', 'ofertaVigente', 'precioEfectivo', '_fechaOfertaISO', '_lineaDe', '_famFina', '_vidIdx', '_vidComparar', '_vidTopIds', '_sellosHtml', '_saboresPara', 'getMarcaIdx', 'getCatIdx'].map(fnHTML).join('\n') +
+  '\nconst _hoyAR = () => "2026-09-23";\n' +
   '\nconst MARCAS_LINEA = ' + HTML.match(/const MARCAS_LINEA = (\[[^\]]*\]);/)[1] + ';\n' +
   'const CATEGORIA_ORDEN = ' + HTML.match(/const CATEGORIA_ORDEN = (\[[^\]]*\]);/)[1] + ';\n' +
   'return { _lineaDe, _famFina, _vidComparar, _vidTopIds, _sellosHtml, _saboresPara, getCatIdx, getMarcaIdx,' +
