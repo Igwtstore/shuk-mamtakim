@@ -61,7 +61,7 @@ async function run() {
   const estado = await new Function('getConfig', 'Deno', 'json', 'fechasClavesIA',
     "return (async () => { const accion = 'estadoClavesIA'; " + est + ' })();')(
     async (k) => ({ ANTHROPIC_API_KEY: 'sk-ant-SECRETISIMA' })[k] || '', { env: { get: (k) => (k === 'GEMINI_API_KEY' ? 'AIzaDELSECRETO' : '') } }, (o) => o, async () => ({ anthropic: '23/09/2026 10:00' }));
-  t.eq('el estado dice de dónde sale cada clave', estado, { anthropic: { cargada: true, origen: 'panel', fecha: '23/09/2026 10:00' }, gemini: { cargada: true, origen: 'secreto', fecha: '' } });
+  t.eq('el estado dice de dónde sale cada clave (y Cloudinary, sin cargar)', estado, { anthropic: { cargada: true, origen: 'panel', fecha: '23/09/2026 10:00' }, gemini: { cargada: true, origen: 'secreto', fecha: '' }, cloudinary: { cargada: false, origen: 'ninguna', fecha: '' } });
   t.ok('…y no trae la clave ni un pedazo', !/SECRETISIMA|DELSECRETO|sk-ant|AIza/.test(JSON.stringify(estado)));
 
   // Todo lo que usa Claude o Gemini sale de la MISMA fuente (antes el verificador de flyers usaba el secreto viejo).

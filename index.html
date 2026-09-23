@@ -3116,11 +3116,25 @@ _sb.auth.onAuthStateChange((_e, session) => { _authToken = session?.access_token
 // llamadas del admin sin tener que tocarlas una por una. Público (sin sesión) → no agrega nada.
 const _origFetch = window.fetch.bind(window);
 window.fetch = function(url, opts) {
+  // 🖼️ v4.99: cada subida a Cloudinary sale FIRMADA por el motor (así solo el equipo puede subir fotos).
+  if (typeof url === 'string' && url.indexOf('https://api.cloudinary.com/') === 0 && opts && opts.method === 'POST' && opts.body instanceof FormData && !opts.body.has('signature') && _authToken) {
+    return _firmarSubidaCloudinary(opts.body).then(() => _origFetch(url, opts));
+  }
   if (typeof url === 'string' && url.indexOf(APPS_SCRIPT_URL) === 0 && _authToken && url.indexOf('token=') === -1) {
     url += (url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(_authToken);
   }
   return _origFetch(url, opts);
 };
+// Le pide al motor la firma de lo que va en la subida (el preset y la carpeta) y la agrega. Si todavía no hay clave de
+// Cloudinary cargada, o el motor no contesta, la subida sale como siempre (sin firma): esto nunca traba una foto.
+async function _firmarSubidaCloudinary(fd) {
+  try {
+    const campos = {};
+    for (const [k, v] of fd.entries()) if (k !== 'file' && typeof v === 'string') campos[k] = v;
+    const r = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'firmarSubida', params: JSON.stringify(campos) }));
+    if (r && r.signature) { fd.set('api_key', r.api_key); fd.set('timestamp', r.timestamp); fd.set('signature', r.signature); }
+  } catch { /* sin firma: sube como siempre */ }
+}
 // 🌐 Dominio público del sitio: TODO link que se le manda a un cliente (VIP, QR, ofertas, PDF,
 // remito, WhatsApp) sale de acá → para mudar de dominio se cambia SOLO esta línea.
 // Dominio propio: shukmamtakim.com.ar (NIC.AR → Vercel). El .vercel.app sigue vivo siempre, así que
@@ -6583,16 +6597,34 @@ function renderClavesIA() {
       <span style="flex-basis:100%;font-size:0.7rem;color:var(--texto-suave)">${ayuda}</span>
     </div>`;
   box.innerHTML = `<div style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:center">
-      <b>🔑 Claves de IA</b> ${_claveIALinea('Claude (Anthropic)', c.anthropic)} ${_claveIALinea('Gemini (flyers)', c.gemini)}
+      <b>🔑 Claves de IA y fotos</b> ${_claveIALinea('Claude (Anthropic)', c.anthropic)} ${_claveIALinea('Gemini (flyers)', c.gemini)} ${_claveIALinea('Cloudinary (subir fotos)', c.cloudinary)}
       <button onclick="_clavesIAAbierto=!_clavesIAAbierto;renderClavesIA()" class="psec-btn" style="font-size:0.72rem;padding:0.25rem 0.65rem;margin-left:auto">${_clavesIAAbierto ? 'Cerrar' : 'Cambiar'}</button>
     </div>` + (_clavesIAAbierto
       ? form('anthropic', 'sk-ant-…', 'Se crea en console.anthropic.com → API Keys → Create Key.') +
         form('gemini', 'AIza… o AQ.…', 'Se crea en aistudio.google.com → Get API key → Create API key.') +
+        `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+          <input id="ia-clave-cld-key" type="text" inputmode="numeric" autocomplete="off" placeholder="Cloudinary: API Key (el número)" style="flex:1;min-width:160px;padding:0.45rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.8rem">
+          <input id="ia-clave-cld-secret" type="password" autocomplete="off" placeholder="API Secret" style="flex:1;min-width:160px;padding:0.45rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.8rem">
+          <button id="ia-clave-btn-cloudinary" onclick="cambiarClaveIA('cloudinary')" style="padding:0.45rem 0.9rem;background:var(--verde);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">Probar y guardar</button>
+          <span style="flex-basis:100%;font-size:0.7rem;color:var(--texto-suave)">Se ve en cloudinary.com → ⚙️ Settings → API Keys (la «API Key» y el «API Secret» de la misma fila). Con esta clave el sistema firma cada subida: solo tus paneles pueden subir fotos.</span>
+        </div>` +
         '<div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.4rem">Antes de guardarla se prueba contra el servicio: si no funciona, no se toca la que está. Después de cambiarla, borrá la vieja en la consola del servicio.</div>'
       : '');
 }
 async function cambiarClaveIA(tipo) {
-  const inp = document.getElementById('ia-clave-' + tipo), btn = document.getElementById('ia-clave-btn-' + tipo);
+  const btn = document.getElementById('ia-clave-btn-' + tipo);
+  if (tipo === 'cloudinary') {
+    const k = document.getElementById('ia-clave-cld-key'), s = document.getElementById('ia-clave-cld-secret');
+    const apiKey = (k && k.value || '').trim(), apiSecret = (s && s.value || '').trim();
+    if (!apiKey || !apiSecret) { (apiKey ? s : k).focus(); return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Probando…'; }
+    const rC = await apiWritePost({ accion: 'guardarClaveCloudinary', apiKey, apiSecret }, '🔑 Clave de Cloudinary probada y guardada ✓');
+    if (s) s.value = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Probar y guardar'; }
+    if (rC && rC.ok) { if (k) k.value = ''; _clavesIAAbierto = false; await cargarClavesIA(); }
+    return;
+  }
+  const inp = document.getElementById('ia-clave-' + tipo);
   const clave = (inp && inp.value || '').trim();
   if (!clave) { if (inp) inp.focus(); return; }
   if (btn) { btn.disabled = true; btn.textContent = 'Probando…'; }

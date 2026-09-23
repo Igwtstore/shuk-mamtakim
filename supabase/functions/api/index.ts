@@ -1563,7 +1563,7 @@ const ACCIONES_KIDS = [
     'archivarFlyer', 'auditarHijos', 'bloquearVidCandy', 'borradosCandy', 'cancelarPedidoHijo', 'cerrarDiaHijos',
     'cobrarPedidoHijo', 'comprasTabHijos', 'consultarDeudores', 'editarPedidoHijo', 'editarProductoHijo',
     'editarProductosLoteHijos', 'editarProveedorHijos', 'editarVentaHijos', 'eliminarCompraHijos', 'eliminarFlyer',
-    'eliminarProductoHijo', 'eliminarProveedorHijos', 'eliminarVentaHijos', 'enviarFlyerWA', 'flyerTexto', 'fondoFlyer',
+    'eliminarProductoHijo', 'eliminarProveedorHijos', 'eliminarVentaHijos', 'enviarFlyerWA', 'firmarSubida', 'flyerTexto', 'fondoFlyer',
     'getAvisosCandy', 'getCatalogoHijos', 'getComprasHijos', 'getConfigCandy', 'getConsumoPeriodo', 'getDepositoHijos',
     'getFlyersHijos', 'getProductosShukAdmin', 'getProveedoresHijos', 'getShukEnCandy', 'getStockDia', 'getUltimoStockDia',
     'guardarFlyer', 'historialCliente', 'movsDeposito', 'panelHijos', 'registrarCompraHijos', 'registrarConsumoHijos',
@@ -2253,6 +2253,37 @@ async function probarClaveIA(tipo: string, clave: string): Promise<string> {
   } catch { return 'no se pudo comprobar la clave (sin conexión con el servicio)'; }
 }
 async function fechasClavesIA(): Promise<any> { try { return JSON.parse(await getConfig('CLAVES_IA_FECHAS', '{}')) || {}; } catch { return {}; } }
+
+// 🖼️ v4.99 — SUBIDAS A CLOUDINARY CON FIRMA. Los paneles subían con presets «sin firma»: cualquiera que leyera el código
+// de una página podía subir archivos a la cuenta. Ahora el motor firma cada subida, solo para el equipo (Jony y la cuenta
+// de los chicos) y solo con los presets y carpetas de los paneles, con la clave de Cloudinary que Jony carga en 🔑 (nunca
+// sale del motor ni viaja en el backup). Con los presets cerrados, lo que llegue sin firma Cloudinary lo rechaza.
+const CLD_CLOUD = 'dq2boloyp', CLD_PRESETS = ['shuk_upload', 'candyshop'], CLD_CARPETAS = ['shuk-mamtakim', 'shuk-comprobantes'];
+async function claveCloudinary() { const k = await getConfig('CLOUDINARY_API_KEY', ''), s = await getConfig('CLOUDINARY_API_SECRET', ''); return k && s ? { k, s } : null; }
+async function probarClaveCloudinary(k: string, s: string): Promise<string> {
+  try {
+    const r = await fetch('https://api.cloudinary.com/v1_1/' + CLD_CLOUD + '/usage', { headers: { Authorization: 'Basic ' + btoa(k + ':' + s) } });   // lectura: no gasta nada
+    if (r.ok) return '';
+    return r.status === 401 || r.status === 403 ? 'la clave no funciona (Cloudinary la rechazó)' : 'Cloudinary respondió ' + r.status + ' — probá de nuevo en un rato';
+  } catch { return 'no se pudo comprobar la clave (sin conexión con Cloudinary)'; }
+}
+// Qué se firma de una subida: SOLO el preset y la carpeta de los paneles. Cualquier otro campo (public_id para pisar una
+// foto, transformaciones, otra carpeta u otro preset) no se firma → null.
+function camposAFirmar(campos: any): any {
+  const firmar: any = {};
+  for (const [k, v] of Object.entries(campos || {})) {
+    if (k === 'upload_preset' && CLD_PRESETS.indexOf(String(v)) !== -1) firmar[k] = String(v);
+    else if (k === 'folder' && CLD_CARPETAS.indexOf(String(v)) !== -1) firmar[k] = String(v);
+    else return null;
+  }
+  return firmar.upload_preset ? firmar : null;
+}
+// La firma de Cloudinary: los campos ordenados «a=1&b=2», pegados al secreto, en SHA-1 (su algoritmo publicado).
+async function firmaCloudinary(campos: any, secreto: string): Promise<string> {
+  const txt = Object.keys(campos).sort().map((k) => k + '=' + campos[k]).join('&') + secreto;
+  const d = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(txt));
+  return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 // Llamada cruda a la API de Anthropic (mismo payload que el motor viejo). `betas`: funciones de la
 // API que todavía van con encabezado propio (p. ej. el respaldo si el modelo se niega).
@@ -3278,7 +3309,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4979,6 +5010,27 @@ Deno.serve(async (req) => {
       const f = await fechasClavesIA(); f.anthropic = fechaAhora(); await setConfig('CLAVES_IA_FECHAS', JSON.stringify(f));
       return json({ ok: true });
     }
+    if (accion === 'guardarClaveCloudinary') {
+      const kC = Q('apiKey').trim(), sC = Q('apiSecret').trim();
+      if (!/^\d{6,20}$/.test(kC)) return json({ error: 'La «API Key» de Cloudinary es un número largo (sin letras)' });
+      if (!/^[A-Za-z0-9_-]{10,64}$/.test(sC)) return json({ error: 'Ese no parece el «API Secret» de Cloudinary' });
+      const mal = await probarClaveCloudinary(kC, sC);
+      if (mal) return json({ error: 'Cloudinary: ' + mal + '. No se guardó nada.' });
+      await setConfig('CLOUDINARY_API_KEY', kC); await setConfig('CLOUDINARY_API_SECRET', sC);
+      const f = await fechasClavesIA(); f.cloudinary = fechaAhora(); await setConfig('CLAVES_IA_FECHAS', JSON.stringify(f));
+      return json({ ok: true });
+    }
+    // Firma de una subida (el equipo: Jony y los chicos). Solo firma lo que usan los paneles: el preset y la carpeta.
+    if (accion === 'firmarSubida') {
+      let campos: any = {};
+      try { campos = JSON.parse(Q('params') || '{}') || {}; } catch { return json({ error: 'pedido inválido' }); }
+      const firmar = camposAFirmar(campos);
+      if (!firmar) return json({ error: 'esa subida no se firma' });
+      const cC = await claveCloudinary();
+      if (!cC) return json({ sinClave: true });   // todavía no hay clave cargada: el panel sube como siempre
+      firmar.timestamp = String(Math.floor(Date.now() / 1000));
+      return json({ api_key: cC.k, timestamp: firmar.timestamp, signature: await firmaCloudinary(firmar, cC.s) });
+    }
     if (accion === 'analizarFotoProducto') return json(await analizarFotoProducto(Q('url')));
     // ✨ v4.87: la IA propone una ficha mejor para un producto (Jony la aplica o la descarta en el panel).
     if (accion === 'sugerirFicha') return json(await sugerirFicha(Q('id'), Q('motivo'), parseInt(Q('personas')) || 0));
@@ -5196,7 +5248,7 @@ Deno.serve(async (req) => {
         const enPanel = !!(await getConfig(clave, '')), enSecreto = !!Deno.env.get(env);
         return { cargada: enPanel || enSecreto, origen: enPanel ? 'panel' : enSecreto ? 'secreto' : 'ninguna', fecha: enPanel ? (fecha || '') : '' };
       };
-      return json({ anthropic: await est('ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY', f.anthropic), gemini: await est('GEMINI_API_KEY', 'GEMINI_API_KEY', f.gemini) });
+      return json({ anthropic: await est('ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY', f.anthropic), gemini: await est('GEMINI_API_KEY', 'GEMINI_API_KEY', f.gemini), cloudinary: await est('CLOUDINARY_API_SECRET', 'CLOUDINARY_API_SECRET_NO_EXISTE', f.cloudinary) });
     }
     if (accion === 'disenoFlyerIA') {
       // 🪄 Gemini diseña el flyer ENTERO; los precios se verifican leyendo la

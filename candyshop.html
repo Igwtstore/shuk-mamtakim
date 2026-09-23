@@ -1332,6 +1332,24 @@ async function cm_guardar() {
   }
 }
 
+// 🖼️ v4.99: cada subida a Cloudinary sale FIRMADA por el motor (así solo los paneles pueden subir fotos). Si todavía
+// no hay clave de Cloudinary cargada, o el motor no contesta, la subida sale como siempre: esto nunca traba una foto.
+const _fetchSinFirma = window.fetch.bind(window);
+window.fetch = function (url, opts) {
+  if (typeof url === 'string' && url.indexOf('https://api.cloudinary.com/') === 0 && opts && opts.method === 'POST' && opts.body instanceof FormData && !opts.body.has('signature')) {
+    return _firmarSubida(opts.body).then(() => _fetchSinFirma(url, opts));
+  }
+  return _fetchSinFirma(url, opts);
+};
+async function _firmarSubida(fd) {
+  try {
+    const campos = {};
+    for (const [k, v] of fd.entries()) if (k !== 'file' && typeof v === 'string') campos[k] = v;
+    const r = await api('firmarSubida', { params: JSON.stringify(campos) });
+    if (r && r.signature) { fd.set('api_key', r.api_key); fd.set('timestamp', r.timestamp); fd.set('signature', r.signature); }
+  } catch (e) { /* sin firma: sube como siempre */ }
+}
+
 async function api(accion, extra = {}) {
   const call = async () => {
     const p = new URLSearchParams({ accion, ...extra });
