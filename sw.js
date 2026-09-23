@@ -1,4 +1,4 @@
-const CACHE = 'shuk-v6';
+const CACHE = 'shuk-v7';   // v7 (v4.97): al activarse borra el cache viejo, que tenía fotos guardadas opacas
 const STATIC = ['/', '/index.html', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -43,15 +43,19 @@ self.addEventListener('fetch', e => {
   // una versión nueva no quede pegada en el cache de un service worker viejo.
   if (url.pathname.startsWith('/ci-k7m2x9/')) return;
 
-  // Imágenes Cloudinary → cache con revalidación
+  // Imágenes Cloudinary → cache con revalidación. SIEMPRE se piden y se guardan "con permiso" (CORS).
+  // Antes: la miniatura del selector de flyers (sin permiso) quedaba guardada OPACA; después el flyer pedía la
+  // MISMA foto con permiso para su lienzo, el SW le devolvía la opaca, el navegador la rechazaba y el flyer
+  // dibujaba 🍬 en vez de la foto (flyer "Directo de Israel" del 22/09). Una respuesta CORS le sirve a los dos.
   if (url.hostname.includes('cloudinary') || url.hostname.includes('githubusercontent')) {
+    const req = new Request(e.request.url, { mode: 'cors', credentials: 'omit' });
     e.respondWith(
       caches.open(CACHE).then(cache =>
-        cache.match(e.request).then(cached => {
-          const network = fetch(e.request).then(res => {
-            cache.put(e.request, res.clone());
+        cache.match(req).then(cached => {
+          const network = fetch(req).then(res => {
+            if (res.ok && res.type === 'cors') cache.put(req, res.clone());
             return res;
-          });
+          }).catch(() => fetch(e.request));   // si el pedido con permiso falla, el original tal cual
           return cached || network;
         })
       )

@@ -6610,7 +6610,7 @@ function _syncCatalogoFlyer() {
     .sort((a, b) => getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre))
     .map(p => {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
-    const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/e_trim:10/w_1400,') : '';
+    const foto = imgs.length ? imgUrl(imgs[0])[0].replace('/w_400,', '/w_1400,') : '';   // imgUrl ya trae e_trim:10 (antes quedaba dos veces)
     return {
       codigo: String(p.id), nombre: p.nombre,
       precioVenta: fPrecioModo === 'may'
@@ -7052,13 +7052,25 @@ function guardarFlyerHistorial(t, conFondo) {
   })();
 }
 
-function _cargarImgFlyer(url) {
+// Carga una foto para el LIENZO del flyer. El lienzo la necesita "con permiso" (crossOrigin): si falla (la red
+// cortó, el navegador la tenía guardada sin permiso, un bloqueo de la PC…) el flyer dibujaba un 🍬 SIN AVISAR
+// (caso real: flyer "Directo de Israel" del 22/09, hecho desde una PC; las mismas fotos hoy cargan bien).
+// Ahora: espera como mucho 20 s, reintenta UNA vez con una dirección que el navegador no tiene guardada, y
+// quien dibuja se entera de qué fotos no entraron (ver el aviso en dibujarFlyer).
+function _cargarImgFlyer(url, esReintento) {
   return new Promise(res => {
     if (!url) return res(null);
     const im = new Image();
     im.crossOrigin = 'anonymous';
-    im.onload = () => res(im);
-    im.onerror = () => res(null);
+    let listo = false;
+    const t = setTimeout(() => { if (!listo) { listo = true; res(null); } }, 20000);
+    im.onload = () => { if (listo) return; listo = true; clearTimeout(t); res(im); };
+    im.onerror = () => {
+      if (listo) return;
+      listo = true; clearTimeout(t);
+      if (esReintento || !/^https?:/i.test(url)) return res(null);
+      _cargarImgFlyer(url + (url.includes('?') ? '&' : '?') + '_f=' + Date.now(), true).then(res);
+    };
     im.src = url;
   });
 }
@@ -7962,6 +7974,9 @@ async function dibujarFlyer(prods, t) {
     conQR ? _cargarImgFlyer(_qrUrl()) : Promise.resolve(null)
   ]);
   let imgs = imgsRaw;
+  // Si alguna foto no entró (ni con el reintento), se AVISA: antes salía el 🍬 en silencio y se publicaba así.
+  const sinFoto = prods.filter((p, i) => p.foto && !imgsRaw[i]).map(p => p.nombre);
+  if (sinFoto.length) showToast('⚠️ No pude cargar la foto de: ' + sinFoto.slice(0, 3).join(', ') + (sinFoto.length > 3 ? ' y ' + (sinFoto.length - 3) + ' más' : '') + ' — revisá la conexión y tocá 🔄 para reintentar');
   const gap = prods.length > 12 ? 12 : prods.length > 4 ? 16 : 24;
   _prepararBlur(W, H);
   // Con escenografía, el fondo blanco de estudio de la foto se nota: se recorta.
@@ -19002,7 +19017,7 @@ if ('serviceWorker' in navigator) {
     // computadora se registra, así vuelve el instalador. iOS instala por Compartir → Agregar a
     // pantalla de inicio, que NO necesita service worker.
     if (!_esIOS) {
-      navigator.serviceWorker.register('/sw.js?v=6').catch(() => {});
+      navigator.serviceWorker.register('/sw.js?v=7').catch(() => {});
       return;
     }
     const controlado = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.indexOf('OneSignal') === -1;
