@@ -1871,6 +1871,17 @@ function fechaAhora() {
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
 const P = (o: any, k: string) => (o[k] == null ? '' : o[k]).toString();
+// 🔒 v4.95: lo que manda un VISITANTE (acciones públicas, sin login) se guarda LIMPIO. Texto libre: sin
+// < ni > (nadie puede guardar una etiqueta como <img onerror=…> que después se ejecute en el panel), sin
+// caracteres de control raros y con tope de largo. Las comillas NO se tocan: hay productos con comillas en
+// el nombre y el carrito viaja en JSON; al mostrar, el panel las escapa (esc / jsAttr).
+const _libre = (s: any, max = 300) => String(s ?? '').replace(/[<>]/g, '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/g, ' ').slice(0, max);
+// Identificadores (vid, código, id, hijo, evento, modo): solo letras, números y _ - . : — lo demás se va.
+const _ident = (s: any, max = 64) => String(s ?? '').replace(/[^A-Za-z0-9_.:\-]/g, '').slice(0, max);
+const _tel = (s: any) => String(s ?? '').replace(/[^\d+ ()\-]/g, '').slice(0, 25);
+// A quién puede avisar la tienda Candy por WhatsApp (los chicos y Jony): antes era el número que mandara
+// cualquiera, o sea un relevo de mensajes gratis con el nombre del negocio.
+const WA_CANDY = ['5491171046383', '5491150987261', '5491131754540'];
 // ⚠️ Teléfono con pinta de trucho: <10 dígitos reales (área+número en AR), >13, o todos iguales.
 // Defensa del lado del motor para 'notificacion' y 'avisarmeCandy' (la tienda ya valida, pero
 // un fetch directo la saltea). Mismo criterio que _telDudoso del front.
@@ -2977,6 +2988,9 @@ async function backupAhora(etiqueta: string) {
   for (const t of TABLAS_BACKUP) {
     try { dump[t] = await sbGet(t, 'select=*'); filas += dump[t].length; } catch (e) { dump[t] = { error: String(e) }; }
   }
+  // 🔒 v4.95: las claves de servicios de afuera (IA, pases) NO viajan en la copia (iban completas, 24 copias
+  // por día). Mismo criterio que el backup de GitHub: quedan vacías y se recargan desde el panel.
+  if (Array.isArray(dump.config)) dump.config = dump.config.map((r: any) => (/(API_KEY|_TOKEN|_SECRET|_PASS|_HASH)$/i.test(String(r.clave)) ? { ...r, valor: '' } : r));
   const f = fechaAhora();   // dd/MM/yyyy HH:mm
   const nombre = 'Backup Shuk ' + (etiqueta ? '(' + etiqueta + ') ' : '') + f.slice(6, 10) + '-' + f.slice(3, 5) + '-' + f.slice(0, 2) + ' ' + f.slice(11, 13) + 'h' + f.slice(14, 16) + '.json';
   const up = await fetch(SB_URL + '/storage/v1/object/backups/' + encodeURIComponent(nombre), { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', 'x-upsert': 'true' }, body: JSON.stringify(dump) });
@@ -3148,7 +3162,7 @@ Deno.serve(async (req) => {
   }
   // ── ZONA PÚBLICA: las acciones de la TIENDA (clientes, sin login) — espejo exacto
   //    de lo que queda FUERA de PROTECTED_ACTIONS/PROTECTED_HIJOS en motor-v2.js.
-  const PUBLICAS = ['miHabitual', 'getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
+  const PUBLICAS = ['miHabitual', 'getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
@@ -3184,7 +3198,7 @@ Deno.serve(async (req) => {
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid) — 90s entre pedidos, máx 4/hora.
       // (El motor viejo usaba CacheService; acá se mira el timestamp 'creado' de las ventas del vid.)
-      const vidVenta = Q('vid');
+      const vidVenta = _ident(Q('vid'));   // 🔒 v4.95
       if (vidVenta) {
         const desde = new Date(Date.now() - 3600000).toISOString();
         const recientes = await sbGet('ventas', 'select=creado&vid=eq.' + encodeURIComponent(vidVenta) + '&creado=gte.' + encodeURIComponent(desde) + '&order=creado.desc');
@@ -3193,7 +3207,9 @@ Deno.serve(async (req) => {
       }
       const esCotizacion = Q('cotizacion') === '1';
       const stockUpdates = Q('stockUpdates');
-      const cliente = Q('cliente');
+      // 🔒 v4.95: siempre "id:cantidad,id:cantidad" (lo arma la tienda); otra cosa no es un pedido de verdad.
+      if (stockUpdates && !/^\d{1,9}:\d{1,6}(,\d{1,9}:\d{1,6})*$/.test(stockUpdates)) return json({ error: 'pedido inválido' });
+      const cliente = _libre(Q('cliente'), 120);
       // 🛡️ Anti-DUPLICADO servidor (caso real #57/#58 isi michan 12/07/2026: mismo carrito
       // reenviado 16 min después con el catálogo viejo en el navegador → sobreventa). Mismo
       // cliente + mismo stock_updates dentro de 30 min y no cancelado = reintento → se devuelve
@@ -3227,7 +3243,7 @@ Deno.serve(async (req) => {
           if (faltan.length) return json({ error: 'stock', detalle: faltan.join(' · '), items: faltanItems });
         }
       }
-      const fila: any = { fecha: fechaAhora(), cliente, tipo: Q('tipo'), productos: Q('productos'), forma_pago: Q('formaPago'), notas: Q('notas'), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: QN('totalARS'), total_usd: QN('totalUSD'), ars_jony: QN('arsJONY'), ars_myri: QN('arsMyri'), usd_myri: QN('usdMyri'), comi_ars: QN('comiARS'), comi_usd: QN('comiUSD'), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: QN('usdJONY'), vid: vidVenta };
+      const fila: any = { fecha: fechaAhora(), cliente, tipo: _libre(Q('tipo'), 30), productos: _libre(Q('productos'), 20000), forma_pago: _libre(Q('formaPago'), 60), notas: _libre(Q('notas'), 1000), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: QN('totalARS'), total_usd: QN('totalUSD'), ars_jony: QN('arsJONY'), ars_myri: QN('arsMyri'), usd_myri: QN('usdMyri'), comi_ars: QN('comiARS'), comi_usd: QN('comiUSD'), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: QN('usdJONY'), vid: vidVenta };
       // Numeración atómica: índice ÚNICO en n_venta + reintento (la versión SQL del LockService del
       // motor viejo — dos pedidos simultáneos NUNCA toman el mismo número).
       const ins = await insertarVentaAtomica(fila);
@@ -3245,17 +3261,17 @@ Deno.serve(async (req) => {
           if (res && sobre > 0) await sendTwilioWA('+5491131754540', '⚠️ *SOBREVENTA*\n' + res.nombre + ': el pedido #' + nVenta + ' (' + cliente + ') pidió *' + qty + '* y solo había *' + res.antes + '*. Faltan ' + sobre + ' — revisalo antes de confirmar.');
         }));
       }
-      await altaClienteAuto(cliente, Q('tipo'));
+      await altaClienteAuto(cliente, fila.tipo);
       // 🔔 Notificación WhatsApp DESDE EL SERVIDOR (caso KI TOV 13/07: la disparaba el navegador
       // del cliente después de enviar — si cerraba la pestaña, moría y el pedido entraba mudo).
       // Truncada a 1500 (Twilio rebota >1600, error 21617 — caso Fabio 13/07).
       if (!esCotizacion) {
         try {
-          let resu = (Q('productos') || '').split(' || ').join('\n');
+          let resu = (fila.productos || '').split(' || ').join('\n');
           const totNP: string[] = [];
           if (QN('totalARS') > 0) totNP.push('$ ' + Math.round(QN('totalARS')).toLocaleString('es-AR'));
           if (QN('totalUSD') > 0) totNP.push('U$S ' + QN('totalUSD').toFixed(2));
-          let cuerpoV = '🛍️ *Nuevo pedido #' + nVenta + ' - Shuk Mamtakim*\n\n👤 *' + cliente + '* (' + Q('tipo') + ')\n\n' + resu + (totNP.length ? '\n\n*Total:* ' + totNP.join(' + ') : '');
+          let cuerpoV = '🛍️ *Nuevo pedido #' + nVenta + ' - Shuk Mamtakim*\n\n👤 *' + cliente + '* (' + fila.tipo + ')\n\n' + resu + (totNP.length ? '\n\n*Total:* ' + totNP.join(' + ') : '');
           if (cuerpoV.length > 1500) cuerpoV = cuerpoV.slice(0, 1450) + '\n…\n📋 *Pedido largo: el detalle completo está en el panel.*';
           await sendTwilioWA('+5491131754540', cuerpoV);
         } catch { /* la notificación jamás frena una venta */ }
@@ -3267,13 +3283,15 @@ Deno.serve(async (req) => {
     }
     if (accion === 'registrarPedidoHijo') {
       let items: any[]; try { items = JSON.parse(Q('items') || '[]'); } catch { return json({ error: 'items inválido' }); }
-      if (!items.length) return json({ error: 'sin items' });
-      const hijo = Q('hijo'), cliente = await clienteCanonicoCandy(Q('cliente'));   // 🧑 grafía única (el pedido nace con el nombre ya conocido)
+      if (!Array.isArray(items) || !items.length || items.length > 200) return json({ error: 'sin items' });
+      // 🔒 v4.95: cada texto de cada renglón, limpio (el panel de los chicos los muestra).
+      items = items.map((it: any) => { const o: any = {}; for (const [k, v] of Object.entries(it || {})) o[_ident(k, 40)] = typeof v === 'string' ? _libre(v, 200) : (typeof v === 'number' || typeof v === 'boolean' ? v : null); return o; });
+      const hijo = _ident(Q('hijo'), 20), cliente = await clienteCanonicoCandy(_libre(Q('cliente'), 120));   // 🧑 grafía única (el pedido nace con el nombre ya conocido)
       if (!hijo || !cliente) return json({ error: 'falta hijo o cliente' });
       const total = QN('total') || items.reduce((s, it) => s + (parseFloat(it.subtotal) || 0), 0);
       // Anti pedidos falsos (paridad con la tienda Shuk): límite por dispositivo (vid) —
       // 90s entre pedidos, máx 4/hora. El WhatsApp igual se abre (el chico recibe el mensaje).
-      const vidPH = Q('vid');
+      const vidPH = _ident(Q('vid'));
       // 🚫 Dispositivo bloqueado (pedidos truchos 13/07: amigos de los chicos jugando)
       if (vidPH && (await getConfig('VIDBLOCK_' + vidPH, '')) === '1') return json({ error: 'rate' });
       if (vidPH) {
@@ -3283,7 +3301,7 @@ Deno.serve(async (req) => {
         if (recPH.length && Date.now() - new Date(recPH[0].creado).getTime() < 90000) return json({ error: 'rate' });
       }
       // 📱 Teléfono obligatorio (anti-truchos 13/07): sin WhatsApp válido no hay pedido
-      const telPH = Q('telefono');
+      const telPH = _tel(Q('telefono'));
       if (telDudoso(telPH)) return json({ error: 'telefono', detalle: 'Dejanos un WhatsApp válido (código de área + número, sin 0 ni 15) para confirmarte el pedido' });
       // 🎁 COMBO: expandir cada combo del pedido a sus COMPONENTES (la validación y la reserva
       // corren sobre los componentes reales; el combo en sí no tiene stock propio).
@@ -3312,10 +3330,10 @@ Deno.serve(async (req) => {
           if (dispV < cant) return json({ error: 'stock', detalle: 'De "' + (it.nombre || cod) + '" quedan ' + Math.max(0, Math.floor(dispV)) + ' y pediste ' + cant });
         }
       }
-      const pedidoId = Q('pedidoId') || 'PH' + Date.now();
+      const pedidoId = _ident(Q('pedidoId'), 40) || 'PH' + Date.now();
       // Anti-duplicado (reintento por red caída): pedido_id es UNIQUE → el segundo insert rebota
       // ANTES de reservar stock (equivale al cache de 15 min del motor viejo, pero permanente).
-      const r = await fetch(SB_URL + '/rest/v1/candy_pedidos', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ hijo, cliente, telefono: Q('telefono'), items: Q('items') || '[]', total: Math.round(total), estado: 'pendiente', pedido_id: pedidoId, nota: Q('nota'), vid: vidPH }) });
+      const r = await fetch(SB_URL + '/rest/v1/candy_pedidos', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ hijo, cliente, telefono: telPH, items: JSON.stringify(items), total: Math.round(total), estado: 'pendiente', pedido_id: pedidoId, nota: _libre(Q('nota'), 500), vid: vidPH }) });
       if (r.status === 409) return json({ ok: true, dup: true });
       if (!r.ok) return json({ error: 'insert pedido ' + r.status + ' ' + (await r.text()).slice(0, 150) });
       // Reserva: descuenta el depósito por cada item (la tienda ve menos stock → no se sobrevende).
@@ -3330,31 +3348,33 @@ Deno.serve(async (req) => {
       return json({ ok: true, pedidoId });
     }
     if (accion === 'avisarmeCandy') {
-      const prodAv = Q('producto'), cliAv = Q('cliente'), telAv = Q('telefono');
+      const prodAv = _libre(Q('producto'), 150), cliAv = _libre(Q('cliente'), 120), telAv = _tel(Q('telefono'));   // 🔒 v4.95
       if (telAv && telDudoso(telAv)) return json({ error: 'teléfono inválido' });   // opcional, pero si viene tiene que ser real
-      await sbInsert('avisos_candy', { fecha: fechaAhora(), hijo: Q('hijo'), codigo: Q('codigo'), producto: prodAv, cliente: cliAv, telefono: telAv, estado: 'pendiente' });
-      const waTo = Q('wa');
-      if (waTo) await sendTwilioWA(waTo, `🔔 *Candy Shop* — te piden un producto agotado\n\n🍬 ${prodAv}\n👤 ${cliAv || 'cliente'}${telAv ? ' · ' + telAv : ''}\n\nCuando lo tengas, avisale 😉`);
+      await sbInsert('avisos_candy', { fecha: fechaAhora(), hijo: _ident(Q('hijo'), 20), codigo: _ident(Q('codigo')), producto: prodAv, cliente: cliAv, telefono: telAv, estado: 'pendiente' });
+      const waTo = Q('wa').replace(/\D/g, '');
+      if (WA_CANDY.includes(waTo)) await sendTwilioWA(waTo, `🔔 *Candy Shop* — te piden un producto agotado\n\n🍬 ${prodAv}\n👤 ${cliAv || 'cliente'}${telAv ? ' · ' + telAv : ''}\n\nCuando lo tengas, avisale 😉`);
       return json({ ok: true });
     }
     if (accion === 'track') {
-      await sbInsert('trafico', { fecha: fechaAhora(), vid: Q('vid'), pagina: Q('pagina') || 'tienda', evento: Q('evento') || 'visita', origen: Q('origen') || 'directo', dispositivo: Q('dispositivo'), ciudad: Q('ciudad'), region: Q('region'), pais: Q('pais'), nombre: Q('nombre'), telefono: Q('telefono'), detalle: Q('producto'), carrito: Q('carrito'), total: QN('total') });
+      // 🔒 v4.95: todo lo que manda un visitante, limpio (la Analítica y el En vivo lo muestran en el panel).
+      const tv = { vid: _ident(Q('vid')), pagina: _libre(Q('pagina'), 120) || 'tienda', evento: _ident(Q('evento'), 40) || 'visita', origen: _libre(Q('origen'), 200) || 'directo', dispositivo: _libre(Q('dispositivo'), 40), ciudad: _libre(Q('ciudad'), 80), region: _libre(Q('region'), 80), pais: _libre(Q('pais'), 60), nombre: _libre(Q('nombre'), 120), telefono: _tel(Q('telefono')), detalle: _libre(Q('producto'), 300), carrito: _libre(Q('carrito'), 8000) };
+      await sbInsert('trafico', { fecha: fechaAhora(), ...tv, total: QN('total') });
       // Compatibilidad con el contador simple de visitas existente.
-      if ((Q('evento') || 'visita') === 'visita') await sbInsert('visitas', { fecha: fechaAhora(), pagina: Q('pagina') || 'tienda' });
+      if (tv.evento === 'visita') await sbInsert('visitas', { fecha: fechaAhora(), pagina: tv.pagina });
       // 🔔 v4.82: ¿esto merece un aviso al celular de Jony? (checkout, cliente conocido, búsqueda vacía, pico)
-      try { await avisosInstantaneos({ vid: Q('vid'), evento: Q('evento') || 'visita', detalle: Q('producto'), nombre: Q('nombre'), telefono: Q('telefono'), total: QN('total'), totalUSD: QN('totalUSD'), carrito: Q('carrito') }); } catch { /* un aviso nunca frena el registro */ }
+      try { await avisosInstantaneos({ vid: tv.vid, evento: tv.evento, detalle: tv.detalle, nombre: tv.nombre, telefono: tv.telefono, total: QN('total'), totalUSD: QN('totalUSD'), carrito: tv.carrito }); } catch { /* un aviso nunca frena el registro */ }
       return json({ ok: true });
     }
     if (accion === 'visitas') return json((await sbGet('visitas', 'select=fecha,pagina&order=id.asc')).map((r: any) => ({ fecha: (r.fecha || '').toString(), pagina: (r.pagina || '').toString() })));
     if (accion === 'registrarClienteMayorista') {
       const telM = Q('telefono').replace(/\D/g, '').slice(-10);
-      const nomM = Q('nombre');
+      const nomM = _libre(Q('nombre'), 120).trim();   // 🔒 v4.95
       if (!telM || !nomM) return json({ error: 'datos incompletos' });
       const todosC = await sbGet('clientes', 'select=id,nombre,telefono');
       const exC = todosC.find((c: any) => (c.telefono || '').toString().replace(/\D/g, '').slice(-10) === telM);
       if (exC) { await sbPatch('clientes', 'id=eq.' + exC.id, { ultimo_acceso: fechaAhora() }); return json({ ok: true, nuevo: false, nombre: (exC.nombre || nomM).toString() }); }
       const fM = fechaAhora();
-      await sbInsert('clientes', { fecha: fM, nombre: nomM, telefono: telM, tipo: Q('tipo') || 'Mayorista', nota: '', ultimo_acceso: fM });
+      await sbInsert('clientes', { fecha: fM, nombre: nomM, telefono: telM, tipo: _libre(Q('tipo'), 30) || 'Mayorista', nota: '', ultimo_acceso: fM });
       return json({ ok: true, nuevo: true });
     }
     if (accion === 'notificarPedido') {
@@ -4304,11 +4324,11 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
     if (accion === 'notificacion') {
-      const pid = P(body, 'productoId'), tel = P(body, 'telefono');
+      const pid = _ident(P(body, 'productoId'), 20), tel = _tel(P(body, 'telefono'));   // 🔒 v4.95
       if (telDudoso(tel)) return json({ error: 'Ese número no parece un WhatsApp válido — poné código de área + número' });
       const ex = await sbGet('notificaciones', 'select=id&producto_id=eq.' + encodeURIComponent(pid) + '&telefono=eq.' + encodeURIComponent(tel) + '&estado=eq.pendiente');
       if (ex.length) return json({ ok: true, duplicado: true });
-      await sbInsert('notificaciones', { fecha: fechaAhora(), producto_id: pid, producto: P(body, 'producto'), nombre: P(body, 'nombre'), telefono: tel, estado: 'pendiente', modo: P(body, 'modoCliente') || 'mayorista' });
+      await sbInsert('notificaciones', { fecha: fechaAhora(), producto_id: pid, producto: _libre(P(body, 'producto'), 150), nombre: _libre(P(body, 'nombre'), 120), telefono: tel, estado: 'pendiente', modo: _ident(P(body, 'modoCliente'), 20) || 'mayorista' });
       return json({ ok: true });
     }
     if (accion === 'marcarNotificado') { await sbPatch('notificaciones', 'producto_id=eq.' + encodeURIComponent(P(body, 'productoId')) + '&telefono=eq.' + encodeURIComponent(P(body, 'telefono')) + '&estado=eq.pendiente', { estado: 'notificado' }); return json({ ok: true }); }
