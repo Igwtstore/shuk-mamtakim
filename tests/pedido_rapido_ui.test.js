@@ -57,7 +57,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR
   // 1) Mayorista: el interruptor, la lista, − y +, el pie
   const ctx = await b.newContext({ viewport: { width: 400, height: 860 } });
   const pg = await nueva(ctx, '/mayorista');
-  ok('en mayorista aparece "¿Ya sabés lo que querés? 🖼️ Con fotos · 📋 Lista rápida"', await hasta(async () => pg.evaluate(() => { const t = document.getElementById('vista-toggle'); return !t.hidden && t.innerText.includes('Lista rápida'); })));
+  ok('en mayorista aparece "¿Ya sabés lo que querés? 🖼️ Con fotos · 📋 Lista rápida" (y se ve)', await hasta(async () => pg.evaluate(() => { const t = document.getElementById('vista-toggle'); return !t.hidden && getComputedStyle(t).display !== 'none' && t.innerText.includes('Lista rápida'); })));
   await pg.evaluate(() => setVistaMay(true));
   const lista = await pg.evaluate(() => ({ filas: [...document.querySelectorAll('#catalogo .lr-fila')].map(f => f.id), cats: [...document.querySelectorAll('#catalogo .lr-cat')].map(c => c.textContent), tarjetas: document.querySelectorAll('#catalogo .producto-card').length }));
   ok('la lista reemplaza a las tarjetas, agrupada por categoría y con lo agotado al final', lista.tarjetas === 0 && JSON.stringify(lista.cats) === JSON.stringify(['Pitzujim', 'Chocolate', '🔔 Sin stock']) && lista.filas.slice(-1)[0] === 'lr-50');
@@ -85,7 +85,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR
   const ctx2 = await b.newContext();
   const pg2 = await nueva(ctx2, '/tienda');
   await esperar(800);
-  ok('en la tienda minorista no hay lista rápida', await pg2.evaluate(() => document.getElementById('vista-toggle').hidden));
+  ok('en la tienda minorista no hay lista rápida (ni se ve el botón)', await pg2.evaluate(() => { const t = document.getElementById('vista-toggle'); return t.hidden && getComputedStyle(t).display === 'none' && t.offsetHeight === 0; }));
   await ctx2.close();
 
   // 2) Panel: el pedido armado por la IA

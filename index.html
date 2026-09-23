@@ -136,6 +136,9 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* Lo marcado "hidden" se oculta SIEMPRE, aunque su clase le ponga display (v4.91: el botón de la
+     lista rápida se veía en la tienda minorista porque .vista-toggle es flex). */
+  [hidden] { display: none !important; }
 
   html { overflow-x: clip; }   /* red de seguridad: ningún off-canvas/elemento ancho descalza la página en el celular (clip no rompe sticky como overflow:hidden) */
   body {

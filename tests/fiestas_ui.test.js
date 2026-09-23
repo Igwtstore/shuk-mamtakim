@@ -63,14 +63,14 @@ const MIE = '2026-09-23T15:00:00-03:00', VIE = '2026-09-25T15:00:00-03:00';
   ok('los productos de Sucot: de cada categoría, intercalados, sin repetir lo de "Lo más pedido" (y nada de Sopa)', JSON.stringify(fiesta.nombres) === JSON.stringify(['Pitzujim-Cajú Caramelizado', 'Klik almohaditas 65g (azul)', 'Caramelos Mentos']));
   await pg.evaluate(() => fiestaSumar(5));
   ok('"+ Agregar" en la fila de la fiesta suma y queda registrado de dónde salió', await pg.evaluate(() => carrito[5] && carrito[5].qty === 1) && await hasta(async () => (await recibidos()).some(x => x.evento === 'vidriera' && x.producto === 'fiesta · Bamba Osem')));
-  ok('miércoles: "🕯️ Pedí hasta el jueves a las 20 h y llega para Shabat"', await pg.evaluate(() => { const e = document.getElementById('shabat-franja'); return !e.hidden && e.textContent === '🕯️ Pedí hasta el jueves a las 20 h y llega para Shabat'; }));
+  ok('miércoles: "🕯️ Pedí hasta el jueves a las 20 h y llega para Shabat" (y se ve)', await pg.evaluate(() => { const e = document.getElementById('shabat-franja'); return !e.hidden && e.offsetHeight > 0 && e.textContent === '🕯️ Pedí hasta el jueves a las 20 h y llega para Shabat'; }));
   ok('la franja va arriba del buscador', await pg.evaluate(() => document.getElementById('shabat-franja').nextElementSibling.classList.contains('buscador-wrap')));
   await ctx.close();
 
   // 2) Viernes: sin franja; la fiesta ya es hoy
   const { pg: pg2, ctx: ctx2 } = await nueva('/tienda', { reloj: VIE });
   ok('viernes: "Hoy empieza Sucot"', await hasta(async () => (await pg2.evaluate(() => (document.querySelector('#catalogo .fiesta') || {}).innerText || '')).includes('Hoy empieza Sucot')));
-  ok('viernes: la franja de Shabat no está', await pg2.evaluate(() => document.getElementById('shabat-franja').hidden));
+  ok('viernes: la franja de Shabat no está (ni se ve)', await pg2.evaluate(() => { const e = document.getElementById('shabat-franja'); return e.hidden && e.offsetHeight === 0; }));
   await ctx2.close();
 
   // 3) Sucot apagado y Shabat con otro horario
