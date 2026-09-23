@@ -11,7 +11,8 @@ async function run() {
   const mails = { jony: 'Admin@ShukMamtakim.com ', miri: 'myri@shukmamtakim.com', kids: 'kids@candyshop.com', intruso: 'alguien@gmail.com', viejo: 'ingodwetrustsrl@gmail.com' };
   const fetch = async (url, o) => { const tok = o.headers.Authorization.replace('Bearer ', ''); return mails[tok] ? { ok: true, json: async () => ({ email: mails[tok], id: 'id-' + tok }) } : { ok: false, json: async () => ({}) }; };
   const F = new Function('fetch', 'const SB_URL = "https://x"; const ANON = "a"; const MAILS_EQUIPO = ' + lista + ';\n' + limpio(cuerpo('usuarioSesion')) + '\n' + limpio(cuerpo('sesionValida')) + '\nreturn { usuarioSesion, sesionValida };')(fetch);
-  t.eq('las cuentas del equipo pasan (el mail se compara sin mayúsculas ni espacios)', [!!(await F.usuarioSesion('jony')), !!(await F.usuarioSesion('miri')), !!(await F.usuarioSesion('kids'))], [true, true, true]);
+  t.eq('las cuentas del equipo pasan (el mail se compara sin mayúsculas ni espacios)', [!!(await F.usuarioSesion('jony')), !!(await F.usuarioSesion('kids'))], [true, true]);
+  t.eq('Miri ya NO pasa (v4.96: afuera de todo)', [await F.usuarioSesion('miri'), await F.sesionValida('miri')], [null, false]);
   t.eq('una sesión VÁLIDA de alguien de afuera no pasa', [await F.usuarioSesion('intruso'), await F.sesionValida('intruso')], [null, false]);
   t.eq('la cuenta vieja que no es del equipo tampoco', await F.sesionValida('viejo'), false);
   t.eq('sin token o con token falso, afuera', [await F.sesionValida(''), await F.sesionValida('cualquiera')], [false, false]);

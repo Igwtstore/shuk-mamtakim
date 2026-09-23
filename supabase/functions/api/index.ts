@@ -1528,7 +1528,8 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
 // abierta y el motor dejaba pasar a CUALQUIER usuario con sesión válida. Además de cerrar la
 // inscripción (23/09), el motor acepta solo estas cuentas: una cuenta nueva, aunque alguien la
 // lograra crear, no puede pedir nada. Sumar una cuenta = agregarla acá.
-const MAILS_EQUIPO = ['admin@shukmamtakim.com', 'myri@shukmamtakim.com', 'kids@candyshop.com'];
+// 🔒 v4.96: Miri ya NO es del equipo (pedido del dueño 23/09: «que MYRI no tenga acceso a NADA»; su cuenta está bloqueada).
+const MAILS_EQUIPO = ['admin@shukmamtakim.com', 'kids@candyshop.com'];
 async function sesionValida(token: string): Promise<boolean> {
   return !!(await usuarioSesion(token));
 }
@@ -1554,6 +1555,22 @@ const esJony = (u: Usuario | null) => !!u && u.email === MAIL_JONY;
 // 🎚️ INTERRUPTOR (v4.52): el mail de Miri identifica a quién le corta el paso el interruptor
 // de acceso (config ACCESO_MIRI, lo maneja Jony desde el panel). Ver portero del dispatcher.
 const MAIL_MIRI = 'myri@shukmamtakim.com';
+const MAIL_KIDS = 'kids@candyshop.com';
+// Las 62 acciones que usa el panel de los chicos (sacadas de candyshop.html el 23/09). Una acción nueva del panel Candy
+// tiene que sumarse ACÁ (si no, al chico le aparece "no disponible para esta cuenta").
+const ACCIONES_KIDS = [
+    'agregarProductoHijo', 'agregarProveedorHijos', 'ajustarDepositoManual', 'analiticaCandy', 'analizarFotoProducto',
+    'archivarFlyer', 'auditarHijos', 'bloquearVidCandy', 'borradosCandy', 'cancelarPedidoHijo', 'cerrarDiaHijos',
+    'cobrarPedidoHijo', 'comprasTabHijos', 'consultarDeudores', 'editarPedidoHijo', 'editarProductoHijo',
+    'editarProductosLoteHijos', 'editarProveedorHijos', 'editarVentaHijos', 'eliminarCompraHijos', 'eliminarFlyer',
+    'eliminarProductoHijo', 'eliminarProveedorHijos', 'eliminarVentaHijos', 'enviarFlyerWA', 'flyerTexto', 'fondoFlyer',
+    'getAvisosCandy', 'getCatalogoHijos', 'getComprasHijos', 'getConfigCandy', 'getConsumoPeriodo', 'getDepositoHijos',
+    'getFlyersHijos', 'getProductosShukAdmin', 'getProveedoresHijos', 'getShukEnCandy', 'getStockDia', 'getUltimoStockDia',
+    'guardarFlyer', 'historialCliente', 'movsDeposito', 'panelHijos', 'registrarCompraHijos', 'registrarConsumoHijos',
+    'registrarPagoCliente', 'registrarPagoVuelto', 'registrarVentaHijos', 'registrarVentaLote', 'registrarVueltoCC',
+    'renombrarCategoriaHijos', 'resetearStockDia', 'resolverAvisoCandy', 'setCategoriaHijosLote', 'setConfigCandy',
+    'setFotoHijo', 'setPrecioShukEnCandy', 'setStockDia', 'toggleShukEnCandy', 'transcribirIdea', 'ventasHoy', 'ventasPeriodo'
+];
 // ── EAN (v4.50) ─────────────────────────────────────────────────────────────────
 // Deja el código comparable: solo dígitos, y el UPC-A de 12 se lleva a EAN-13 con el 0
 // de adelante (si no, el mismo producto no matchea entre un ticket y un escaneo).
@@ -3179,6 +3196,10 @@ Deno.serve(async (req) => {
   const usuario = (esPublica || conSecreto) ? null : await usuarioSesion(token);
   if (!esPublica && !conSecreto && !usuario) return json({ error: 'no autorizado' });
   if (SOLO_JONY.indexOf(accion) !== -1 && !conSecreto && !esJony(usuario)) return json({ error: 'no autorizado' });
+  // 🔒 v4.96: la cuenta de los chicos (Candy) puede SOLO lo que usa su panel (candyshop.html): antes pasaba a 143 acciones
+  // del Shuk (clientes, plata, cobros, cortes, push a todos). El texto NO es 'no autorizado' a propósito: ese dispara el
+  // refresco de sesión del panel y acá la sesión es válida — lo que no corresponde es la acción.
+  if (usuario && usuario.email === MAIL_KIDS && ACCIONES_KIDS.indexOf(accion) === -1) return json({ error: 'no disponible para esta cuenta' });
   // 🎚️ INTERRUPTOR DE ACCESO DE MIRI (v4.52): Jony lo prende/apaga desde el panel (ACCESO_MIRI).
   // Apagado ⇒ el token de Miri no puede pedir NINGUNA acción protegida — ni siquiera con una
   // sesión que le quedó abierta en el navegador: la barrera es del servidor, no de la pantalla.
