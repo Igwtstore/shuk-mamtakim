@@ -47,7 +47,7 @@ const trafico = [
   ev('v_nadie', 'busqueda', 1, 9, { detalle: 'bon o bon', total: 4 }),
   // COMPRADOR: hizo todo el camino hasta el pedido.
   ev('v_compra', 'visita', 1, 15), ev('v_compra', 'carrito', 1, 15, { detalle: 'Pesek Zman' }), ev('v_compra', 'pedido', 1, 15, { nombre: 'Iosi M' }),
-  // 💵 MAYORISTA EN DÓLARES (caso real Isi Michan, 27/08): U$S 85,50 que la pantalla
+  // 💵 MAYORISTA EN DÓLARES (caso real Ana Prueba, 27/08): U$S 85,50 que la pantalla
   // mostraba como "$ 86". Los renglones viejos NO traen la moneda: hay que deducirla.
   { ...ev('v_may', 'visita', 1, 11), pagina: 'mayorista' },
   { ...ev('v_may', 'carrito', 1, 11, { detalle: 'Klik dolar', carrito: JSON.stringify([{ n: 'Klik dolar', q: 10, p: 8.55 }]), total: 86 }), pagina: 'mayorista' },

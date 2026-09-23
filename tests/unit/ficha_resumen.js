@@ -27,13 +27,13 @@ async function run() {
   const r = (id, fecha, evento, x = {}) => ({ id, ts: null, fecha, vid: 'v_yael', pagina: 'tienda', evento, origen: '', dispositivo: 'celular', ciudad: 'Buenos Aires', pais: 'Argentina', nombre: '', telefono: '', detalle: '', carrito: '', total: 0, ...x });
   const tanda = JSON.stringify({ v: [{ i: '1', n: 'Pitzujim-Pecán Oreo.' }, { i: '2', n: 'Chocolate Elite Crunch' }] });
   const evs = [
-    r(1, '03/09/2026 11:32', 'visita', { detalle: ficha(11), origen: 'whatsapp', nombre: 'Yael sasso', telefono: '1127668668' }),
+    r(1, '03/09/2026 11:32', 'visita', { detalle: ficha(11), origen: 'whatsapp', nombre: 'Prueba3 sasso', telefono: '1140023757' }),
     r(2, '03/09/2026 11:33', 'carrito', { detalle: 'Pitzujim-Semillas de Girasol de Israel!!', carrito: '[{"n":"Pitzujim-Semillas de Girasol","q":2,"p":6000}]', total: 12000 }),
     r(3, '03/09/2026 11:34', 'salida', { detalle: '{"seg":74,"int":0,"prod":0}' }),
     r(4, '22/09/2026 01:40', 'visita', { detalle: ficha(1, { vip: '' }), origen: 'directo' }),
     r(5, '22/09/2026 01:41', 'vistas', { detalle: tanda }),
     r(6, '22/09/2026 01:42', 'vistas', { detalle: tanda.slice(0, tanda.indexOf('Chocolate') + 4) }),   // tanda cortada
-    r(7, '22/09/2026 01:48', 'pedido', { nombre: 'Yael sasson', carrito: '[{"n":"Pitzujim-Pecán Oreo.","q":1,"p":12000}]', total: 87995 }),
+    r(7, '22/09/2026 01:48', 'pedido', { nombre: 'Cliente Prueba 3', carrito: '[{"n":"Pitzujim-Pecán Oreo.","q":1,"p":12000}]', total: 87995 }),
     r(8, '22/09/2026 01:49', 'bloqueado'),
     r(9, '22/09/2026 20:06', 'salida', { detalle: '{"seg":75,"int":3,"prod":0}' }),
   ];
@@ -42,7 +42,7 @@ async function run() {
   t.ok('ningún "producto" es texto de código (ni ficha técnica ni segundos)', !todo.includes('{\\"') && !todo.includes('"tz') && !todo.includes('seg'));
   t.eq('lo que más miró sale de las tandas de vistas (la cortada también cuenta lo que llegó entero)', f.productos, [{ nombre: 'Pitzujim-Pecán Oreo.', n: 2 }, { nombre: 'Chocolate Elite Crunch', n: 1 }]);
   t.eq('lo que puso en el carrito sale de los eventos de carrito', f.agregados, [{ nombre: 'Pitzujim-Semillas de Girasol de Israel!!', n: 1 }]);
-  t.eq('el nombre es el ÚLTIMO que dejó (si corrigió "sasso" por "sasson", manda el corregido)', f.nombre, 'Yael sasson');
+  t.eq('el nombre es el ÚLTIMO que dejó (si corrigió "sasso" por "sasson", manda el corregido)', f.nombre, 'Cliente Prueba 3');
   t.eq('el canal es el primer toque (el que lo trajo)', f.origen, 'whatsapp');
   t.eq('días distintos', f.dias, 2);
   t.eq('el recorrido no incluye los rechazos del candado', f.linea.map(x => x.evento).includes('bloqueado'), false);

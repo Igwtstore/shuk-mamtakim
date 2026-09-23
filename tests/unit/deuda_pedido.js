@@ -1,5 +1,5 @@
 // Blindaje: deuda residual de un pedido (_deudaPedido) — función REAL de index.html.
-// Cubre el bug que casi borra la deuda de isi michan: un pedido cobrado PARCIAL (parte a caja
+// Cubre el bug que casi borra la deuda de Dani Ficticio: un pedido cobrado PARCIAL (parte a caja
 // real + parte a cuenta corriente) NO debe figurar como saldado; la deuda es lo que quedó en CTA_CTE.
 const { extraerFns, suite } = require('./_helpers');
 
@@ -23,7 +23,7 @@ module.exports.run = () => {
   d = _deudaPedido({ estado: 'cotizacion', arsMyri: 9999 }, false);
   s.ok('Cotización: deuda 0', d.ars === 0 && d.usd === 0);
 
-  // 5) EL CASO isi michan: cobrado PARCIAL con tramos (parte a caja real + parte a CTA_CTE_USD).
+  // 5) EL CASO Dani Ficticio: cobrado PARCIAL con tramos (parte a caja real + parte a CTA_CTE_USD).
   //    El backend igual setea cajaMyri con caja real → esCobradoReal daría true, pero la deuda
   //    residual son los U$S 157.66 que quedaron a cuenta corriente.
   const tramos = JSON.stringify([
@@ -32,7 +32,7 @@ module.exports.run = () => {
     { dueno: 'M', caja: 'CTA_CTE_USD', monto: 157.66 }
   ]);
   d = _deudaPedido({ cajaJony: 'EFT_JONY', cajaMyri: 'EFT_MYRI', tramos, usdMyri: 240, arsMyri: 126260 }, false);
-  s.ok('Cobro parcial (isi michan): deuda residual USD = 157.66', Math.abs(d.usd - 157.66) < 0.01 && d.ars === 0);
+  s.ok('Cobro parcial (Dani Ficticio): deuda residual USD = 157.66', Math.abs(d.usd - 157.66) < 0.01 && d.ars === 0);
 
   // 6) Vista Miri: solo cuenta la parte de Miri (no la de Jony)
   const tr2 = JSON.stringify([

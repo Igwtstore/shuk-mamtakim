@@ -14,12 +14,12 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
 
   const r = await page.evaluate(async () => {
     const out = {};
-    const V = [{ id: 'P51', nVenta: 51, cliente: 'Sarah Kantor', fecha: '07/07/2026 12:09', estado: 'pendiente', tipo: 'Mayorista',
+    const V = [{ id: 'P51', nVenta: 51, cliente: 'Beto Ejemplo', fecha: '07/07/2026 12:09', estado: 'pendiente', tipo: 'Mayorista',
       productos: '• 1x Cosa — $ 100.350 c/u = $ 100.350', formaPago: 'Efectivo',
       totalARS: 100350, totalUSD: 121.15, arsJONY: 100350, arsMyri: 0, usdMyri: 44, usdJONY: 77.15, comiARS: 0, comiUSD: 6.6 }];
     const P = [
-      { cliente: 'Sarah Kantor', pedidoId: 'P51', fecha: '12/07/2026', montoARS: 100350, montoUSD: 121.15, montoPitz: 100350, montoPitzUsd: 77.15, caja: 'ETF_USD_JONY', tc: 1520 },
-      { cliente: 'Sarah Kantor', pedidoId: '', fecha: '12/07/2026', montoARS: 0, montoUSD: 12.83, montoPitz: 0, montoPitzUsd: 0, caja: 'ETF_USD_JONY', tc: 0 },
+      { cliente: 'Beto Ejemplo', pedidoId: 'P51', fecha: '12/07/2026', montoARS: 100350, montoUSD: 121.15, montoPitz: 100350, montoPitzUsd: 77.15, caja: 'ETF_USD_JONY', tc: 1520 },
+      { cliente: 'Beto Ejemplo', pedidoId: '', fecha: '12/07/2026', montoARS: 0, montoUSD: 12.83, montoPitz: 0, montoPitzUsd: 0, caja: 'ETF_USD_JONY', tc: 0 },
     ];
     const origApi = window.apiGet;
     window.apiGet = async (a) => {

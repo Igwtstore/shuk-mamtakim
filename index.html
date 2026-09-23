@@ -2846,10 +2846,10 @@ function pintarBannerTienda() {
   b.style.display = 'block';
   if (_estadoTienda === 'cerrada') {
     b.style.background = '#fde8e8'; b.style.color = '#c0392b';
-    b.innerHTML = `🔴 ${_tiendaMsg || 'Tienda cerrada por el momento.'} <a href="https://wa.me/${WA_NUM1}" target="_blank" style="color:#c0392b;text-decoration:underline">Contactar al vendedor</a>`;
+    b.innerHTML = `🔴 ${esc(_tiendaMsg || 'Tienda cerrada por el momento.')} <a href="https://wa.me/${WA_NUM1}" target="_blank" style="color:#c0392b;text-decoration:underline">Contactar al vendedor</a>`;
   } else {
     b.style.background = 'var(--dorado-claro,#fdf3e3)'; b.style.color = '#7a5a1a';
-    b.innerHTML = `🟡 ${_tiendaMsg || 'Cerrado por control de stock.'} Podés armar tu pedido y se enviará como <b>cotización</b> (te confirmamos stock en 24hs).`;
+    b.innerHTML = `🟡 ${esc(_tiendaMsg || 'Cerrado por control de stock.')} Podés armar tu pedido y se enviará como <b>cotización</b> (te confirmamos stock en 24hs).`;
   }
 }
 
@@ -3302,7 +3302,7 @@ function _miniCards(ids, fnSumar) {
     const p = productos.find(x => x.id === id);
     if (!p) return '';
     const foto = (p.imagen || '').split(',').map(s => s.trim()).filter(x => x && !esVideo(x))[0];
-    const img = foto ? `<img src="${imgUrl(foto)[0]}" alt="" loading="lazy" onerror="this.replaceWith('🍬')">` : '🍬';
+    const img = foto ? `<img src="${esc(imgUrl(foto)[0])}" alt="" loading="lazy" onerror="this.replaceWith('🍬')">` : '🍬';
     const enC = carrito[id] ? carrito[id].qty : 0;
     return `<div class="vitrina-card">
       <button class="vitrina-foto" onclick="vitrinaIr(${id})" aria-label="Ver ${esc(p.nombre)}">${img}</button>
@@ -4073,12 +4073,12 @@ function _acFilasHtml() {
   return lista.map(p => {
     const sel = !!_acSel[p.id];
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
-    const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:34px;height:34px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+    const thumb = imgs.length ? `<img src="${esc(imgUrl(imgs[0])[0])}" style="width:34px;height:34px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const estado = _acEsOculto(p) ? '<span style="color:#b8860b">🙈 oculto</span>' : `<span style="color:#1a7a3a">👁️ ${esc(p.visible||'Ambos')}</span>`;
     const _stk = parseFloat(p.stock) || 0;
     const stkTxt = `<span style="color:${_stk <= 0 ? '#c0392b' : '#555'};font-weight:${_stk <= 0 ? '700' : '400'}">📦 ${_stk <= 0 ? 'sin stock' : _stk + ' u.'}</span>`;
     return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.6rem;border-bottom:1px solid var(--gris);cursor:pointer;background:${sel?'#eef4fb':'#fff'}">
-      <input type="checkbox" ${sel?'checked':''} onchange="_acToggle('${p.id}', this)" style="width:17px;height:17px">
+      <input type="checkbox" ${sel?'checked':''} onchange="_acToggle('${jsAttr(p.id)}', this)" style="width:17px;height:17px">
       ${thumb}
       <div style="flex:1;min-width:0">
         <div style="font-size:0.84rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_duenoBadge(p)}${esc(p.nombre)}</div>
@@ -4086,7 +4086,7 @@ function _acFilasHtml() {
         <div style="font-size:0.66rem;color:var(--texto-suave)">🏷️ ${esc(p.categoria||'Varios')} · ${estado} · ${stkTxt}</div>
       </div>
       <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:2px;flex-shrink:0" title="Descuento de este producto (pisa el general)">
-        <input type="number" min="0" max="100" value="${_acDescProd[p.id] !== undefined ? _acDescProd[p.id] : ''}" oninput="_acSetDescProd('${p.id}', this.value)" placeholder="${_acDescGeneral || '%'}" style="width:42px;padding:4px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.72rem;text-align:center">
+        <input type="number" min="0" max="100" value="${_acDescProd[p.id] !== undefined ? _acDescProd[p.id] : ''}" oninput="_acSetDescProd('${jsAttr(p.id)}', this.value)" placeholder="${_acDescGeneral || '%'}" style="width:42px;padding:4px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.72rem;text-align:center">
         <span style="font-size:0.66rem;color:#aaa">%</span>
       </div>
     </label>`;
@@ -4241,7 +4241,7 @@ function _acBuildDoc() {
     return parts.join('<br>') || '';
   };
   const foto = (p, h) => { const imgs = (p.imagen||'').split(',').map(x=>x.trim()).filter(Boolean);
-    return imgs.length ? `<img src="${imgUrl(imgs[0])[0].replace('/w_400,', '/w_1000,')}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
+    return imgs.length ? `<img src="${esc(imgUrl(imgs[0])[0].replace('/w_400,', '/w_1000,'))}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${h>60?'2rem':'1.2rem'};background:#faf8f5">🍬</div>`; };
   let cuerpo = '';
   cats.forEach(c => {
     cuerpo += `<div style="background:#fcf3e3;color:#c9954a;font-weight:800;font-size:0.82rem;padding:5px 10px;border-radius:6px;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em">${esc(c)}</div>`;
@@ -4527,7 +4527,7 @@ function renderCatalogo() {
     if (p.hashgaja) kBadges.push(['#fdf3e3', '#8a5a1e', '✡️ ' + p.hashgaja]);
     // Zona kosher SIEMPRE renderizada (con o sin chips) y de UNA línea: las tarjetas quedan
     // parejas entre filas (antes "Lácteo · Jalav Israel" + supervisión saltaban a 2 renglones).
-    const kosherHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:2px 0 1px;min-height:19px">${kBadges.map(b => `<span style="background:${b[0]};color:${b[1]};font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">${b[2]}</span>`).join('')}</div>`;
+    const kosherHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:2px 0 1px;min-height:19px">${kBadges.map(b => `<span style="background:${b[0]};color:${b[1]};font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">${esc(b[2])}</span>`).join('')}</div>`;
     return `
     <div class="producto-card ${agotado ? 'agotado' : ''}${(p.etiqueta||'').trim() ? ' con-cinta' : ''}" id="card-${p.id}">
       ${(p.etiqueta||'').trim() ? (() => { const _t = p.etiqueta.trim(); const _c = _t.length <= 11 ? 'c-lg' : _t.length <= 16 ? 'c-md' : _t.length <= 24 ? 'c-sm' : 'c-xs'; return `<div class="cinta-wrap"><div class="cinta ${_c}" title="${esc(_t)}">${esc(_t)}</div></div>`; })() : ''}
@@ -4536,8 +4536,8 @@ function renderCatalogo() {
       <button class="share-btn" onclick="compartirProducto(${p.id})" title="Compartir">📤</button>
       ${(() => { const sl = _sellosHtml(p, topSet); return sl ? `<div class="foto-con-sellos">${renderImg(p)}<div class="sellos-foto">${sl}</div></div>` : renderImg(p); })()}
       <div class="producto-info">
-        <div class="producto-nombre">${p.nombre}</div>
-        <div class="producto-desc">${p.desc}</div>
+        <div class="producto-nombre">${esc(p.nombre)}</div>
+        <div class="producto-desc">${esc(p.desc)}</div>
         ${kosherHtml}
         ${ofertaVigente(p) ? `
         <div class="precio-cartel" style="border-color:#c0392b">
@@ -4734,16 +4734,16 @@ function abrirFotoGrande(el) {
   const ov = document.createElement('div');
   ov.className = 'visor-foto';
   ov.innerHTML = `<button class="visor-x" aria-label="Cerrar">✕</button>
-    <img src="${_urlGrande(src)}" alt="${(el.alt || 'Producto').replace(/"/g, '&quot;')}">
+    <img src="${esc(_urlGrande(src))}" alt="${(el.alt || 'Producto').replace(/"/g, '&quot;')}">
     <div class="visor-tip">Tocá fuera de la foto para cerrar</div>`;
   const cerrar = () => {
     ov.classList.remove('abierto');
-    document.removeEventListener('keydown', esc);
+    document.removeEventListener('keydown', teclaEsc);
     setTimeout(() => ov.remove(), 180);
   };
-  const esc = e => { if (e.key === 'Escape') cerrar(); };
+  const teclaEsc = e => { if (e.key === 'Escape') cerrar(); };   // 🔒 v4.95: antes se llamaba esc y tapaba la función que escapa (TDZ al abrir la foto)
   ov.onclick = e => { if (e.target !== ov.querySelector('img')) cerrar(); };   // cualquier punto afuera
-  document.addEventListener('keydown', esc);
+  document.addEventListener('keydown', teclaEsc);
   document.body.appendChild(ov);
   requestAnimationFrame(() => ov.classList.add('abierto'));
 }
@@ -4762,17 +4762,17 @@ function renderImg(p) {
     // FOTO del producto: en iPhone el video no arranca hasta cargar y sin poster quedaba el
     // recuadro EN BLANCO (bug cazado por el usuario desde el celular).
     const fotoPoster = imagenes.find(x => !esVideo(x));
-    const posterAttr = fotoPoster ? `poster="${imgUrl(fotoPoster)[0]}"` : '';
-    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${primera}" data-vurl="${primera}" ${posterAttr}
+    const posterAttr = fotoPoster ? `poster="${esc(imgUrl(fotoPoster)[0])}"` : '';
+    mediaEl = `<video class="producto-img" id="cimg-${p.id}" data-vsrc="${esc(primera)}" data-vurl="${esc(primera)}" ${posterAttr}
       ${multi ? '' : 'loop'} muted playsinline preload="metadata" style="object-fit:cover"
       onclick="event.stopPropagation();_vidTap(this)" onerror="_vidRescate(this)"
       ${multi ? `onended="goToSlideInternal(${p.id},(carouselIdx[${p.id}]+1)%${imagenes.length})"` : ''}></video>`;
   } else {
     const urls0 = imgUrl(primera);
-    mediaEl = `<img class="producto-img" id="cimg-${p.id}" src="${urls0[0]}"
-      data-f1="${urls0[1]}" data-f2="${urls0[2]}" data-f3="${urls0[3]}"
+    mediaEl = `<img class="producto-img" id="cimg-${p.id}" src="${esc(urls0[0])}"
+      data-f1="${esc(urls0[1])}" data-f2="${esc(urls0[2])}" data-f3="${esc(urls0[3])}"
       onclick="event.stopPropagation();abrirFotoGrande(this)"
-      onerror="imgFallbackNext(this)" loading="lazy" alt="${p.nombre}">`;
+      onerror="imgFallbackNext(this)" loading="lazy" alt="${esc(p.nombre)}">`;
   }
   return `<div class="producto-img-wrap" id="carousel-${p.id}"
     ${multi ? `onmouseenter="hoverCarouselStart(${p.id})" onmouseleave="hoverCarouselStop(${p.id})" ontouchstart="hoverCarouselStart(${p.id})"` : ''}>
@@ -5369,8 +5369,8 @@ function renderCarrito() {
     return `
     <div class="carrito-item">
       <div class="carrito-item-info">
-        <div class="carrito-item-nombre">${item.nombre}</div>
-        <div class="carrito-item-desc">${item.desc.substring(0,60)}${item.desc.length>60?'…':''}</div>
+        <div class="carrito-item-nombre">${esc(item.nombre)}</div>
+        <div class="carrito-item-desc">${esc(item.desc.substring(0,60))}${item.desc.length>60?'…':''}</div>
         ${_faltaPack ? `<div style="font-size:0.72rem;color:var(--dorado);font-weight:700;margin-top:2px">🎁 Sumá ${_faltaPack} más y cada una sale $ ${Math.round(item.precioPack).toLocaleString('es-AR')}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:0.5rem">
@@ -5864,7 +5864,7 @@ function detalleCobro(v, soloMiri) {
       const montoTxt = t.moneda === 'USD'
         ? (cajaUSD || tc <= 0 ? `U$S ${m.toFixed(2)}` : `U$S ${m.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars2(m * tc)}`)
         : $ars2(m);
-      return `${montoTxt} → <b>${cajaLabel(t.caja)}</b>`;
+      return `${montoTxt} → <b>${esc(cajaLabel(t.caja))}</b>`;
     });
     return parts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;color:#1a7a3a;background:#eef7ee;border-radius:8px;padding:0.35rem 0.6rem">💵 ${parts.join(' &nbsp;·&nbsp; ')}</div>` : '';
   }
@@ -5874,19 +5874,19 @@ function detalleCobro(v, soloMiri) {
   const $ars = n => '$ ' + Math.round(n).toLocaleString('es-AR');
   const cajaJusd = (cajaJ === 'ETF_USD_JONY') ? cajaJ : 'ETF_USD_JONY';   // dólares de Jony → su caja U$S
   const partes = [];
-  if (!soloMiri && arsJ > 0 && esReal(cajaJ)) partes.push(`${$ars(arsJ)} → <b>${cajaLabel(cajaJ)}</b>`);
+  if (!soloMiri && arsJ > 0 && esReal(cajaJ)) partes.push(`${$ars(arsJ)} → <b>${esc(cajaLabel(cajaJ))}</b>`);
   if (!soloMiri && usdJ > 0) {
     // Si la parte de Jony en U$S se cobró en una caja de pesos con tipo de cambio: mostrar la conversión.
     const cajaJenPesos = esReal(cajaJ) && !/USD|U\$S/.test(cajaJ) && cajaJ !== 'ETF_USD_JONY';
-    if (cajaJenPesos && tc > 0) partes.push(`U$S ${usdJ.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdJ * tc)} → <b>${cajaLabel(cajaJ)}</b>`);
-    else partes.push(`U$S ${usdJ.toFixed(2)} → <b>${cajaLabel(cajaJusd)}</b>`);
+    if (cajaJenPesos && tc > 0) partes.push(`U$S ${usdJ.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdJ * tc)} → <b>${esc(cajaLabel(cajaJ))}</b>`);
+    else partes.push(`U$S ${usdJ.toFixed(2)} → <b>${esc(cajaLabel(cajaJusd))}</b>`);
   }
-  if (arsM > 0 && esReal(cajaM)) partes.push(`${$ars(arsM)} → <b>${cajaLabel(cajaM)}</b>`);
+  if (arsM > 0 && esReal(cajaM)) partes.push(`${$ars(arsM)} → <b>${esc(cajaLabel(cajaM))}</b>`);
   if (usdM > 0 && esReal(cajaM)) {
     // Si la caja destino es en pesos y hay tipo de cambio: mostrar la conversión completa.
     const cajaEnPesos = !/USD|U\$S/.test(cajaM) && cajaM !== 'ETF_USD_MYRI';
-    if (cajaEnPesos && tc > 0) partes.push(`U$S ${usdM.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdM * tc)} → <b>${cajaLabel(cajaM)}</b>`);
-    else partes.push(`U$S ${usdM.toFixed(2)} → <b>${cajaLabel(cajaM)}</b>`);
+    if (cajaEnPesos && tc > 0) partes.push(`U$S ${usdM.toFixed(2)} × $${tc.toLocaleString('es-AR')} = ${$ars(usdM * tc)} → <b>${esc(cajaLabel(cajaM))}</b>`);
+    else partes.push(`U$S ${usdM.toFixed(2)} → <b>${esc(cajaLabel(cajaM))}</b>`);
   }
   const aj = parseFloat(v.ajuste || 0);
   let ajLinea = '';
@@ -6193,8 +6193,8 @@ async function renderPedidos() {
             if (!soloMiri) return true;
             return !_lineaEsDeJony(x.l, nombresJony, _suV, _lineasV, x.li);   // vista Miri: oculta lo de Jony (gemelos: el ID decide → Miri VE los suyos)
           }).map(x => _esLineaCero(x.l)
-            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(x.l, x.li)}${x.l} ⚠️</div>`
-            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(x.l, x.li)}${x.l}</div>`).join('');
+            ? `<div style="font-size:0.78rem;color:#c0392b;font-weight:700;line-height:1.5">${_chipDueno(x.l, x.li)}${esc(x.l)} ⚠️</div>`
+            : `<div style="font-size:0.78rem;color:var(--texto-suave);line-height:1.5">${_chipDueno(x.l, x.li)}${esc(x.l)}</div>`).join('');
       const _nCeros = v.productos ? v.productos.split(' || ').filter(_esLineaCero).length : 0;
       const arsJ = parseFloat(v.arsJONY || 0);
       const arsM = parseFloat(v.arsMyri || 0);
@@ -6244,19 +6244,19 @@ async function renderPedidos() {
         const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
         avisoVenc = `<div style="background:${fuerte?'#fde0e0':'#fff3d6'};border:2px solid ${fuerte?'#c0392b':'#e8a13a'};border-radius:10px;padding:0.6rem 0.8rem;margin:0.5rem 0;display:flex;justify-content:space-between;align-items:center;gap:0.6rem;flex-wrap:wrap">
           <div style="font-size:1rem;font-weight:800;color:${fuerte?'#c0392b':'#b8730a'}">${label}</div>
-          <button onclick="window.open('${wa}','_blank')" style="background:#25d366;color:white;border:none;border-radius:8px;padding:0.45rem 0.9rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap">💬 Recordar</button>
+          <button onclick="window.open('${jsAttr(wa)}','_blank')" style="background:#25d366;color:white;border:none;border-radius:8px;padding:0.45rem 0.9rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap">💬 Recordar</button>
         </div>`;
       }
       const _envGratis = _envioGratisPorVenta[v.id] = envioGratisDe(v.tipo, v.totalARS, v.totalUSD);   // 🚚 v4.90
       return `
-      <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}" id="pedido-${v.id}">
+      <div class="pedido-item ${estado !== 'pendiente' ? esc(estado) : ''}" id="pedido-${esc(v.id)}">
         <div class="pedido-item-header">
           <div>
             <div class="pedido-cliente">${v.nVenta ? `<span style="color:var(--dorado)">#${v.nVenta}</span> · ` : ''}${esc(v.cliente)} <span style="font-weight:400;font-size:0.8rem;color:var(--texto-suave)">(${esc(v.tipo)})</span></div>
-            <div class="pedido-fecha">${v.fecha} · ${v.formaPago}</div>
+            <div class="pedido-fecha">${esc(v.fecha)} · ${esc(v.formaPago)}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
-            <span class="estado-pill estado-${estado}">${estado}</span>
+            <span class="estado-pill estado-${esc(estado)}">${esc(estado)}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
             ${_envGratis ? `<span class="envio-chip" title="Productos por ${_plataAR(v.totalARS)}: no se le cobra envío${esc(_envioZonaTxt())}">🚚 Envío gratis</span>` : ''}
             ${cobrado
@@ -6269,20 +6269,20 @@ async function renderPedidos() {
         </div>
         ${avisoVenc}
         ${_nCeros && (estado === 'pendiente' || estado === 'preparando') && !soloMiri ? `<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:10px;padding:0.5rem 0.8rem;margin:0.5rem 0;font-size:0.85rem;font-weight:800;color:#c0392b">⚠️ ${_nCeros === 1 ? 'Hay un producto a precio $0' : 'Hay ' + _nCeros + ' productos a precio $0'} — tocá ✏️ Editar para corregirlo</div>` : ''}
-        <div style="margin:0.4rem 0">${productLines || (soloMiri ? '' : v.productos)}</div>
+        <div style="margin:0.4rem 0">${productLines || (soloMiri ? '' : esc(v.productos))}</div>
         ${splitParts.length ? `<div style="font-size:0.72rem;margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.4rem">${splitParts.join(' | ')}</div>` : ''}
         ${detalleCobro(v, soloMiri)}
         ${_notasClientes[v.cliente] ? `<div style="font-size:0.75rem;background:#fdf3e3;border-left:3px solid var(--dorado);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.3rem;color:#7a5a1a">👤 ${esc(_notasClientes[v.cliente])}</div>` : ''}
         ${v.notas && v.notas !== 'Manual' ? `<div style="font-size:0.75rem;background:#e8f5ee;border-left:3px solid var(--verde);padding:0.3rem 0.6rem;border-radius:0 6px 6px 0;margin-top:0.2rem;color:#1a5a2e">📝 ${esc(v.notas)}</div>` : ''}
         <div class="pedido-acciones">
           ${estado === 'cotizacion' ? `
-          <button class="btn-accion" style="background:#fdf3e3;color:#7a5a1a;font-weight:700;border:1.5px solid var(--dorado)" onclick="aceptarCotizacion('${v.id}')">✅ Aceptar (descuenta stock)</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Rechazar</button>` : (estado === 'cancelado' ? `
-          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a;font-weight:700;border:1.5px solid var(--verde)" title="Vuelve a ponerlo pendiente y descuenta el stock que haya" onclick='abrirLevantarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>↩️ Levantar pedido</button>` : (conAcciones ? `
-          ${estado === 'pendiente' ? `<button class="btn-accion" style="background:#e8eeff;color:#2c6fad" onclick="cambiarEstado('${v.id}','preparando',this)">🔧 Preparando</button>` : ''}
-          <button class="btn-accion btn-entregar" onclick="cambiarEstado('${v.id}','entregado',this)">✓ Entregado</button>
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar</button>` : `
-          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${v.id}','cancelado',this)">✕ Cancelar y devolver stock</button>`))}
+          <button class="btn-accion" style="background:#fdf3e3;color:#7a5a1a;font-weight:700;border:1.5px solid var(--dorado)" onclick="aceptarCotizacion('${jsAttr(v.id)}')">✅ Aceptar (descuenta stock)</button>
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${jsAttr(v.id)}','cancelado',this)">✕ Rechazar</button>` : (estado === 'cancelado' ? `
+          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a;font-weight:700;border:1.5px solid var(--verde)" title="Vuelve a ponerlo pendiente y descuenta el stock que haya" onclick='abrirLevantarPedido(${esc(JSON.stringify(v))})'>↩️ Levantar pedido</button>` : (conAcciones ? `
+          ${estado === 'pendiente' ? `<button class="btn-accion" style="background:#e8eeff;color:#2c6fad" onclick="cambiarEstado('${jsAttr(v.id)}','preparando',this)">🔧 Preparando</button>` : ''}
+          <button class="btn-accion btn-entregar" onclick="cambiarEstado('${jsAttr(v.id)}','entregado',this)">✓ Entregado</button>
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${jsAttr(v.id)}','cancelado',this)">✕ Cancelar</button>` : `
+          <button class="btn-accion btn-cancelar" onclick="cambiarEstado('${jsAttr(v.id)}','cancelado',this)">✕ Cancelar y devolver stock</button>`))}
         </div>
         <div class="pedido-acciones" style="margin-top:0.3rem">
           ${estado !== 'cotizacion' ? (() => {
@@ -6298,11 +6298,11 @@ async function renderPedidos() {
               if (parcial && (rJ + rM > 1 || rUM + rUJ > 0.01)) {
                 const cubJ = Math.max(0, Math.round(arsJ - rJ)), cubM = Math.max(0, Math.round(arsM - rM));
                 const cubUM = Math.max(0, Math.round((usdM - rUM) * 100) / 100), cubUJ = Math.max(0, Math.round((_uJ - rUJ) * 100) / 100);
-                return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobroResidual('${v.id}',${rJ},${rM},${rUM},'${_cli}',${rUJ},${cubJ},${cubM},${cubUM},${cubUJ})">💰 Confirmar cobro (el resto)</button>`;
+                return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobroResidual('${jsAttr(v.id)}',${rJ},${rM},${rUM},'${_cli}',${rUJ},${cubJ},${cubM},${cubUM},${cubUJ})">💰 Confirmar cobro (el resto)</button>`;
               }
               if (parcial) return `<span style="font-size:0.7rem;color:#1a7a3a;font-weight:700;align-self:center">✓ cubierto por pagos a cuenta</span>`;
             }
-            return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${v.id}',${arsJ},${arsM},${usdM},'${_cli}',${_uJ})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>`;
+            return `<button class="btn-accion" style="background:var(--dorado-claro);color:var(--dorado);font-weight:600" onclick="abrirConfirmarCobro('${jsAttr(v.id)}',${arsJ},${arsM},${usdM},'${_cli}',${_uJ})">${cobrado ? '🔄 Re-confirmar cobro' : '💰 Confirmar cobro'}</button>`;
           })() : ''}
           ${(estado !== 'cotizacion' && !cobrado && !soloMiri) ? (() => {
             const pg = pagadoPed[v.id] || { pitz:0, golARS:0, golUSD:0, pitzUSD:0 };
@@ -6310,10 +6310,10 @@ async function renderPedidos() {
             const remGolARS = Math.max(0, Math.round(arsM - pg.golARS));
             const remGolUSD = Math.max(0, (usdM - pg.golUSD));
             const remPitzUSD = Math.max(0, (parseFloat(v.usdJONY || 0) - (pg.pitzUSD||0)));
-            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${jsAttr(v.cliente||'')}','${v.id}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)},null,${remPitzUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
+            return `<button class="btn-accion" style="background:#eef7ee;color:#1a7a3a;font-weight:600" onclick="abrirPagoCuenta('${jsAttr(v.cliente||'')}','${jsAttr(v.id)}',${remPitz},${remGolARS},${remGolUSD.toFixed(2)},null,${remPitzUSD.toFixed(2)})">💵 Pago a cuenta</button>`;
           })() : ''}
-          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaPedido('${v.id}')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
-          <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️ Editar</button>
+          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick="abrirNotaPedido('${jsAttr(v.id)}')">📝 ${v.notas&&v.notas!=='Manual'?'Editar nota':'Agregar nota'}</button>
+          <button class="btn-accion" style="background:#e8f0ff;color:#2c6fad" onclick='abrirEditarPedido(${esc(JSON.stringify(v))})'>✏️ Editar</button>
           ${(() => {
             const _t = _telPorCliente[v.cliente] || _telPorCliente[normCliente(v.cliente || '')] || '';
             if (!_t) return '';
@@ -6321,9 +6321,9 @@ async function renderPedidos() {
             const _txt = encodeURIComponent(`¡Hola ${(v.cliente || '').trim()}! 🍬 Te escribo por tu pedido #${v.nVenta || ''} del Shuk.`);
             return `<a class="btn-accion" href="https://wa.me/${_num}?text=${_txt}" target="_blank" rel="noopener" style="background:#e7f9ee;color:#128c4a;text-decoration:none;display:inline-block" title="Escribirle al ${_t}">💬 WhatsApp</a>`;
           })()}
-          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${JSON.stringify(v).replace(/'/g,"&#39;")})'>🧾 Remito</button>
-          <button class="btn-accion" style="background:#efe7dd;color:#5c3d1e" title="Imprime el remito directo, sin pasar por el modal" onclick='abrirRemitoPDF(${JSON.stringify(v).replace(/'/g,"&#39;")}, true)'>🖨️ Imprimir</button>
-          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick='exportarPedido(${JSON.stringify(v).replace(/'/g,"&#39;")})'>📤 Exportar</button>
+          <button class="btn-accion" style="background:#e8f5ee;color:#1a7a3a" onclick='abrirRemito(${esc(JSON.stringify(v))})'>🧾 Remito</button>
+          <button class="btn-accion" style="background:#efe7dd;color:#5c3d1e" title="Imprime el remito directo, sin pasar por el modal" onclick='abrirRemitoPDF(${esc(JSON.stringify(v))}, true)'>🖨️ Imprimir</button>
+          <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave)" onclick='exportarPedido(${esc(JSON.stringify(v))})'>📤 Exportar</button>
         </div>
       </div>`;
     };
@@ -6435,8 +6435,8 @@ function renderOfertasAdmin() {
     const badgePack = tienePack ? `<span style="background:#fdf3e3;color:var(--dorado);font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px">PACK x${p.cantPack}</span>` : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:10px">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
-        ${p.desc ? `<div style="font-size:0.75rem;color:var(--texto-suave)">${p.desc}</div>` : ''}
+        <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div>
+        ${p.desc ? `<div style="font-size:0.75rem;color:var(--texto-suave)">${esc(p.desc)}</div>` : ''}
         <div style="display:flex;gap:0.3rem;margin-top:2px;flex-wrap:wrap">${badge}${badgePack}</div>
       </div>
       <button onclick="abrirOfertaModal(${p.id})"
@@ -6699,12 +6699,12 @@ function renderFlyerGrid() {
   document.getElementById('flyer-prod-grid').innerHTML = (_flyerFiltrados().map(p => {
     const sel = !!fSel[p.codigo];
     const img = p.foto
-      ? `<img src="${p.foto}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
+      ? `<img src="${esc(p.foto)}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
       : `<div style="height:110px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:#f0ebe3;border-radius:10px">🍬</div>`;
     return `<div onclick="toggleFlyerProd('${p.codigo}')" style="cursor:pointer;border:2.5px solid ${sel ? '#7b2ff7' : '#eee4d8'};border-radius:14px;padding:6px;background:${sel ? '#f6efff' : '#fff'};position:relative">
       ${sel ? '<div style="position:absolute;top:4px;right:4px;background:#7b2ff7;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;z-index:1">✓</div>' : ''}
       ${img}
-      <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${p.nombre}</div>
+      <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${esc(p.nombre)}</div>
       <div style="font-size:0.68rem;color:#8b5e3c;font-weight:700">${fmtFlyer(p.precioVenta)}</div>
     </div>`;
   }).join('')) || '<div class="empty">Nada con ese nombre 🤷</div>';
@@ -6855,11 +6855,11 @@ function renderFlyerOpciones() {
   document.getElementById('flyer-extras').innerHTML = prods.map(p => {
     const ex = fExtras[p.codigo] || {};
     return `<div style="display:grid;grid-template-columns:1fr 110px 96px;gap:6px;align-items:center;margin-bottom:6px">
-      <div style="font-size:0.8rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div>
+      <div style="font-size:0.8rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
       <select onchange="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].badge=this.value" style="padding:8px 4px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem;background:#fff">
         ${BADGES.map(b => `<option value="${b}" ${ex.badge === b ? 'selected' : ''}>${b || 'Etiqueta...'}</option>`).join('')}
       </select>
-      <input type="number" placeholder="$ promo" value="${ex.promo || ''}" oninput="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].promo=parseFloat(this.value)||0" style="padding:8px 6px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem">
+      <input type="number" placeholder="$ promo" value="${esc(ex.promo || '')}" oninput="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].promo=parseFloat(this.value)||0" style="padding:8px 6px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem">
     </div>`;
   }).join('');
 }
@@ -8109,15 +8109,15 @@ function renderFlyers() {
   }
   el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">' + lista.map(f => `
     <div style="border:1.5px solid #eee4d8;border-radius:14px;overflow:hidden;background:#fff">
-      <img src="${f.url.replace('/upload/', '/upload/w_400/')}" style="width:100%;display:block;cursor:pointer" onclick="window.open('${f.url}','_blank')">
+      <img src="${esc(f.url.replace('/upload/', '/upload/w_400/'))}" style="width:100%;display:block;cursor:pointer" onclick="window.open('${jsAttr(/^https?:\/\//i.test(f.url) ? f.url : '')}','_blank')">
       <div style="padding:8px 10px">
-        <div style="font-size:0.74rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo || 'Flyer'}</div>
-        <div style="font-size:0.66rem;color:#aaa">${f.fecha}${f.fondo ? ' · 🪄' : ''}</div>
+        <div style="font-size:0.74rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.titulo || 'Flyer')}</div>
+        <div style="font-size:0.66rem;color:#aaa">${esc(f.fecha)}${f.fondo ? ' · 🪄' : ''}</div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button onclick="descargarFlyerUrl('${f.url}')" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
-          <button onclick="regenerarFlyer('${f.id}')" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
-          <button onclick="archivarFlyerUI('${f.id}','${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
-          <button onclick="eliminarFlyerUI('${f.id}')" title="Eliminar" style="flex:1;padding:6px 0;background:#fde8e8;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🗑️</button>
+          <button onclick="descargarFlyerUrl('${jsAttr(/^https?:\/\//i.test(f.url) ? f.url : '')}')" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
+          <button onclick="regenerarFlyer('${jsAttr(f.id)}')" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
+          <button onclick="archivarFlyerUI('${jsAttr(f.id)}','${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
+          <button onclick="eliminarFlyerUI('${jsAttr(f.id)}')" title="Eliminar" style="flex:1;padding:6px 0;background:#fde8e8;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🗑️</button>
         </div>
       </div>
     </div>`).join('') + '</div>';
@@ -8201,10 +8201,10 @@ async function buscarDormidos() {
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0.75rem;border:1.5px solid var(--gris-medio);border-radius:10px;margin-bottom:0.45rem">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:0.85rem;color:var(--azul)">${esc(p.nombre)}</div>
-        <div style="font-size:0.72rem;color:var(--texto-suave)">${p.stock} en stock · sin ventas en 30 días${base ? ' · ' + fmtASRS(base) + ' → <b style="color:#c0392b">' + fmtASRS(sugerido) + '</b>' : ''}</div>
+        <div style="font-size:0.72rem;color:var(--texto-suave)">${esc(p.stock)} en stock · sin ventas en 30 días${base ? ' · ' + fmtASRS(base) + ' → <b style="color:#c0392b">' + fmtASRS(sugerido) + '</b>' : ''}</div>
       </div>
       <div style="display:flex;gap:0.3rem;flex-shrink:0">
-        ${base ? `<button onclick="crearOfertaRapida('${p.id}',${sugerido})" style="padding:0.35rem 0.7rem;background:#fde8e8;color:#c0392b;border:1.5px solid #f5c6c6;border-radius:7px;font-size:0.74rem;font-weight:700;cursor:pointer;white-space:nowrap">🔥 Oferta -15%</button>` : ''}
+        ${base ? `<button onclick="crearOfertaRapida('${jsAttr(p.id)}',${sugerido})" style="padding:0.35rem 0.7rem;background:#fde8e8;color:#c0392b;border:1.5px solid #f5c6c6;border-radius:7px;font-size:0.74rem;font-weight:700;cursor:pointer;white-space:nowrap">🔥 Oferta -15%</button>` : ''}
         <button onclick="abrirOfertaModal(${parseInt(p.id)})" style="padding:0.35rem 0.6rem;background:var(--gris);color:var(--texto-suave);border:1.5px solid var(--gris-medio);border-radius:7px;font-size:0.74rem;font-weight:600;cursor:pointer">✏️</button>
       </div>
     </div>`;
@@ -8379,14 +8379,14 @@ function _mVal(id, campo) {
 function _mPills(id, campo, opts, actual) {
   return `<div style="display:flex;gap:2px">` + opts.map(([val, lbl]) => {
     const on = String(actual) === String(val);
-    return `<button type="button" onclick="masivoPill('${id}','${campo}','${val}',this)" style="padding:2px 6px;border:1px solid ${on ? 'var(--azul)' : 'var(--gris-medio)'};background:${on ? 'var(--azul)' : '#fff'};color:${on ? '#fff' : 'var(--texto)'};border-radius:5px;font-size:0.66rem;font-weight:700;cursor:pointer;white-space:nowrap">${lbl}</button>`;
+    return `<button type="button" onclick="masivoPill('${jsAttr(id)}','${campo}','${val}',this)" style="padding:2px 6px;border:1px solid ${on ? 'var(--azul)' : 'var(--gris-medio)'};background:${on ? 'var(--azul)' : '#fff'};color:${on ? '#fff' : 'var(--texto)'};border-radius:5px;font-size:0.66rem;font-weight:700;cursor:pointer;white-space:nowrap">${lbl}</button>`;
   }).join('') + `</div>`;
 }
 
 function _mCatSelect(id) {
   const actual = _mVal(id, 'categoria');
   const opts = _masivoCats.map(c => `<option ${c === actual ? 'selected' : ''}>${esc(c)}</option>`).join('');
-  return `<select onchange="masivoRecord('${id}','categoria',this.value,this)" style="padding:3px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.76rem;max-width:108px">${opts}</select>`;
+  return `<select onchange="masivoRecord('${jsAttr(id)}','categoria',this.value,this)" style="padding:3px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.76rem;max-width:108px">${opts}</select>`;
 }
 
 function _mMargen(id) {
@@ -8401,25 +8401,25 @@ function renderMasivo() {
   const body = document.getElementById('masivo-body');
   const list = _masivoFiltrados();
   if (!list.length) { body.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--texto-suave)">Sin resultados</div>'; return; }
-  const inp = (id, campo, tipo) => `<input ${tipo} value="${esc(_mVal(id, campo))}" onchange="masivoRecord('${id}','${campo}',this.value,this)" style="width:100%;padding:4px 5px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.8rem;box-sizing:border-box;font-family:'DM Sans',sans-serif">`;
+  const inp = (id, campo, tipo) => `<input ${tipo} value="${esc(_mVal(id, campo))}" onchange="masivoRecord('${jsAttr(id)}','${campo}',this.value,this)" style="width:100%;padding:4px 5px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.8rem;box-sizing:border-box;font-family:'DM Sans',sans-serif">`;
   let html;
   if (_masivoVista === 'desc') {
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">Descripción</th><th style="${_mTh}">🎤 Descripción Shuki</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:240px">${inp(p.id, 'desc', 'type="text"')}</td><td style="${_mTd}min-width:240px">${inp(p.id, 'descBot', 'type="text"')}</td></tr>`;
+      html += `<tr data-mrow="${esc(p.id)}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:150px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:240px">${inp(p.id, 'desc', 'type="text"')}</td><td style="${_mTd}min-width:240px">${inp(p.id, 'descBot', 'type="text"')}</td></tr>`;
     });
   } else if (_masivoVista === 'kosher') {
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1"><th style="${_mTh}">Producto</th><th style="${_mTh}">✡️ Hashgajá (supervisión)</th><th style="${_mTh}">Parve / Lácteo</th><th style="${_mTh}">Jalav <span style="font-weight:400">(si es lácteo)</span></th></tr></thead><tbody>`;
     list.forEach(p => {
       const esLacteo = _mVal(p.id, 'kosherTipo') === 'Lácteo';
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
+      html += `<tr data-mrow="${esc(p.id)}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${_duenoBadge(p)}<b style="font-size:0.8rem">${esc(p.nombre)}</b></td><td style="${_mTd}min-width:180px">${inp(p.id, 'hashgaja', 'type="text" list="hashgaja-list" onfocus="this.select()" placeholder="Elegí o escribí una nueva…"')}</td><td style="${_mTd}">${_mPills(p.id, 'kosherTipo', [['', '—'], ['Parve', '🌿 Parve'], ['Lácteo', '🥛 Lácteo']], _mVal(p.id, 'kosherTipo'))}</td><td style="${_mTd}">${esLacteo ? _mPills(p.id, 'jalav', [['', '—'], ['Jalav Israel', 'Israel'], ['Jalav Akum', 'Akum']], _mVal(p.id, 'jalav')) : '<span style="color:var(--texto-suave);font-size:0.7rem">— solo lácteos</span>'}</td></tr>`;
     });
   } else {
     const _flecha = c => (_masivoOrden.col === c) ? (_masivoOrden.dir > 0 ? ' ▲' : ' ▼') : '';
     const _thSort = (c, lbl, extra) => `<th style="${_mTh}cursor:pointer;user-select:none" ${extra||''} onclick="masivoSort('${c}')" title="Ordenar por ${lbl}">${lbl}${_flecha(c)}</th>`;
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th><th style="${_mTh}" title="Código de barras — sugiere el producto al recibir mercadería de Israel">🔢 EAN</th><th style="${_mTh}" title="Cinta diagonal en la tarjeta de la tienda (texto corto)">🎗️ Cinta</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${p.id}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${p.id}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:118px">${inp(p.id, 'ean', 'type="text" inputmode="numeric" maxlength="14"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
+      html += `<tr data-mrow="${esc(p.id)}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${esc(p.id)}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:118px">${inp(p.id, 'ean', 'type="text" inputmode="numeric" maxlength="14"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -8497,8 +8497,8 @@ function renderStockDrawer(lista) {
   body.innerHTML = lista.map(p => `
     <div class="stock-drawer-row">
       <div class="stock-drawer-nombre">
-        <div style="font-weight:600">${_duenoBadge(p)}${p.nombre}</div>
-        ${p.desc ? `<div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,40)}</div>` : ''}
+        <div style="font-weight:600">${_duenoBadge(p)}${esc(p.nombre)}</div>
+        ${p.desc ? `<div style="font-size:0.72rem;color:var(--texto-suave)">${esc(p.desc.substring(0,40))}</div>` : ''}
       </div>
       <span class="stock-drawer-actual" title="Stock actual">${p.stock}</span>
       <input type="number" class="stock-drawer-input" id="sinput-${p.id}" value="${p.stock}" min="0">
@@ -8552,7 +8552,7 @@ function _manualFoto(p, px) {
   const arch = (p.imagen || '').split(',')[0].trim();
   if (!arch) return `<div style="width:${px}px;height:${px}px;border-radius:6px;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:${Math.round(px * 0.5)}px;flex-shrink:0">🍬</div>`;
   const url = imgUrl(arch)[0] || '';
-  return `<img src="${url}" loading="lazy" onclick="event.stopPropagation();abrirFotoGrande(this)" title="Tocá para verla en grande"
+  return `<img src="${esc(url)}" loading="lazy" onclick="event.stopPropagation();abrirFotoGrande(this)" title="Tocá para verla en grande"
     style="width:${px}px;height:${px}px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid #f0ebe3;flex-shrink:0;cursor:zoom-in"
     onerror="this.style.display='none'">`;
 }
@@ -8592,8 +8592,8 @@ function renderManualProductos() {
         onchange="setManualQty(${p.id}, this.value)" oninput="setManualQty(${p.id}, this.value)" />
       ${_manualFoto(p, 38)}
       <div style="flex:1;min-width:0">
-        <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
-        <div style="font-size:0.72rem;color:var(--texto-suave)">${p.desc.substring(0,60)}</div>
+        <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div>
+        <div style="font-size:0.72rem;color:var(--texto-suave)">${esc(p.desc.substring(0,60))}</div>
         <div style="font-size:0.7rem;color:var(--dorado);font-weight:600">${precioStr} · Stock: ${p.stock}</div>
       </div>
     </div>`;
@@ -8818,8 +8818,8 @@ function renderManualSeleccion() {
       <span style="font-weight:800;color:var(--verde);min-width:30px;text-align:center">${qty}×</span>
       ${_manualFoto(p, 34)}
       <div style="flex:1;min-width:120px">
-        <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}</div>
-        ${p.desc ? `<div style="font-size:0.68rem;color:var(--texto-suave)">${p.desc.substring(0,45)}</div>` : ''}
+        <div style="font-size:0.8rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div>
+        ${p.desc ? `<div style="font-size:0.68rem;color:var(--texto-suave)">${esc(p.desc.substring(0,45))}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end">
         <div style="display:flex;align-items:center;gap:3px">
@@ -9060,7 +9060,7 @@ function renderNpArchivos() {
   const _badgePortada = `<div style="position:absolute;top:2px;left:2px;background:var(--dorado);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:6px">★ Portada</div>`;
   if (_npPreSubida) {
     html += `<div style="position:relative">
-      <img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_200,f_auto,q_auto/${_npPreSubida}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px">
+      <img src="https://res.cloudinary.com/dq2boloyp/image/upload/w_200,f_auto,q_auto/${esc(_npPreSubida)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px">
       ${_badgePortada}
       <div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(0,0,0,0.5);color:#fff;border-radius:0 0 8px 8px">ya subida ✓</div>
     </div>`;
@@ -9148,7 +9148,7 @@ function _renderCopiarLista() {
     const foto = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
     const src = imgUrl(foto)[0];
     return `<div onclick="_copiarFotoElegir('${jsAttr(foto)}', this)" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--gris);cursor:pointer">
-      <img src="${src}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">
+      <img src="${esc(src)}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">
       <div style="flex:1;min-width:0;font-size:0.82rem;font-weight:600;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_duenoBadge ? _duenoBadge(p) : ''}${esc(p.nombre)}</div>
       <span style="font-size:0.7rem;color:var(--azul);font-weight:700">copiar →</span>
     </div>`;
@@ -9418,7 +9418,7 @@ function gem_render() {
     const src = f ? imgUrl(f)[0] : '';
     const ya = _epVinculo && ((x.vinculo || '') === _epVinculo || String(x.id) === _epVinculo);
     return `<div onclick="gem_elegir('${x.id}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f5f1ea;cursor:pointer;${ya ? 'background:#eef9f0' : ''}">
-      ${src ? `<img src="${src}" style="width:40px;height:40px;object-fit:contain;background:#f7f2e8;border-radius:8px">` : '<div style="width:40px;height:40px;background:#f7f2e8;border-radius:8px"></div>'}
+      ${src ? `<img src="${esc(src)}" style="width:40px;height:40px;object-fit:contain;background:#f7f2e8;border-radius:8px">` : '<div style="width:40px;height:40px;background:#f7f2e8;border-radius:8px"></div>'}
       <div style="flex:1;min-width:0"><div style="font-size:0.82rem;font-weight:600">${esc(x.nombre)}</div>
       <div style="font-size:0.66rem;color:#999">${esc(x.dueno || '?')} · stock ${x.stock}${x.desc ? ' · ' + esc(x.desc.slice(0, 26)) : ''}</div></div>
       ${ya ? '<span style="color:#1a7a3c;font-weight:800">✓</span>' : ''}
@@ -9492,7 +9492,7 @@ function pk2_render() {
   document.getElementById('pk2-list').innerHTML = items.map(p => {
     const c = _pk2Sel[p.id] || 0;
     return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f1ea">
-      <img src="${_pk2Foto(p)}" style="width:34px;height:34px;object-fit:contain;background:#f7f2e8;border-radius:7px">
+      <img src="${esc(_pk2Foto(p))}" style="width:34px;height:34px;object-fit:contain;background:#f7f2e8;border-radius:7px">
       <span style="flex:1;font-size:0.8rem;${c ? 'font-weight:800' : ''}">${esc(p.nombre)}${p.desc ? ' <span style=\"color:#aaa;font-size:0.7rem\">' + esc(p.desc.slice(0, 24)) + '</span>' : ''}</span>
       <button onclick="pk2_qty('${p.id}',-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
       <b style="min-width:16px;text-align:center;font-size:0.85rem">${c || ''}</b>
@@ -9649,7 +9649,7 @@ function filtrarEditor() {
   cont.innerHTML = lista.map(p => {
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
     const thumb = imgs.length
-      ? `<img src="${imgUrl(imgs[0])[0]}" style="width:42px;height:42px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
+      ? `<img src="${esc(imgUrl(imgs[0])[0])}" style="width:42px;height:42px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">`
       : `<div style="width:42px;height:42px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const oculto = (p.visible || '') === 'Oculto' ? ' <span style="font-size:0.6rem;background:#f0ebe3;border-radius:4px;padding:1px 5px">🙈</span>' : '';
     const esJ = p.dueno === 'Jony';
@@ -9912,7 +9912,7 @@ function renderFotosEditor() {
     const src = m.k === 'old' ? imgUrl(m.v)[0] : URL.createObjectURL(m.v);
     const media = esVid
       ? `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;background:var(--gris);border-radius:8px;font-size:1.6rem;pointer-events:none">🎬</div>`
-      : `<img src="${src}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px;pointer-events:none" ${m.k === 'new' ? 'onload="URL.revokeObjectURL(this.src)"' : 'onerror="this.style.opacity=0.3"'}>`;
+      : `<img src="${esc(src)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px;pointer-events:none" ${m.k === 'new' ? 'onload="URL.revokeObjectURL(this.src)"' : 'onerror="this.style.opacity=0.3"'}>`;
     const esPortada = i === 0;
     const label = esPortada
       ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:var(--dorado);color:#fff;font-weight:700;border-radius:0 0 8px 8px;pointer-events:none">★ portada</div>`
@@ -10241,13 +10241,13 @@ async function cargarBandeja() {
     </div>` : '';
   grid.innerHTML = header + retryBanner + bandejaCache.map(b => `
     <div style="border:1.5px solid var(--gris-medio);border-radius:10px;overflow:hidden;background:#fff;position:relative">
-      <button onclick="borrarFotoBandeja('${b.id}')" title="Borrar esta foto" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:0.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">🗑️</button>
-      <img src="https://res.cloudinary.com/dq2boloyp/image/upload/e_trim:10/w_300,f_auto,q_auto/${b.publicId}" style="width:100%;height:100px;object-fit:contain;background:#fff" loading="lazy">
+      <button onclick="borrarFotoBandeja('${jsAttr(b.id)}')" title="Borrar esta foto" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:0.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">🗑️</button>
+      <img src="https://res.cloudinary.com/dq2boloyp/image/upload/e_trim:10/w_300,f_auto,q_auto/${esc(b.publicId)}" style="width:100%;height:100px;object-fit:contain;background:#fff" loading="lazy">
       <div style="padding:6px 8px">
         ${b.estado === 'listo'
           ? `<div style="font-size:0.72rem;font-weight:700;color:var(--azul);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.nombre)}</div>
              <div style="font-size:0.62rem;color:var(--texto-suave);height:26px;overflow:hidden">${esc(b.desc)}</div>
-             <button onclick="usarDeBandeja('${b.id}')" style="width:100%;margin-top:4px;padding:5px 0;background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;font-size:0.7rem;font-weight:700;cursor:pointer">Usar en alta ↑</button>`
+             <button onclick="usarDeBandeja('${jsAttr(b.id)}')" style="width:100%;margin-top:4px;padding:5px 0;background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;font-size:0.7rem;font-weight:700;cursor:pointer">Usar en alta ↑</button>`
           : b.estado === 'error'
           ? `<div style="font-size:0.68rem;color:#c0392b">😕 No se pudo (reintentá ↑)</div>`
           : `<div style="font-size:0.68rem;color:var(--texto-suave)">🧠 Pensando...</div>`}
@@ -10444,7 +10444,7 @@ function _renderImportarCandy() {
     const ya = enShuk.has((p.nombre || '').trim().toLowerCase());
     const fu = _candyFotoUrl(p.foto);
     const thumb = fu
-      ? `<img src="${fu}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.outerHTML='<div style=\\'width:40px;height:40px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\'>🍬</div>'">`
+      ? `<img src="${esc(fu)}" style="width:40px;height:40px;object-fit:contain;background:var(--gris);border-radius:6px;flex-shrink:0" onerror="this.outerHTML='<div style=\\'width:40px;height:40px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\'>🍬</div>'">`
       : `<div style="width:40px;height:40px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const stockDep = parseInt(p.stock) || 0;
     const stockTxt = `<span style="color:${stockDep > 0 ? '#1a7a3c' : '#c0392b'}">📦 ${stockDep} en depósito</span>`;
@@ -10461,7 +10461,7 @@ function _renderImportarCandy() {
       </div>
       <div style="display:flex;gap:6px;margin-top:5px;padding-left:1.7rem">
         <div style="flex:1"><div style="font-size:0.56rem;color:var(--texto-suave);text-align:center">P. Mayorista</div><input id="imp-may-${i}" type="text" inputmode="decimal" placeholder="0" style="${inp}"></div>
-        <div style="flex:1"><div style="font-size:0.56rem;color:var(--texto-suave);text-align:center">P. Minorista</div><input id="imp-min-${i}" type="number" value="${p.precioVenta || ''}" style="${inp}"></div>
+        <div style="flex:1"><div style="font-size:0.56rem;color:var(--texto-suave);text-align:center">P. Minorista</div><input id="imp-min-${i}" type="number" value="${esc(p.precioVenta || '')}" style="${inp}"></div>
       </div>
     </div>`;
   }).join('');
@@ -10744,7 +10744,7 @@ function verDetalleMovimientoCaja(vid) {
     }
     return `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--gris)">
       <span style="flex:1">${esc(nombre)}</span>
-      <span style="font-weight:700;white-space:nowrap">${subT}</span></div>`;
+      <span style="font-weight:700;white-space:nowrap">${esc(subT)}</span></div>`;
   }).join('');
   const cuerpo = (d.lineas && d.lineas.length) ? filas : '<div style="color:var(--texto-suave)">(este pedido no tiene productos de tu parte)</div>';
   // Si el pedido tiene descuento global, mostrarlo y dejar el Total NETO (lo que de verdad se cobró).
@@ -10757,7 +10757,7 @@ function verDetalleMovimientoCaja(vid) {
     <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:4px;font-size:0.85rem;color:var(--texto-suave)"><span>Subtotal</span><span>${subtotalTxt}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:var(--rojo)"><span>🏷️ Descuento global −${dPct}%</span><span>− ${[totARS ? '$ ' + Math.round(totARS * dPct / 100).toLocaleString('es-AR') : '', totUSD ? 'U$S ' + (totUSD * dPct / 100).toFixed(2) : ''].filter(Boolean).join(' + ')}</span></div>` : '';
   const html = `<div style="font-weight:700;font-size:1rem;margin-bottom:2px">Pedido #${d.n} — ${esc(d.cliente || 's/nombre')}</div>
-    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${d.fecha} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
+    <div style="font-size:0.75rem;color:var(--texto-suave);margin-bottom:10px">${esc(d.fecha)} · ${d.cobrado ? '✓ cobrado' : '⏳ pendiente de cobro'}</div>
     <div style="font-size:0.85rem;line-height:1.4">${cuerpo}</div>
     ${descBloque}
     ${totalTxt ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--azul);font-weight:700"><span>Total${dPct > 0 ? ' (con descuento)' : ''}</span><span>${totalTxt}</span></div>` : ''}
@@ -10863,7 +10863,7 @@ function verDetalleDeudor(i) {
       return `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--gris)"><span style="flex:1;font-size:0.8rem">${esc(nombre)}</span><span style="font-weight:700;white-space:nowrap;font-size:0.8rem">${esc(subT)}</span></div>`;
     }).join('');
     html += `<div style="border:1px solid var(--gris-medio);border-radius:10px;padding:0.55rem 0.7rem;margin-bottom:0.5rem">
-      <div style="font-weight:700;font-size:0.85rem">Pedido #${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${v.fecha || ''} · ⏳ pendiente</span></div>
+      <div style="font-weight:700;font-size:0.85rem">Pedido #${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${esc(v.fecha || '')} · ⏳ pendiente</span></div>
       <div style="margin-top:4px">${lineas}</div>
       <div style="display:flex;justify-content:space-between;margin-top:5px;padding-top:4px;border-top:1.5px solid var(--azul);font-weight:700;font-size:0.82rem"><span>${parcial ? 'Saldo del pedido (pagó parte)' : 'Total'}</span><span>${totTxt}</span></div>
     </div>`;
@@ -10881,8 +10881,8 @@ function verDetalleDeudor(i) {
       window._pagoIdx[p.id] = p;
       // Editar/anular SOLO en vista completa (en vista Miri se muestra parte de Jony → no se toca)
       const acc = (!soloMiri && p.id != null) ? `
-        <button onclick="event.stopPropagation();abrirEditarPago('${p.id}')" title="Editar este pago" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">✏️</button>
-        <button onclick="event.stopPropagation();anularPago('${p.id}')" title="Anular este pago" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">🗑️</button>` : '';
+        <button onclick="event.stopPropagation();abrirEditarPago('${jsAttr(p.id)}')" title="Editar este pago" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">✏️</button>
+        <button onclick="event.stopPropagation();anularPago('${jsAttr(p.id)}')" title="Anular este pago" style="background:#fde8e8;color:#c0392b;border:none;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;font-family:inherit">🗑️</button>` : '';
       html += `<div style="padding:3px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:0.76rem"><span style="color:var(--texto-suave);flex:1;min-width:0">${esc(p.fecha || '')}${p.pedidoId ? '' : ' · a cuenta'}${_tcTxt(p.tc)}${(p.comprobante || '').trim() ? ' 📎' : ''}${_notaPagoHtml(p)}</span><span style="font-weight:700;color:var(--verde);white-space:nowrap">− ${t}</span>${acc}</div>${soloMiri ? '' : _desgloseBolsillos(p)}</div>`;
     });
   }
@@ -10935,7 +10935,7 @@ function abrirEditarPago(id) {
       <button onclick="guardarEdicionPago()" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar cambios</button>
       <button onclick="document.getElementById('editpago-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
     </div>
-    <button onclick="anularPago('${id}')" style="width:100%;margin-top:0.55rem;padding:0.6rem;background:#fde8e8;color:#c0392b;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">🗑️ Anular este pago</button>
+    <button onclick="anularPago('${jsAttr(id)}')" style="width:100%;margin-top:0.55rem;padding:0.6rem;background:#fde8e8;color:#c0392b;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">🗑️ Anular este pago</button>
   </div>`;
 }
 async function guardarEdicionPago() {
@@ -11128,7 +11128,7 @@ function _renderEstadoCta() {
   const filas = d.movs.map(m => {
     const credito = m.signo < 0;
     return `<tr style="border-bottom:1px solid #eee">
-      <td style="padding:5px 6px;font-size:0.72rem;white-space:nowrap;vertical-align:top">${m.fecha}</td>
+      <td style="padding:5px 6px;font-size:0.72rem;white-space:nowrap;vertical-align:top">${esc(m.fecha)}</td>
       <td style="padding:5px 6px;font-size:0.74rem;vertical-align:top">${esc(m.concepto)}</td>
       <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;vertical-align:top;font-weight:700;color:${credito ? '#1a7a3c' : '#c0392b'}">${_fmtSigno(m.ars, m.usd, m.signo)}</td>
       <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;vertical-align:top;font-weight:700">${_fmtSaldo(m.sA, m.sU)}</td>
@@ -11500,16 +11500,16 @@ async function renderCaja() {
     });
     const _clipsDe = c => !c ? '' : c.split('\n').filter(Boolean).map(u => ` <a href="${esc(u)}" target="_blank" onclick="event.stopPropagation()" title="Ver comprobante">📎</a>`).join('');
     gastos.forEach(g => {
-      if (g.columna) movs.push({ desc: `${g.desc} ${g.fecha}${_clipsDe(g.comprobante)}`, col: g.columna, val: -(parseFloat(g.monto)||0), mon: g.moneda, tipo: 'gasto' });
+      if (g.columna) movs.push({ desc: `${esc(g.desc)} ${esc(g.fecha)}${_clipsDe(g.comprobante)}`, col: g.columna, val: -(parseFloat(g.monto)||0), mon: g.moneda, tipo: 'gasto' });
     });
     if (Array.isArray(rendiciones)) rendiciones.forEach(r => {
-      if (r.columna) movs.push({ desc: `${r.desc} ${r.fecha}${_clipsDe(r.comprobante)}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
+      if (r.columna) movs.push({ desc: `${esc(r.desc)} ${esc(r.fecha)}${_clipsDe(r.comprobante)}`, col: r.columna, val: -(parseFloat(r.monto)||0), mon: r.moneda, tipo: 'rendicion' });
     });
     // Pagos a cuenta: ingresan a la caja elegida y bajan la cuenta corriente
     if (Array.isArray(pagosCuenta)) pagosCuenta.forEach(p => {
       const aRS = parseFloat(p.montoARS)||0, uSD = parseFloat(p.montoUSD)||0;
       const esPerdon = p.caja === 'PERDON';   // perdón/redondeo: baja la deuda, NO entra a ninguna caja
-      const desc = (esPerdon ? `🎁 Perdón ${p.cliente||''} ${p.fecha||''}` : `Pago cta ${p.cliente||''} ${p.fecha||''}`) + _clipsDe(p.comprobante) + _notaPagoHtml(p);
+      const desc = (esPerdon ? `🎁 Perdón ${esc(p.cliente||'')} ${esc(p.fecha||'')}` : `Pago cta ${esc(p.cliente||'')} ${esc(p.fecha||'')}`) + _clipsDe(p.comprobante) + _notaPagoHtml(p);
       if (aRS > 0 && p.caja) {
         if (!esPerdon) {
           // Espejo del caso U$S-en-pesos: si la deuda en PESOS la pagó con DÓLARES FÍSICOS (caja
@@ -11568,7 +11568,7 @@ async function renderCaja() {
           const dd = _det[m.vid];
           m.fecha = dd.fechaCobro || dd.fecha || '';
           // Si cobro y pedido difieren de día, se aclara en el detalle (el desc ya trae la del pedido)
-          if (dd.fechaCobro && dd.fecha && dd.fechaCobro.split(' ')[0] !== dd.fecha.split(' ')[0]) m.desc += ` · cobrado ${dd.fechaCobro.split(' ')[0]}`;
+          if (dd.fechaCobro && dd.fecha && dd.fechaCobro.split(' ')[0] !== dd.fecha.split(' ')[0]) m.desc += ` · cobrado ${esc(dd.fechaCobro.split(' ')[0])}`;
         }
         else { const mm = (m.desc || '').match(/\d{2}\/\d{2}\/\d{4}(?: \d{2}:\d{2})?/); m.fecha = mm ? mm[0] : ''; }
       }
@@ -11631,8 +11631,8 @@ async function renderCaja() {
           const d = m.vid ? (_det[m.vid] || {}) : {};
           const sub2 = m.sub || (d.fecha || '');
           return `
-        <tr style="${m.vid ? 'cursor:pointer' : ''}" ${m.vid ? `onclick="verDetalleMovimientoCaja('${m.vid}')" title="Ver detalle del pedido"` : ''}>
-          <td style="color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${d.cliente ? ` · ${esc(d.cliente)}` : ''}${sub2 ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${sub2}</span>` : ''}</td>
+        <tr style="${m.vid ? 'cursor:pointer' : ''}" ${m.vid ? `onclick="verDetalleMovimientoCaja('${jsAttr(m.vid)}')" title="Ver detalle del pedido"` : ''}>
+          <td style="color:${colColor[m.tipo]||'var(--azul)'}">${m.vid ? '🔍 ' : ''}${m.desc}${d.cliente ? ` · ${esc(d.cliente)}` : ''}${sub2 ? `<br><span style="font-size:0.62rem;color:var(--texto-suave)">${esc(sub2)}</span>` : ''}</td>
           ${cols.map(c => {
             if (c.key !== m.col) return '<td></td>';
             const color = m.val >= 0 ? 'var(--verde)' : 'var(--rojo)';
@@ -12300,10 +12300,10 @@ async function renderCuentaSocios() {
       const parcial = rr && (aM + aJ < baseM + baseJ - 1 || uM + uJ < baseUM + baseUJ - 0.01);
       const tot = [aM>0?f(aM):'', uM>0?('U$S '+uM.toFixed(2)):''].filter(Boolean).join(' + ') || (uJ>0&&!aJ?('U$S '+uJ.toFixed(2)):f(aJ));
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed #e0d4b8">
-        <span style="font-size:0.7rem;color:#7a5a1a">${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${(v.formaPago||'').trim()} · ${tot}${parcial?' <span style="color:#b8860b">(resto — lo demás ya entró por pagos a cuenta)</span>':''}</span></span>
+        <span style="font-size:0.7rem;color:#7a5a1a">${esc(v.cliente||'s/nombre')} <span style="color:var(--texto-suave)">· ${esc((v.formaPago||'').trim())} · ${tot}${parcial?' <span style="color:#b8860b">(resto — lo demás ya entró por pagos a cuenta)</span>':''}</span></span>
         <button onclick="${parcial
-          ? `abrirConfirmarCobroResidual('${v.id}',${aJ},${aM},${uM},'${jsAttr(v.cliente||'')}',${uJ},${Math.max(0,baseJ-aJ)},${Math.max(0,baseM-aM)},${Math.max(0,Math.round((baseUM-uM)*100)/100)},${Math.max(0,Math.round((baseUJ-uJ)*100)/100)})`
-          : `abrirConfirmarCobro('${v.id}',${aJ},${aM},${uM},'${jsAttr(v.cliente||'')}',${uJ})`}" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
+          ? `abrirConfirmarCobroResidual('${jsAttr(v.id)}',${aJ},${aM},${uM},'${jsAttr(v.cliente||'')}',${uJ},${Math.max(0,baseJ-aJ)},${Math.max(0,baseM-aM)},${Math.max(0,Math.round((baseUM-uM)*100)/100)},${Math.max(0,Math.round((baseUJ-uJ)*100)/100)})`
+          : `abrirConfirmarCobro('${jsAttr(v.id)}',${aJ},${aM},${uM},'${jsAttr(v.cliente||'')}',${uJ})`}" style="background:var(--dorado-claro);color:var(--dorado);border:none;border-radius:6px;padding:3px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;white-space:nowrap">💰 Confirmar</button>
       </div>`;
     };
     html += _comiBox(false, _revisar.length ? `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #e0e8f2">
@@ -12432,7 +12432,7 @@ function _resumenMiriHTML(R) {
         ? `<span style="font-size:0.66rem;font-weight:800;color:#b8860b;background:#fdf3e3;border-radius:10px;padding:1px 7px;white-space:nowrap">⏳ cta cte — sin cobrar</span>`
         : `<span style="font-size:0.66rem;font-weight:800;color:#c0392b;background:#fdecea;border-radius:10px;padding:1px 7px;white-space:nowrap">🟠 debe ${dosMon(rem.ars, rem.usd)}</span>`);
     return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--gris)">
-      <div style="min-width:0"><div style="font-weight:700;font-size:0.8rem">#${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave)">· ${(v.fecha || '').split(' ')[0]} · ${esc(v.cliente || '')}</span> ${chip}</div>
+      <div style="min-width:0"><div style="font-weight:700;font-size:0.8rem">#${v.nVenta || '—'} <span style="font-weight:400;color:var(--texto-suave)">· ${esc((v.fecha || '').split(' ')[0])} · ${esc(v.cliente || '')}</span> ${chip}</div>
       <div style="font-size:0.74rem;color:var(--texto-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(prodTxt)}</div></div>
       <div style="font-weight:700;font-size:0.82rem;white-space:nowrap">${dosMon(vA, vU)}</div>
     </div>`;
@@ -12739,7 +12739,7 @@ async function previewRenumerar(btn) {
   if (btn) { btn.disabled = false; btn.textContent = '👀 Ver qué cambiaría'; }
   if (!r || !r.ok) { out.innerHTML = '<div style="color:#c0392b;font-size:0.82rem">No se pudo revisar. Reintentá.</div>'; return; }
   if (!r.totalCambios) { out.innerHTML = '<div style="color:var(--verde);font-size:0.85rem">✓ Los # ya están todos correctos, no hay nada que renumerar.</div>'; return; }
-  const filas = (r.cambios || []).slice(0, 15).map(c => `<div style="font-size:0.72rem;padding:2px 0">#${c.viejo} → <b>#${c.nuevo}</b> · ${esc(c.cliente)} <span style="color:var(--texto-suave)">(${c.fecha})</span></div>`).join('');
+  const filas = (r.cambios || []).slice(0, 15).map(c => `<div style="font-size:0.72rem;padding:2px 0">#${c.viejo} → <b>#${c.nuevo}</b> · ${esc(c.cliente)} <span style="color:var(--texto-suave)">(${esc(c.fecha)})</span></div>`).join('');
   out.innerHTML = `<div style="font-size:0.8rem;font-weight:700;margin-bottom:4px;color:var(--azul)">${r.totalCambios} de ${r.total} pedidos cambian de #:</div>
     <div style="max-height:240px;overflow-y:auto;border:1px solid var(--gris-medio);border-radius:8px;padding:6px">${filas}${r.totalCambios > 15 ? '<div style="font-size:0.7rem;color:var(--texto-suave)">…y ' + (r.totalCambios - 15) + ' más</div>' : ''}</div>
     <div style="font-size:0.7rem;color:var(--texto-suave);margin:5px 0">El # es solo la etiqueta del pedido — la plata, las deudas y las cajas NO se tocan.</div>
@@ -12853,12 +12853,12 @@ function gvRender() {
     const estado = p.activo ? '<span style="color:#1a7a3a;font-weight:600">👁️ visible</span>' : '<span style="color:#b8860b;font-weight:600">🙈 oculto</span>';
     const duenoTxt = p.dueno ? ` · ${esc(p.dueno)} ${p.moneda === 'U$S' ? 'U$S' : '$'}` : '';
     return `<label style="display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0.7rem;border-bottom:1px solid var(--gris-claro,#eee);cursor:pointer;background:${sel ? '#eef4fb' : '#fff'}">
-      <input type="checkbox" ${sel ? 'checked' : ''} onchange="gvToggle('${p.id}')">
+      <input type="checkbox" ${sel ? 'checked' : ''} onchange="gvToggle('${jsAttr(p.id)}')">
       <div style="flex:1;min-width:0">
         <div style="font-size:0.86rem;font-weight:600;color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
         <div style="font-size:0.72rem;color:${stockColor}">${stockTxt} · ${estado}${duenoTxt} · 🏷️ ${esc(p.categoria || 'Varios')}</div>
       </div>
-      <button type="button" onclick="event.preventDefault();event.stopPropagation();gvEditar('${p.id}')" title="Editar producto" style="border:none;background:var(--gris,#f0ebe3);border-radius:7px;padding:5px 9px;cursor:pointer;font-size:0.9rem">✏️</button>
+      <button type="button" onclick="event.preventDefault();event.stopPropagation();gvEditar('${jsAttr(p.id)}')" title="Editar producto" style="border:none;background:var(--gris,#f0ebe3);border-radius:7px;padding:5px 9px;cursor:pointer;font-size:0.9rem">✏️</button>
     </label>`;
   }).join('');
   gvActualizarContador();
@@ -12919,7 +12919,7 @@ async function cargarSaldoCCSubmit(btn) {
     res.innerHTML = `<span style="color:var(--verde)">✓ Cargado a la cuenta de ${esc(cliente)} (#${r.nVenta})</span>`;
     ['saldo-cliente', 'saldo-ars', 'saldo-usd', 'saldo-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     setTimeout(() => refreshAdmin(), 1200);
-  } else { res.innerHTML = `<span style="color:var(--rojo)">Error: ${(r && r.error) || 'no se pudo'}</span>`; }
+  } else { res.innerHTML = `<span style="color:var(--rojo)">Error: ${esc((r && r.error) || 'no se pudo')}</span>`; }
 }
 
 function setModo(m) {
@@ -13101,11 +13101,11 @@ function _vipMostrarLink(url, nombre, canal, n) {
   const wa = `https://wa.me/?text=${encodeURIComponent(`¡Hola ${nombre}! 🍬 Te armé un catálogo especial con carrito para que pidas directo: ${url}`)}`;
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:440px;width:100%">
     <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🔗 Link privado listo</div>
-    <div style="font-size:0.8rem;color:var(--texto-suave);margin-top:4px">Para <b>${esc(nombre)}</b> · ${n} producto${n !== 1 ? 's' : ''} · precios ${canal}. Solo lo ve quien tenga el link.</div>
-    <input readonly value="${url}" onclick="this.select()" style="width:100%;margin-top:0.7rem;padding:0.55rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.78rem;box-sizing:border-box;background:#faf8f4">
+    <div style="font-size:0.8rem;color:var(--texto-suave);margin-top:4px">Para <b>${esc(nombre)}</b> · ${n} producto${n !== 1 ? 's' : ''} · precios ${esc(canal)}. Solo lo ve quien tenga el link.</div>
+    <input readonly value="${esc(url)}" onclick="this.select()" style="width:100%;margin-top:0.7rem;padding:0.55rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.78rem;box-sizing:border-box;background:#faf8f4">
     <div style="display:flex;gap:6px;margin-top:0.7rem">
-      <button onclick="navigator.clipboard.writeText('${url}').then(()=>showToast('Link copiado ✓'))" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">📋 Copiar</button>
-      <button onclick="window.open('${wa}','_blank')" style="flex:1;padding:0.65rem;background:#25d366;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💬 WhatsApp</button>
+      <button onclick="navigator.clipboard.writeText('${jsAttr(url)}').then(()=>showToast('Link copiado ✓'))" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">📋 Copiar</button>
+      <button onclick="window.open('${jsAttr(wa)}','_blank')" style="flex:1;padding:0.65rem;background:#25d366;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💬 WhatsApp</button>
       <button onclick="document.getElementById('viplink-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>
   </div>`;
@@ -13118,10 +13118,10 @@ async function verLinksVip() {
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:460px;width:100%;max-height:80vh;overflow-y:auto">
     <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🗂 Links privados vivos</div>
     ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
-      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${l.canal}</span>${(l.desc > 0 || l.nDescProd > 0) ? ` <span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:1px 6px;border-radius:6px">🏷️ ${l.desc > 0 && !l.nDescProd ? '-' + l.desc + '%' : 'con dto.'}</span>` : ''}</div><div style="font-size:0.68rem;color:var(--texto-suave)">${l.creado}</div></div>
-      <button onclick="navigator.clipboard.writeText(SITIO + '/?vip=${l.token}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
-      <button onclick="editarLinkVip('${l.token}','${jsAttr(l.nombre)}','${l.canal}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
-      <button onclick="borrarLinkVip('${l.token}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.n} prod · ${esc(l.canal)}</span>${(l.desc > 0 || l.nDescProd > 0) ? ` <span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:1px 6px;border-radius:6px">🏷️ ${l.desc > 0 && !l.nDescProd ? '-' + l.desc + '%' : 'con dto.'}</span>` : ''}</div><div style="font-size:0.68rem;color:var(--texto-suave)">${esc(l.creado)}</div></div>
+      <button onclick="navigator.clipboard.writeText(SITIO + '/?vip=${jsAttr(l.token)}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
+      <button onclick="editarLinkVip('${jsAttr(l.token)}','${jsAttr(l.nombre)}','${jsAttr(l.canal)}')" title="Editar qué productos muestra (la URL no cambia)" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️</button>
+      <button onclick="borrarLinkVip('${jsAttr(l.token)}')" title="Revocar: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.6rem 0">No hay links creados.</div>'}
     <button onclick="document.getElementById('viplink-overlay').remove()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>
   </div>`;
@@ -13652,14 +13652,14 @@ function _ocRender() {
 function _ocFilaHtml(p) {
   const sel = !!_ocSel[p.id];
   const imgs = (p.imagen||'').split(',').map(s=>s.trim()).filter(Boolean);
-  const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:34px;height:34px;object-fit:contain;background:#f5f0e8;border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:#f5f0e8;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
+  const thumb = imgs.length ? `<img src="${esc(imgUrl(imgs[0])[0])}" style="width:34px;height:34px;object-fit:contain;background:#f5f0e8;border-radius:6px;flex-shrink:0" onerror="this.style.opacity=0.2">` : `<div style="width:34px;height:34px;background:#f5f0e8;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
   const stock = p.stock||0;
   const stockChip = `<span style="font-size:0.66rem;font-weight:700;color:${stock<=0?'#c0392b':(stock<=3?'var(--dorado)':'var(--verde)')}">${stock<=0?'sin stock':stock+' u.'}</span>`;
   const peso = parseFloat(p.peso)||0;
   const pesoInfo = peso > 0 ? `<span style="font-size:0.64rem;color:var(--texto-suave)">${peso}g/bolsa</span>` : `<span style="font-size:0.64rem;color:#c0392b;font-weight:700">⚠️ falta peso</span>`;
   const chipDueno = (!esVistaMiri() && p.dueno) ? `<span style="font-size:0.58rem;font-weight:800;color:${p.dueno==='Jony'?'#c9954a':'#c050a0'}"> ${p.dueno==='Jony'?'JONY':'MIRI'}</span>` : '';
-  return `<div style="display:flex;align-items:center;gap:8px;padding:0.5rem 0;border-bottom:1px solid var(--gris);background:${sel?'#eef7ee':'#fff'}" id="oc-row-${p.id}">
-    <input type="checkbox" ${sel?'checked':''} onchange="_ocToggle('${p.id}', this)" style="width:17px;height:17px;flex-shrink:0;cursor:pointer">
+  return `<div style="display:flex;align-items:center;gap:8px;padding:0.5rem 0;border-bottom:1px solid var(--gris);background:${sel?'#eef7ee':'#fff'}" id="oc-row-${esc(p.id)}">
+    <input type="checkbox" ${sel?'checked':''} onchange="_ocToggle('${jsAttr(p.id)}', this)" style="width:17px;height:17px;flex-shrink:0;cursor:pointer">
     ${thumb}
     <div style="flex:1;min-width:0">
       <div style="font-size:0.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}${chipDueno}</div>
@@ -13667,7 +13667,7 @@ function _ocFilaHtml(p) {
       <div>${stockChip} · ${pesoInfo}</div>
       ${_ocUltimaHtml(p)}
     </div>
-    <input type="number" min="0" value="${_ocCant[p.id]||''}" placeholder="cant" oninput="_ocSetCant('${p.id}', this.value)" style="width:56px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:8px;text-align:center;font-family:inherit;flex-shrink:0">
+    <input type="number" min="0" value="${_ocCant[p.id]||''}" placeholder="cant" oninput="_ocSetCant('${jsAttr(p.id)}', this.value)" style="width:56px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:8px;text-align:center;font-family:inherit;flex-shrink:0">
   </div>`;
 }
 // 📜 "última: KI TOV · 12/07 · U$S 1,80" debajo de cada renglón de la orden.
@@ -13754,7 +13754,7 @@ function _ordenCompraHTML(items, id, fecha) {
   const totBolsas = items.reduce((s,i)=>s+i.cantidad,0);
   const filas = items.map(i => {
     const url = _ocFotoUrl(i.imagen);
-    const img = url ? `<img src="${url}" style="width:64px;height:64px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.display='none'">` : '🍬';
+    const img = url ? `<img src="${esc(url)}" style="width:64px;height:64px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.display='none'">` : '🍬';
     const pesoT = i.peso>0 ? `${(i.pesoTotal/1000).toFixed(2)} kg` : '<span style="color:#c0392b">⚠️ s/peso</span>';
     // 📜 Última compra: a quién y a cuánto. Va debajo del nombre, en chiquito, para que al
     // pedir el presupuesto tengas a mano con quién comparás. Nunca sale en vista Miri.
@@ -13763,7 +13763,7 @@ function _ordenCompraHTML(items, id, fecha) {
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:76px">${img}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3"><div style="font-weight:600;font-size:0.9rem">${esc(i.nombre)}</div>${i.desc?`<div style="font-size:0.74rem;color:#999">${esc(i.desc)}</div>`:''}${ultTxt}</td>
-      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-weight:800;font-size:1.1rem">${i.cantidad}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-weight:800;font-size:1.1rem">${esc(i.cantidad)}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-size:0.78rem;color:#666">${i.peso>0?i.peso+' g':'—'}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:right;font-weight:700">${pesoT}</td>
     </tr>`;
@@ -13774,7 +13774,7 @@ function _ordenCompraHTML(items, id, fecha) {
       <div><div style="font-size:1.4rem;font-weight:800;color:#1e7a3c">🛒 Orden de compra${numTxt ? ` <span style="font-size:1rem;color:#888;font-weight:700">${numTxt}</span>` : ''}</div><div style="font-size:0.8rem;color:#999">${esc(fechaMostrar)}</div></div>
       <button class="btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
     </div>
-    <div style="background:#eef7ee;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700">Total: ${items.length} productos · ${totBolsas} bolsas · ${(totPeso/1000).toFixed(2)} kg</div>
+    <div style="background:#eef7ee;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700">Total: ${items.length} productos · ${esc(totBolsas)} bolsas · ${(totPeso/1000).toFixed(2)} kg</div>
     <table><thead><tr style="background:#f5f0e8"><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Foto</th><th style="padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#999">Producto</th><th style="padding:7px 8px;font-size:0.62rem;text-transform:uppercase;color:#999">Cant.</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso/bolsa</th><th style="padding:7px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#999">Peso total</th></tr></thead><tbody>${filas}</tbody></table>
     </body></html>`;
 }
@@ -13791,9 +13791,9 @@ async function verOrdenesCompra() {
     <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem">🗂 Órdenes guardadas</div>
     ${ords.length ? ords.map(o => `<div style="display:flex;align-items:center;gap:8px;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(o.fecha||'')}</div><div style="font-size:0.72rem;color:var(--texto-suave)">${(o.totalPeso/1000).toFixed(2)} kg${o.nota?' · '+esc(o.nota):''}</div></div>
-      <button onclick="reabrirOrdenCompra('${o.id}')" title="Abrir para seguir editándola" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️ Editar</button>
-      <button onclick="imprimirOrdenGuardada('${o.id}')" title="Reimprimir / PDF" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 9px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">🖨️</button>
-      <button onclick="borrarOrdenCompra('${o.id}')" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+      <button onclick="reabrirOrdenCompra('${jsAttr(o.id)}')" title="Abrir para seguir editándola" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✏️ Editar</button>
+      <button onclick="imprimirOrdenGuardada('${jsAttr(o.id)}')" title="Reimprimir / PDF" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 9px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">🖨️</button>
+      <button onclick="borrarOrdenCompra('${jsAttr(o.id)}')" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('') : '<div style="color:var(--texto-suave);font-size:0.85rem;padding:0.6rem 0">No hay órdenes guardadas.</div>'}
     <button onclick="nuevaOrdenCompra()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:#1e7a3c;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">← Nueva orden</button>
   </div>`;
@@ -13828,7 +13828,7 @@ function _stockCard(p, recientes) {
   let media;
   if (imgs.length) {
     const u = imgUrl(imgs[0]);
-    media = `<img src="${u[0]}" data-f1="${u[1]||''}" data-f2="${u[2]||''}" data-f3="${u[3]||''}" onerror="imgFallbackNext(this)" loading="lazy" style="width:100%;height:78px;object-fit:cover;border-radius:6px">
+    media = `<img src="${esc(u[0])}" data-f1="${esc(u[1]||'')}" data-f2="${esc(u[2]||'')}" data-f3="${esc(u[3]||'')}" onerror="imgFallbackNext(this)" loading="lazy" style="width:100%;height:78px;object-fit:cover;border-radius:6px">
       <div style="display:none;height:78px;background:var(--gris);border-radius:6px;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
   } else {
     media = `<div style="height:78px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🍬</div>`;
@@ -13841,7 +13841,7 @@ function _stockCard(p, recientes) {
     : `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);margin-top:0.25rem">sin stock — dar de alta</div>`;
   return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center;position:relative">
     ${chipFecha}
-    <button onclick="irAEditarProducto(${p.id})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
+    <button onclick="irAEditarProducto(${Number(p.id)})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
     ${media}
     <div style="font-size:0.76rem;font-weight:600;color:var(--azul);margin-top:0.3rem;line-height:1.2">${esc(p.nombre)}</div>
     <div style="font-size:0.68rem;color:var(--texto-suave);line-height:1.2">${esc((p.desc||'').substring(0,28))}</div>
@@ -14077,7 +14077,7 @@ async function renderStockValorizado() {
     const pct = R.totalOrd > 0 ? Math.round(it.ord / R.totalOrd * 100) : 0;
     const imgs = (it.imagen || '').split(',').map(s => s.trim()).filter(Boolean);
     const thumb = imgs.length
-      ? `<img src="${imgUrl(imgs[0])[0]}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">`
+      ? `<img src="${esc(imgUrl(imgs[0])[0])}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">`
       : `<div style="width:34px;height:34px;border-radius:6px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.85rem">🍬</div>`;
     let chipRot = '';
     if (rot) {
@@ -14114,7 +14114,7 @@ async function renderStockValorizado() {
   const sinCostoHtml = R.sinCosto.map(x =>
     `<div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem;align-items:center">
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(x.nombre)}</b> <span style="color:var(--texto-suave);font-size:0.66rem">${esc((x.desc || '').substring(0, 24))}</span></span>
-      <span style="flex-shrink:0;display:flex;gap:0.4rem;align-items:center"><span style="color:var(--texto-suave);font-size:0.7rem">${x.u} u.</span><button onclick="irAEditarProducto(${x.id})" style="background:var(--gris);color:var(--texto);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 7px;font-size:0.68rem;cursor:pointer;font-family:inherit">✏️ cargar</button></span>
+      <span style="flex-shrink:0;display:flex;gap:0.4rem;align-items:center"><span style="color:var(--texto-suave);font-size:0.7rem">${x.u} u.</span><button onclick="irAEditarProducto(${Number(x.id)})" style="background:var(--gris);color:var(--texto);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 7px;font-size:0.68rem;cursor:pointer;font-family:inherit">✏️ cargar</button></span>
     </div>`).join('');
 
   cont.innerHTML = `
@@ -14277,7 +14277,7 @@ async function renderMasVendido() {
   cont.innerHTML = arr.map((a, i) => {
     const imgs = (a.imagen || '').split(',').map(s => s.trim()).filter(Boolean);
     const thumb = imgs.length
-      ? `<img src="${imgUrl(imgs[0])[0]}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:38px;height:38px;object-fit:cover;border-radius:6px;flex-shrink:0">`
+      ? `<img src="${esc(imgUrl(imgs[0])[0])}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:38px;height:38px;object-fit:cover;border-radius:6px;flex-shrink:0">`
       : `<div style="width:38px;height:38px;border-radius:6px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>`;
     const chipDueno = (!soloMiri && a.dueno) ? `<span style="font-size:0.58rem;font-weight:800;color:${a.dueno === 'Jony' ? '#c9954a' : '#c050a0'}">${a.dueno === 'Jony' ? 'JONY' : 'MIRI'}</span>` : '';
     const stockTxt = a.stock === null ? '' : `<span style="font-size:0.66rem;color:${a.stock <= 0 ? '#c0392b' : a.stock <= 3 ? 'var(--dorado)' : 'var(--texto-suave)'}">stock ${a.stock}${a.stock <= 0 ? ' ⚠️' : ''}</span>`;
@@ -14292,7 +14292,7 @@ async function renderMasVendido() {
     // La orden de compra es solo de Jony (por ahora): el campo de cantidad no aparece en vista Miri.
     const cantAct = a.id ? (_ocCant[a.id] || '') : '';
     const enOrden = cantAct !== '' && cantAct > 0;
-    const ctrlOC = (a.id && !soloMiri) ? `<input type="number" min="0" inputmode="numeric" value="${cantAct}" placeholder="cant" oninput="mvSetCant('${a.id}', this.value)" title="Cuántas reponer → se agrega a la orden de compra" style="width:58px;padding:6px 5px;border:1.6px solid ${enOrden ? '#1e7a3c' : '#bfe3c9'};border-radius:9px;text-align:center;font-family:inherit;font-size:0.82rem;font-weight:${enOrden ? '800' : '500'};color:${enOrden ? '#1e7a3c' : 'inherit'};background:${enOrden ? '#eaf6ee' : '#fff'};flex-shrink:0;outline:none">` : '';
+    const ctrlOC = (a.id && !soloMiri) ? `<input type="number" min="0" inputmode="numeric" value="${cantAct}" placeholder="cant" oninput="mvSetCant('${jsAttr(a.id)}', this.value)" title="Cuántas reponer → se agrega a la orden de compra" style="width:58px;padding:6px 5px;border:1.6px solid ${enOrden ? '#1e7a3c' : '#bfe3c9'};border-radius:9px;text-align:center;font-family:inherit;font-size:0.82rem;font-weight:${enOrden ? '800' : '500'};color:${enOrden ? '#1e7a3c' : 'inherit'};background:${enOrden ? '#eaf6ee' : '#fff'};flex-shrink:0;outline:none">` : '';
     return `<div style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0;border-bottom:1px solid var(--gris)">
       <span style="font-size:0.9rem;font-weight:800;min-width:26px;text-align:center">${medalla(i)}</span>
       ${thumb}
@@ -14340,7 +14340,7 @@ function filtrarRecep() {
     </div>`;
   if (!lista.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.7rem">Sin resultados</div>' + _btnCrear; return; }
   cont.innerHTML = lista.map(p => `
-    <div onclick="agregarRecep(${p.id})" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)">
+    <div onclick="agregarRecep(${Number(p.id)})" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--gris)">
       <div style="min-width:0;flex:1">
         <div style="font-size:0.85rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div>
         <div style="font-size:0.7rem;color:var(--texto-suave)">${esc((p.desc || '').substring(0, 45))} · stock ${p.stock}${p.costo > 0 ? ' · costo ' + (p.moneda === 'U$S' ? 'U$S ' + p.costo.toFixed(2) : '$ ' + Math.round(p.costo).toLocaleString('es-AR')) : ' · sin costo'}</div>
@@ -14755,7 +14755,7 @@ function elegirTrazar(id) {
   document.getElementById('trazar-buscar').value = p ? p.nombre + (p.desc ? ' · ' + p.desc.substring(0, 30) : '') : '';
   document.getElementById('trazar-resultados').style.display = 'none';
   const sel = document.getElementById('trazar-sel');
-  sel.innerHTML = `<option value="${id}" selected></option>`;
+  sel.innerHTML = `<option value="${esc(id)}" selected></option>`;
   sel.value = String(id);
   trazarProducto();
 }
@@ -14808,8 +14808,8 @@ async function trazarProducto() {
       <div style="font-weight:800;font-size:0.86rem;margin-bottom:0.4rem">📜 Movimientos de stock <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· stock actual: ${prod.stock} u.</span></div>
       <div id="trazar-movs" style="font-size:0.8rem;color:var(--texto-suave)">Cargando…</div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.6rem">
-        <button id="trazar-audit-btn" onclick="auditarStockBackups('${id}', 'horario')" style="background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🕰️ Últimas 24hs (hora x hora)</button>
-        <button id="trazar-audit-btn-mes" onclick="auditarStockBackups('${id}', 'diario')" style="background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🗓️ Último mes (día x día)</button>
+        <button id="trazar-audit-btn" onclick="auditarStockBackups('${jsAttr(id)}', 'horario')" style="background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🕰️ Últimas 24hs (hora x hora)</button>
+        <button id="trazar-audit-btn-mes" onclick="auditarStockBackups('${jsAttr(id)}', 'diario')" style="background:#fff;border:1.5px solid var(--azul);color:var(--azul);border-radius:8px;padding:0.45rem 0.8rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🗓️ Último mes (día x día)</button>
       </div>
       <div id="trazar-audit" style="margin-top:0.4rem"></div>
     </div>`;
@@ -15151,8 +15151,8 @@ function mostrarClientes(arr) {
           </div>
         </div>
         <div style="display:flex;gap:0.3rem;flex-shrink:0">
-          <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${c.tipo}','${c.telefono||''}')">💬</button>
-          ${c.telefono ? `<button class="btn-accion" style="background:#f0f4ff;color:#2c6fad;font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirEditarClienteModal('${nombre}','${c.telefono}','${c.tipo}')">✏️</button>` : ''}
+          <button class="btn-accion btn-entregar" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();contactarCliente('${nombre}','${jsAttr(c.tipo)}','${jsAttr(c.telefono||'')}')">💬</button>
+          ${c.telefono ? `<button class="btn-accion" style="background:#f0f4ff;color:#2c6fad;font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirEditarClienteModal('${nombre}','${jsAttr(c.telefono)}','${jsAttr(c.tipo)}')">✏️</button>` : ''}
           <button class="btn-accion" style="background:var(--gris);color:var(--texto-suave);font-size:0.7rem;padding:0.3rem 0.6rem" onclick="event.stopPropagation();abrirNotaModal('cliente','${nombre}','${jsAttr(_notasClientes[c.nombre]||'')}','Nota — ${nombre}')">📝</button>
         </div>
       </div>
@@ -15161,11 +15161,11 @@ function mostrarClientes(arr) {
         ${c.historial.slice().reverse().map(v => `
           <div style="font-size:0.78rem;padding:0.35rem 0;border-bottom:1px solid var(--gris-medio);display:flex;justify-content:space-between;gap:0.5rem">
             <div>
-              <span style="color:var(--texto-suave)">${v.fecha.split(' ')[0]}</span>
+              <span style="color:var(--texto-suave)">${esc(v.fecha.split(' ')[0])}</span>
               <span style="color:var(--azul);font-weight:600;margin-left:0.3rem">${v.totalARS>0?'$ '+Math.round(v.totalARS).toLocaleString('es-AR'):''}${v.totalUSD>0?' U$S '+parseFloat(v.totalUSD).toFixed(2):''}</span>
-              <span style="color:var(--texto-suave);font-size:0.7rem;margin-left:0.3rem">${v.formaPago}</span>
+              <span style="color:var(--texto-suave);font-size:0.7rem;margin-left:0.3rem">${esc(v.formaPago)}</span>
             </div>
-            <span class="estado-pill estado-${v.estado||'pendiente'}" style="flex-shrink:0">${v.estado||'pendiente'}</span>
+            <span class="estado-pill estado-${esc(v.estado||'pendiente')}" style="flex-shrink:0">${esc(v.estado||'pendiente')}</span>
           </div>`).join('')}
       </div>
     </div>`;
@@ -15181,6 +15181,7 @@ function toggleClienteHistorial(id) {
 // su chat; si no, abre WhatsApp para elegir el contacto, con el mensaje ya armado.
 function recordarDeudaWA(cliente, totStr, tel) {
   const msg = `¡Hola ${cliente}! 👋 Te escribimos de *Shuk Mamtakim* 🍬\nTe recordamos que tenés un saldo pendiente de *${totStr}*.\n¡Muchas gracias!`;
+  tel = String(tel || '').replace(/[^\d]/g, '');
   const waBase = tel ? `https://wa.me/${tel.startsWith('549') ? tel : '549' + tel}` : 'https://wa.me/';
   window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -15188,7 +15189,7 @@ function recordarDeudaWA(cliente, totStr, tel) {
 function contactarCliente(nombre, tipo, tel) {
   const link = tipo === 'Minorista' ? SITIO + '/#min-pL3q7' : SITIO + '/mayorista';
   const msg = `¡Hola ${nombre}! 👋 Te escribimos desde *Shuk Mamtakim*. ¿Querés ver nuestro catálogo actualizado? 👉 ${link}`;
-  const waBase = tel ? `https://wa.me/549${tel}` : `https://wa.me/`;
+  const waBase = tel ? `https://wa.me/549${String(tel).replace(/[^\d]/g, '')}` : `https://wa.me/`;
   window.open(`${waBase}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -15311,7 +15312,7 @@ function _anaChipCliente(v) {
 }
 function _anaBtnWA(tel, msg, texto) {
   if (!tel) return '';
-  return `<button onclick="window.open('https://wa.me/549${tel}?text=${encodeURIComponent(msg)}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">${texto}</button>`;
+  return `<button onclick="window.open('https://wa.me/549${String(tel).replace(/[^\d]/g, '')}?text=${jsAttr(encodeURIComponent(msg))}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">${texto}</button>`;
 }
 
 function pintarAnalitica() {
@@ -15612,7 +15613,7 @@ function _vivoHtmlDia() {
         <div style="font-size:0.76rem;color:#2d1a0a;margin-top:2px;line-height:1.5">${resumen.length ? resumen.join(' · ') : 'sin movimientos'}</div>
         ${meta ? `<div style="font-size:0.66rem;color:var(--texto-suave);margin-top:2px">${meta}</div>` : ''}
         ${abierta ? `<div style="margin-top:6px;padding:6px 8px;background:var(--gris-claro);border-radius:8px">${_vivoPasos(s)}</div>` : ''}
-        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${btn(`vivoDiaAbrir('${esc(s.key)}')`, abierta ? '▲ Cerrar' : '▼ Paso a paso')}${_anaBtnWA(p.telefono, msg, '💬')}${btn(`abrirFichaVisitante('${esc(s.vid)}')`, '👤 Su historia')}</div>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${btn(`vivoDiaAbrir('${jsAttr(s.key)}')`, abierta ? '▲ Cerrar' : '▼ Paso a paso')}${_anaBtnWA(p.telefono, msg, '💬')}${btn(`abrirFichaVisitante('${jsAttr(s.vid)}')`, '👤 Su historia')}</div>
       </div>
     </div>`;
   };
@@ -15832,7 +15833,7 @@ function _vivoHtmlAhora() {
     const chip = (txt, bg, col) => ` <span style="font-size:0.62rem;background:${bg};color:${col};border-radius:5px;padding:1px 6px;font-weight:700;vertical-align:middle">${txt}</span>`;
     const chipEtapa = p.etapa === 'checkout' ? chip('🔥 en el checkout', '#fdeaea', '#c0392b') : p.etapa === 'pedido' ? chip('✅ ya pidió', '#e8f5ee', 'var(--verde)') : p.etapa === 'carrito' ? chip('🛒 armando carrito', '#eef4fb', '#2c6fad') : '';
     const chipMay = p.pagina === 'mayorista' ? chip('📦 mayorista', '#eef4fb', '#2c6fad') : '';
-    const carrito = p.items && p.items.length ? `<div style="font-size:0.74rem;color:#444;margin-top:4px;line-height:1.5">${p.items.map(it => '<b>' + it.q + '×</b> ' + esc(it.n)).join(' · ')} · 💰 <b>${_anaPlataMix(p.total, p.totalUSD)}</b></div>` : '';
+    const carrito = p.items && p.items.length ? `<div style="font-size:0.74rem;color:#444;margin-top:4px;line-height:1.5">${p.items.map(it => '<b>' + esc(it.q) + '×</b> ' + esc(it.n)).join(' · ')} · 💰 <b>${_anaPlataMix(p.total, p.totalUSD)}</b></div>` : '';
     const msg = `¡Hola${p.nombre ? ' ' + p.nombre.split(' ')[0] : ''}! 👋 Te escribo de *Shuk Mamtakim* 🍬 Vi que estás mirando la tienda${p.productos.length ? ' (' + p.productos[0] + ')' : ''}. ¿Te ayudo con algo?`;
     const caliente = p.etapa === 'checkout';
     return `<div style="border:1.5px solid ${caliente ? '#f0c9c9' : 'var(--gris-medio)'};border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem;background:${caliente ? '#fffafa' : 'transparent'}">
@@ -15843,7 +15844,7 @@ function _vivoHtmlAhora() {
       <div style="font-size:0.76rem;color:#2d1a0a;margin-top:3px">${_vivoTexto(ev)}</div>
       ${carrito}
       <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:2px">entró ${_vivoHace(p.primero, ahora)}${p.seg ? ' · lleva ' + _vivoDur(p.seg) : ''}${p.ciudad ? ' · 📍 ' + esc(p.ciudad) : ''}${p.dispositivo ? ' · ' + (p.dispositivo === 'celular' ? '📱' : '💻') : ''}${p.telefono ? ' · 📞 ' + esc(p.telefono) : ''}</div>
-      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">${_anaBtnWA(p.telefono, msg, '💬 Escribirle ahora')}${btn(`abrirFichaVisitante('${esc(p.vid)}')`, '👤 Su historia')}</div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">${_anaBtnWA(p.telefono, msg, '💬 Escribirle ahora')}${btn(`abrirFichaVisitante('${jsAttr(p.vid)}')`, '👤 Su historia')}</div>
     </div>`;
   };
   html += _anaCard(`<div class="admin-titulo">🟢 En la tienda ahora (${activos.length})</div>
@@ -16058,7 +16059,7 @@ function _anaSecCarritos(d) {
   const rows = ab.length ? ab.map((a, i) => {
     const tieneItems = a.items && a.items.length;
     const detalle = tieneItems
-      ? a.items.map(it => `<b>${it.q}×</b> ${esc(it.n)}`).join(' · ')
+      ? a.items.map(it => `<b>${esc(it.q)}×</b> ${esc(it.n)}`).join(' · ')
       : (a.productos.length ? esc(a.productos.join(', ')) + ' <span style="color:#bbb">(sin cantidades)</span>' : 'productos sin detalle');
     const totalStr = (a.total > 0 || a.totalUSD > 0) ? ` · 💰 <b>${_anaPlataMix(a.total, a.totalUSD || 0)}</b>` : '';
     const chipMay = a.mayorista ? ' <span style="font-size:0.6rem;background:#eef4fb;color:#2c6fad;border-radius:5px;padding:1px 5px;font-weight:700">📦 mayorista</span>' : '';
@@ -16066,7 +16067,7 @@ function _anaSecCarritos(d) {
     const caliente = a.horas <= 48;
     const btnCargar = tieneItems ? `<button onclick="cargarComoPedido(${i})" style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">📋 Cargar como pedido</button>` : '';
     const btnWA = a.telefono ? `<button onclick="waCarrito(${i})" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">💬 Escribirle con el pedido</button>` : '';
-    const btnFicha = `<button onclick="abrirFichaVisitante('${esc(a.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">👤 Su historia</button>`;
+    const btnFicha = `<button onclick="abrirFichaVisitante('${jsAttr(a.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">👤 Su historia</button>`;
     const comoSup = a.comoSeSupo && !a.nombre ? '' : (a.comoSeSupo ? ` <span style="font-size:0.6rem;color:var(--texto-suave)">(${esc(a.comoSeSupo)})</span>` : '');
     return `<div style="border:1.5px solid ${caliente ? '#f0c9c9' : 'var(--gris-medio)'};border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem;background:${caliente ? '#fffafa' : 'transparent'}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap">
@@ -16135,8 +16136,8 @@ function _anaFilasGente(d) {
           <div style="font-size:0.62rem;color:var(--texto-suave)">últ. ${esc(v.ultima)}</div>
           <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end">
             ${_anaBtnWA(v.telefono, msg, '💬')}
-            <button onclick="bautizarVisitante('${esc(v.vid)}', '${esc(v.leDijiste ? v.nombre : '')}', '${esc(v.nota || '')}')" title="Ponerle nombre" style="background:#f3e8ff;color:#7b2ff7;border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">✏️</button>
-            <button onclick="abrirFichaVisitante('${esc(v.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
+            <button onclick="bautizarVisitante('${jsAttr(v.vid)}', '${jsAttr(v.leDijiste ? v.nombre : '')}', '${jsAttr(v.nota || '')}')" title="Ponerle nombre" style="background:#f3e8ff;color:#7b2ff7;border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">✏️</button>
+            <button onclick="abrirFichaVisitante('${jsAttr(v.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
           </div>
         </div>
       </div>
@@ -16160,7 +16161,7 @@ function _anaSecMirones(d) {
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0">
           ${_anaBtnWA(m.telefono, msg, '💬')}
-          <button onclick="abrirFichaVisitante('${esc(m.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
+          <button onclick="abrirFichaVisitante('${jsAttr(m.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer">👤</button>
         </div>
       </div>
     </div>`;
@@ -16386,7 +16387,7 @@ const _fichaIA = {};
 function _fichaIAHtml(id) {
   const st = _fichaIA[id];
   if (!st) return '';
-  const idJ = esc(String(id));
+  const idJ = jsAttr(String(id));
   if (st.estado === 'cargando') return '<div class="ficha-ia">✨ La IA está mirando la foto y escribiendo… tarda unos segundos.</div>';
   if (st.estado === 'error') return `<div class="ficha-ia err">⚠️ ${esc(st.error)} <button class="gh" onclick="fichaIA('${idJ}','${st.motivo}',${st.personas || 0})">Reintentar</button></div>`;
   if (st.estado === 'aplicado') return `<div class="ficha-ia ok">✓ ${esc(st.msg)}</div>`;
@@ -16467,7 +16468,7 @@ function _anaSecProductos(d) {
   const vsc = vm.vistosSinCarrito || [];
   // ✨ v4.87: la IA propone la ficha (solo Jony: la acción es suya en el servidor)
   const puedeIA = !esVistaMiri() && socioActual === 'jony';
-  const btnIA = (id, motivo, personas) => puedeIA && id ? `<button class="ficha-ia-btn" onclick="fichaIA('${esc(String(id))}','${motivo}',${parseInt(personas) || 0})" title="La IA mira la foto y te propone una ficha mejor">✨ Mejorar</button>` : '';
+  const btnIA = (id, motivo, personas) => puedeIA && id ? `<button class="ficha-ia-btn" onclick="fichaIA('${jsAttr(String(id))}','${motivo}',${parseInt(personas) || 0})" title="La IA mira la foto y te propone una ficha mejor">✨ Mejorar</button>` : '';
   const cajaIA = id => puedeIA && id ? `<div data-ficha-ia="${esc(String(id))}">${_fichaIAHtml(String(id))}</div>` : '';
   if (vm.eventos) {
     html += _anaCard(`<div class="admin-titulo">👁️ Los ven y no los agarran (${vsc.length})</div>
@@ -16671,7 +16672,7 @@ function _anaSecCanales(d) {
           ${v.conPase ? '<span style="font-size:0.6rem;background:#fdf3e6;color:#e08a2a;border-radius:5px;padding:1px 5px;font-weight:700">🔑 entró con el pase</span>' : ''}
         </div>
         <div style="color:var(--texto-suave);font-size:0.68rem">acá eran las ${esc((v.ultima || '').slice(11))}${v.horaAlla ? ' · <b>allá: ' + esc(v.horaAlla) + '</b>' : ''}${v.segundos ? ' · se quedó ' + v.segundos + 's' : ''}${v.dondeEsta && v.dondeEsta !== v.pais ? ' · su reloj dice ' + esc(v.dondeEsta) : ''} · llegó ${esc(_anaIconoOrigen[v.origen] || v.origen)}
-          ${v.vid ? `· <a href="#" onclick="abrirFichaVisitante('${esc(v.vid)}');return false" style="color:var(--azul);font-weight:700">ver su ficha</a>` : ''}</div>
+          ${v.vid ? `· <a href="#" onclick="abrirFichaVisitante('${jsAttr(v.vid)}');return false" style="color:var(--azul);font-weight:700">ver su ficha</a>` : ''}</div>
       </div>`).join('');
     const disc = (cg.discrepancias || []).map(x => `<div style="font-size:0.72rem;padding:3px 0;border-bottom:1px solid var(--gris-medio)">🔍 ${esc(x.detalle)} <span style="color:var(--texto-suave)">· ${esc(x.fecha)}</span></div>`).join('');
     html += _anaCard(`<div class="admin-titulo">🌎 Candado geográfico</div>
@@ -16697,7 +16698,7 @@ function _anaSecCanales(d) {
           <div style="text-align:right;flex-shrink:0">
             <div style="font-size:0.82rem;font-weight:700">${l.visitas} visita${l.visitas !== 1 ? 's' : ''}</div>
             <div style="font-size:0.66rem;color:var(--texto-suave)">últ. ${esc(l.ultima)}</div>
-            ${l.telefono ? `<button onclick="window.open('https://wa.me/549${l.telefono}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:2px 8px;font-size:0.7rem;font-weight:600;cursor:pointer;margin-top:3px">💬 Escribir</button>` : ''}
+            ${l.telefono ? `<button onclick="window.open('https://wa.me/549${String(l.telefono).replace(/[^\d]/g,'')}','_blank')" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:2px 8px;font-size:0.7rem;font-weight:600;cursor:pointer;margin-top:3px">💬 Escribir</button>` : ''}
           </div>
         </div>
       </div>`).join('')
@@ -16716,7 +16717,7 @@ function waCarrito(i) {
     + `Vi que te quedó un pedido armado y no llegó a salir:\n${items}\n`
     + ((a.total > 0 || a.totalUSD > 0) ? `\nTotal: *${_anaPlataMix(a.total, a.totalUSD || 0)}*\n` : '')
     + `\n¿Te lo preparo? Si querés cambiar algo, avisame 😊`;
-  window.open(`https://wa.me/549${a.telefono}?text=${encodeURIComponent(msg)}`, '_blank');
+  window.open(`https://wa.me/549${String(a.telefono).replace(/[^\d]/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 // ── 👤 FICHA DEL VISITANTE: toda su historia, paso por paso ──────────────────
@@ -16771,8 +16772,8 @@ async function abrirFichaVisitante(vid) {
       ${f.segundos ? '⏱️ se quedó <b>' + f.segundos + ' segundos</b> en total · ' + (f.interacciones || 0) + ' cosas tocó' : ''}
     </div>` : ''}
     <div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">
-      ${f.telefono ? _anaBtnWA(f.telefono, msg, '💬 Escribirle por WhatsApp') : ''}
-      <button onclick="bautizarVisitante('${esc(f.vid)}', '${esc(f.aliasPuesto || '')}', '${esc(f.notaPuesta || '')}')" style="background:#f3e8ff;color:#7b2ff7;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">✏️ ${f.aliasPuesto ? 'Cambiar el nombre' : '¿Sabés quién es? Ponele nombre'}</button>
+      ${f.telefono ? _anaBtnWA(String(f.telefono).replace(/[^\d]/g,''), msg, '💬 Escribirle por WhatsApp') : ''}
+      <button onclick="bautizarVisitante('${jsAttr(f.vid)}', '${jsAttr(f.aliasPuesto || '')}', '${jsAttr(f.notaPuesta || '')}')" style="background:#f3e8ff;color:#7b2ff7;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">✏️ ${f.aliasPuesto ? 'Cambiar el nombre' : '¿Sabés quién es? Ponele nombre'}</button>
     </div>
     ${compras ? `<div style="font-weight:700;font-size:0.82rem;margin:8px 0 5px">🛍️ Le compró ${(f.compras || []).length} vez${(f.compras || []).length !== 1 ? 'ces' : ''}</div>${compras}` : ''}
     ${(f.productos || []).length ? `<div style="font-weight:700;font-size:0.82rem;margin:9px 0 4px">👀 Lo que más miró</div>
@@ -16797,7 +16798,7 @@ function _fichaHtmlRecorrido() {
       <div style="min-width:0;flex:1">
         <div style="font-size:0.75rem;color:#2d1a0a;line-height:1.5">${res.length ? res.join(' · ') : 'sin movimientos'}</div>
         ${abierta ? `<div style="margin-top:5px;padding:5px 8px;background:var(--gris-claro);border-radius:8px">${_vivoPasos(ses)}</div>` : ''}
-        <div style="margin-top:4px">${btn(`fichaAbrirVisita('${esc(ses.key)}')`, abierta ? '▲ Cerrar' : '▼ Paso a paso')}</div>
+        <div style="margin-top:4px">${btn(`fichaAbrirVisita('${jsAttr(ses.key)}')`, abierta ? '▲ Cerrar' : '▼ Paso a paso')}</div>
       </div>
     </div>`;
   }).join('');
@@ -16815,7 +16816,7 @@ function cerrarFichaVisitante() {
 // Exporta a CSV los leads o los carritos abandonados del período mostrado.
 function descargarAnaCSV(tipo) {
   const d = window._anaData; if (!d) return;
-  const esc = v => '"' + (v==null?'':String(v)).replace(/"/g,'""') + '"';
+  const esc = v => { let t = v == null ? '' : String(v); if (/^[=+@]|^-[^\d.]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };   // 🔒 v4.95: sin fórmulas de Excel
   let cols, rows, nombre;
   if (tipo === 'leads') {
     cols = ['Nombre','Teléfono','Ciudad','Origen','Visitas','Última'];
@@ -16852,7 +16853,7 @@ function cargarProductosJonySelect() {
   if (!sel) return;
   const jonyProds = productos.filter(p => p.dueno === 'Jony').sort((a,b) => a.nombre.localeCompare(b.nombre));
   sel.innerHTML = '<option value="">Seleccioná producto...</option>' +
-    jonyProds.map(p => `<option value="${p.id}" data-nombre="${p.nombre}${p.desc?' · '+p.desc:''}">${p.nombre}${p.desc?' · '+p.desc:''}</option>`).join('');
+    jonyProds.map(p => `<option value="${esc(p.id)}" data-nombre="${esc(p.nombre)}${p.desc?' · '+esc(p.desc):''}">${esc(p.nombre)}${p.desc?' · '+esc(p.desc):''}</option>`).join('');
 }
 
 async function renderGanancias() {
@@ -16891,9 +16892,9 @@ async function renderGanancias() {
   lista.innerHTML = movs.map(m => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0.45rem 0;border-bottom:1px solid var(--gris-medio);gap:0.5rem">
       <div>
-        <span style="font-size:0.65rem;font-weight:700;background:#f0f0f0;padding:2px 6px;border-radius:10px;color:${tipoColor[m.tipo]||'#666'}">${tipoLabel[m.tipo]||m.tipo}</span>
-        <span style="font-size:0.8rem;color:var(--texto-suave);margin-left:0.4rem">${m.descripcion}</span>
-        <div style="font-size:0.7rem;color:var(--texto-suave)">${m.fecha}</div>
+        <span style="font-size:0.65rem;font-weight:700;background:#f0f0f0;padding:2px 6px;border-radius:10px;color:${tipoColor[m.tipo]||'#666'}">${esc(tipoLabel[m.tipo]||m.tipo)}</span>
+        <span style="font-size:0.8rem;color:var(--texto-suave);margin-left:0.4rem">${esc(m.descripcion)}</span>
+        <div style="font-size:0.7rem;color:var(--texto-suave)">${esc(m.fecha)}</div>
       </div>
       <span style="font-weight:700;font-size:0.9rem;color:${m.monto>=0?'var(--verde)':'#c0392b'};flex-shrink:0">${m.monto>=0?'+':''}$ ${Math.abs(Math.round(m.monto)).toLocaleString('es-AR')}</span>
     </div>`).join('');
@@ -17152,7 +17153,7 @@ async function cargarEstadoPush() {
     if (!d || d.error) throw new Error((d && d.error) || 'sin respuesta');
     if (!d.configurado) {
       el.innerHTML = '⚠️ <b>El servicio de notificaciones no está configurado</b> — nadie puede recibirlas todavía.'
-        + (d.motivo ? '<br><span style="font-size:0.72rem">(' + d.motivo + ')</span>' : '');
+        + (d.motivo ? '<br><span style="font-size:0.72rem">(' + esc(d.motivo) + ')</span>' : '');
       el.style.color = '#c0392b';
       if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
       return;
@@ -17219,7 +17220,7 @@ function verificarStockBajo() {
   if (det && !det._tog) { det._tog = true; det.addEventListener('toggle', () => { const fl = document.getElementById('stock-alerta-flecha'); if (fl) fl.textContent = det.open ? '▾' : '▸'; }); }
   lista.innerHTML = bajos.map(p =>
     `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--gris-medio)">
-      <span style="font-size:0.85rem;color:var(--azul);font-weight:600">${p.nombre} <span style="font-weight:400;color:var(--texto-suave)">${p.desc.substring(0,40)}</span></span>
+      <span style="font-size:0.85rem;color:var(--azul);font-weight:600">${esc(p.nombre)} <span style="font-weight:400;color:var(--texto-suave)">${esc(p.desc.substring(0,40))}</span></span>
       <span style="font-size:0.85rem;font-weight:700;color:${p.stock <= 1 ? 'var(--rojo)' : 'var(--dorado)'}">⚠️ ${p.stock} ud.</span>
     </div>`
   ).join('');
@@ -17279,7 +17280,8 @@ function exportarExtractoCaja() {
     const v = parseFloat(m.val) || 0;
     saldo += v;
     if (v >= 0) totIn += v; else totOut += -v;
-    const detalle = (m.desc || '').replace(/\s+#/, ' #').replace(/"/g, '""');
+    // m.desc es HTML de pantalla (ya escapado en v4.95 y con el 📎 como link): el CSV va en texto plano.
+    const detalle = (m.desc || '').replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+#/, ' #').replace(/^([=+@])/, "'$1").replace(/"/g, '""');
     return [
       `"${(m.fecha || '').toString()}"`,
       `"${detalle}"`,
@@ -17306,7 +17308,7 @@ function exportarExtractoCaja() {
 // Jony dentro de cada pedido, y las columnas de plata de Jony (Total mezclado, ARS Jony,
 // comisión). Miri solo ve SUS golosinas y SU plata. Función pura → testeable. REGLA SAGRADA.
 function _ventasACsv(ventas, soloMiri) {
-  const esc = s => '"' + (s == null ? '' : String(s)).replace(/"/g, '""') + '"';
+  const esc = s => { let t = s == null ? '' : String(s); if (/^[=+@]|^-[^\d.]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };   // 🔒 v4.95: sin fórmulas de Excel
   const lista = soloMiri ? (ventas || []).filter(pedidoEsDeMiri) : (ventas || []);
   const headers = soloMiri
     ? ['#','Fecha','Cliente','Tipo','Productos','Forma de Pago','Estado','ARS Myri','USD Myri']
@@ -17567,7 +17569,7 @@ function eliminarNotificacion(productoId, telefono) {
 function notificarCliente(tel, producto, nombre, productoId, modoCliente) {
   const link = modoCliente === 'mayorista' ? SITIO + '/mayorista' : SITIO + '/#min-pL3q7';
   const msg = `¡Hola ${nombre}! 🎉 Ya tenemos *${producto}* disponible en Shuk Mamtakim. ¡Podés hacer tu pedido ahora! 👉 ${link}`;
-  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+  window.open(`https://wa.me/${String(tel).replace(/[^\d]/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
   const params = new URLSearchParams({ accion: 'marcarNotificado', productoId, telefono: tel });
   fetch(APPS_SCRIPT_URL + '?' + params.toString())
     .then(() => setTimeout(renderNotificaciones, 1500))
@@ -17610,9 +17612,9 @@ function renderSimilarLista() {
   cont.innerHTML = lista.map(p => {
     const sel = !!_similarSel[p.id];
     const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean);
-    const thumb = imgs.length ? `<img src="${imgUrl(imgs[0])[0]}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">` : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>`;
+    const thumb = imgs.length ? `<img src="${esc(imgUrl(imgs[0])[0])}" style="width:38px;height:38px;object-fit:contain;background:var(--gris);border-radius:6px" onerror="this.style.opacity=0.2">` : `<div style="width:38px;height:38px;background:var(--gris);border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>`;
     return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.7rem;border-bottom:1px solid var(--gris);cursor:pointer;background:${sel ? '#e8f5ee' : '#fff'}">
-      <input type="checkbox" ${sel ? 'checked' : ''} onchange="_similarToggle('${p.id}')" style="width:16px;height:16px">
+      <input type="checkbox" ${sel ? 'checked' : ''} onchange="_similarToggle('${jsAttr(p.id)}')" style="width:16px;height:16px">
       ${thumb}
       <div style="flex:1;min-width:0"><div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}</div><div style="font-size:0.7rem;color:var(--texto-suave)">${esc((p.desc || '').substring(0, 38))} · <b>${_similarPrecio(p)}</b></div></div>
     </label>`;
@@ -17637,7 +17639,7 @@ async function _similarImagen() {
     <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">${sel.map(p => {
       const imgs = (p.imagen || '').split(',').map(x => x.trim()).filter(Boolean); const url = imgs.length ? imgUrl(imgs[0])[0] : '';
       return `<div style="display:flex;gap:12px;align-items:center;border:1px solid #eee;border-radius:10px;padding:8px">
-        ${url ? `<img src="${url}" crossorigin="anonymous" style="width:66px;height:66px;object-fit:contain;background:#f5f0e8;border-radius:8px">` : `<div style="width:66px;height:66px;background:#f5f0e8;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🍬</div>`}
+        ${url ? `<img src="${esc(url)}" crossorigin="anonymous" style="width:66px;height:66px;object-fit:contain;background:#f5f0e8;border-radius:8px">` : `<div style="width:66px;height:66px;background:#f5f0e8;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🍬</div>`}
         <div style="flex:1;min-width:0"><div style="font-weight:700;color:#1a1a2e;font-size:0.95rem">${esc(p.nombre)}</div><div style="font-size:0.76rem;color:#999">${esc((p.desc || '').substring(0, 60))}</div><div style="font-weight:800;color:#1a7a3a;margin-top:2px">${_similarPrecio(p)}</div></div>
       </div>`; }).join('')}</div>
     <div style="padding:8px 16px;color:#aaa;font-size:0.7rem;border-top:1px solid #eee">${SITIO_DOM}</div></div>`;
@@ -17663,7 +17665,7 @@ async function enviarSimilar() {
   }
   // Fallback (compu): descarga la imagen y abre WhatsApp con el texto para que la adjuntes.
   if (file) { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = 'shuk-recomendado.jpg'; a.click(); showToast('🖼️ Imagen descargada — adjuntala en WhatsApp 📎'); }
-  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+  window.open(`https://wa.me/${String(tel).replace(/[^\d]/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
   cerrarSimilar();
 }
 
@@ -17971,7 +17973,7 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
     if (!esPedido && ccIdx != null && window._ccData && window._ccData[ccIdx]) {
       _itemsConSaldo(window._ccData[ccIdx].items).forEach(it => {
         const ds = [it.remARS > 0 ? '$ ' + Math.round(it.remARS).toLocaleString('es-AR') : '', it.remUSD > 0 ? 'U$S ' + it.remUSD.toFixed(2) : ''].filter(Boolean).join(' + ');
-        _pedSel.innerHTML += `<option value="${it.v.id}">#${it.v.nVenta || it.v.id} · debe ${ds}</option>`;
+        _pedSel.innerHTML += `<option value="${esc(it.v.id)}">#${esc(it.v.nVenta || it.v.id)} · debe ${ds}</option>`;
         _hay = true;
       });
     }
@@ -19237,7 +19239,7 @@ function abrirRemitoPDF(v, autoPrint) {
   // Parsear líneas en columnas con foto (en vista Miri, sin las de Jony)
   const filas = (soloMiri ? _lineasPedidoVista(v.productos, true, v.stockUpdates) : (v.productos||'').split(' || ')).map(linea => {
     const m = linea.match(/^• (\d+)x (.+?) — (\$|U\$S) ([\d.,]+) c\/u = (\$|U\$S) ([\d.,]+)/);
-    if (!m) return `<tr><td colspan="5" style="padding:8px 16px;font-size:0.8rem;color:#666;border-bottom:1px solid #f0ebe3">${linea}</td></tr>`;
+    if (!m) return `<tr><td colspan="5" style="padding:8px 16px;font-size:0.8rem;color:#666;border-bottom:1px solid #f0ebe3">${esc(linea)}</td></tr>`;
     const [, qty, nombreCompleto, moneda, precioUnit, , subtotal] = m;
     const partes = nombreCompleto.split(' · ');
     const nombre = partes[0].trim();
@@ -19266,13 +19268,13 @@ function abrirRemitoPDF(v, autoPrint) {
     }
     const imgUrl = prodLinea ? _fotoRemito(prodLinea) : '';
     const imgTag = imgUrl
-      ? `<img src="${imgUrl}" style="width:44px;height:44px;object-fit:contain;background:#f5f0e8;border-radius:6px;display:block" onerror="this.style.display='none'">`
+      ? `<img src="${esc(imgUrl)}" style="width:44px;height:44px;object-fit:contain;background:#f5f0e8;border-radius:6px;display:block" onerror="this.style.display='none'">`
       : `<div style="width:44px;height:44px;border-radius:6px;background:#f0ebe3;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🍬</div>`;
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid #f0ebe3;width:56px">${imgTag}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0ebe3">
-        <div style="font-weight:600;font-size:0.84rem;color:#2d1a0a">${nombre}</div>
-        ${desc ? `<div style="font-size:0.7rem;color:#999;margin-top:1px">${desc}</div>` : ''}
+        <div style="font-weight:600;font-size:0.84rem;color:#2d1a0a">${esc(nombre)}</div>
+        ${desc ? `<div style="font-size:0.7rem;color:#999;margin-top:1px">${esc(desc)}</div>` : ''}
         ${prodLinea ? _kosherChipsHtml(prodLinea, 'mini') : ''}
       </td>
       <td style="padding:8px 8px;border-bottom:1px solid #f0ebe3;text-align:center;font-size:0.83rem;color:#555;white-space:nowrap">${qty}</td>
@@ -19970,13 +19972,13 @@ function renderEditLineas() {
     const _pl = l.prodId ? productos.find(x => String(x.id) === String(l.prodId)) : null;
     const _im = _pl ? (imgUrl((_pl.imagen || '').split(',')[0].trim())[0] || '') : '';
     const _foto = _im
-      ? `<img src="${_im}" onclick="event.stopPropagation();abrirFotoGrande(this)" title="Tocá para verla en grande" style="width:40px;height:40px;object-fit:contain;background:#faf8f5;border-radius:6px;border:1px solid #f0ebe3;flex-shrink:0;cursor:zoom-in" onerror="this.style.display='none'">`
+      ? `<img src="${esc(_im)}" onclick="event.stopPropagation();abrirFotoGrande(this)" title="Tocá para verla en grande" style="width:40px;height:40px;object-fit:contain;background:#faf8f5;border-radius:6px;border:1px solid #f0ebe3;flex-shrink:0;cursor:zoom-in" onerror="this.style.display='none'">`
       : `<div style="width:40px;height:40px;border-radius:6px;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🍬</div>`;
     return `
     <div class="edit-row" style="flex-wrap:wrap;gap:6px;position:relative">
       <div style="display:flex;align-items:center;width:100%;gap:8px">
         ${_foto}
-        <span class="edit-prod-name" style="flex:1;font-weight:600;font-size:0.85rem">${l.nombre}${l.descripcion ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${l.descripcion}</span>` : ''}${_pl ? `<span style="display:block;font-size:0.6rem;color:${(_pl.dueno === 'Jony') ? '#8a5a1e' : '#1a5c8a'};font-weight:700;margin-top:1px">${esc(_pl.dueno || '—')}${_pl.stock != null ? ' · stock ' + _pl.stock : ''}</span>` : `<span style="display:block;font-size:0.6rem;color:#c0392b;font-weight:700;margin-top:1px">⚠️ sin producto en el catálogo</span>`}</span>
+        <span class="edit-prod-name" style="flex:1;font-weight:600;font-size:0.85rem">${esc(l.nombre)}${l.descripcion ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${esc(l.descripcion)}</span>` : ''}${_pl ? `<span style="display:block;font-size:0.6rem;color:${(_pl.dueno === 'Jony') ? '#8a5a1e' : '#1a5c8a'};font-weight:700;margin-top:1px">${esc(_pl.dueno || '—')}${_pl.stock != null ? ' · stock ' + _pl.stock : ''}</span>` : `<span style="display:block;font-size:0.6rem;color:#c0392b;font-weight:700;margin-top:1px">⚠️ sin producto en el catálogo</span>`}</span>
         <button onclick="eliminarLineaEdit(${i})" style="background:#fde8e8;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:#e05c2a;font-size:1rem;flex-shrink:0" title="Eliminar producto">×</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px;width:100%">
@@ -20041,7 +20043,7 @@ function filtrarAgregarEdit() {
     const { precioUnit: precio, moneda } = _precioMoneda(p, esMay ? 'Mayorista' : 'Minorista');
     const precioStr = moneda === 'U$S' ? `U$S ${precio.toFixed(2)}` : `$ ${precio.toLocaleString('es-AR')}`;
     return `<div onclick="agregarProductoEdit(${p.id})" style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--gris-medio);cursor:pointer">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${p.nombre}${p.desc ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${p.desc.substring(0,40)}</span>` : ''}</div>
+      <div style="font-size:0.82rem;font-weight:600;color:var(--azul)">${_duenoBadge(p)}${esc(p.nombre)}${p.desc ? `<span style="font-weight:400;color:var(--texto-suave)"> · ${esc(p.desc.substring(0,40))}</span>` : ''}</div>
       <div style="font-size:0.7rem;color:var(--dorado);font-weight:600">${precioStr} · Stock: ${p.stock}</div>
     </div>`;
   }).join('');

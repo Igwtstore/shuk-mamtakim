@@ -1,4 +1,4 @@
-// INSPECTOR EN VIVO (solo lectura) — pago de Sarah Kantor #51
+// INSPECTOR EN VIVO (solo lectura) — pago de Beto Ejemplo #51
 // Deuda por componente: $100.350 Pitzujim(J) · U$S 77,15 Pitzujim(J) · U$S 44 golosinas(M), comi U$S 6,60
 // Vigila: pagos nuevos (id>102) + cambios en la venta P1783436978494. Emite una línea por hallazgo.
 const { Client } = require('pg');

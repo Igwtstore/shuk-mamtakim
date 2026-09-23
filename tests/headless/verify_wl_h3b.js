@@ -32,7 +32,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     body: `window.TIENDA_CONFIG = {
       id: 'demo',
       marca: { nombre: 'Kiosco Demo', emoji: '🧉', tagline: 'demo', url: 'https://demo.example', baseImg: '' },
-      contacto: { whatsapp: '111', whatsappHumano: '11 1111-1111', whatsappAlt: '222', whatsappExtra: [], telefonos: { jony: '111', meir: '333', iosi: '444' } },
+      contacto: { whatsapp: '111', whatsappHumano: '11 1111-1111', whatsappAlt: '222', whatsappExtra: [], telefonos: { Prueba2: '111', meir: '333', iosi: '444' } },
       infra: { backendUrl: 'https://demo.example/api', supabase: { url: 'https://soarkknjewgcewryxqac.supabase.co', anonKey: 'k' }, cloudinary: { cloud: 'democloud', preset: 'demo' }, oneSignalAppId: 'x' },
       candy: { nombre: 'Demo Kids', emoji: '🧁', logo: '', cloudinaryPreset: 'demokids' },
       negocio: { comisionSocio: 0.15, maaser: 0.10, socios: ['A','B'] },
@@ -51,7 +51,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
   chk('DEMO: título "Kiosco Demo 🧉"', r2.titulo === 'Kiosco Demo 🧉', r2.titulo);
   chk('DEMO: headers repintados a "Kiosco Demo"', r2.wlDivs.every(t => t === 'Kiosco Demo'), JSON.stringify(r2.wlDivs));
   chk('DEMO: pie de remito compone marca+dominio demo', r2.remito === 'Kiosco Demo 🧉 — demo.example', r2.remito);
-  chk('DEMO: botón WhatsApp compone número/marca de la ficha (no hardcode)', r2.btnWa.includes('TIENDA_CONFIG.contacto.whatsapp') && !r2.btnWa.includes('5491131754540'), r2.btnWa.slice(0, 120));
+  chk('DEMO: botón WhatsApp compone número/marca de la ficha (no hardcode)', r2.btnWa.includes('TIENDA_CONFIG.contacto.whatsapp') && !r2.btnWa.includes('5491140015838'), r2.btnWa.slice(0, 120));
   chk('DEMO: sin errores JS', errs2.length === 0, errs2.join(' | '));
 
   await browser.close();

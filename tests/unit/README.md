@@ -20,7 +20,7 @@ node tests/unit/_run.js          # desde la raíz del repo
 ## Qué cubre hoy (41 checks)
 - **ganancia_multimoneda** — ganancia Pitzujim/golosinas de Jony en $ y U$S, desambiguación
   de los 9 "Pitzujim" por descripción, renombrado, costo U$S × TC, sin costo, sin TC, Miri no cuenta.
-- **deuda_pedido** — deuda residual; cobro parcial que NO borra la deuda (bug isi michan); vista Miri.
+- **deuda_pedido** — deuda residual; cobro parcial que NO borra la deuda (bug Dani Ficticio); vista Miri.
 - **precios** — precio + moneda según tipo (base del repreciado al editar una venta).
 - **packs_ofertas** — precio del carrito de Candy con ofertas (vigentes/vencidas) y packs automáticos.
 - **catalogo_descuento** — descuento del catálogo con redondeo siempre para arriba ($ y U$S).

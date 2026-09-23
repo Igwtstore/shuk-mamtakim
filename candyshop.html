@@ -1057,11 +1057,11 @@ function combo_render() {
   document.getElementById('combo-list').innerHTML = items.map(p => {
     const it = _fCombo.find(x => x.codigo === p.codigo);
     return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f1ea">
-      ${p.foto ? `<img src="${p.foto}" style="width:32px;height:32px;object-fit:contain;background:#f5f0e8;border-radius:7px">` : '<div style="width:32px;height:32px;background:#f5f0e8;border-radius:7px"></div>'}
+      ${p.foto ? `<img src="${esc(p.foto)}" style="width:32px;height:32px;object-fit:contain;background:#f5f0e8;border-radius:7px">` : '<div style="width:32px;height:32px;background:#f5f0e8;border-radius:7px"></div>'}
       <span style="flex:1;font-size:0.8rem;${it ? 'font-weight:800' : ''}">${escCM(p.nombre)}</span>
-      <button onclick="combo_qty('${String(p.codigo).replace(/'/g, "\\'")}',-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
-      <b style="min-width:16px;text-align:center;font-size:0.85rem">${it ? it.cant : ''}</b>
-      <button onclick="combo_qty('${String(p.codigo).replace(/'/g, "\\'")}',1)" style="width:26px;height:26px;border:none;background:#ffd6e8;border-radius:7px;font-weight:800;cursor:pointer">+</button>
+      <button onclick="combo_qty(${esc(JSON.stringify(String(p.codigo)))},-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
+      <b style="min-width:16px;text-align:center;font-size:0.85rem">${it ? esc(it.cant) : ''}</b>
+      <button onclick="combo_qty(${esc(JSON.stringify(String(p.codigo)))},1)" style="width:26px;height:26px;border:none;background:#ffd6e8;border-radius:7px;font-weight:800;cursor:pointer">+</button>
     </div>`;
   }).join('') || '<div class="empty">Sin candidatos</div>';
 }
@@ -1178,7 +1178,7 @@ function videoPromptCandy() {
       <button onclick="navigator.clipboard.writeText(document.getElementById('vid-prompt-txt').value).then(()=>toast('📋 Prompt copiado'))" style="flex:1;padding:10px;border:none;background:#b14cff;color:#fff;border-radius:9px;font-weight:800;cursor:pointer">📋 Copiar prompt</button>
       <a id="vidc-abrir" href="https://gemini.google.com" target="_blank" style="flex:1;padding:10px;border:none;background:#1a73e8;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none">🚀 Abrir Gemini</a>
     </div>
-    ${fotoUrl ? `<div style="font-size:0.7rem;color:#888;margin-top:8px">La foto para adjuntar: <a href="${fotoUrl}" target="_blank" download>descargala acá 📥</a></div>` : ''}`;
+    ${fotoUrl ? `<div style="font-size:0.7rem;color:#888;margin-top:8px">La foto para adjuntar: <a href="${esc(fotoUrl)}" target="_blank" download>descargala acá 📥</a></div>` : ''}`;
   vidRefrescarC();
 }
 // ═══ M4 UNIFICACIÓN: analítica de visitas + visor de borrados ═══
@@ -1293,19 +1293,19 @@ function cm_render() {
   const list = _cmData.filter(p => !q || (p.nombre || '').toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
   const cats = [...new Set(_cmData.map(p => p.categoria || 'Varios'))].sort();
   const td = 'padding:4px;border-bottom:1px solid #f0ebe3;';
-  const inp = (cod, campo, extra) => `<input value="${escCM(cm_val(cod, campo))}" ${extra || ''} oninput="cm_set('${cod}','${campo}',this.value)" style="width:100%;padding:5px 4px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.78rem;box-sizing:border-box;text-align:center">`;
+  const inp = (cod, campo, extra) => `<input value="${escCM(cm_val(cod, campo))}" ${extra || ''} oninput="cm_set(${esc(JSON.stringify(String(cod)))},'${campo}',this.value)" style="width:100%;padding:5px 4px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.78rem;box-sizing:border-box;text-align:center">`;
   const th = 'padding:6px 4px;font-size:0.64rem;color:#8a6d4a;text-transform:uppercase;text-align:left;white-space:nowrap;';
   const filas = list.map(p => `<tr>
     <td style="${td}font-size:0.68rem;color:#999;white-space:nowrap">${escCM(p.codigo)}</td>
     <td style="${td}min-width:150px">${inp(p.codigo, 'nombre', 'type="text" style="width:100%;padding:5px 4px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.78rem;box-sizing:border-box"')}</td>
-    <td style="${td}"><select onchange="cm_set('${p.codigo}','categoria',this.value)" style="padding:5px 2px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.74rem;max-width:110px">${cats.map(c => `<option ${cm_val(p.codigo, 'categoria') === c ? 'selected' : ''}>${escCM(c)}</option>`).join('')}</select></td>
+    <td style="${td}"><select onchange="cm_set(${esc(JSON.stringify(String(p.codigo)))},'categoria',this.value)" style="padding:5px 2px;border:1.5px solid #e5ddd2;border-radius:6px;font-size:0.74rem;max-width:110px">${cats.map(c => `<option ${cm_val(p.codigo, 'categoria') === c ? 'selected' : ''}>${escCM(c)}</option>`).join('')}</select></td>
     <td style="${td}width:70px">${inp(p.codigo, 'precioVenta', 'type="text" inputmode="decimal"')}</td>
     <td style="${td}width:64px">${inp(p.codigo, 'costo', 'type="text" inputmode="decimal"')}</td>
     <td style="${td}width:64px">${inp(p.codigo, 'precioOferta', 'type="text" inputmode="decimal" title="0 = sin oferta"')}</td>
     <td style="${td}width:84px">${inp(p.codigo, 'fechaOferta', 'type="text" placeholder="dd/mm/aaaa"')}</td>
     <td style="${td}width:46px">${inp(p.codigo, 'cantPack', 'type="number" min="0"')}</td>
     <td style="${td}width:64px">${inp(p.codigo, 'precioPack', 'type="text" inputmode="decimal"')}</td>
-    <td style="${td}text-align:center"><input type="checkbox" ${cm_val(p.codigo, 'siempreDisp') === '1' ? 'checked' : ''} onchange="cm_set('${p.codigo}','siempreDisp',this.checked?'1':'0')" title="Siempre disponible (vender aunque no haya stock)"></td>
+    <td style="${td}text-align:center"><input type="checkbox" ${cm_val(p.codigo, 'siempreDisp') === '1' ? 'checked' : ''} onchange="cm_set(${esc(JSON.stringify(String(p.codigo)))},'siempreDisp',this.checked?'1':'0')" title="Siempre disponible (vender aunque no haya stock)"></td>
     <td style="${td}width:54px">${inp(p.codigo, 'stock', 'type="number" min="0"')}</td>
   </tr>`).join('');
   document.getElementById('cmasivo-body').innerHTML = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#faf6f0;z-index:1">
@@ -1403,7 +1403,7 @@ function renderPedidosPendientes(peds) {
   card.style.display = '';
   if (cnt) cnt.textContent = _pedidosPendientes.length;
   list.innerHTML = _pedidosPendientes.map(p => {
-    const lineas = (p.items || []).map(it => `${it.cantidad}× ${esc(it.nombre)}`).join(' · ');
+    const lineas = (p.items || []).map(it => `${esc(it.cantidad)}× ${esc(it.nombre)}`).join(' · ');
     return `<div style="border:1px solid #e8e0d5;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fbf9f6">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
         <div><div style="font-weight:800;color:#5c3d1e">👤 ${esc(p.cliente)}</div>
@@ -1411,12 +1411,12 @@ function renderPedidosPendientes(peds) {
         <div style="font-size:0.68rem;color:#b0a290;margin-top:2px">${p.telefono ? '📱 ' + esc(p.telefono) + ' · ' : ''}${p.vid ? '🔑 aparato ' + esc(String(p.vid).slice(0, 6)) : ''}</div></div>
         <div style="font-weight:800;color:#2c6fad;white-space:nowrap">${fmt(p.total)}</div>
       </div>
-      <div style="font-size:0.8rem;color:#6b5a48;margin:6px 0">${(p.items || []).map(it => `${it.cantidad}× ${esc(it.nombre)} — ${fmt(it.precio)} c/u = <b>${fmt((it.precio || 0) * (it.cantidad || 1))}</b>`).join('<br>')}</div>
+      <div style="font-size:0.8rem;color:#6b5a48;margin:6px 0">${(p.items || []).map(it => `${esc(it.cantidad)}× ${esc(it.nombre)} — ${fmt(it.precio)} c/u = <b>${fmt((it.precio || 0) * (it.cantidad || 1))}</b>`).join('<br>')}</div>
       <div style="display:flex;gap:8px">
-        <button onclick="cobrarPedido('${p.pedidoId}')" style="flex:1;background:#1a7a3c;color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-family:inherit;cursor:pointer">💵 Cobrar</button>
-        <button onclick="remitoTiendaCandy('${p.pedidoId}')" title="Remito para el cliente (imprimir o WhatsApp)" style="background:#fdf1f7;color:#c050a0;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">🧾</button>
-        <button onclick="editarPedidoTienda('${p.pedidoId}')" title="Editar cantidades y precios" style="background:#eef4fb;color:#2c6fad;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✏️</button>
-        <button onclick="cancelarPedido('${p.pedidoId}')" style="background:#f3e6e6;color:#c0392b;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✕</button>
+        <button onclick="cobrarPedido(${esc(JSON.stringify(String(p.pedidoId)))})" style="flex:1;background:#1a7a3c;color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-family:inherit;cursor:pointer">💵 Cobrar</button>
+        <button onclick="remitoTiendaCandy(${esc(JSON.stringify(String(p.pedidoId)))})" title="Remito para el cliente (imprimir o WhatsApp)" style="background:#fdf1f7;color:#c050a0;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">🧾</button>
+        <button onclick="editarPedidoTienda(${esc(JSON.stringify(String(p.pedidoId)))})" title="Editar cantidades y precios" style="background:#eef4fb;color:#2c6fad;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✏️</button>
+        <button onclick="cancelarPedido(${esc(JSON.stringify(String(p.pedidoId)))})" style="background:#f3e6e6;color:#c0392b;border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-family:inherit;cursor:pointer">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -1442,15 +1442,15 @@ function _renderEped(cliente) {
     ${_epedItems.map((it, i) => `<div style="border:1px solid #eee;border-radius:10px;padding:8px 10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
         <div style="font-weight:700;font-size:0.84rem;flex:1;min-width:0">${esc(it.nombre)}</div>
-        <button onclick="_epedItems.splice(${i},1);_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" style="background:none;border:none;color:#c0392b;font-size:1rem;cursor:pointer">✕</button>
+        <button onclick="_epedItems.splice(${i},1);_renderEped(${esc(JSON.stringify(String(cliente || '')))})" style="background:none;border:none;color:#c0392b;font-size:1rem;cursor:pointer">✕</button>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
         <div style="display:flex;align-items:center;gap:6px">
-          <button onclick="_epedItems[${i}].cantidad=Math.max(1,_epedItems[${i}].cantidad-1);_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" style="width:30px;height:30px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:1rem;cursor:pointer">−</button>
+          <button onclick="_epedItems[${i}].cantidad=Math.max(1,_epedItems[${i}].cantidad-1);_renderEped(${esc(JSON.stringify(String(cliente || '')))})" style="width:30px;height:30px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:1rem;cursor:pointer">−</button>
           <b style="min-width:22px;text-align:center">${it.cantidad}</b>
-          <button onclick="_epedItems[${i}].cantidad+=1;_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" style="width:30px;height:30px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:1rem;cursor:pointer">+</button>
+          <button onclick="_epedItems[${i}].cantidad+=1;_renderEped(${esc(JSON.stringify(String(cliente || '')))})" style="width:30px;height:30px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:1rem;cursor:pointer">+</button>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;font-size:0.82rem">$ <input type="number" min="0" value="${it.precio}" onchange="_epedItems[${i}].precio=parseFloat(this.value)||0;_renderEped('${esc(cliente || '').replace(/'/g, "\\'")}')" onclick="this.select()" style="width:80px;padding:6px;border:1.5px solid #ddd;border-radius:8px;text-align:right;font-size:0.84rem"> c/u</div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:0.82rem">$ <input type="number" min="0" value="${it.precio}" onchange="_epedItems[${i}].precio=parseFloat(this.value)||0;_renderEped(${esc(JSON.stringify(String(cliente || '')))})" onclick="this.select()" style="width:80px;padding:6px;border:1.5px solid #ddd;border-radius:8px;text-align:right;font-size:0.84rem"> c/u</div>
         <div style="margin-left:auto;font-weight:700;font-size:0.84rem;color:#2c6fad">${fmt(it.precio * it.cantidad)}</div>
       </div>
     </div>`).join('')}
@@ -1505,12 +1505,12 @@ function remitoTiendaCandy(pedidoId) {
   const filas = (p.items || []).map(it => {
     const foto = _fotoCandyRemito(it.codigo);
     const img = foto
-      ? `<img src="${foto}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;display:block" onerror="this.style.display='none'">`
+      ? `<img src="${esc(foto)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;display:block" onerror="this.style.display='none'">`
       : `<div style="width:44px;height:44px;border-radius:8px;background:#fdf1f7;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🍬</div>`;
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid #f7e8f0;width:56px">${img}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f7e8f0;font-weight:600;font-size:0.86rem;color:#3d2233">${esc(it.nombre)}</td>
-      <td style="padding:8px 8px;border-bottom:1px solid #f7e8f0;text-align:center;font-size:0.84rem;color:#555">${it.cantidad}</td>
+      <td style="padding:8px 8px;border-bottom:1px solid #f7e8f0;text-align:center;font-size:0.84rem;color:#555">${esc(it.cantidad)}</td>
       <td style="padding:8px 8px;border-bottom:1px solid #f7e8f0;text-align:right;font-size:0.84rem;color:#555;white-space:nowrap">${fmt(it.precio)}</td>
       <td style="padding:8px 14px;border-bottom:1px solid #f7e8f0;text-align:right;font-size:0.84rem;font-weight:700;color:#3d2233;white-space:nowrap">${fmt((it.precio || 0) * (it.cantidad || 1))}</td>
     </tr>`;
@@ -1605,8 +1605,8 @@ async function renderAvisos() {
       : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0ebe3">
       <div style="min-width:0">
-        <div style="font-weight:700;font-size:0.88rem;color:#5c3d1e">🍬 ${a.producto}</div>
-        <div style="font-size:0.74rem;color:#aaa">👤 ${a.cliente || 'cliente'}${tel ? ' · ' + a.telefono : ''}${tel && _telDudosoAviso(a.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 5px;border-radius:4px">⚠️ dudoso</span>' : ''} · ${a.fecha}</div>
+        <div style="font-weight:700;font-size:0.88rem;color:#5c3d1e">🍬 ${esc(a.producto)}</div>
+        <div style="font-size:0.74rem;color:#aaa">👤 ${esc(a.cliente || 'cliente')}${tel ? ' · ' + esc(a.telefono) : ''}${tel && _telDudosoAviso(a.telefono) ? ' <span style="background:#fde8e8;color:#c0392b;font-size:0.62rem;font-weight:700;padding:1px 5px;border-radius:4px">⚠️ dudoso</span>' : ''} · ${esc(a.fecha)}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         ${waBtn}
@@ -1683,7 +1683,7 @@ async function abrirComi() {
   if (!catalogoCache.length) catalogoCache = await api('getCatalogoHijos') || [];
   const sel = document.getElementById('comi-producto');
   sel.innerHTML = catalogoCache.map(p =>
-    `<option value="${p.codigo}" data-nombre="${(p.nombre||'').replace(/"/g,'')}" data-costo="${p.costo||0}">${p.nombre}</option>`).join('');
+    `<option value="${esc(p.codigo)}" data-nombre="${esc((p.nombre||'').replace(/"/g,''))}" data-costo="${esc(p.costo||0)}">${esc(p.nombre)}</option>`).join('');
   document.getElementById('comi-cantidad').value = 1;
   document.getElementById('comi-nota').value = '';
   setMotivoComi('comido');
@@ -1725,8 +1725,8 @@ function renderConsumoHoy(consumo) {
     const icon = c.motivo === 'regalo' ? '🎁' : (c.motivo === 'otro' ? '📝' : '😋');
     const cst = (parseFloat(c.costo) || 0) * (parseInt(c.cantidad) || 0);
     return `<div style="display:flex;justify-content:space-between;font-size:0.84rem;color:#666;padding:4px 0;border-top:1px solid #f0ebe3">
-      <span>${icon} ${c.cantidad}× ${c.producto}${c.nota ? ` <span style="color:#aaa">· ${c.nota}</span>` : ''}</span>
-      <span style="color:#bbb;font-size:0.78rem">${cst > 0 ? '−' + fmt(cst) : (c.hora || '')}</span></div>`;
+      <span>${icon} ${esc(c.cantidad)}× ${esc(c.producto)}${c.nota ? ` <span style="color:#aaa">· ${esc(c.nota)}</span>` : ''}</span>
+      <span style="color:#bbb;font-size:0.78rem">${cst > 0 ? '−' + fmt(cst) : esc(c.hora || '')}</span></div>`;
   }).join('');
   el.innerHTML = `<div style="font-size:0.78rem;font-weight:700;color:#e05c2a;padding:4px 0">😋 Comido / regalado hoy: −${fmt(totalCosto)} <span style="font-weight:400;color:#aaa">(se descuenta de la ganancia)</span></div>${filas}`;
 }
@@ -1808,19 +1808,19 @@ function renderDashboard(ventas, catalogo, deudores = [], consumo = []) {
     const cambioTag = vuelto ? '<span class="badge" style="background:#e8f0ff;color:#2c6fad;margin-left:6px">💰 CAMBIO</span>'
       : (debe ? '<span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:6px">⚠️ DEBE</span>' : '');
     const lineasHtml = g.lineas.map(l => {
-      const cod = (l.codigo||'').replace(/'/g,"\\'");
-      const nom = (l.producto||'').replace(/'/g,"\\'");
-      const cli = (l.cliente||'').replace(/'/g,"\\'");
+      const cod = esc(JSON.stringify(String(l.codigo||'')));
+      const nom = esc(JSON.stringify(String(l.producto||'')));
+      const cli = esc(JSON.stringify(String(l.cliente||'')));
       const botones = l.rowIndex ? `
-        <button onclick="abrirEditarVenta(${l.rowIndex},'${cod}','${nom}',${l.cantidad||1},${l.precio||0},'${cli}',${l.saldoPendiente||0})" title="Corregir" style="background:none;border:none;cursor:pointer;font-size:0.95rem;padding:0 1px">✏️</button>
+        <button onclick="abrirEditarVenta(${l.rowIndex},${cod},${nom},${l.cantidad||1},${l.precio||0},${cli},${l.saldoPendiente||0})" title="Corregir" style="background:none;border:none;cursor:pointer;font-size:0.95rem;padding:0 1px">✏️</button>
         <button onclick="eliminarVenta(${l.rowIndex})" title="Borrar" style="background:none;border:none;cursor:pointer;font-size:0.95rem;padding:0 1px">🗑️</button>` : '';
       return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;color:#555;padding:1px 0">
-        <span>${l.cantidad}x ${l.producto}</span>
+        <span>${esc(l.cantidad)}x ${esc(l.producto)}</span>
         <span style="display:flex;align-items:center;gap:4px"><span>${fmt(l.subtotal)}</span>${botones}</span></div>`;
     }).join('');
     return `<div style="border:1px solid #ece6da;border-left:5px solid ${borde};border-radius:12px;padding:12px 14px;margin-bottom:16px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid #f0ebe3">
-        <div style="font-size:1.02rem;font-weight:800;color:${borde}">👤 ${g.cliente}${cambioTag}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${g.hora}</span></div>
+        <div style="font-size:1.02rem;font-weight:800;color:${borde}">👤 ${esc(g.cliente)}${cambioTag}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${esc(g.hora)}</span></div>
         <div style="text-align:right"><div style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</div>${g.gan>0?`<div style="font-size:0.75rem;color:#2e8b57">+${fmt(g.gan)}</div>`:''}</div>
       </div>
       ${lineasHtml}
@@ -1853,15 +1853,15 @@ function ajustarStockRapido(cod) {
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px';
     ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
   ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:18px;max-width:330px;width:100%">
-    <div style="font-weight:800;font-size:1rem;margin-bottom:2px">📦 Stock de ${p.nombre}</div>
+    <div style="font-weight:800;font-size:1rem;margin-bottom:2px">📦 Stock de ${esc(p.nombre)}</div>
     <div style="font-size:0.72rem;color:#999;margin-bottom:14px">Cantidad en el depósito</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
       <button onclick="_stkRapDelta(-1)" style="width:46px;height:46px;border-radius:12px;border:1.5px solid #e0d5c9;background:#fff;font-size:1.5rem;font-weight:800;cursor:pointer">−</button>
-      <input id="stock-rapido-input" type="number" min="0" value="${p.stock || 0}" style="flex:1;text-align:center;padding:11px;border:2px solid #2e8b57;border-radius:12px;font-size:1.3rem;font-weight:800;box-sizing:border-box">
+      <input id="stock-rapido-input" type="number" min="0" value="${esc(p.stock || 0)}" style="flex:1;text-align:center;padding:11px;border:2px solid #2e8b57;border-radius:12px;font-size:1.3rem;font-weight:800;box-sizing:border-box">
       <button onclick="_stkRapDelta(1)" style="width:46px;height:46px;border-radius:12px;border:1.5px solid #e0d5c9;background:#fff;font-size:1.5rem;font-weight:800;cursor:pointer">+</button>
     </div>
     <div style="display:flex;gap:8px">
-      <button onclick="_guardarStockRapido('${cod.replace(/'/g, "\\'")}')" style="flex:1;padding:12px;background:#2e8b57;color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">Guardar</button>
+      <button onclick="_guardarStockRapido(${esc(JSON.stringify(cod))})" style="flex:1;padding:12px;background:#2e8b57;color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">Guardar</button>
       <button onclick="document.getElementById('stock-rapido-ov').remove()" style="padding:12px 16px;background:#eee;border:none;border-radius:12px;font-weight:700;cursor:pointer">✕</button>
     </div>
   </div>`;
@@ -1893,9 +1893,9 @@ function _renderFotosFaltantes() {
   const lista = _candySinFoto();
   const filas = lista.map(p => `<div id="ff-row-${(p.codigo || '').replace(/[^a-zA-Z0-9]/g, '')}" style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid #eee">
       <div style="width:42px;height:42px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">📦</div>
-      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.68rem;color:#999">${p.codigo}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div><div style="font-size:0.68rem;color:#999">${esc(p.codigo)}</div></div>
       <label style="background:#b14cff;color:#fff;font-weight:700;font-size:0.78rem;padding:8px 12px;border-radius:10px;cursor:pointer;white-space:nowrap">📷 Subir
-        <input type="file" accept="image/*" style="display:none" onchange="_subirFotoFaltante('${(p.codigo || '').replace(/'/g, "\\'")}', this)">
+        <input type="file" accept="image/*" style="display:none" onchange="_subirFotoFaltante(${esc(JSON.stringify(p.codigo || ''))}, this)">
       </label>
     </div>`).join('');
   ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:460px;width:100%;max-height:86vh;display:flex;flex-direction:column">
@@ -1980,7 +1980,7 @@ function _poblarFiltroCatPanel() {
   const sel = document.getElementById('cat-filtro-cat'); if (!sel) return;
   const cats = [...new Set(catalogoCache.map(p => p.categoria || 'Varios'))].sort((a, b) => (a === 'Varios' ? 1 : 0) - (b === 'Varios' ? 1 : 0) || a.localeCompare(b));
   const cur = sel.value;
-  sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+  sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${esc(c)}</option>`).join('');
   if (cats.includes(cur)) sel.value = cur;
 }
 
@@ -1991,14 +1991,14 @@ function renderCatalogo(catalogo) {
     const esShuk = p.origen === 'shuk';
     const gan = (p.precioVenta || 0) - (p.costo || 0);
     const fotoHtml = p.foto
-      ? `<div class="cat-foto"><img src="${fotoCS(p.foto, 200)}" style="object-fit:contain;background:#fff" onerror="this.parentElement.innerHTML='📦'"></div>`
+      ? `<div class="cat-foto"><img src="${esc(fotoCS(p.foto, 200))}" style="object-fit:contain;background:#fff" onerror="this.parentElement.innerHTML='📦'"></div>`
       : `<div class="cat-foto">📦</div>`;
     const badge = esShuk ? `<span style="background:#ffe0f0;color:#b14cff;font-size:0.62rem;font-weight:800;padding:1px 6px;border-radius:6px;margin-right:4px">🛍️ Shuk</span>` : '';
     // Los de Shuk son VIVOS (no se editan acá); solo se pueden quitar del catálogo de Candy.
     const accion = esShuk
-      ? `<button class="btn-edit" title="Quitar de Candy" onclick="quitarShukDeCandy('${(p.codigo||'').replace('shuk:','')}')">✕</button>`
-      : `<button class="btn-edit" onclick='editarProducto(${JSON.stringify(p)})'>✏️</button>`;
-    const catTxt = (p.categoria && p.categoria !== 'Varios') ? ` · 🏷️ ${p.categoria}` : '';
+      ? `<button class="btn-edit" title="Quitar de Candy" onclick="quitarShukDeCandy(${esc(JSON.stringify((p.codigo||'').replace('shuk:','')))})">✕</button>`
+      : `<button class="btn-edit" onclick='editarProducto(${esc(JSON.stringify(p))})'>✏️</button>`;
+    const catTxt = (p.categoria && p.categoria !== 'Varios') ? ` · 🏷️ ${esc(p.categoria)}` : '';
     const promoTxt = !esShuk ? (
       (p.precioOferta > 0 ? ` · <span style="color:#e53935;font-weight:700">🔥 ${fmt(p.precioOferta)}</span>` : '') +
       (p.cantPack > 0 && p.precioPack > 0 ? ` · <span style="color:#e07b00;font-weight:700">🎁 x${p.cantPack}</span>` : '')
@@ -2007,12 +2007,12 @@ function renderCatalogo(catalogo) {
     // El stock de los propios se ajusta al toque; los de Shuk son vivos (stock de Shuk, no se toca acá).
     const stockHtml = esShuk
       ? `<span style="color:${stockColor};font-weight:700">📦 ${p.stock || 0}</span>`
-      : `<span onclick="event.stopPropagation();ajustarStockRapido('${(p.codigo || '').replace(/'/g, "\\'")}')" style="color:${stockColor};font-weight:700;cursor:pointer;border-bottom:1px dashed ${stockColor}">📦 ${p.stock || 0} ✏️</span>`;
+      : `<span onclick="event.stopPropagation();ajustarStockRapido(${esc(JSON.stringify(p.codigo || ''))})" style="color:${stockColor};font-weight:700;cursor:pointer;border-bottom:1px dashed ${stockColor}">📦 ${p.stock || 0} ✏️</span>`;
     return `<div class="cat-item">
       ${fotoHtml}
       <div class="cat-info">
-        <div class="cat-name">${badge}${p.nombre}</div>
-        <div class="cat-code">${p.codigo} · ${stockHtml}${catTxt}${promoTxt}</div>
+        <div class="cat-name">${badge}${esc(p.nombre)}</div>
+        <div class="cat-code">${esc(p.codigo)} · ${stockHtml}${catTxt}${promoTxt}</div>
       </div>
       <div class="cat-prices">
         <div class="cat-price">${fmt(p.precioVenta)}</div>
@@ -2088,15 +2088,15 @@ function _renderImpShuk() {
     const duenoTag = (p.dueno || '') === 'Jony'
       ? '<span style="background:#fff3d6;color:#b8860b;font-size:0.56rem;font-weight:800;padding:0 4px;border-radius:5px">Jony</span>'
       : '<span style="background:#ffe0f0;color:#c2389a;font-size:0.56rem;font-weight:800;padding:0 4px;border-radius:5px">Miri</span>';
-    return `<div onclick="toggleImpShuk('${p.id}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
+    return `<div onclick="toggleImpShuk(${esc(JSON.stringify(p.id))}, this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
       <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
-      ${src ? `<img src="${src}" style="width:38px;height:38px;object-fit:contain;background:#f5f5f5;border-radius:6px" onerror="this.outerHTML='<div style=&quot;width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center&quot;>🍬</div>'">` : '<div style="width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      ${src ? `<img src="${esc(src)}" style="width:38px;height:38px;object-fit:contain;background:#f5f5f5;border-radius:6px" onerror="this.outerHTML='<div style=&quot;width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center&quot;>🍬</div>'">` : '<div style="width:38px;height:38px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:0.85rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${duenoTag} ${p.nombre} ${oculto ? '<span style="color:#b8860b;font-size:0.6rem">🙈</span>' : ''}</div>
+        <div style="font-weight:700;font-size:0.85rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${duenoTag} ${esc(p.nombre)} ${oculto ? '<span style="color:#b8860b;font-size:0.6rem">🙈</span>' : ''}</div>
         <div style="font-size:0.68rem;color:#999">$${p.precioMin || 0} · 📦 ${p.stock || 0}${(p.upp || 1) > 1 ? ' × ' + p.upp + ' u/paq' : ''}</div>
       </div>
       ${on ? `<input type="number" min="0" value="${_impShukPrecios[p.id] || ''}" placeholder="$${p.precioMin || 0}" title="Precio POR UNIDAD en Candy (vacío = precio del Shuk)"
-        onclick="event.stopPropagation()" onchange="event.stopPropagation(); setPrecioImpShuk('${p.id}', this.value)"
+        onclick="event.stopPropagation()" onchange="event.stopPropagation(); setPrecioImpShuk(${esc(JSON.stringify(p.id))}, this.value)"
         style="width:74px;padding:5px 6px;border:1.5px solid #d8cbe8;border-radius:8px;font-size:0.76rem;text-align:right">` : ''}
     </div>`;
   }).join('');
@@ -2150,11 +2150,11 @@ function _renderOrganizarCat() {
   const filas = lista.map(p => {
     const on = !!_orgCatSel[p.codigo];
     const src = p.foto ? fotoCS(p.foto, 120) : '';
-    const cat = (p.categoria && p.categoria !== 'Varios') ? `🏷️ ${p.categoria}` : '<span style="color:#c0392b">sin categoría</span>';
-    return `<div onclick="_toggleOrgCat('${(p.codigo || '').replace(/'/g, "\\'")}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
+    const cat = (p.categoria && p.categoria !== 'Varios') ? `🏷️ ${esc(p.categoria)}` : '<span style="color:#c0392b">sin categoría</span>';
+    return `<div onclick="_toggleOrgCat(${esc(JSON.stringify(p.codigo || ''))}, this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#f0fff4' : '#fff'}">
       <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
-      ${src ? `<img src="${src}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
-      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.66rem;color:#999">${cat}</div></div>
+      ${src ? `<img src="${esc(src)}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div><div style="font-size:0.66rem;color:#999">${cat}</div></div>
     </div>`;
   }).join('');
   ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column">
@@ -2164,8 +2164,8 @@ function _renderOrganizarCat() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button onclick="_orgCatTodos()" style="background:none;border:none;color:#2e8b57;font-weight:700;cursor:pointer;font-size:0.74rem">Seleccionar todos</button><span id="org-cat-count" style="font-size:0.72rem;color:#888">${nSel} elegidos</span></div>
     <div style="overflow:auto;flex:1;border:1px solid #f0f0f0;border-radius:10px;min-height:120px">${filas || '<div class="empty">Sin productos propios</div>'}</div>
     ${(() => { const cats = [...new Set((catalogoCache || []).map(p => (p.categoria || '').trim()).filter(c => c && c !== 'Varios'))].sort((a, b) => a.localeCompare(b)); return `<div style="font-size:0.74rem;color:#555;margin-top:10px;font-weight:700">Tocá una categoría para usarla, o el ✏️ para corregir su nombre. O escribí una NUEVA abajo 👇</div>${cats.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">${cats.map(c => `<span style="display:inline-flex;align-items:center;border:1.5px solid #cfe8d6;background:#f0fff4;border-radius:14px;overflow:hidden">
-      <button type="button" onclick="document.getElementById('org-cat-input').value='${c.replace(/'/g, "\\'")}'" style="padding:5px 4px 5px 11px;border:none;background:none;color:#2e8b57;font-weight:700;font-size:0.75rem;cursor:pointer">${c}</button>
-      <button type="button" onclick="_renombrarCat('${c.replace(/'/g, "\\'")}')" title="Renombrar" style="padding:5px 8px 5px 3px;border:none;background:none;cursor:pointer;font-size:0.72rem">✏️</button>
+      <button type="button" onclick="document.getElementById('org-cat-input').value=${esc(JSON.stringify(c))}" style="padding:5px 4px 5px 11px;border:none;background:none;color:#2e8b57;font-weight:700;font-size:0.75rem;cursor:pointer">${esc(c)}</button>
+      <button type="button" onclick="_renombrarCat(${esc(JSON.stringify(c))})" title="Renombrar" style="padding:5px 8px 5px 3px;border:none;background:none;cursor:pointer;font-size:0.72rem">✏️</button>
     </span>`).join('')}</div>` : '<div style="font-size:0.7rem;color:#bbb;margin-top:4px">(todavía no tenés ninguna — escribí la primera abajo)</div>'}`; })()}
     <input id="org-cat-input" placeholder="✍️ Escribí la categoría (ej: Galletitas)" style="width:100%;padding:10px 11px;border:2px solid #2e8b57;border-radius:10px;font-size:0.9rem;box-sizing:border-box;margin-top:6px">
     <div style="display:flex;gap:6px;margin-top:8px">
@@ -2195,10 +2195,10 @@ function _renombrarCat(cat) {
     ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
   ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:18px;max-width:340px;width:100%">
     <div style="font-weight:800;font-size:1rem;margin-bottom:3px">✏️ Renombrar categoría</div>
-    <div style="font-size:0.72rem;color:#999;margin-bottom:12px">Se corrige en todos los productos de "<b>${cat}</b>".</div>
+    <div style="font-size:0.72rem;color:#999;margin-bottom:12px">Se corrige en todos los productos de "<b>${esc(cat)}</b>".</div>
     <input id="renom-cat-input" value="${cat.replace(/"/g, '&quot;')}" style="width:100%;padding:11px;border:2px solid #2e8b57;border-radius:12px;font-size:1rem;box-sizing:border-box;margin-bottom:14px">
     <div style="display:flex;gap:8px">
-      <button onclick="_guardarRenombreCat('${cat.replace(/'/g, "\\'")}')" style="flex:1;padding:12px;background:#2e8b57;color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">Guardar</button>
+      <button onclick="_guardarRenombreCat(${esc(JSON.stringify(cat))})" style="flex:1;padding:12px;background:#2e8b57;color:#fff;border:none;border-radius:12px;font-weight:800;cursor:pointer">Guardar</button>
       <button onclick="document.getElementById('renom-cat-ov').remove()" style="padding:12px 16px;background:#eee;border:none;border-radius:12px;font-weight:700;cursor:pointer">✕</button>
     </div>
   </div>`;
@@ -2271,12 +2271,12 @@ function _ccatFilasHtml() {
   return lista.map(p => {
     const on = !!_catCandySel[p.codigo];
     const src = p.foto ? fotoCS(p.foto, 120) : '';
-    return `<div onclick="_toggleCatCandy('${(p.codigo || '').replace(/'/g, "\\'")}', this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#fcf3e3' : '#fff'}">
+    return `<div onclick="_toggleCatCandy(${esc(JSON.stringify(p.codigo || ''))}, this)" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;background:${on ? '#fcf3e3' : '#fff'}">
       <div style="width:22px;text-align:center;font-size:1.1rem">${on ? '✅' : '⬜'}</div>
-      ${src ? `<img src="${src}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
-      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div><div style="font-size:0.68rem;color:#999">${fmt(p.precioVenta)}</div></div>
+      ${src ? `<img src="${esc(src)}" style="width:36px;height:36px;object-fit:contain;background:#f5f5f5;border-radius:6px">` : '<div style="width:36px;height:36px;background:#f5f5f5;border-radius:6px;display:flex;align-items:center;justify-content:center">🍬</div>'}
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.83rem;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div><div style="font-size:0.68rem;color:#999">${fmt(p.precioVenta)}</div></div>
       <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:2px;flex-shrink:0" title="Descuento de este producto (pisa el general)">
-        <input type="number" min="0" max="100" value="${_catCandyDescProd[p.codigo] !== undefined ? _catCandyDescProd[p.codigo] : ''}" oninput="_ccatSetDescProd('${(p.codigo || '').replace(/'/g, "\\'")}', this.value)" placeholder="${_catCandyDescGeneral || '%'}" style="width:42px;padding:4px;border:1.5px solid #e0d5c9;border-radius:6px;font-size:0.72rem;text-align:center">
+        <input type="number" min="0" max="100" value="${_catCandyDescProd[p.codigo] !== undefined ? _catCandyDescProd[p.codigo] : ''}" oninput="_ccatSetDescProd(${esc(JSON.stringify(p.codigo || ''))}, this.value)" placeholder="${_catCandyDescGeneral || '%'}" style="width:42px;padding:4px;border:1.5px solid #e0d5c9;border-radius:6px;font-size:0.72rem;text-align:center">
         <span style="font-size:0.66rem;color:#aaa">%</span>
       </div>
     </div>`;
@@ -2343,7 +2343,7 @@ function _armarCatCandyDoc() {
   const sel = (catalogoCache || []).filter(p => _catCandySel[p.codigo]);
   const titulo = (document.getElementById('armar-cat-titulo')?.value || '').trim() || 'Catálogo';
   const hoy = new Date().toLocaleDateString('es-AR');
-  const foto = p => p.foto ? `<img src="${fotoCS(p.foto, 1000)}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;background:#faf8f5">🍬</div>`;
+  const foto = p => p.foto ? `<img src="${esc(fotoCS(p.foto, 1000))}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:contain;background:#faf8f5">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;background:#faf8f5">🍬</div>`;
   const precioHtml = p => { const d = _ccatPrecioDesc(p); if (d.txt) return d.txt; return `<span style="text-decoration:line-through;color:#bbb;font-size:0.82em">${d.orig}</span> <span style="color:#c0392b">${d.nuevo}</span> <span style="background:#fde8e8;color:#c0392b;font-size:0.58em;font-weight:800;padding:1px 4px;border-radius:4px;vertical-align:middle">-${d.pct}%</span>`; };
   let cuerpo = '';
   if (_catCandyLayout === 'grilla') {
@@ -2598,8 +2598,8 @@ function renderCopiarFotoCandy() {
   const q = (document.getElementById('cfoto-buscar').value || '').toLowerCase().trim();
   const items = catalogoCache.filter(p => p.foto && (!q || (p.nombre || '').toLowerCase().includes(q)));
   document.getElementById('cfoto-list').innerHTML = items.length ? items.map(p => `
-    <div onclick="elegirFotoCandy('${String(p.codigo).replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f5f1ea;cursor:pointer">
-      <img src="${p.foto}" style="width:38px;height:38px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.visibility='hidden'">
+    <div onclick="elegirFotoCandy(${esc(JSON.stringify(String(p.codigo)))})" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f5f1ea;cursor:pointer">
+      <img src="${esc(p.foto)}" style="width:38px;height:38px;object-fit:contain;background:#f5f0e8;border-radius:8px" onerror="this.style.visibility='hidden'">
       <span style="font-size:0.82rem">${escCM(p.nombre)}</span>
     </div>`).join('') : '<div class="empty">Sin productos con foto</div>';
 }
@@ -2607,7 +2607,7 @@ function elegirFotoCandy(codigo) {
   const p = catalogoCache.find(x => x.codigo === codigo);
   if (!p || !p.foto) return;
   fotoUrl = p.foto;
-  document.getElementById('foto-preview').innerHTML = `<img src="${fotoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
+  document.getElementById('foto-preview').innerHTML = `<img src="${esc(fotoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
   document.getElementById('foto-status').textContent = '✓ foto copiada de ' + p.nombre;
   document.getElementById('cfoto-overlay').style.display = 'none';
 }
@@ -2645,11 +2645,11 @@ function pk_render() {
   document.getElementById('pkfoto-list').innerHTML = items.map(p => {
     const c = _pkSel[p.codigo] || 0;
     return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f1ea">
-      <img src="${p.foto}" style="width:34px;height:34px;object-fit:contain;background:#f5f0e8;border-radius:7px">
+      <img src="${esc(p.foto)}" style="width:34px;height:34px;object-fit:contain;background:#f5f0e8;border-radius:7px">
       <span style="flex:1;font-size:0.8rem;${c ? 'font-weight:800' : ''}">${escCM(p.nombre)}</span>
-      <button onclick="pk_qty('${String(p.codigo).replace(/'/g, "\\'")}',-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
+      <button onclick="pk_qty(${esc(JSON.stringify(String(p.codigo)))},-1)" style="width:26px;height:26px;border:none;background:#f0e9df;border-radius:7px;font-weight:800;cursor:pointer">−</button>
       <b style="min-width:16px;text-align:center;font-size:0.85rem">${c || ''}</b>
-      <button onclick="pk_qty('${String(p.codigo).replace(/'/g, "\\'")}',1)" style="width:26px;height:26px;border:none;background:#ffe7c2;border-radius:7px;font-weight:800;cursor:pointer">+</button>
+      <button onclick="pk_qty(${esc(JSON.stringify(String(p.codigo)))},1)" style="width:26px;height:26px;border:none;background:#ffe7c2;border-radius:7px;font-weight:800;cursor:pointer">+</button>
     </div>`;
   }).join('') || '<div class="empty">Sin productos con foto</div>';
 }
@@ -2817,7 +2817,7 @@ async function subirFoto(input) {
 function previewFoto(url) {
   const prev = document.getElementById('foto-preview');
   fotoUrl = url || '';
-  prev.innerHTML = url ? `<img src="${url}" onerror="this.parentElement.innerHTML='📦'">` : '📦';
+  prev.innerHTML = url ? `<img src="${esc(url)}" onerror="this.parentElement.innerHTML='📦'">` : '📦';
 }
 
 function actualizarGananciaPreview() {
@@ -2974,12 +2974,12 @@ function renderFlyerGrid() {
   document.getElementById('flyer-prod-grid').innerHTML = catalogoCache.map(p => {
     const sel = !!fSel[p.codigo];
     const img = p.foto
-      ? `<img src="${fotoCS(p.foto, 400)}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
+      ? `<img src="${esc(fotoCS(p.foto, 400))}" style="width:100%;height:110px;object-fit:contain;background:#fff;border-radius:10px">`
       : `<div style="height:110px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:#f0ebe3;border-radius:10px">🍬</div>`;
-    return `<div onclick="toggleFlyerProd('${p.codigo}')" style="cursor:pointer;border:2.5px solid ${sel ? '#7b2ff7' : '#eee4d8'};border-radius:14px;padding:6px;background:${sel ? '#f6efff' : '#fff'};position:relative">
+    return `<div onclick="toggleFlyerProd(${esc(JSON.stringify(String(p.codigo)))})" style="cursor:pointer;border:2.5px solid ${sel ? '#7b2ff7' : '#eee4d8'};border-radius:14px;padding:6px;background:${sel ? '#f6efff' : '#fff'};position:relative">
       ${sel ? '<div style="position:absolute;top:4px;right:4px;background:#7b2ff7;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;z-index:1">✓</div>' : ''}
       ${img}
-      <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${p.nombre}</div>
+      <div style="font-size:0.7rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2d1a0a">${esc(p.nombre)}</div>
       <div style="font-size:0.68rem;color:#8b5e3c;font-weight:700">${fmt(p.precioVenta)}</div>
     </div>`;
   }).join('');
@@ -3086,12 +3086,13 @@ function renderFlyerOpciones() {
   const prods = catalogoCache.filter(p => fSel[p.codigo]);
   document.getElementById('flyer-extras').innerHTML = prods.map(p => {
     const ex = fExtras[p.codigo] || {};
+    const cj = esc(JSON.stringify(String(p.codigo)));   // código como literal JS seguro dentro del atributo
     return `<div style="display:grid;grid-template-columns:1fr 110px 96px;gap:6px;align-items:center;margin-bottom:6px">
-      <div style="font-size:0.8rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</div>
-      <select onchange="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].badge=this.value" style="padding:8px 4px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem;background:#fff">
+      <div style="font-size:0.8rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</div>
+      <select onchange="fExtras[${cj}]=fExtras[${cj}]||{};fExtras[${cj}].badge=this.value" style="padding:8px 4px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem;background:#fff">
         ${BADGES.map(b => `<option value="${b}" ${ex.badge === b ? 'selected' : ''}>${b || 'Etiqueta...'}</option>`).join('')}
       </select>
-      <input type="number" placeholder="$ promo" value="${ex.promo || ''}" oninput="fExtras['${p.codigo}']=fExtras['${p.codigo}']||{};fExtras['${p.codigo}'].promo=parseFloat(this.value)||0" style="padding:8px 6px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem">
+      <input type="number" placeholder="$ promo" value="${esc(ex.promo || '')}" oninput="fExtras[${cj}]=fExtras[${cj}]||{};fExtras[${cj}].promo=parseFloat(this.value)||0" style="padding:8px 6px;border:1.5px solid #e0d5c9;border-radius:8px;font-size:0.74rem">
     </div>`;
   }).join('');
 }
@@ -3485,15 +3486,15 @@ function renderFlyers() {
   }
   el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">' + lista.map(f => `
     <div style="border:1.5px solid #eee4d8;border-radius:14px;overflow:hidden;background:#fff">
-      <img src="${f.url.replace('/upload/', '/upload/w_400/')}" style="width:100%;display:block;cursor:pointer" onclick="window.open('${f.url}','_blank')">
+      <img src="${esc(f.url.replace('/upload/', '/upload/w_400/'))}" style="width:100%;display:block;cursor:pointer" onclick="window.open(${esc(JSON.stringify(/^https?:\/\//i.test(f.url) ? f.url : ''))},'_blank')">
       <div style="padding:8px 10px">
-        <div style="font-size:0.74rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo || 'Flyer'}</div>
-        <div style="font-size:0.66rem;color:#aaa">${f.fecha}${f.fondo ? ' · 🪄' : ''}</div>
+        <div style="font-size:0.74rem;font-weight:700;color:#2d1a0a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.titulo || 'Flyer')}</div>
+        <div style="font-size:0.66rem;color:#aaa">${esc(f.fecha)}${f.fondo ? ' · 🪄' : ''}</div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button onclick="descargarFlyerUrl('${f.url}')" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
-          <button onclick="regenerarFlyer('${f.id}')" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
-          <button onclick="archivarFlyerUI('${f.id}','${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
-          <button onclick="eliminarFlyerUI('${f.id}')" title="Eliminar" style="flex:1;padding:6px 0;background:#fde8e8;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🗑️</button>
+          <button onclick="descargarFlyerUrl(${esc(JSON.stringify(/^https?:\/\//i.test(f.url) ? f.url : ''))})" title="Descargar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">⬇️</button>
+          <button onclick="regenerarFlyer(${esc(JSON.stringify(f.id))})" title="Regenerar" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🔄</button>
+          <button onclick="archivarFlyerUI(${esc(JSON.stringify(f.id))},'${f.estado === 'archivado' ? 'activo' : 'archivado'}')" title="${f.estado === 'archivado' ? 'Restaurar' : 'Archivar'}" style="flex:1;padding:6px 0;background:#f0ebe3;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">${f.estado === 'archivado' ? '↩️' : '🗂️'}</button>
+          <button onclick="eliminarFlyerUI(${esc(JSON.stringify(f.id))})" title="Eliminar" style="flex:1;padding:6px 0;background:#fde8e8;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">🗑️</button>
         </div>
       </div>
     </div>`).join('') + '</div>';
@@ -3611,7 +3612,7 @@ function fotoCS(url, w) {
 function fotoMini(codigo, size) {
   const p = catalogoCache.find(x => x.codigo === codigo);
   return p?.foto
-    ? `<img src="${fotoCS(p.foto, 200)}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0" onerror="this.outerHTML='📦'">`
+    ? `<img src="${esc(fotoCS(p.foto, 200))}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0" onerror="this.outerHTML='📦'">`
     : `<div style="width:${size}px;height:${size}px;border-radius:8px;background:#f0ebe3;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.55)}px;flex-shrink:0">📦</div>`;
 }
 
@@ -3637,8 +3638,8 @@ function renderDeposito(deposito) {
     const nombre = d.nombre;
     return `<div class="stock-chip" style="gap:8px">
       ${fotoMini(d.codigo, 30)}
-      <div class="stock-chip-nombre" style="flex:1;min-width:0;max-width:none" title="${nombre}">${nombre}</div>
-      <button onclick="verMovsDeposito('${String(d.codigo).replace(/'/g, "\\'")}', '${String(nombre).replace(/'/g, "\\'")}')" title="Ver movimientos (de dónde vino / a dónde fue)" style="border:none;background:#f0e9df;border-radius:8px;padding:4px 7px;cursor:pointer;font-size:0.8rem">🔍</button>
+      <div class="stock-chip-nombre" style="flex:1;min-width:0;max-width:none" title="${esc(nombre)}">${esc(nombre)}</div>
+      <button onclick="verMovsDeposito(${esc(JSON.stringify(String(d.codigo)))}, ${esc(JSON.stringify(String(nombre)))})" title="Ver movimientos (de dónde vino / a dónde fue)" style="border:none;background:#f0e9df;border-radius:8px;padding:4px 7px;cursor:pointer;font-size:0.8rem">🔍</button>
       <div class="stock-chip-nums">
         <div class="stock-chip-rest">${d.cantidad}</div>
         <div class="stock-chip-sub">unidades</div>
@@ -3691,7 +3692,7 @@ function renderCompras(compras) {
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f5f1ea">
         ${fotoMini(it.codigo, 34)}
         <div style="flex:1;min-width:0">
-          <div style="font-size:0.85rem;font-weight:600;color:#2d1a0a">${it.nombre || it.codigo}</div>
+          <div style="font-size:0.85rem;font-weight:600;color:#2d1a0a">${esc(it.nombre || it.codigo)}</div>
           <div style="font-size:0.75rem;color:#aaa">${it.cantidad} × ${fmt(it.costoUnit)}</div>
         </div>
         <div style="font-weight:700;font-size:0.85rem;color:#5c3d1e">${fmt(it.cantidad * it.costoUnit)}</div>
@@ -3700,13 +3701,13 @@ function renderCompras(compras) {
     return `<div>
       <div class="item-row" style="cursor:pointer" onclick="toggleCompra(${i})">
         <div class="item-info">
-          <div class="item-name">🧾 ${c.proveedor || 'Sin proveedor'}</div>
-          <div class="item-sub">${c.fecha} · ${n} producto${n === 1 ? '' : 's'} <span id="compra-flecha-${i}">▸</span></div>
+          <div class="item-name">🧾 ${esc(c.proveedor || 'Sin proveedor')}</div>
+          <div class="item-sub">${esc(c.fecha)} · ${n} producto${n === 1 ? '' : 's'} <span id="compra-flecha-${i}">▸</span></div>
         </div>
         <div class="item-right"><div class="item-price">${fmt(c.total)}</div></div>
       </div>
       <div id="compra-det-${i}" style="display:none;padding:2px 0 10px 4px">${det}
-        <button onclick="borrarCompra('${(c.id || '').replace(/'/g, "\\'")}')" style="margin-top:8px;width:100%;padding:8px;background:#fde8e8;border:none;border-radius:10px;color:#c0392b;font-size:0.82rem;font-weight:700;cursor:pointer">🗑️ Borrar esta compra (resta del depósito y recalcula costo)</button>
+        <button onclick="borrarCompra(${esc(JSON.stringify(c.id || ''))})" style="margin-top:8px;width:100%;padding:8px;background:#fde8e8;border:none;border-radius:10px;color:#c0392b;font-size:0.82rem;font-weight:700;cursor:pointer">🗑️ Borrar esta compra (resta del depósito y recalcula costo)</button>
       </div>
     </div>`;
   }).join('');
@@ -3736,10 +3737,10 @@ function renderProveedores(provs) {
   }
   el.innerHTML = provs.map(pv => `<div class="item-row">
     <div class="item-info">
-      <div class="item-name">${pv.nombre}</div>
-      ${pv.telefono || pv.notas ? `<div class="item-sub">${[pv.telefono, pv.notas].filter(Boolean).join(' · ')}</div>` : ''}
+      <div class="item-name">${esc(pv.nombre)}</div>
+      ${pv.telefono || pv.notas ? `<div class="item-sub">${esc([pv.telefono, pv.notas].filter(Boolean).join(' · '))}</div>` : ''}
     </div>
-    <button class="btn-edit" onclick='editarProveedor(${JSON.stringify(pv)})'>✏️</button>
+    <button class="btn-edit" onclick='editarProveedor(${esc(JSON.stringify(pv))})'>✏️</button>
   </div>`).join('');
 }
 
@@ -3803,7 +3804,7 @@ function abrirModalCompra() {
   }
   if (!catalogoCache.length) { alert('Primero agregá productos al catálogo'); return; }
   document.getElementById('cp-proveedor').innerHTML =
-    proveedoresCache.map(pv => `<option value="${pv.id}">${pv.nombre}</option>`).join('');
+    proveedoresCache.map(pv => `<option value="${esc(pv.id)}">${esc(pv.nombre)}</option>`).join('');
   cpItems = [{ codigo:'', cantidad:'', costoUnit:'' }];
   renderCpItems();
   document.getElementById('compra-overlay').classList.add('open');
@@ -3814,7 +3815,7 @@ function cerrarModalCompra() { document.getElementById('compra-overlay').classLi
 function renderCpItems() {
   const opciones = [...catalogoCache]
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-    .map(p => `<option value="${p.codigo}">${p.nombre}</option>`).join('');
+    .map(p => `<option value="${esc(p.codigo)}">${esc(p.nombre)}</option>`).join('');
   document.getElementById('cp-items').innerHTML = cpItems.map((it, i) => `
     <div style="display:grid;grid-template-columns:1fr 62px 80px 26px;gap:6px;margin-bottom:8px;align-items:center">
       <select class="form-input" style="background:#fff;padding:9px 6px;font-size:0.82rem" onchange="cpSet(${i},'codigo',this.value)">
@@ -3999,12 +4000,12 @@ function _sugerenciasDe(q) {
 function _sugerenciasHtml(q, onPick) {
   const s = _sugerenciasDe(q);
   return s.deudores.map(d => `
-    <div class="cliente-sug" onclick="${onPick}('${d.cliente.replace(/'/g,"\\'")}')">
-      <span>${d.cliente}</span>
+    <div class="cliente-sug" onclick="${onPick}(${esc(JSON.stringify(d.cliente))})">
+      <span>${esc(d.cliente)}</span>
       ${d.saldo > 0 ? `<span class="cliente-sug-deuda">Debe ${fmt(d.saldo)}</span>` : d.saldo < 0 ? `<span style="font-size:0.75rem;color:#2c6fad">Le debemos ${fmt(-d.saldo)}</span>` : '<span style="font-size:0.75rem;color:#aaa">Sin deuda</span>'}
     </div>`).join('') + s.resto.map(n => `
-    <div class="cliente-sug" onclick="${onPick}('${n.replace(/'/g,"\\'")}')">
-      <span>${n}</span><span style="font-size:0.75rem;color:#aaa">Cliente conocido</span>
+    <div class="cliente-sug" onclick="${onPick}(${esc(JSON.stringify(n))})">
+      <span>${esc(n)}</span><span style="font-size:0.75rem;color:#aaa">Cliente conocido</span>
     </div>`).join('');
 }
 function renderSugerencias(q) {
@@ -4028,8 +4029,8 @@ function mostrarDeudaCliente() {
   const d = nom ? deudoresCache.find(x => normCli(x.cliente) === n) : null;
   const nombre = d ? d.cliente : nom;          // mostrar la grafía linda del cliente
   const saldo = d ? d.saldo : 0;
-  if (saldo > 0) el.innerHTML = `<div style="background:#fde8e8;border:1px solid #f0c0c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#c0392b">⚠️ ${nombre} ya debe ${fmt(saldo)}</div>`;
-  else if (saldo < 0) el.innerHTML = `<div style="background:#e8f0ff;border:1px solid #c0d0f0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#2c6fad">💰 A ${nombre} le debemos ${fmt(-saldo)} de cambio</div>`;
+  if (saldo > 0) el.innerHTML = `<div style="background:#fde8e8;border:1px solid #f0c0c0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#c0392b">⚠️ ${esc(nombre)} ya debe ${fmt(saldo)}</div>`;
+  else if (saldo < 0) el.innerHTML = `<div style="background:#e8f0ff;border:1px solid #c0d0f0;border-radius:10px;padding:8px 12px;font-size:0.85rem;font-weight:700;color:#2c6fad">💰 A ${esc(nombre)} le debemos ${fmt(-saldo)} de cambio</div>`;
   else el.innerHTML = '';
 }
 // #2 — En vivo, mientras tipea cuánto pagó: qué queda debiendo (y el total con lo de antes).
@@ -4062,15 +4063,15 @@ function renderProductosGrid() {
   const el = document.getElementById('w-productos-grid');
   el.innerHTML = catalogoCache.map(p => {
     const sel = wProductosSeleccionados[p.codigo];
-    const fotoEl = p.foto ? `<div class="prod-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
-    return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleProducto('${p.codigo}')">
+    const fotoEl = p.foto ? `<div class="prod-foto"><img src="${esc(p.foto)}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
+    return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleProducto(${esc(JSON.stringify(String(p.codigo)))})">
       ${sel ? `<div class="prod-badge" style="display:flex;gap:2px;width:auto;border-radius:12px;padding:0 6px;min-width:22px">
         <span>${sel.qty}</span>
-        <span onclick="quitarProducto('${p.codigo}',event)" style="opacity:0.7;font-size:0.7rem;margin-left:2px">✕</span>
+        <span onclick="quitarProducto(${esc(JSON.stringify(String(p.codigo)))},event)" style="opacity:0.7;font-size:0.7rem;margin-left:2px">✕</span>
       </div>` : ''}
       ${fotoEl}
       <div class="prod-info">
-        <div class="prod-nombre">${p.nombre}</div>
+        <div class="prod-nombre">${esc(p.nombre)}</div>
         <div class="prod-precio">${fmt(p.precioVenta)}</div>
       </div>
     </div>`;
@@ -4105,22 +4106,22 @@ function renderCantidades() {
   const el = document.getElementById('w-cantidades');
   el.innerHTML = Object.values(wProductosSeleccionados).map(p => {
     const precio = p.precioCustom ?? p.precioVenta;
-    const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
+    const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${esc(p.foto)}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
     return `<div class="qty-item">
       ${fotoEl}
       <div class="qty-item-info">
         <div class="qty-item-nombre" style="display:flex;align-items:center;justify-content:space-between">
-          <span>${p.nombre}</span>
-          <button onclick="eliminarDeQty('${p.codigo}')" style="background:none;border:none;font-size:1rem;color:#ccc;cursor:pointer;padding:0 2px;line-height:1" title="Quitar">✕</button>
+          <span>${esc(p.nombre)}</span>
+          <button onclick="eliminarDeQty(${esc(JSON.stringify(String(p.codigo)))})" style="background:none;border:none;font-size:1rem;color:#ccc;cursor:pointer;padding:0 2px;line-height:1" title="Quitar">✕</button>
         </div>
         <div class="qty-item-precio" style="display:flex;align-items:center;gap:4px">
-          <input class="precio-edit" inputmode="numeric" value="${precio}" onchange="setPrecioWizard('${p.codigo}',this.value)" onclick="this.select()"> c/u
+          <input class="precio-edit" inputmode="numeric" value="${esc(precio)}" onchange="setPrecioWizard(${esc(JSON.stringify(String(p.codigo)))},this.value)" onclick="this.select()"> c/u
         </div>
       </div>
       <div class="qty-control">
-        <button class="qty-btn-big" onclick="cambiarQtyWizard('${p.codigo}',-1)">−</button>
-        <span class="qty-num-big" id="wqty-${p.codigo}">${p.qty}</span>
-        <button class="qty-btn-big" onclick="cambiarQtyWizard('${p.codigo}',1)">+</button>
+        <button class="qty-btn-big" onclick="cambiarQtyWizard(${esc(JSON.stringify(String(p.codigo)))},-1)">−</button>
+        <span class="qty-num-big" id="wqty-${esc(String(p.codigo))}">${p.qty}</span>
+        <button class="qty-btn-big" onclick="cambiarQtyWizard(${esc(JSON.stringify(String(p.codigo)))},1)">+</button>
       </div>
     </div>`;
   }).join('');
@@ -4279,7 +4280,7 @@ function renderDeudores(deudores) {
     meDebenEllos.map((d, i) => `
     <div class="deudor-card">
       <div class="deudor-header" onclick="toggleDeudor('d${i}')">
-        <div><div class="deudor-nombre">👤 ${d.cliente}</div></div>
+        <div><div class="deudor-nombre">👤 ${esc(d.cliente)}</div></div>
         <div style="text-align:right">
           <div class="deudor-monto">${fmt(d.saldo)}</div>
           <div style="font-size:0.7rem;color:#aaa">Tocá para cobrar ↓</div>
@@ -4288,8 +4289,8 @@ function renderDeudores(deudores) {
       <div class="deudor-detail" id="dd-d${i}">
         <div class="deudor-cobrar">
           <input class="cobrar-input" type="number" id="cobrar-monto-d${i}" placeholder="¿Cuánto pagó?">
-          <button class="btn-cobrar" onclick="cobrarDeuda('${d.cliente.replace(/'/g,"\\'")}', 'd${i}', this)">Cobrar</button>
-          <button class="btn-cobrar-todo" onclick="cobrarTodo('${d.cliente.replace(/'/g,"\\'")}', 'd${i}', this)">Todo</button>
+          <button class="btn-cobrar" onclick="cobrarDeuda(${esc(JSON.stringify(d.cliente))}, 'd${i}', this)">Cobrar</button>
+          <button class="btn-cobrar-todo" onclick="cobrarTodo(${esc(JSON.stringify(d.cliente))}, 'd${i}', this)">Todo</button>
         </div>
         <div style="display:flex;gap:10px;align-items:center;margin-top:7px;font-size:0.74rem;flex-wrap:wrap">
           <span style="color:#999">Pagó con:</span>
@@ -4297,7 +4298,7 @@ function renderDeudores(deudores) {
           <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input type="radio" name="metodo-d${i}" value="mp"> 📱 MP</label>
           <label style="cursor:pointer;display:flex;align-items:center;gap:3px;margin-left:auto;color:#c0392b" title="Si pagó un poco menos y querés cerrar la cuenta"><input type="checkbox" id="perdon-d${i}"> 🎁 saldar el resto</label>
         </div>
-        <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
+        <button class="btn-historial" onclick="verHistorial(${esc(JSON.stringify(d.cliente))})">📋 Ver historial completo</button>
       </div>
     </div>`).join('');
   }
@@ -4313,7 +4314,7 @@ function renderDeudores(deudores) {
     leDeboYo.map((d, i) => `
     <div class="deudor-card deudor-card-vuelto">
       <div class="deudor-header" onclick="toggleDeudor('v${i}')">
-        <div><div class="deudor-nombre">👤 ${d.cliente}</div></div>
+        <div><div class="deudor-nombre">👤 ${esc(d.cliente)}</div></div>
         <div style="text-align:right">
           <div class="deudor-monto-cambio">${fmt(Math.abs(d.saldo))}</div>
           <div style="font-size:0.7rem;color:#aaa">Tocá para saldar ↓</div>
@@ -4323,10 +4324,10 @@ function renderDeudores(deudores) {
         <div style="font-size:0.85rem;color:#666;padding:6px 0">Le debés ${fmt(Math.abs(d.saldo))} de cambio</div>
         <div class="deudor-cobrar">
           <input class="cobrar-input" type="number" id="vuelto-monto-v${i}" placeholder="¿Cuánto le diste?">
-          <button class="btn-cobrar" style="background:linear-gradient(135deg,#2c6fad,#1a4f8a)" onclick="darVueltoParcial('${d.cliente.replace(/'/g,"\\'")}', 'v${i}', this)">Dar</button>
-          <button class="btn-cobrar-todo" style="color:#2c6fad;border-color:#b2cce8" onclick="pagarVuelto('${d.cliente.replace(/'/g,"\\'")}', this)">Todo</button>
+          <button class="btn-cobrar" style="background:linear-gradient(135deg,#2c6fad,#1a4f8a)" onclick="darVueltoParcial(${esc(JSON.stringify(d.cliente))}, 'v${i}', this)">Dar</button>
+          <button class="btn-cobrar-todo" style="color:#2c6fad;border-color:#b2cce8" onclick="pagarVuelto(${esc(JSON.stringify(d.cliente))}, this)">Todo</button>
         </div>
-        <button class="btn-historial" onclick="verHistorial('${d.cliente.replace(/'/g,"\\'")}')">📋 Ver historial completo</button>
+        <button class="btn-historial" onclick="verHistorial(${esc(JSON.stringify(d.cliente))})">📋 Ver historial completo</button>
       </div>
     </div>`).join('');
   }
@@ -4497,14 +4498,14 @@ function seleccionarRCliente(nombre) {
 function renderRProductosGrid() {
   document.getElementById('rw-productos-grid').innerHTML = catalogoCache.map(p => {
     const sel = rProductosSeleccionados[p.codigo];
-    const fotoEl = p.foto ? `<div class="prod-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
-    return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleRProducto('${p.codigo}')">
+    const fotoEl = p.foto ? `<div class="prod-foto"><img src="${esc(p.foto)}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="prod-foto">🍬</div>`;
+    return `<div class="prod-card ${sel ? 'selected' : ''}" style="position:relative" onclick="toggleRProducto(${esc(JSON.stringify(String(p.codigo)))})">
       ${sel ? `<div class="prod-badge" style="display:flex;gap:2px;width:auto;border-radius:12px;padding:0 6px;min-width:22px">
         <span>${sel.qty}</span>
-        <span onclick="quitarRProducto('${p.codigo}',event)" style="opacity:0.7;font-size:0.7rem;margin-left:2px">✕</span>
+        <span onclick="quitarRProducto(${esc(JSON.stringify(String(p.codigo)))},event)" style="opacity:0.7;font-size:0.7rem;margin-left:2px">✕</span>
       </div>` : ''}
       ${fotoEl}
-      <div class="prod-info"><div class="prod-nombre">${p.nombre}</div><div class="prod-precio">${fmt(p.precioVenta)}</div></div>
+      <div class="prod-info"><div class="prod-nombre">${esc(p.nombre)}</div><div class="prod-precio">${fmt(p.precioVenta)}</div></div>
     </div>`;
   }).join('');
 }
@@ -4531,22 +4532,22 @@ function setPrecioRWizard(codigo, val) {
 function renderRCantidades() {
   document.getElementById('rw-cantidades').innerHTML = Object.values(rProductosSeleccionados).map(p => {
     const precio = p.precioCustom ?? p.precioVenta;
-    const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${p.foto}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
+    const fotoEl = p.foto ? `<div class="qty-item-foto"><img src="${esc(p.foto)}" onerror="this.parentElement.innerHTML='🍬'"></div>` : `<div class="qty-item-foto">🍬</div>`;
     return `<div class="qty-item">
       ${fotoEl}
       <div class="qty-item-info">
         <div class="qty-item-nombre" style="display:flex;align-items:center;justify-content:space-between">
-          <span>${p.nombre}</span>
-          <button onclick="eliminarDeRQty('${p.codigo}')" style="background:none;border:none;font-size:1rem;color:#ccc;cursor:pointer;padding:0 2px;line-height:1" title="Quitar">✕</button>
+          <span>${esc(p.nombre)}</span>
+          <button onclick="eliminarDeRQty(${esc(JSON.stringify(String(p.codigo)))})" style="background:none;border:none;font-size:1rem;color:#ccc;cursor:pointer;padding:0 2px;line-height:1" title="Quitar">✕</button>
         </div>
         <div class="qty-item-precio" style="display:flex;align-items:center;gap:4px">
-          <input class="precio-edit" inputmode="numeric" value="${precio}" onchange="setPrecioRWizard('${p.codigo}',this.value)" onclick="this.select()"> c/u
+          <input class="precio-edit" inputmode="numeric" value="${esc(precio)}" onchange="setPrecioRWizard(${esc(JSON.stringify(String(p.codigo)))},this.value)" onclick="this.select()"> c/u
         </div>
       </div>
       <div class="qty-control">
-        <button class="qty-btn-big" onclick="cambiarRQtyWizard('${p.codigo}',-1)">−</button>
-        <span class="qty-num-big" id="rwqty-${p.codigo}">${p.qty}</span>
-        <button class="qty-btn-big" onclick="cambiarRQtyWizard('${p.codigo}',1)">+</button>
+        <button class="qty-btn-big" onclick="cambiarRQtyWizard(${esc(JSON.stringify(String(p.codigo)))},-1)">−</button>
+        <span class="qty-num-big" id="rwqty-${esc(p.codigo)}">${p.qty}</span>
+        <button class="qty-btn-big" onclick="cambiarRQtyWizard(${esc(JSON.stringify(String(p.codigo)))},1)">+</button>
       </div>
     </div>`;
   }).join('');
@@ -4705,7 +4706,7 @@ function _candyDeudaVivaHtml(movs) {
     vivas.map(d => {
       const parcial = d.resta < d.original - 0.01;
       return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff7ef;border:1px solid #f0d9bf;border-radius:10px;padding:8px 11px;margin-bottom:6px">
-        <div style="min-width:0"><div style="font-size:0.84rem;font-weight:700;color:#5c3d1e">🛍️ ${esc(d.producto || 'Venta')}</div><div style="font-size:0.7rem;color:#aaa">${d.fecha}${parcial ? ' · pagó parte' : ''}</div></div>
+        <div style="min-width:0"><div style="font-size:0.84rem;font-weight:700;color:#5c3d1e">🛍️ ${esc(d.producto || 'Venta')}</div><div style="font-size:0.7rem;color:#aaa">${esc(d.fecha)}${parcial ? ' · pagó parte' : ''}</div></div>
         <div style="text-align:right;white-space:nowrap"><div style="font-weight:800;font-size:0.95rem;color:#e05c2a">${fmt(d.resta)}</div>${parcial ? `<div style="font-size:0.66rem;color:#aaa">de ${fmt(d.original)}</div>` : ''}</div>
       </div>`;
     }).join('') + `</div>`;
@@ -4760,12 +4761,12 @@ function renderHistorialCliente(movs, cliente) {
     const saldada = m.tipo === 'pago' && m.saldoAcum <= 0.01;
     const montoAbs = Math.abs(m.monto);
     const metodoLine = (m.tipo === 'pago' && m.metodo) ? `<span style="font-size:0.68rem;color:#888;margin-left:5px">${m.metodo === 'mp' ? '📱 MP' : '💵 efectivo'}</span>` : '';
-    const prodLine = m.producto ? `<div style="font-size:0.78rem;color:#5c3d1e;font-weight:600;margin-top:3px">🛍️ ${m.producto}</div>` : '';
+    const prodLine = m.producto ? `<div style="font-size:0.78rem;color:#5c3d1e;font-weight:600;margin-top:3px">🛍️ ${esc(m.producto)}</div>` : '';
     return `<div class="mov-row" ${saldada ? 'style="background:#f0faf4;border-radius:12px;padding:2px 0"' : ''}>
       <div>
-        <span class="mov-badge ${t.cls}" ${saldada ? 'style="font-weight:900;letter-spacing:0.03em"' : ''}>${t.label}</span>${metodoLine}
+        <span class="mov-badge ${t.cls}" ${saldada ? 'style="font-weight:900;letter-spacing:0.03em"' : ''}>${esc(t.label)}</span>${metodoLine}
         ${prodLine}
-        <div style="font-size:0.72rem;color:#aaa;margin-top:2px">${m.fecha}</div>
+        <div style="font-size:0.72rem;color:#aaa;margin-top:2px">${esc(m.fecha)}</div>
       </div>
       <div style="text-align:right">
         <div style="font-weight:700;font-size:0.92rem;color:${m.monto > 0 ? '#e05c2a' : '#2e8b57'}">${t.signo}${fmt(montoAbs)}</div>
@@ -4801,8 +4802,8 @@ function _candyExtractoDocHTML() {
     const credito = m.monto < 0;
     const concepto = (m.tipo === 'deuda' ? (m.producto || 'Pedido') : (_candyCajaLbl[m.tipo] || m.tipo));
     return `<tr style="border-bottom:1px solid #eee">
-      <td style="padding:5px 6px;font-size:0.72rem;white-space:nowrap;vertical-align:top">${m.fecha}</td>
-      <td style="padding:5px 6px;font-size:0.74rem;vertical-align:top">${concepto}</td>
+      <td style="padding:5px 6px;font-size:0.72rem;white-space:nowrap;vertical-align:top">${esc(m.fecha)}</td>
+      <td style="padding:5px 6px;font-size:0.74rem;vertical-align:top">${esc(concepto)}</td>
       <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;font-weight:700;color:${credito ? '#1a7a3c' : '#c0392b'}">${credito ? '−' : '+'} ${fmtN(m.monto)}</td>
       <td style="padding:5px 6px;font-size:0.74rem;text-align:right;white-space:nowrap;font-weight:700">${fmtN(m.saldoAcum)}</td>
     </tr>`;
@@ -4816,7 +4817,7 @@ function _candyExtractoDocHTML() {
         <div style="font-size:0.72rem;color:#999">Estado de cuenta</div></div>
       <div style="text-align:right;font-size:0.7rem;color:#999">Emitido<br><b style="color:#444">${d.emitido}</b></div>
     </div>
-    <div style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Cliente: ${d.cliente}</div>
+    <div style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Cliente: ${esc(d.cliente)}</div>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="background:#f5efe6;color:#555">
         <th style="padding:5px 6px;font-size:0.68rem;text-align:left">Fecha</th>
@@ -4925,7 +4926,7 @@ async function abrirEditarVenta(rowIndex, codigo, nombre, cantidad, precio, clie
   }
   const sel = document.getElementById('ev-producto');
   sel.innerHTML = catalogoCache.map(p =>
-    `<option value="${p.codigo}" data-precio="${p.precioVenta||0}" data-nombre="${p.nombre}" ${p.codigo === codigo ? 'selected' : ''}>${p.nombre} · $${(p.precioVenta||0).toLocaleString('es-AR')}</option>`
+    `<option value="${esc(p.codigo)}" data-precio="${p.precioVenta||0}" data-nombre="${esc(p.nombre)}" ${p.codigo === codigo ? 'selected' : ''}>${esc(p.nombre)} · $${(p.precioVenta||0).toLocaleString('es-AR')}</option>`
   ).join('');
   document.getElementById('ev-cantidad').value = cantidad;
   document.getElementById('ev-precio').value = precio;
@@ -5003,11 +5004,11 @@ async function revisarTodoHijos(btn) {
   const cards = dups.map(d => {
     const filas = d.items.map((x, i) => `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #f0ebe3;font-size:0.82rem">
-        <span>${i === 0 ? '🟢 original' : '🟠 copia'} · ${x.cantidad}× ${x.producto} · ${fmt(x.total)}${x.cliente ? ' · 👤 ' + x.cliente : ''}</span>
+        <span>${i === 0 ? '🟢 original' : '🟠 copia'} · ${x.cantidad}× ${esc(x.producto)} · ${fmt(x.total)}${x.cliente ? ' · 👤 ' + esc(x.cliente) : ''}</span>
         ${i === 0 ? '' : `<button onclick="borrarDuplicadoHijo(${x.rowIndex}, this)" style="background:#fde8e8;border:none;border-radius:8px;padding:5px 10px;color:#c0392b;font-weight:700;font-size:0.78rem;cursor:pointer;white-space:nowrap">🗑️ Borrar copia</button>`}
       </div>`).join('');
     return `<div style="background:#fff;border:1.5px solid #f0c896;border-radius:12px;padding:12px;margin-bottom:10px">
-      <div style="font-weight:700;color:#b8860b;font-size:0.85rem">⚠️ ${d.repetidos} copia(s) iguales · ${d.items[0].fecha}</div>
+      <div style="font-weight:700;color:#b8860b;font-size:0.85rem">⚠️ ${d.repetidos} copia(s) iguales · ${esc(d.items[0].fecha)}</div>
       ${filas}
     </div>`;
   }).join('');
@@ -5074,13 +5075,13 @@ function _renderStockLoadList() {
     const disp = (_depoDisp[p.codigo] || 0) + q;   // en depósito quedan _depoDisp; +q porque q ya salió a esta lista
     return `<div class="stock-load-item">
       <div style="min-width:0">
-        <div class="stock-load-nombre">${p.nombre}</div>
+        <div class="stock-load-nombre">${esc(p.nombre)}</div>
         <div class="stock-load-precio">${fmt(p.precioVenta)} · <span style="color:#bbb">depósito: ${disp}</span></div>
       </div>
       <div class="qty-control">
-        <button class="qty-btn-big" onclick="cambiarStockQty('${p.codigo}',-1)">−</button>
-        <input class="qty-num-big" id="sqty-${p.codigo}" type="number" inputmode="numeric" min="0" value="${q}" onchange="setStockQty('${p.codigo}', this.value)" style="width:44px;text-align:center;border:1.5px solid #e6ddcf;border-radius:8px;font-weight:800;font-size:1rem;-moz-appearance:textfield">
-        <button class="qty-btn-big" onclick="cambiarStockQty('${p.codigo}',1)">+</button>
+        <button class="qty-btn-big" onclick="cambiarStockQty(${esc(JSON.stringify(String(p.codigo)))},-1)">−</button>
+        <input class="qty-num-big" id="sqty-${esc(p.codigo)}" type="number" inputmode="numeric" min="0" value="${q}" onchange="setStockQty(${esc(JSON.stringify(String(p.codigo)))}, this.value)" style="width:44px;text-align:center;border:1.5px solid #e6ddcf;border-radius:8px;font-weight:800;font-size:1rem;-moz-appearance:textfield">
+        <button class="qty-btn-big" onclick="cambiarStockQty(${esc(JSON.stringify(String(p.codigo)))},1)">+</button>
       </div>
     </div>`;
   }).join('');
@@ -5170,7 +5171,7 @@ function renderStockRestante(stockDia, ventas, catalogo, consumo = []) {
     const cls = it.restante <= 0 ? 'cero' : (it.restante <= 2 ? 'bajo' : '');
     const pct = it.inicial > 0 ? Math.round((it.restante / it.inicial) * 100) : 0;
     return `<div class="stock-chip">
-      <div class="stock-chip-nombre" title="${it.nombre}">${it.nombre}</div>
+      <div class="stock-chip-nombre" title="${esc(it.nombre)}">${esc(it.nombre)}</div>
       <div class="stock-chip-nums">
         <div class="stock-chip-rest ${cls}">${it.restante === 0 ? '✓' : it.restante}<span class="stock-chip-sub">/${it.inicial}</span></div>
       </div>
@@ -5331,8 +5332,8 @@ function renderHistoria(ventas, porHijo, quien, consumoAll = []) {
     return `<div class="dia-card">
       <div class="dia-header" onclick="toggleDia(${idx})">
         <div style="flex:1;min-width:0">
-          <div class="dia-fecha-label">${diaNom} ${fecha}</div>
-          <div class="dia-resumen">${resumen}</div>
+          <div class="dia-fecha-label">${diaNom} ${esc(fecha)}</div>
+          <div class="dia-resumen">${esc(resumen)}</div>
         </div>
         <div class="dia-nums">
           <div class="dia-vendido-label">${fmt(vendido)}</div>
@@ -5353,15 +5354,15 @@ function renderHistoria(ventas, porHijo, quien, consumoAll = []) {
           return Array.from(grp.values()).map(g => {
             const lineas = g.lineas.map(v => {
               const sub = (v.precio||0)*(v.cantidad||1);
-              const cod = (v.codigo||'').replace(/'/g,"\\'");
-              const nom = (v.producto||'').replace(/'/g,"\\'");
-              const cli = (v.cliente||'').replace(/'/g,"\\'");
+              const cod = esc(JSON.stringify(v.codigo||''));
+              const nom = esc(JSON.stringify(v.producto||''));
+              const cli = esc(JSON.stringify(v.cliente||''));
               return `<div class="item-row" style="padding-left:8px">
-                <div class="item-info"><div class="item-name" style="font-size:0.88rem">${v.cantidad}× ${v.producto}</div></div>
+                <div class="item-info"><div class="item-name" style="font-size:0.88rem">${v.cantidad}× ${esc(v.producto)}</div></div>
                 <div class="item-right">
                   <div class="item-price">${fmt(sub)}</div>
                   <div class="item-actions">
-                    <button class="item-action-btn" onclick="abrirEditarVenta(${v.rowIndex},'${cod}','${nom}',${v.cantidad||1},${v.precio||0},'${cli}',${v.saldoPendiente||0})" title="Editar">✏️</button>
+                    <button class="item-action-btn" onclick="abrirEditarVenta(${v.rowIndex},${cod},${nom},${v.cantidad||1},${v.precio||0},${cli},${v.saldoPendiente||0})" title="Editar">✏️</button>
                     <button class="item-action-btn" onclick="eliminarVenta(${v.rowIndex})" title="Eliminar">🗑️</button>
                   </div>
                 </div>
@@ -5374,7 +5375,7 @@ function renderHistoria(ventas, porHijo, quien, consumoAll = []) {
               : (_debe ? '<span class="badge" style="background:#fde8e8;color:#c0392b;margin-left:6px">⚠️ DEBE</span>' : '');
             return `<div style="border:1px solid #f0ebe3;border-left:4px solid ${_borde};border-radius:10px;margin:12px 0;padding:8px 10px;background:#fff">
               <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0 7px;margin-bottom:4px;border-bottom:1px solid #f0ebe3">
-                <span style="font-size:0.98rem;font-weight:800;color:${_borde}">👤 ${g.cliente}${_badge}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${g.hora}</span></span>
+                <span style="font-size:0.98rem;font-weight:800;color:${_borde}">👤 ${esc(g.cliente)}${_badge}<span style="font-weight:400;color:#bbb;font-size:0.76rem"> · ${esc(g.hora)}</span></span>
                 <span style="font-weight:800;color:#5c3d1e">${fmt(g.total)}</span>
               </div>
               ${lineas}
@@ -5492,7 +5493,7 @@ function renderTotal(meirVentas, iosiVentas, meirStock, iosiStock, meirDeudores,
       else if (sobra > 0)             { sobraStr = sobra; sobraStyle = 'color:#e05c2a;font-weight:700'; }
       else                            { sobraStr = sobra; sobraStyle = 'color:#c00;font-weight:700'; }
       return `<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f5f0e8">
-        <div style="flex:2;font-size:0.87rem;font-weight:600;color:#3d2a12;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nombre}</div>
+        <div style="flex:2;font-size:0.87rem;font-weight:600;color:#3d2a12;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nombre)}</div>
         <div style="flex:1;text-align:center;font-size:0.85rem;color:#888">${llevo || '—'}</div>
         <div style="flex:1;text-align:center;font-size:0.85rem">${vendio || '—'}</div>
         <div style="flex:1;text-align:center;font-size:0.9rem;${sobraStyle}">${sobraStr}</div>

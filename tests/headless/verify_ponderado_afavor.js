@@ -27,7 +27,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     out.cuentaRecep = alerta.includes('tenías 2 a U$S 10.00') && alerta.includes('entraron 3 a U$S 12.94') && alerta.includes('nuevo costo U$S 11.76') && alerta.includes('ponderado');
 
     // ── 2) ESTADO DE CUENTA con crédito → banda verde 💚 ──
-    window._estadoCta = { cliente: 'Sarah Kantor', emitido: '12/07/2026', tel: '', saldoARS: 0, saldoUSD: -12.83,
+    window._estadoCta = { cliente: 'Beto Ejemplo', emitido: '12/07/2026', tel: '', saldoARS: 0, saldoUSD: -12.83,
       movs: [{ ts: 1, fecha: '12/07/2026', tipo: 'pago', concepto: 'Pago a cuenta', ars: 0, usd: 12.83, signo: -1, sA: 0, sU: -12.83 }] };
     _renderEstadoCta();
     const doc = document.getElementById('estadocta-doc');
@@ -38,12 +38,12 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
 
     // ── 3) LISTA DE DEUDORES: Sarah a favor en verde + no cuenta como deudora ──
     const V = [
-      { id: 'P51', nVenta: 51, cliente: 'Sarah Kantor', fecha: '07/07/2026', estado: 'pendiente', tipo: 'Mayorista', productos: '• 1x X — $ 100 c/u = $ 100', totalARS: 100350, totalUSD: 121.15, arsJONY: 100350, arsMyri: 0, usdMyri: 44, usdJONY: 77.15 },
+      { id: 'P51', nVenta: 51, cliente: 'Beto Ejemplo', fecha: '07/07/2026', estado: 'pendiente', tipo: 'Mayorista', productos: '• 1x X — $ 100 c/u = $ 100', totalARS: 100350, totalUSD: 121.15, arsJONY: 100350, arsMyri: 0, usdMyri: 44, usdJONY: 77.15 },
       { id: 'P60', nVenta: 60, cliente: 'Deudor Real', fecha: '10/07/2026', estado: 'pendiente', tipo: 'Mayorista', productos: '• 1x Y — $ 100 c/u = $ 100', totalARS: 50000, totalUSD: 0, arsJONY: 0, arsMyri: 50000, usdMyri: 0, usdJONY: 0 },
     ];
     const P = [
-      { cliente: 'Sarah Kantor', pedidoId: 'P51', fecha: '12/07/2026', montoARS: 100350, montoUSD: 121.15, montoPitz: 100350, montoPitzUsd: 77.15, caja: 'ETF_USD_JONY', tc: 1520 },
-      { cliente: 'Sarah Kantor', pedidoId: '', fecha: '12/07/2026', montoARS: 0, montoUSD: 12.83, montoPitz: 0, montoPitzUsd: 0, caja: 'ETF_USD_JONY', tc: 0 },
+      { cliente: 'Beto Ejemplo', pedidoId: 'P51', fecha: '12/07/2026', montoARS: 100350, montoUSD: 121.15, montoPitz: 100350, montoPitzUsd: 77.15, caja: 'ETF_USD_JONY', tc: 1520 },
+      { cliente: 'Beto Ejemplo', pedidoId: '', fecha: '12/07/2026', montoARS: 0, montoUSD: 12.83, montoPitz: 0, montoPitzUsd: 0, caja: 'ETF_USD_JONY', tc: 0 },
     ];
     const origApi = window.apiGet;
     window.apiGet = async (a) => a === 'ventas' ? V : (a === 'getPagos' ? P : []);
@@ -51,7 +51,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     await renderCuentaCorriente();
     window.apiGet = origApi;
     const cc = document.getElementById('cc-lista').innerHTML;
-    out.sarahVerde = cc.includes('Sarah Kantor') && cc.includes('💚 A favor: U$S 12.83');
+    out.sarahVerde = cc.includes('Beto Ejemplo') && cc.includes('💚 A favor: U$S 12.83');
     out.sinRecordarAFavor = !/Sarah[\s\S]{0,700}?Recordar/.test(cc);
     out.badge = document.getElementById('cc-total-badge').textContent;
     out.badgeSoloDeudores = out.badge.includes('1 deudor');
