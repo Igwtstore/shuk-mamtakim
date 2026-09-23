@@ -38,9 +38,9 @@ const trafico = [
   ev('v_debora', 'carrito', 1, 21, { detalle: 'Chocolate Elite', carrito: JSON.stringify([{ n: 'Chocolate Elite', q: 3, p: 8000 }]), total: 24000 }),
   ev('v_debora', 'checkout', 1, 21, { carrito: JSON.stringify([{ n: 'Chocolate Elite', q: 3, p: 8000 }]), total: 24000 }),
   ev('v_debora', 'visita', 0, 10),
-  // SARAH: se registró con nombre pero compró desde OTRO aparato (el nombre es el puente).
-  ev('v_sarah', 'visita', 2, 12, { nombre: 'Sarah G', telefono: '1155667788' }),
-  ev('v_sarah', 'carrito', 2, 12, { nombre: 'Sarah G', telefono: '1155667788', detalle: 'Bon O Bon', carrito: JSON.stringify([{ n: 'Bon O Bon', q: 2, p: 5000 }]), total: 10000 }),
+  // LÍA: se registró con nombre pero compró desde OTRO aparato (el nombre es el puente).
+  ev('v_lia', 'visita', 2, 12, { nombre: 'Lía G', telefono: '1155667788' }),
+  ev('v_lia', 'carrito', 2, 12, { nombre: 'Lía G', telefono: '1155667788', detalle: 'Bon O Bon', carrito: JSON.stringify([{ n: 'Bon O Bon', q: 2, p: 5000 }]), total: 10000 }),
   // DESCONOCIDO: entró tres días distintos y nunca compró ni dejó nada.
   ev('v_nadie', 'visita', 3, 9), ev('v_nadie', 'visita', 2, 9), ev('v_nadie', 'visita', 1, 9),
   ev('v_nadie', 'busqueda', 1, 9, { detalle: 'halva', total: 0 }),
@@ -83,11 +83,11 @@ const trafico = [
 const ventas = [
   { id: 'P1', fecha: dd(20, 18), cliente: 'Débora Levy', estado: 'entregado', total_ars: 45000, total_usd: 0, vid: 'v_debora', stock_updates: '1:2' },
   { id: 'P2', fecha: dd(9, 18), cliente: 'Débora Levy', estado: 'entregado', total_ars: 100000, total_usd: 0, vid: 'v_debora', stock_updates: '1:1' },
-  { id: 'P3', fecha: dd(30, 18), cliente: 'Sarah G', estado: 'entregado', total_ars: 20000, total_usd: 0, vid: 'v_viejo_de_sarah', stock_updates: '2:1' },
+  { id: 'P3', fecha: dd(30, 18), cliente: 'Lía G', estado: 'entregado', total_ars: 20000, total_usd: 0, vid: 'v_viejo_de_lia', stock_updates: '2:1' },
   { id: 'P4', fecha: dd(1, 16), cliente: 'Iosi M', estado: 'pendiente', total_ars: 12000, total_usd: 0, vid: 'v_compra', stock_updates: '3:2', tipo_cambio: 1400 },
   { id: 'P5', fecha: dd(1, 16), cliente: 'Cancelada', estado: 'cancelado', total_ars: 999999, total_usd: 0, vid: 'v_debora', stock_updates: '1:50' },
 ];
-const clientes = [{ nombre: 'Débora Levy', telefono: '1144556677', tipo: 'Minorista' }, { nombre: 'Sarah G', telefono: '1155667788', tipo: 'Mayorista' }];
+const clientes = [{ nombre: 'Débora Levy', telefono: '1144556677', tipo: 'Minorista' }, { nombre: 'Lía G', telefono: '1155667788', tipo: 'Mayorista' }];
 const productos = [
   { id: '1', nombre: 'Chocolate Elite', stock: 0, activo: true, dueno: 'Jony' },
   { id: '2', nombre: 'Bon O Bon', stock: 40, activo: true, dueno: 'Jony' },
@@ -109,9 +109,9 @@ function run() {
   eq('y cuánto gastó (la venta CANCELADA no suma)', deb.gastadoARS, 145000);
   ok('explica de dónde se supo quién es', deb.comoSeSupo === 'ya compró desde este aparato');
 
-  const sarah = d.visitantes.find(v => v.vid === 'v_sarah');
-  eq('el que compró desde OTRO aparato se reconoce por el nombre', sarah.compras, 1);
-  ok('Sarah queda marcada como clienta', sarah.esCliente === true);
+  const lia = d.visitantes.find(v => v.vid === 'v_lia');
+  eq('el que compró desde OTRO aparato se reconoce por el nombre', lia.compras, 1);
+  ok('Lía queda marcada como clienta', lia.esCliente === true);
 
   const nadie = d.visitantes.find(v => v.vid === 'v_nadie');
   ok('el que de verdad no se sabe quién es, queda sin nombre', !nadie.nombre && !nadie.esCliente);
@@ -123,7 +123,7 @@ function run() {
   eq('los carritos sin cerrar son 6 (el que pidió no cuenta)', d.abandonados.length, 6);
   eq('primero el contactable que ya te compró', d.abandonados[0].nombre, 'Débora Levy');
   const carDeb = d.abandonados.find(a => a.vid === 'v_debora');
-  const carSar = d.abandonados.find(a => a.vid === 'v_sarah');
+  const carSar = d.abandonados.find(a => a.vid === 'v_lia');
   // Ojo: nada de rangos finos acá. El caso usa fechas relativas ("ayer a las 21"), así que
   // las horas exactas cambian según a qué hora se corra el test. Lo estable es la RELACIÓN.
   ok('sabe hace cuántas horas quedó colgado', carDeb.horas > 0 && carDeb.horas < 48);
@@ -178,7 +178,7 @@ function run() {
   ok('y queda marcado como puesto por vos (no como dato de la persona)', bautizado.leDijiste === true);
   eq('explica de dónde salió ese nombre', bautizado.comoSeSupo, 'se lo pusiste vos');
   eq('la nota que anotaste viaja con él', bautizado.nota, 'entra siempre de noche, mira Elite');
-  const real = d.visitantes.find(v => v.vid === 'v_sarah');
+  const real = d.visitantes.find(v => v.vid === 'v_lia');
   ok('a la que dejó su nombre de verdad NO la marca como puesta por vos', real.leDijiste === false);
   ok('el bautizado ahora cuenta como identificado', d.accionable.identificados === 4);
 
@@ -252,7 +252,7 @@ function run() {
   ok('cada día dice qué miraron', d.diasDetalle.some(x => x.top.length > 0));
 
   // ── LOS NÚMEROS DE LA CABECERA ──────────────────────────────────────────────
-  eq('cuenta los identificados', d.accionable.identificados, 4);   // Débora, Sarah, Iosi + el bautizado
+  eq('cuenta los identificados', d.accionable.identificados, 4);   // Débora, Lía, Iosi + el bautizado
   eq('cuenta los que no sabemos quiénes son', d.accionable.anonimos, 6);
   ok('suma los pesos que quedaron en los carritos', d.accionable.oportunidadARS === 34000 + 24000);
 

@@ -413,7 +413,7 @@ async function confirmarCobro(body: any) {
   if (has('comprobante')) { const prevC = (v.comprobante || '').toString().trim(); const nuevoC = P(body, 'comprobante').trim(); patch.comprobante = prevC ? (prevC + '\n' + nuevoC) : nuevoC; }
 
   // ── FECHA DEL COBRO (v3.92/93): cuándo entró la plata DE VERDAD (antes el extracto usaba la
-  // fecha del pedido → "no me coinciden las fechas con el resumen de MP", caso KI TOV #37).
+  // fecha del pedido → "no me coinciden las fechas con el resumen de MP", caso #37).
   // Si el modal manda la fecha elegida (📅), ESA manda (también al re-confirmar). Si no viene,
   // se estampa "ahora" solo la primera vez.
   const fcElegida = P(body, 'fechaCobro').trim();
@@ -968,7 +968,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   };
 
   // ══════════════════════════════════════════════════════════════════════════════
-  //  💵 LA MONEDA DEL CARRITO — caso real (Isi Michan, 27/08): armó un carrito
+  //  💵 LA MONEDA DEL CARRITO — caso real (un cliente, 27/08): armó un carrito
   //  MAYORISTA de U$S 85,50 y la pantalla mostraba "$ 86". El mayorista puede tener
   //  precios en dólares; el minorista SIEMPRE cobra en pesos. Sumarlos como si fueran
   //  la misma plata desordena la prioridad (ese carrito aparecía último) y miente el total.
@@ -3363,7 +3363,7 @@ Deno.serve(async (req) => {
       // 🔒 v4.95: siempre "id:cantidad,id:cantidad" (lo arma la tienda); otra cosa no es un pedido de verdad.
       if (stockUpdates && !/^\d{1,9}:\d{1,6}(,\d{1,9}:\d{1,6})*$/.test(stockUpdates)) return json({ error: 'pedido inválido' });
       const cliente = _libre(Q('cliente'), 120);
-      // 🛡️ Anti-DUPLICADO servidor (caso real #57/#58 isi michan 12/07/2026: mismo carrito
+      // 🛡️ Anti-DUPLICADO servidor (caso real #57/#58, 12/07/2026: mismo carrito
       // reenviado 16 min después con el catálogo viejo en el navegador → sobreventa). Mismo
       // cliente + mismo stock_updates dentro de 30 min y no cancelado = reintento → se devuelve
       // el pedido EXISTENTE como éxito y NO se crea ni descuenta nada.
@@ -3437,9 +3437,9 @@ Deno.serve(async (req) => {
         }));
       }
       await altaClienteAuto(cliente, fila.tipo);
-      // 🔔 Notificación WhatsApp DESDE EL SERVIDOR (caso KI TOV 13/07: la disparaba el navegador
+      // 🔔 Notificación WhatsApp DESDE EL SERVIDOR (caso de un pedido mayorista 13/07: la disparaba el navegador
       // del cliente después de enviar — si cerraba la pestaña, moría y el pedido entraba mudo).
-      // Truncada a 1500 (Twilio rebota >1600, error 21617 — caso Fabio 13/07).
+      // Truncada a 1500 (Twilio rebota >1600, error 21617 — caso real 13/07).
       if (!esCotizacion) {
         try {
           let resu = (fila.productos || '').split(' || ').join('\n');
@@ -3557,7 +3557,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, nuevo: true });
     }
     if (accion === 'notificarPedido') {
-      // Twilio WA corta en 1600 caracteres (error 21617 — caso real: pedido mayorista de Fabio
+      // Twilio WA corta en 1600 caracteres (error 21617 — caso real: un pedido mayorista del
       // 13/07 nunca llegó). Si el resumen es largo, se recorta con aviso: el detalle está en el panel.
       let cuerpoNP = '🛍️ *Nuevo pedido - Shuk Mamtakim*\n\n👤 *' + Q('cliente') + '* (' + Q('tipo') + ')\n\n' + Q('resumen');
       if (cuerpoNP.length > 1500) cuerpoNP = cuerpoNP.slice(0, 1450) + '\n…\n📋 *Pedido largo: el detalle completo está en el panel.*';
@@ -3723,7 +3723,7 @@ Deno.serve(async (req) => {
     // ── ESCRITURAS (POST) ─────────────────────────────────────────────────────
     if (accion === 'registrarPagoCuenta') {
       if (N(body, 'montoARS') === 0 && N(body, 'montoUSD') === 0) return json({ error: 'monto vacío' });
-      // ⚖️ AUTO-REPARTO (2026-07-07, pedido del usuario tras el caso Isi/Dany/KI TOV/Moshe/Yair):
+      // ⚖️ AUTO-REPARTO (2026-07-07, pedido del usuario tras los casos de 5 clientes):
       // "cuando el cliente paga, paga, ya está" — el sistema separa SOLO qué parte del pago es
       // Pitzujim (de Jony) y qué parte golosinas (de Miri), contra la deuda viva FIFO del
       // cliente, con EXACTAMENTE el mismo orden que usan la ganancia (coberturaPagos) y la
@@ -3804,7 +3804,7 @@ Deno.serve(async (req) => {
       // conserva el reparto que ya tenía. Recalcularlo puede DESTRUIRLO: el auto-reparto lo deduce
       // de la deuda viva del cliente, y si esa deuda ya se cubrió (o el reparto se había forzado a
       // mano, como en una devolución) devuelve otra cosa y la plata cambia de dueño sola.
-      // Caso real: pago #130 de Percy (U$S 81 todos de Jony) → al editarle solo la nota, el
+      // Caso real: pago #130 de un cliente (U$S 81 todos de Jony) → al editarle solo la nota, el
       // recálculo lo bajó a 0,03 y los otros 80,97 pasaban a golosinas de Miri.
       const _mismoMonto = Math.abs(mA - (parseFloat(pgE.monto_ars) || 0)) < 0.5
                        && Math.abs(mU - (parseFloat(pgE.monto_usd) || 0)) < 0.005;
@@ -3909,7 +3909,7 @@ Deno.serve(async (req) => {
       if (has('stockDeltas') && estadoPed !== 'cotizacion') {
         for (const u of P(body, 'stockDeltas').split(',')) { const pp = u.split(':'); const pid = pp[0], delta = parseInt(pp[1]) || 0; if (!delta) continue; await moverStockShuk(pid, delta, 'Edición pedido #' + (v.n_venta || '')); }
       }
-      // ⚖️ RECONCILIACIÓN COBRO vs TOTAL (caso #46 Mati Allami): editar un pedido YA COBRADO
+      // ⚖️ RECONCILIACIÓN COBRO vs TOTAL (caso #46): editar un pedido YA COBRADO
       // agregándole productos no puede "cobrarse solo" — lo cubierto real son los tramos, y el
       // faltante queda como tramo Cta Cte → la tarjeta muestra "cobro parcial · debe X", entra
       // a la cuenta corriente y las cajas no se inflan. Se compara POR MONEDA contra el total
@@ -3918,7 +3918,7 @@ Deno.serve(async (req) => {
       let deudaNueva: any = null;
       // 💸 SOBRECOBRO (v4.41): si el total BAJA en un pedido ya cobrado (típico: devolución), la
       // plata real que el cliente ya pagó y ahora no debe quedaba en el aire — nadie avisaba y
-      // la caja mostraba menos de lo que había (caso Percy #33, U$S 81). Se informa al front con
+      // la caja mostraba menos de lo que había (caso #33, U$S 81). Se informa al front con
       // el reparto por dueño y la caja original, para ofrecerlo como saldo a favor.
       let sobrecobro: any = null;
       const realCaja = (c: any) => !!c && !String(c).startsWith('CTA_CTE');
@@ -5444,7 +5444,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, ean: cod, candidatos: cands, ambiguo: cands.length > 1 });
     }
     // 📜 La ÚLTIMA compra de CADA producto, en una sola llamada. Es lo que necesita la orden
-    // de compra para poner "última: KI TOV · 12/07 · U$S 1,80" en cada renglón: pedirlo de a
+    // de compra para poner "última: Rami Levy · 12/07 · U$S 1,80" en cada renglón: pedirlo de a
     // uno para 63 artículos serían 63 requests. Trae solo lo de Jony (misma barrera).
     if (accion === 'ultimasCompras') {
       if (!esJony(usuario)) return json({ error: 'no autorizado' });

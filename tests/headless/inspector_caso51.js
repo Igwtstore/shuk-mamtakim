@@ -23,8 +23,8 @@ async function tick(c) {
     lastPago = Math.max(lastPago, parseInt(p.id));
     const mA = +p.monto_ars || 0, mU = +p.monto_usd || 0, pzA = +p.monto_pitz || 0, pzU = +p.monto_pitz_usd || 0;
     const golA = mA - pzA, golU = mU - pzU;
-    const esSarah = /sarah/i.test(p.cliente || '') || p.pedido_id === VENTA;
-    if (!esSarah) { console.log(`ℹ️ pago #${p.id} de OTRO cliente (${p.cliente}): ${f$(mA)} + ${fU(mU)} → ${p.caja}`); continue; }
+    const esCaso = /clienta test/i.test(p.cliente || '') || p.pedido_id === VENTA;
+    if (!esCaso) { console.log(`ℹ️ pago #${p.id} de OTRO cliente (${p.cliente}): ${f$(mA)} + ${fU(mU)} → ${p.caja}`); continue; }
     console.log(`💰 PAGO #${p.id} — ${p.cliente} → pedido ${p.pedido_id || '(general)'} · caja ${p.caja}${+p.tc > 0 ? ' · TC ' + p.tc : ''}${p.nota ? ' · nota: ' + p.nota : ''}`);
     console.log(`   Monto: ${f$(mA)} + ${fU(mU)} · Reparto guardado → Pitzujim(J): ${f$(pzA)} + ${fU(pzU)} | golosinas(M): ${f$(golA)} + ${fU(golU)}`);
     const checks = [];
@@ -56,7 +56,7 @@ async function tick(c) {
 
 (async () => {
   let c = await conectar();
-  console.log('👁️ INSPECTOR PRENDIDO — Sarah #51: deuda ' + f$(COMP.pitzA) + ' Pitz(J) + ' + fU(COMP.pitzU) + ' Pitz(J) + ' + fU(COMP.golU) + ' golosinas(M). Esperando el pago…');
+  console.log('👁️ INSPECTOR PRENDIDO — caso #51: deuda ' + f$(COMP.pitzA) + ' Pitz(J) + ' + fU(COMP.pitzU) + ' Pitz(J) + ' + fU(COMP.golU) + ' golosinas(M). Esperando el pago…');
   // conexión NUEVA por tick: el pooler corta sockets ociosos y un socket muerto no debe
   // voltear la vigilancia (caída real 2026-07-12)
   try { await c.end(); } catch (e) {}

@@ -31,7 +31,7 @@ const F = new Function(sinTipos([bloque('fotoShukUrl'), constante('fotosShukList
   if (r1.code === 200) console.log(JSON.stringify(JSON.parse(r1.texto), null, 1)); else console.log(JSON.stringify(r1.body).slice(0, 400));
   // 2) Pedido por mensaje
   const act = prods.filter(x => x.activo !== false);
-  const r2 = await llamar(F.pedidoMensajeIA(act, 'hola! mandame 12 klik de leche, 24 barritas pesek zman, 5 pitzujim de maní y 2 alfajores havanna 🙏 soy Sarah', null));
+  const r2 = await llamar(F.pedidoMensajeIA(act, 'hola! mandame 12 klik de leche, 24 barritas pesek zman, 5 pitzujim de maní y 2 alfajores havanna 🙏 soy Ana', null));
   console.log('PEDIDO', r2.code, r2.seg + ' s', 'stop:', r2.body.stop_reason, 'modelo:', r2.body.model);
   if (r2.code === 200) console.log(JSON.stringify(F.limpiarPedidoIA(JSON.parse(r2.texto), act), null, 1)); else console.log(JSON.stringify(r2.body).slice(0, 400));
 })().catch(e => console.log('ERROR', e.message));

@@ -1,6 +1,6 @@
 // v3.66 — "no me cuadra esos U$S 44 de Miri": golosinas U$S cobradas por Jony (caja ETF_USD_JONY)
 // tienen que aparecer como "Jony te debe" en cuenta socios + Mi resumen + caja vista Miri.
-// Datos = caso Sarah real: pago atado (gol U$S 44) + pago general a favor (12,83, SIN dueño aún).
+// Datos = el caso real (una clienta): pago atado (gol U$S 44) + pago general a favor (12,83, SIN dueño aún).
 const { chromium } = require('playwright');
 let ok = 0, fail = 0;
 const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail++; console.log('  ✗ FALLO:', n, x || ''); } };

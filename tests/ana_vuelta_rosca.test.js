@@ -16,7 +16,7 @@ const DATA = {
   dias30: [{ fecha: '2026-08-25', n: 120 }, { fecha: '2026-08-26', n: 147 }],
   topProductos: [{ nombre: 'Chocolate Elite', n: 23 }, { nombre: 'Bon O Bon', n: 19 }],
   conversionPorOrigen: [{ origen: 'whatsapp', visitantes: 80, pedidos: 12, pct: 15 }],
-  leads: [{ nombre: 'Sarah G', telefono: '1155667788', ciudad: 'CABA', origen: 'whatsapp', pagina: 'tienda', visitas: 9, ultima: '26/08/2026 20:10' }],
+  leads: [{ nombre: 'Lía G', telefono: '1155667788', ciudad: 'CABA', origen: 'whatsapp', pagina: 'tienda', visitas: 9, ultima: '26/08/2026 20:10' }],
   abandonados: [
     { vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, gastadoUSD: 0, ultimaCompra: '10/08/2026 18:00', tipoCliente: 'Minorista', comoSeSupo: 'ya compró desde este aparato', apodo: '#VABC', leDijiste: false, nota: '', ciudad: 'CABA', dispositivo: 'celular', origen: 'whatsapp', visitas: 6, etapa: 'checkout', productos: ['Chocolate Elite'], items: [{ n: 'Chocolate Elite', q: 3, p: 8000 }, { n: 'Bon O Bon', q: 2, p: 5000 }], total: 34000, totalUSD: 0, totalEquiv: 34000, mayorista: false, cuando: '26/08 21:15', ts: Date.now() - 3600000, horas: 1, score: 1900 },
     { vid: 'v_may', nombre: 'Ana Prueba', telefono: '1140007919', esCliente: false, compras: 0, gastadoARS: 0, gastadoUSD: 0, ultimaCompra: '', tipoCliente: '', comoSeSupo: 'se registró', ciudad: 'CABA', dispositivo: 'compu', origen: 'directo', visitas: 3, etapa: 'carrito', productos: ['Klik dolar'], items: [{ n: 'Klik dolar', q: 10, p: 8.55, m: 'U$S' }], total: 0, totalUSD: 85.5, totalEquiv: 119700, mayorista: true, cuando: '27/08 11:00', ts: Date.now() - 7200000, horas: 2, score: 900 },

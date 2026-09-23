@@ -36,7 +36,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     out.aFavorNota = html.includes('se descuenta solo de la próxima compra');
     out.aFavorVerde = /background:\s*#e8f5ee[^>]*>\s*<span>💚 SALDO A FAVOR/.test(html.replace(/\n/g, ' '));
 
-    // ── 3) LISTA DE DEUDORES: Sarah a favor en verde + no cuenta como deudora ──
+    // ── 3) LISTA DE DEUDORES: la clienta a favor en verde + no cuenta como deudora ──
     const V = [
       { id: 'P51', nVenta: 51, cliente: 'Beto Ejemplo', fecha: '07/07/2026', estado: 'pendiente', tipo: 'Mayorista', productos: '• 1x X — $ 100 c/u = $ 100', totalARS: 100350, totalUSD: 121.15, arsJONY: 100350, arsMyri: 0, usdMyri: 44, usdJONY: 77.15 },
       { id: 'P60', nVenta: 60, cliente: 'Deudor Real', fecha: '10/07/2026', estado: 'pendiente', tipo: 'Mayorista', productos: '• 1x Y — $ 100 c/u = $ 100', totalARS: 50000, totalUSD: 0, arsJONY: 0, arsMyri: 50000, usdMyri: 0, usdJONY: 0 },
@@ -52,7 +52,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     window.apiGet = origApi;
     const cc = document.getElementById('cc-lista').innerHTML;
     out.sarahVerde = cc.includes('Beto Ejemplo') && cc.includes('💚 A favor: U$S 12.83');
-    out.sinRecordarAFavor = !/Sarah[\s\S]{0,700}?Recordar/.test(cc);
+    out.sinRecordarAFavor = !/Clienta TEST[\s\S]{0,700}?Recordar/.test(cc);
     out.badge = document.getElementById('cc-total-badge').textContent;
     out.badgeSoloDeudores = out.badge.includes('1 deudor');
     out.deudorRealRojo = cc.includes('Deudor Real') && cc.includes('$ 50.000');
@@ -63,9 +63,9 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
   chk('estado de cuenta: banda 💚 SALDO A FAVOR con U$S 12,83 (no "SALDO ACTUAL" rojo)', r.aFavorBanda);
   chk('  · con la nota "se descuenta solo de la próxima compra"', r.aFavorNota);
   chk('  · en verde de verdad', r.aFavorVerde);
-  chk('deudores: Sarah aparece en VERDE con 💚 A favor: U$S 12,83', r.sarahVerde);
+  chk('deudores: la clienta aparece en VERDE con 💚 A favor: U$S 12,83', r.sarahVerde);
   chk('  · sin botón Recordar (no hay nada que reclamarle)', r.sinRecordarAFavor);
-  chk('  · el contador dice "1 deudor" (Sarah no cuenta): ' + r.badge, r.badgeSoloDeudores);
+  chk('  · el contador dice "1 deudor" (la clienta no cuenta): ' + r.badge, r.badgeSoloDeudores);
   chk('  · el deudor real sigue en rojo con su monto', r.deudorRealRojo);
   chk('sin errores JS', errs.length === 0, errs.join(' | '));
 

@@ -17,7 +17,7 @@ const IA = { ok: true, items: [
   { id: 30, nombre: 'Barrita Pesek Zman grande (clasica)', cantidad: 24, pedido: 'barritas pesek zman', dudoso: false, stock: 17 },
   { id: 41, nombre: 'Pitzujim-Mani Sabor Grill', cantidad: 5, pedido: 'pitzujim de maní', dudoso: true, stock: 48 },
   { id: 50, nombre: 'Agotado de siempre', cantidad: 2, pedido: 'los de siempre', dudoso: false, stock: 0 },
-], noEncontrados: ['alfajores havanna'], cliente: 'Sarah', nota: 'Pide que llegue el jueves.' };
+], noEncontrados: ['alfajores havanna'], cliente: 'Ana', nota: 'Pide que llegue el jueves.' };
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
 // Una foto chiquita de verdad (PNG 2×2) para probar la subida.
@@ -96,20 +96,20 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR
   ok('la caja "✨ Armar el pedido con IA" está arriba de Cargar pedido manual', await pg3.evaluate(() => { const c = document.getElementById('pia-caja'); return !!c && c.innerText.includes('Armar el pedido con IA'); }));
   await pg3.evaluate(() => armarPedidoConIA());
   ok('sin mensaje ni foto no manda nada', pedidosIA.length === 0);
-  await pg3.evaluate(() => { document.getElementById('pia-texto').value = 'hola! mandame 12 klik de leche, 24 barritas pesek zman y 5 pitzujim de maní 🙏 soy Sarah'; });   // el panel está oculto en esta prueba
+  await pg3.evaluate(() => { document.getElementById('pia-texto').value = 'hola! mandame 12 klik de leche, 24 barritas pesek zman y 5 pitzujim de maní 🙏 soy Ana'; });   // el panel está oculto en esta prueba
   await pg3.setInputFiles('#pia-foto', { name: 'lista.png', mimeType: 'image/png', buffer: PNG });
   ok('la foto se achica y queda lista para mandar (JPG)', await hasta(async () => pg3.evaluate(() => _piaImg && _piaImg.tipo === 'image/jpeg' && _piaImg.data.length > 20)));
   await pg3.evaluate(() => { armarPedidoConIA(); });   // sin esperar la respuesta: se mira el "leyendo"
   ok('mientras lee, lo dice', await hasta(async () => (await pg3.evaluate(() => document.getElementById('pia-res').innerText)).includes('está leyendo el pedido'), 2000));
   ok('manda el mensaje y la foto', await hasta(async () => pedidosIA.some(x => x.texto.includes('12 klik de leche') && x.imagen && x.imagen.tipo === 'image/jpeg')));
   const res = await (async () => { await hasta(async () => (await pg3.evaluate(() => document.getElementById('pia-res').innerText)).includes('La IA armó el pedido')); return pg3.evaluate(() => document.getElementById('pia-res').innerText); })();
-  ok('muestra lo que armó, con lo que escribió el cliente', res.includes('La IA armó el pedido de Sarah (4 productos)') && res.includes('12× Klik chocolate con leche 65g (amarillo)') && res.includes('«klik de leche»'));
+  ok('muestra lo que armó, con lo que escribió el cliente', res.includes('La IA armó el pedido de Ana (4 productos)') && res.includes('12× Klik chocolate con leche 65g (amarillo)') && res.includes('«klik de leche»'));
   ok('avisa lo dudoso, lo que no alcanza, lo que no tiene stock y lo que no está', res.includes('revisá cuál es') && res.includes('hay 17: se cargan 17') && res.includes('sin stock: no se carga') && res.includes('alfajores havanna') && res.includes('Pide que llegue el jueves'));
   await pg3.evaluate(() => { _manualQtys = { 41: 3 }; });
   await pg3.evaluate(() => piaCargar());
   const cargado = await pg3.evaluate(() => ({ q: _manualQtys, cli: document.getElementById('manual-cliente').value, sel: document.getElementById('manual-seleccion-lista').innerText }));
   ok('"Cargar en el pedido" llena el pedido manual (reemplazando lo que había): 12, 17 (lo que hay) y 5; lo agotado no', JSON.stringify(cargado.q) === JSON.stringify({ 12: 12, 30: 17, 41: 5 }));
-  ok('y pone el nombre del cliente si estaba vacío', cargado.cli === 'Sarah');
+  ok('y pone el nombre del cliente si estaba vacío', cargado.cli === 'Ana');
   ok('el pedido armado se ve abajo, listo para revisar y registrar', cargado.sel.includes('Klik chocolate con leche') && cargado.sel.includes('Barrita Pesek Zman'));
   await pg3.evaluate(() => piaDescartar());
   ok('"Descartar" limpia la caja', await pg3.evaluate(() => document.getElementById('pia-res').innerHTML === '' && document.getElementById('pia-texto').value === '' && !_piaImg));

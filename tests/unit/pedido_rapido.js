@@ -71,12 +71,12 @@ async function run() {
       { id: 41, cantidad: 5, pedido: 'pitzujim de maní', dudoso: true },
       { id: 30, cantidad: 99999, pedido: 'barritas', dudoso: false },
     ],
-    noEncontrados: ['bamba de frutilla', ' '], cliente: '  Sarah ', nota: 'pide envío el jueves',
+    noEncontrados: ['bamba de frutilla', ' '], cliente: '  Ana ', nota: 'pide envío el jueves',
   }, prods);
   t.eq('el mismo producto dos veces se suma; lo de cantidad 0 no entra; las cantidades tienen techo', L.items.map(x => [x.id, x.cantidad]), [[12, 14], [41, 5], [30, 9999]]);
   t.eq('cada renglón trae el nombre del catálogo, lo que escribió el cliente, si es dudoso y el stock', L.items[1], { id: 41, nombre: 'Pitzujim-Mani Sabor Grill', cantidad: 5, pedido: 'pitzujim de maní', dudoso: true, stock: 0 });
   t.eq('un id que no existe va a "no encontré", junto con lo que la IA no encontró', L.noEncontrados, ['alfajor havanna', 'bamba de frutilla']);
-  t.eq('cliente y nota, limpios', [L.cliente, L.nota], ['Sarah', 'pide envío el jueves']);
+  t.eq('cliente y nota, limpios', [L.cliente, L.nota], ['Ana', 'pide envío el jueves']);
   t.eq('una respuesta rota no rompe nada', motor.limpiarPedidoIA(null, prods), { items: [], noEncontrados: [], cliente: '', nota: '' });
 
   // ── la lista rápida mayorista ──

@@ -20,7 +20,7 @@ async function run() {
   const L = new Function(linea('_libre') + linea('_ident') + linea('_tel') + linea('WA_CANDY') + 'return { _libre, _ident, _tel, WA_CANDY };')();
 
   // Texto libre: sin < ni >, las comillas quedan (hay productos con comillas y el carrito es JSON).
-  t.eq('un nombre con una etiqueta queda sin poder armarla', L._libre('<img src=x onerror=alert(1)>Sarah'), 'img src=x onerror=alert(1)Sarah');
+  t.eq('un nombre con una etiqueta queda sin poder armarla', L._libre('<img src=x onerror=alert(1)>Ana'), 'img src=x onerror=alert(1)Ana');
   t.eq('<script> tampoco', L._libre('<script>robar()</script>'), 'scriptrobar()/script');
   t.eq('las comillas y los acentos quedan (D\'Angelo, «Pitzujim "Grill"»)', [L._libre("D'Angelo"), L._libre('Pitzujim "Grill"'), L._libre('Añá güera')], ["D'Angelo", 'Pitzujim "Grill"', 'Añá güera']);
   const carrito = JSON.stringify([{ n: 'Klik "azul"', q: 2 }]);

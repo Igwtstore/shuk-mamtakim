@@ -1564,7 +1564,7 @@
       <span id="cc-total-badge" style="background:#fde8e8;color:#c0392b;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;display:none"></span>
     </div>
     <div id="cc-lista"><div class="sinpedidos" style="padding:0.5rem 0">Cargando...</div></div>
-    <!-- Pago a cuenta de CUALQUIER cliente (deba o no): p.ej. dejar plata a favor (caso Sarah 2026-07-12,
+    <!-- Pago a cuenta de CUALQUIER cliente (deba o no): p.ej. dejar plata a favor (caso de una clienta 2026-07-12,
          que desapareció de la lista al saldar y no había de dónde cargarle el excedente) -->
     <div id="cc-pago-libre" style="display:none;margin-top:0.6rem;border-top:1px dashed var(--gris-medio);padding-top:0.6rem">
       <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
@@ -1778,7 +1778,7 @@
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin:0.6rem 0 0.2rem">
         <div style="flex:1 1 190px;min-width:0">
           <label for="recep-proveedor" style="display:block;font-size:0.7rem;font-weight:700;color:var(--texto-suave);margin-bottom:0.2rem">🏷️ ¿A quién le compraste?</label>
-          <input type="text" id="recep-proveedor" list="recep-proveedores-previos" placeholder="Ej: KI TOV, Rami Levy…" autocomplete="off"
+          <input type="text" id="recep-proveedor" list="recep-proveedores-previos" placeholder="Ej: Rami Levy, Shufersal…" autocomplete="off"
             style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;outline:none" />
           <datalist id="recep-proveedores-previos"></datalist>
         </div>
@@ -5619,7 +5619,7 @@ async function enviarPedido(_stockVerificado) {
     ? `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineasMiri.join('\n')}${totalMiriLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`
     : null;
 
-  // ── El servidor decide PRIMERO (12/07/2026, caso isi #57/#58): si no hay stock el pedido
+  // ── El servidor decide PRIMERO (12/07/2026, caso #57/#58): si no hay stock el pedido
   //    NO existe y el carrito queda intacto para corregirlo; si es duplicado, no se re-registra.
   const _respVenta = await enviarVentaASheet(nombre, items, tipoCliente, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY);
   if (_respVenta && _respVenta.error === 'stock') {
@@ -5666,7 +5666,7 @@ async function enviarPedido(_stockVerificado) {
   cerrarCarrito();
   renderCatalogo();
 
-  // WhatsApp con BOTONES (caso KI TOV 13/07: window.open tras esperar al servidor pierde el
+  // WhatsApp con BOTONES (caso de un pedido mayorista 13/07: window.open tras esperar al servidor pierde el
   // "permiso de click" y el navegador lo bloquea — el modal con <a> funciona siempre).
   // La notificación Twilio al admin ahora la manda EL SERVIDOR al registrar (infalible).
   mostrarConfirmacionWA(msg, msgMiri);
@@ -5674,7 +5674,7 @@ async function enviarPedido(_stockVerificado) {
 }
 
 // ⚠️ 2026-07-15 — POR PEDIDO DEL USUARIO: el pedido va SOLO a su número (WA_NUM1), UN solo botón.
-// Se anuló el 2º botón (a Miri) tras la fuga del caso Andrea Tova. Para reactivarlo a futuro,
+// Se anuló el 2º botón (a Miri) tras la fuga que avisó una clienta. Para reactivarlo a futuro,
 // volver a pasar msgMiri y poner dosBotones = !!msgMiri (el filtrado de msgMiri ya está listo en enviarPedido).
 function mostrarConfirmacionWA(msg, msgMiri) {
   const url1 = `https://wa.me/${WA_NUM1}?text=${encodeURIComponent(msg)}`;
@@ -5795,7 +5795,7 @@ async function renderVisitas() {
 }
 
 // Normaliza el nombre del cliente para agrupar la cuenta corriente:
-// ignora mayúsculas, espacios de más y acentos, así "Isi Michan" e "isi michan" son la MISMA cuenta.
+// ignora mayúsculas, espacios de más y acentos, así "Juan Pérez" y "juan perez" son la MISMA cuenta.
 function normCliente(s) {
   return (s || '').toString().trim().toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')   // saca acentos
@@ -5841,7 +5841,7 @@ function _deudaPedido(v, soloMiri) {
 }
 function _tieneDeuda(v, soloMiri) { const d = _deudaPedido(v, soloMiri); return d.ars > 0.005 || d.usd > 0.005; }
 // Desglose "(golosinas $X − comisión $Y)" para los renglones donde el que cobró se quedó la
-// comisión y debe el neto: muestra de dónde sale el número (pedido del usuario: caso Yimbo #15).
+// comisión y debe el neto: muestra de dónde sale el número (pedido del usuario: caso #15).
 function _desgloseComi(d, quien) {
   const cA = d.comi || 0, cU = d.comiU || 0;
   if (cA <= 0.5 && cU <= 0.004) return '';
@@ -5990,7 +5990,7 @@ async function renderCuentaCorriente() {
     // ⚖️ v4.26: en vista Miri, el SALDO A FAVOR se reduce por lo que el cliente deba del otro lado.
     // Un cliente es UNO SOLO: si le sobra plata en la caja de Miri pero se llevó mercadería de Jony,
     // esa plata YA está comprometida (la cuenta entre socios la registra como "Miri cobró plata de
-    // Jony"). Mostrarla entera hacía que Miri creyera que podía entregar de más (caso Sarah Kantor
+    // Jony"). Mostrarla entera hacía que Miri creyera que podía entregar de más (caso de una clienta
     // 2026-07-28: veía U$S 76,83 a favor cuando libres había U$S 22,97).
     // 🔒 Privacidad: el a favor nunca baja de 0 — jamás se convierte en deuda visible, así Miri no
     // puede deducir ni el monto ni la existencia de un pedido de Jony.
@@ -6016,7 +6016,7 @@ async function renderCuentaCorriente() {
     const _pagoLibre = document.getElementById('cc-pago-libre');
     if (_pagoLibre) _pagoLibre.style.display = soloMiri ? 'none' : '';
     // Quitar los saldados; los que tienen plata A FAVOR (pagaron de más / adelantaron) se
-    // muestran en verde — antes desaparecían y el crédito quedaba invisible (caso Sarah 12/07).
+    // muestran en verde — antes desaparecían y el crédito quedaba invisible (caso de una clienta 12/07).
     const deudoresL = Object.values(porCliente).filter(d => d.totalARS > 1 || d.totalUSD > 0.01);
     const aFavorL = Object.values(porCliente)
       .filter(d => !(d.totalARS > 1 || d.totalUSD > 0.01) && (d.totalARS < -1 || d.totalUSD < -0.01))
@@ -6117,7 +6117,7 @@ async function renderPedidos() {
     ]);
     // 📞 Teléfonos por cliente: el pedido de la tienda guarda el tel en la ficha del cliente, pero la
     // tarjeta no lo mostraba → si el cliente no tocaba el botón de WhatsApp al confirmar, no había
-    // forma de contactarlo (caso #100 meir hallak, 2026-07-29). Ahora la tarjeta trae el botón.
+    // forma de contactarlo (caso #100, 2026-07-29). Ahora la tarjeta trae el botón.
     (Array.isArray(_clis) ? _clis : []).forEach(c => {
       const t = (c.telefono || '').toString().replace(/\D/g, '');
       if (t && c.nombre) { _telPorCliente[c.nombre] = t; _telPorCliente[normCliente(c.nombre)] = t; }
@@ -6146,7 +6146,7 @@ async function renderPedidos() {
       Object.keys(_porCli).forEach(k => {
         const _pg = (pagos || []).filter(p => normCliente(p.cliente) === k);
         // Se guarda también el desglose por dueño (jA/mA/jU/mU): el botón "Confirmar cobro"
-        // lo usa para precargar SOLO el resto cuando hubo pagos a cuenta (caso Moshe #47).
+        // lo usa para precargar SOLO el resto cuando hubo pagos a cuenta (caso #47).
         _imputarPedidos(_porCli[k], _pg, soloMiri).forEach(it => { deudaViva[it.v.id] = { ars: it.remARS, usd: it.remUSD, jA: it.jA, mA: it.mA, jU: it.jU, mU: it.mU }; });
       });
     }
@@ -6310,7 +6310,7 @@ async function renderPedidos() {
         <div class="pedido-acciones" style="margin-top:0.3rem">
           ${estado !== 'cotizacion' ? (() => {
             // Si hubo pagos a cuenta, el cobro precarga SOLO el resto (deuda viva por dueño),
-            // no el total del pedido (caso Moshe #47: pagó U$S 320 a cuenta y el modal ofrecía
+            // no el total del pedido (caso #47: pagó U$S 320 a cuenta y el modal ofrecía
             // los 432,50 completos → habría cobrado dos veces). Mismo mecanismo que "Revisar".
             const _uJ = parseFloat(v.usdJONY || 0), _cli = jsAttr(v.cliente || '');
             const _dv = deudaViva[v.id];
@@ -10845,7 +10845,7 @@ function _imputarPedidos(pedidos, pagos, soloMiri) {
   // golosinas (de Miri), en $ y U$S, y los pagos se imputan con EXACTAMENTE el mismo orden
   // que la cuenta entre socios y la ganancia: atados por su reparto guardado; generales FIFO
   // ($ Pitzujim primero, U$S golosinas primero). Antes se imputaba por MONEDA sin distinguir
-  // dueño → caso Isi: el pago que cubría el Pitzujim del #31 aparecía descontando las
+  // dueño → caso real: el pago que cubría el Pitzujim del #31 aparecía descontando las
   // golosinas del #48 (mostraba 78,19 en vez de 99,20). Ahora las tres pantallas coinciden.
   const items = (pedidos || []).map(v => {
     const _d = _deudaPedido(v, false);
@@ -11091,7 +11091,7 @@ async function abrirEstadoCuenta(cliente) {
   movs.forEach(m => { sA += m.signo * m.ars; sU += m.signo * m.usd; m.sA = sA; m.sU = sU; });
   // ⚖️ v4.27: en vista Miri, si al cliente le sobra plata acá pero YA la usó en otra compra, el
   // extracto tiene que decirlo — si no, el documento que se le manda promete un saldo que no existe
-  // (caso Sarah Kantor: mostraba U$S 76,83 a favor cuando libres había 22,97). Se agrega una línea
+  // (caso de una clienta: mostraba U$S 76,83 a favor cuando libres había 22,97). Se agrega una línea
   // 🔒 NEUTRA ("aplicado a otra compra"): no dice de quién era la mercadería, así no expone nada de Jony.
   if (soloMiri && (sA < -1 || sU < -0.01)) {
     const pedsFull = ventas.filter(v => normCliente(v.cliente) === k && v.estado !== 'cancelado' && v.estado !== 'cotizacion');
@@ -11346,7 +11346,7 @@ async function auditarSistema() {
     if (tARS === 0 && tUSD === 0) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): total en $0` });
     // Reparto ARS no cuadra
     if (tARS > 0 && Math.abs(tARS - repARS) > 1) al.push({ sev: 'alta', txt: `Pedido #${n} (${cli}): total $${tARS.toLocaleString('es-AR')} pero el reparto Jony+Myri suma $${repARS.toLocaleString('es-AR')}` });
-    // USD Myri fantasma (como el de Roger)
+    // USD Myri fantasma (como el de un cliente)
     if (tUSD === 0 && usdM > 0) al.push({ sev: 'alta', txt: `Pedido #${n} (${cli}): tiene U$S ${usdM} de Myri pero el total en dólares es 0 (residuo a limpiar)` });
     if (tUSD > 0 && Math.abs(tUSD - usdM) > 0.5 && usdM > 0) al.push({ sev: 'media', txt: `Pedido #${n} (${cli}): total U$S ${tUSD.toFixed(2)} vs Myri U$S ${usdM.toFixed(2)}` });
     // Entregado hace rato sin cobrar
@@ -11569,7 +11569,7 @@ async function renderCaja() {
         if (!esPerdon) {
           // Espejo del caso U$S-en-pesos: si la deuda en PESOS la pagó con DÓLARES FÍSICOS (caja
           // U$S + TC), a la caja entran los U$S reales (aRS÷tc) — el arqueo físico cierra; la
-          // deuda en $ baja igual por su monto completo (v3.63, caso Sarah 2026-07-12).
+          // deuda en $ baja igual por su monto completo (v3.63, caso de una clienta 2026-07-12).
           const ptcA = parseFloat(p.tc) || 0;
           const cajaUSDa = _CAJAS_USD.includes(p.caja) || p.caja === 'CTA_CTE_USD';
           // Parte de MIRI (golosinas neta de comisión) en la moneda del movimiento: si la caja es
@@ -11641,7 +11641,7 @@ async function renderCaja() {
         if (m.tipo === 'comi') return;        // comisión: es de Jony
         if (m.dueno === 'J') return;          // Pitzujim: es de Jony → Myri no lo ve
         // Golosinas que Jony cobró en su caja (no liquidadas): él se las debe a Myri.
-        // Incluye la caja U$S de Jony (agregada 2026-07-12, caso Sarah) — en su moneda.
+        // Incluye la caja U$S de Jony (agregada 2026-07-12, caso de una clienta) — en su moneda.
         if (m.myriNet !== undefined && ['MP_JONY', 'EFT_JONY', 'ETF_USD_JONY'].includes(m.col) && !m.corte && m.myriNet > 0) {
           hayJonyDebe = true;
           const _esU = m.mon === 'USD';
@@ -11806,7 +11806,7 @@ async function renderCaja() {
 // Convención de saldo: positivo = Myri le debe a Jony; negativo = Jony le debe a Myri.
 let _socios = { ars: 0, usd: 0 };
 const MYRI_BOXES_CC = ['MP_GABY','EFT_MYRI','ETF_USD_MYRI'];
-// ETF_USD_JONY agregada 2026-07-12 (caso Sarah: golosinas U$S de Miri cobradas en la caja de
+// ETF_USD_JONY agregada 2026-07-12 (caso de una clienta: golosinas U$S de Miri cobradas en la caja de
 // dólares de Jony eran invisibles para la cuenta de socios; impacto histórico verificado: cero)
 const JONY_BOXES_CC = ['EFT_JONY','MP_JONY','ETF_USD_JONY'];
 
@@ -11958,7 +11958,7 @@ async function renderCuentaSocios() {
   // ATADOS a un pedido: reparto explícito (montoPitz). GENERALES ("Automático"): se imputan
   // FIFO contra la deuda viva del cliente COMPONENTE POR COMPONENTE (Pitzujim de Jony /
   // golosinas $ / golosinas U$S) — la plata cobrada tiene dueño aunque el pago sea general.
-  // Bug histórico (venía de Google) cazado por el usuario con el caso Dany Elion: cobró
+  // Bug histórico (venía de Google) cazado por el usuario con el caso de un cliente: cobró
   // U$S de golosinas de Miri en su caja y la cuenta de socios lo ignoraba.
   const _fpar = f => { const m = (f||'').split(' ')[0].split('/'); return m.length < 3 ? 0 : new Date(+m[2], +m[1]-1, +m[0]).getTime(); };
   const _resPorCli = {};
@@ -12062,7 +12062,7 @@ async function renderCuentaSocios() {
       if (MYRI_ARS.includes(caja)) comiDebe += comi;
       else if (JONY_BOXES_CC.includes(caja)) { jonyTiene += (usadoGolA - comi); _cdesc += comi; }
     }
-    // Golosinas U$S: convertidas si entraron en pesos con TC (caso Elion), si no en U$S
+    // Golosinas U$S: convertidas si entraron en pesos con TC (caso de un cliente), si no en U$S
     if (usadoGolU > 0) {
       if (tcP > 0 && COBRO_ARS_COLS.includes(caja)) {
         const arsEq = usadoGolU * tcP; const comi = Math.round(arsEq * 0.15);
@@ -12410,7 +12410,7 @@ function _resumenMiriCalc(ventas, cajaMovs, ds, soc, ccData) {
   // Cuadre por construcción: vendido = ya cobrado + te deben − cobrado de más + lo que cobró Jony
   const cobradoARS = vendARS - debenARS + favorARS - jonyDebeARS;
   const cobradoUSD = vendUSD - debenUSD + favorUSD - jonyDebeUSD;
-  // Estado POR VENTA (pedido del usuario 2026-07-09: Sarah #51 y Meir #42 sin cobrar parecían
+  // Estado POR VENTA (pedido del usuario 2026-07-09: los pedidos #51 y #42 sin cobrar parecían
   // plata en mano — "Miri va a querer un dinero que no está"). La deuda viva de cada pedido
   // sale de _ccData (ya imputada: pagos atados + generales FIFO, en vista Miri).
   const remPorVenta = {};
@@ -13725,7 +13725,7 @@ function _ocFilaHtml(p) {
     <input type="number" min="0" value="${_ocCant[p.id]||''}" placeholder="cant" oninput="_ocSetCant('${jsAttr(p.id)}', this.value)" style="width:56px;padding:4px 6px;border:1.5px solid var(--gris-medio);border-radius:8px;text-align:center;font-family:inherit;flex-shrink:0">
   </div>`;
 }
-// 📜 "última: KI TOV · 12/07 · U$S 1,80" debajo de cada renglón de la orden.
+// 📜 "última: Rami Levy · 12/07 · U$S 1,80" debajo de cada renglón de la orden.
 // Es el dato que estabas por necesitar justo cuando decidís cuánto reponer y a quién pedírselo.
 // 🔒 Nunca en vista Miri (trae proveedores y costos).
 let _ocUltima = {};   // producto_id → { fecha, proveedor, costoUnit, cantidad, moneda }
@@ -14753,7 +14753,7 @@ async function avisarEANRepetido(idInput) {
 }
 
 // 🏷️ Proveedores ya usados, para el autocompletar del campo. Se guardan en este navegador:
-// evita tipear "KI TOV" distinto cada vez y que después el historial los cuente separados.
+// evita tipear "Rami Levy" distinto cada vez y que después el historial los cuente separados.
 function _recordarProveedor(nombre) {
   try {
     const previos = JSON.parse(localStorage.getItem('shuk_proveedores') || '[]');
@@ -18142,7 +18142,7 @@ function _pagoArsActual() {
 }
 // El TC aparece en las DOS direcciones cruzadas:
 //  · deuda U$S pagada con PESOS a una caja de pesos (v3.41)
-//  · deuda en $ pagada con DÓLARES FÍSICOS a una caja U$S (v3.63, caso Sarah) — a la caja
+//  · deuda en $ pagada con DÓLARES FÍSICOS a una caja U$S (v3.63, caso de una clienta) — a la caja
 //    entran los U$S reales (÷TC) así el arqueo físico cierra; la deuda en $ baja igual.
 function pagoFraccionarToggle() {
   const on = !!document.getElementById('pago-fraccionar')?.checked;
@@ -19629,7 +19629,7 @@ function _stockHoyPorId() {
   return m;
 }
 
-// 🔄 EL STOCK EN MEMORIA PUEDE ESTAR VIEJO (caso real 07/09/2026, pedido #146 de Yimbo): el panel
+// 🔄 EL STOCK EN MEMORIA PUEDE ESTAR VIEJO (caso real 07/09/2026, pedido #146): el panel
 // carga el catálogo al abrirse, y mientras tanto se vendió, se recibió mercadería o se corrigió
 // stock desde otro lado. Decidir con esa foto vieja es peligroso al revés que sobrevender: la
 // pantalla decía "no queda nada" de tres Chocketa que en el depósito tenían 4, y los sacaba del
@@ -19879,7 +19879,7 @@ function abrirEditarPedido(v) {
   const _descGuardado = _sep.desc;
   _identificarLineasPedido(_editLineas, v);
   // El precio y la moneda GUARDADOS en el pedido son la fuente de verdad: es lo que se acordó con
-  // el cliente y puede ser un precio ESPECIAL editado a mano (ej. Sarah Kantor #51 — Pitzujim a
+  // el cliente y puede ser un precio ESPECIAL editado a mano (ej. el pedido #51 — Pitzujim a
   // minorista −10% dentro de un pedido mayorista). Se RESPETAN. Solo se repara desde el catálogo
   // la línea que quedó SIN precio válido (0/NaN: el producto no tenía precio cargado en su momento),
   // para no dejar un renglón roto. (Antes se repreciaba SIEMPRE desde el catálogo → borraba los

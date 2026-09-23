@@ -11,7 +11,7 @@ async function run() {
   const trucos = [
     '/despliegue/shuk.env', '/%64espliegue/shuk.env', '//despliegue/shuk.env', '/./despliegue/shuk.env', '/x/../despliegue/shuk.env',
     '/%2564espliegue/shuk.env', '/DESPLIEGUE/shuk.env', '/despliegue%2fshuk.env', '/%2fdespliegue/shuk.env',
-    '/tests/headless/inspector_sarah.js', '/%74ests/headless/inspector_sarah.js', '//tests/unit/README.md',
+    '/tests/headless/inspector_caso51.js', '/%74ests/headless/inspector_caso51.js', '//tests/unit/README.md',
     '/supabase/functions/api/index.ts', '/%73upabase/functions/api/index.ts', '/supabase/.temp/linked-project.json',
     '/.git/config', '/%2egit/config', '/.git/HEAD', '/.env', '/.clasp.json', '/x/.env',
     '/vercel.json', '/%76ercel.json', '//vercel.json', '/middleware.js', '/appsscript.json',

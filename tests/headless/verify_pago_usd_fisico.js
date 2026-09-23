@@ -1,4 +1,4 @@
-// v3.63 — Deuda en $ pagada con DÓLARES FÍSICOS (caso Sarah #51):
+// v3.63 — Deuda en $ pagada con DÓLARES FÍSICOS (caso #51):
 // el modal pide TC y muestra los U$S reales; la CAJA U$S recibe aRS÷tc (no pesos).
 // + regresión de la dirección vieja (v3.41: U$S pagados en pesos) y del pago normal.
 const { chromium } = require('playwright');
@@ -12,7 +12,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
   await page.goto('http://localhost:8917/index.html', { waitUntil: 'load', timeout: 30000 });
   await page.waitForTimeout(1200);
 
-  // ── 1) EL MODAL: caso Sarah (pedido: Pitzujim $100.350 + U$S, caja ETF U$S JONY) ──
+  // ── 1) EL MODAL: caso #51 (pedido: Pitzujim $100.350 + U$S, caja ETF U$S JONY) ──
   const r1 = await page.evaluate(() => {
     const out = {};
     document.getElementById('pago-split-wrap').style.display = 'block';   // modo pedido
@@ -51,8 +51,8 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     const out = {};
     const V = [];
     const P = [
-      // caso Sarah: $100.350 (Pitzujim) + U$S 121,15 a caja U$S con TC 1400
-      { cliente: 'Sarah TEST', pedidoId: 'P51', fecha: '12/07/2026', montoARS: 100350, montoUSD: 121.15, montoPitz: 100350, montoPitzUsd: 77.15, caja: 'ETF_USD_JONY', tc: 1400 },
+      // caso #51: $100.350 (Pitzujim) + U$S 121,15 a caja U$S con TC 1400
+      { cliente: 'Clienta TEST', pedidoId: 'P51', fecha: '12/07/2026', montoARS: 100350, montoUSD: 121.15, montoPitz: 100350, montoPitzUsd: 77.15, caja: 'ETF_USD_JONY', tc: 1400 },
       // regresión v3.41: U$S 50 pagados en pesos a caja de pesos con TC 1500
       { cliente: 'Otro TEST', pedidoId: 'P99', fecha: '12/07/2026', montoARS: 0, montoUSD: 50, montoPitz: 0, montoPitzUsd: 0, caja: 'EFT_JONY', tc: 1500 },
       // pago normal sin TC: pesos a caja de pesos
@@ -69,15 +69,15 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     out.arsEnCajaUsd = enCaja('ETF_USD_JONY', 'ARS');       // debe ser CERO (¡el bug viejo!)
     out.v341 = enCaja('EFT_JONY', 'ARS');                   // 50×1500 = 75.000
     out.normal = enCaja('EFT_MYRI', 'ARS');                 // 20.000
-    // solo las bajas de cta cte del pago de SARAH (los otros pagos mock tienen las suyas)
-    const idxSarah = movs.findIndex(m => /Sarah/.test(m.desc || ''));
-    const bajasSarah = movs.slice(idxSarah, idxSarah + 5).filter(m => /Cta Cte/i.test(m.desc || '') && m.val < 0);
+    // solo las bajas de cta cte del pago de la clienta #51 (los otros pagos mock tienen las suyas)
+    const idxClienta = movs.findIndex(m => /Clienta TEST/.test(m.desc || ''));
+    const bajasSarah = movs.slice(idxClienta, idxClienta + 5).filter(m => /Cta Cte/i.test(m.desc || '') && m.val < 0);
     out.ctaCteArs = bajasSarah.filter(m => m.col === 'CTA_CTE_ARS').reduce((s, m) => s + m.val, 0);   // −100.350
     out.ctaCteUsd = bajasSarah.filter(m => m.col === 'CTA_CTE_USD').reduce((s, m) => s + m.val, 0);   // −121.15
     return out;
   });
   chk('caja ETF U$S JONY recibe U$S 192,83 REALES (71,68 de los pesos + 121,15)', Math.abs(r2.usdJony - 192.83) < 0.02, String(r2.usdJony));
-  chk('🛡️ CERO pesos en la caja de dólares (el descuadre tipo Fabio, imposible)', Math.abs(r2.arsEnCajaUsd) < 0.01, String(r2.arsEnCajaUsd));
+  chk('🛡️ CERO pesos en la caja de dólares (el descuadre de aquel caso, imposible)', Math.abs(r2.arsEnCajaUsd) < 0.01, String(r2.arsEnCajaUsd));
   chk('la deuda en $ baja COMPLETA de la Cta Cte (−$ 100.350)', Math.abs(r2.ctaCteArs + 100350) < 1, String(r2.ctaCteArs));
   chk('la deuda U$S baja completa (−U$S 121,15)', Math.abs(r2.ctaCteUsd + 121.15) < 0.02, String(r2.ctaCteUsd));
   chk('regresión v3.41: U$S en pesos → caja $ recibe $ 75.000', Math.abs(r2.v341 - 75000) < 1, String(r2.v341));

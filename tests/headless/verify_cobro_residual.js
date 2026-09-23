@@ -1,4 +1,4 @@
-// Caso Moshe #47: pedido U$S 432,50 (todo Jony) con pago a cuenta de U$S 320 atado.
+// Caso #47: pedido U$S 432,50 (todo Jony) con pago a cuenta de U$S 320 atado.
 // El botón "Confirmar cobro" de la tarjeta debe precargar SOLO el resto (112,50), no el total.
 const { chromium } = require('playwright');
 let ok = 0, fail = 0;
@@ -12,7 +12,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
 
   const r = await page.evaluate(async () => {
     const V = [
-      { id: 'PM47', nVenta: 47, cliente: 'Moshe TEST', fecha: '05/07/2026 20:14', estado: 'pendiente', tipo: 'Mayorista',
+      { id: 'PM47', nVenta: 47, cliente: 'Cliente TEST', fecha: '05/07/2026 20:14', estado: 'pendiente', tipo: 'Mayorista',
         productos: '• 6x Tableta chocolate — U$S 6.90 c/u = U$S 41.40', formaPago: 'Efectivo',
         totalARS: 0, totalUSD: 432.5, arsJONY: 0, arsMyri: 0, usdMyri: 0, usdJONY: 432.5, comiARS: 0, comiUSD: 0 },
       { id: 'PSIN', nVenta: 48, cliente: 'Otro TEST', fecha: '06/07/2026 10:00', estado: 'pendiente', tipo: 'Minorista',
@@ -20,7 +20,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
         totalARS: 1000, totalUSD: 0, arsJONY: 0, arsMyri: 1000, usdMyri: 0, usdJONY: 0 },
     ];
     const P = [
-      { cliente: 'Moshe TEST', pedidoId: 'PM47', fecha: '06/07/2026', montoARS: 0, montoUSD: 320, montoPitz: 0, montoPitzUsd: 320, caja: 'ETF_USD_JONY' },
+      { cliente: 'Cliente TEST', pedidoId: 'PM47', fecha: '06/07/2026', montoARS: 0, montoUSD: 320, montoPitz: 0, montoPitzUsd: 320, caja: 'ETF_USD_JONY' },
     ];
     const origApi = window.apiGet;
     window.apiGet = async (a) => a === 'ventas' ? V : (a === 'getPagos' ? P : (origApi ? origApi(a) : []));
@@ -37,7 +37,7 @@ const chk = (n, c, x) => { if (c) { ok++; console.log('  ✓', n); } else { fail
     };
   });
 
-  chk('la tarjeta de Moshe muestra "Confirmar cobro (el resto)"', r.tieneResto);
+  chk('la tarjeta del #47 muestra "Confirmar cobro (el resto)"', r.tieneResto);
   chk('precarga el RESTO: U$S 112,50 de Jony (no 432,50)', r.args && r.args[3] === 112.5, JSON.stringify(r.args));
   chk('lo cubierto por pagos viaja aparte (320 → tramo Cta Cte, no se pierde)', r.args && r.args[7] === 320, JSON.stringify(r.args));
   chk('un pedido SIN pagos sigue con el botón normal (total completo)', r.normalIntacto);

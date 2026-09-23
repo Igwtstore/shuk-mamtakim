@@ -24,10 +24,10 @@ const F = new Function('const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n
 async function run() {
   const t = suite();
   const ficha = (hl, extra = {}) => JSON.stringify({ tz: 'America/Buenos_Aires', idi: 'es-US', ap: 'Android', px: '384x832', toq: 1, pwa: 0, push: 0, hl, wa: 0, pase: 0, ...extra });
-  const r = (id, fecha, evento, x = {}) => ({ id, ts: null, fecha, vid: 'v_yael', pagina: 'tienda', evento, origen: '', dispositivo: 'celular', ciudad: 'Buenos Aires', pais: 'Argentina', nombre: '', telefono: '', detalle: '', carrito: '', total: 0, ...x });
+  const r = (id, fecha, evento, x = {}) => ({ id, ts: null, fecha, vid: 'v_prueba3', pagina: 'tienda', evento, origen: '', dispositivo: 'celular', ciudad: 'Buenos Aires', pais: 'Argentina', nombre: '', telefono: '', detalle: '', carrito: '', total: 0, ...x });
   const tanda = JSON.stringify({ v: [{ i: '1', n: 'Pitzujim-Pecán Oreo.' }, { i: '2', n: 'Chocolate Elite Crunch' }] });
   const evs = [
-    r(1, '03/09/2026 11:32', 'visita', { detalle: ficha(11), origen: 'whatsapp', nombre: 'Prueba3 sasso', telefono: '1140023757' }),
+    r(1, '03/09/2026 11:32', 'visita', { detalle: ficha(11), origen: 'whatsapp', nombre: 'Prueba3 Gonzales', telefono: '1100000003' }),
     r(2, '03/09/2026 11:33', 'carrito', { detalle: 'Pitzujim-Semillas de Girasol de Israel!!', carrito: '[{"n":"Pitzujim-Semillas de Girasol","q":2,"p":6000}]', total: 12000 }),
     r(3, '03/09/2026 11:34', 'salida', { detalle: '{"seg":74,"int":0,"prod":0}' }),
     r(4, '22/09/2026 01:40', 'visita', { detalle: ficha(1, { vip: '' }), origen: 'directo' }),
@@ -42,7 +42,7 @@ async function run() {
   t.ok('ningún "producto" es texto de código (ni ficha técnica ni segundos)', !todo.includes('{\\"') && !todo.includes('"tz') && !todo.includes('seg'));
   t.eq('lo que más miró sale de las tandas de vistas (la cortada también cuenta lo que llegó entero)', f.productos, [{ nombre: 'Pitzujim-Pecán Oreo.', n: 2 }, { nombre: 'Chocolate Elite Crunch', n: 1 }]);
   t.eq('lo que puso en el carrito sale de los eventos de carrito', f.agregados, [{ nombre: 'Pitzujim-Semillas de Girasol de Israel!!', n: 1 }]);
-  t.eq('el nombre es el ÚLTIMO que dejó (si corrigió "sasso" por "sasson", manda el corregido)', f.nombre, 'Cliente Prueba 3');
+  t.eq('el nombre es el ÚLTIMO que dejó (si corrigió "Gonzales" por "González", manda el corregido)', f.nombre, 'Cliente Prueba 3');
   t.eq('el canal es el primer toque (el que lo trajo)', f.origen, 'whatsapp');
   t.eq('días distintos', f.dias, 2);
   t.eq('el recorrido no incluye los rechazos del candado', f.linea.map(x => x.evento).includes('bloqueado'), false);
