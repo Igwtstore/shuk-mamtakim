@@ -22,6 +22,8 @@ const PRODUCTOS = [P('1', 'Chocolate Elite', 10, 9000), P('2', 'Bon O Bon', 5, 5
   // Un visitante de Tel Aviv, en hebreo, desde un iPhone: así se ve la diferencia.
   const ctx = await b.newContext({ timezoneId: 'Asia/Jerusalem', locale: 'he-IL', viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
   const pg = await ctx.newPage();
+  // Desde v4.80 un navegador automatizado no cuenta como visitante: la prueba se presenta como uno común.
+  await pg.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); });
   await pg.addInitScript(() => { window.supabase = { createClient: () => ({ auth: { getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) } }) }; });
   const tracks = [];
   const errs = [];
@@ -29,6 +31,8 @@ const PRODUCTOS = [P('1', 'Chocolate Elite', 10, 9000), P('2', 'Bon O Bon', 5, 5
   await pg.route('**/*', route => {
     const u = route.request().url();
     if (u.includes('accion=track')) { tracks.push(u); return route.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
+    // Desde v4.79 la tienda manda cada evento al servidor del sitio (/api/track, por POST): se registra igual.
+    if (u.includes('/api/track')) { const pd = route.request().postData() || ''; tracks.push(u.split('?')[0] + '?' + (pd || u.split('?')[1] || '')); return route.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
     if (u.includes('/rest/v1/productos')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PRODUCTOS) });
     if (u.includes('getEstadoTienda')) return route.fulfill({ contentType: 'application/json', body: '{"estado":"abierta","mensaje":"","aviso":""}' });
     if (u.includes('ipapi')) return route.fulfill({ contentType: 'application/json', body: '{"city":"Tel Aviv","region":"TA","country_name":"Israel"}' });

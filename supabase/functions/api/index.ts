@@ -564,6 +564,53 @@ function productosQueVolvieron(pendientes: any[], productos: any[]) {
   });
   return Object.values(grupos).sort((a: any, b: any) => b.esperan - a.esperan);
 }
+// 🔥 LA VIDRIERA SE ORDENA SOLA (v4.87), a partir de los pedidos (no de las visitas):
+//  · orden: lo que tuvo pedidos en 30 días, de más a menos. Con eso la tienda pone primero, en
+//    cada categoría, lo que se vende.
+//  · top: lo más pedido de la semana, con 2 pedidos como mínimo (lo que compró una sola persona
+//    no es "lo más pedido"). Si la semana vino floja y no llegan a 4, se miran 14 días.
+//  · agota: lo que al ritmo del último mes dura menos de 10 días y tuvo 3 pedidos o más, con el
+//    stock que tenía al calcularlo. Si después entra mercadería, la tienda apaga el sello sola.
+// Se cuentan PEDIDOS distintos, no unidades: un mayorista de 24 cajas no tapa a diez clientes.
+// Los pases a Candy no cuentan (son internos). A la tienda viaja el orden y los sellos, nunca
+// cuánto se vendió.
+function calcularVidriera(ventas: any[], productos: any[], ahoraMs: number) {
+  const porId: any = {};
+  productos.forEach((p: any) => { porId[String(p.id)] = p; });
+  const cuenta = (dias: number) => {
+    const out: any = {};
+    ventas.forEach((v: any) => {
+      if (['cancelado', 'cotizacion'].includes(String(v.estado || '')) || String(v.cliente || '') === 'Candy') return;
+      const t = v.creado ? Date.parse(String(v.creado)) : (tsDeFecha(String(v.fecha || '')) || NaN);
+      if (!(t > 0) || ahoraMs - t > dias * 86400000) return;
+      const enEste: any = {};
+      String(v.stock_updates || '').split(',').forEach((u: string) => {
+        const par = u.split(':'), id = String(par[0] || '').trim(), q = parseInt(par[1]) || 0;
+        if (!id || q <= 0 || !porId[id]) return;
+        const e = out[id] = out[id] || { ped: 0, u: 0 };
+        e.u += q;
+        if (!enEste[id]) { enEste[id] = 1; e.ped++; }
+      });
+    });
+    return out;
+  };
+  const vivo = (id: string) => porId[id] && porId[id].activo !== false;
+  const stockDe = (id: string) => parseInt(porId[id] && porId[id].stock) || 0;
+  const c30 = cuenta(30);
+  const ordenar = (c: any) => (a: string, b: string) => c[b].ped - c[a].ped || c[b].u - c[a].u || ((c30[b] || {}).ped || 0) - ((c30[a] || {}).ped || 0) || parseInt(a) - parseInt(b);
+  const orden = Object.keys(c30).filter(vivo).sort(ordenar(c30)).map((id) => parseInt(id));
+  const candidatos = (c: any) => Object.keys(c).filter((id) => vivo(id) && stockDe(id) > 0 && c[id].ped >= 2);
+  let dias = 7, c = cuenta(7), top = candidatos(c);
+  if (top.length < 4) { dias = 14; c = cuenta(14); top = candidatos(c); }
+  top = top.sort(ordenar(c)).slice(0, 16);
+  const agota: any = {};
+  Object.keys(c30).forEach((id) => {
+    const st = stockDe(id), e = c30[id];
+    if (!vivo(id) || st <= 0 || e.ped < 3) return;
+    if (st / (e.u / 30) < 10) agota[id] = st;
+  });
+  return { t: ahoraMs, dias, top: top.map((id) => parseInt(id)), orden, agota };
+}
 // 👤 LA FICHA DE UN VISITANTE (v4.85), armada a partir de sus eventos. Antes se contaba como
 // "producto" cualquier texto de un evento, y desde que cada visita trae su ficha técnica (y cada
 // salida sus segundos) en formato de código, eso aparecía en "Lo que más miró" y en el recorrido.
@@ -672,6 +719,8 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // 🔁 v4.86: "lo de siempre" (ofrecido/cargado/descartado) y la encuesta de después del pedido.
   const recom: any = { ofrecidos: {}, cargados: {}, descartados: {} };
   const encuesta: any = { canales: {}, respuestas: 0, pushSi: 0 };
+  // 🔥 v4.87: lo que se suma desde la fila "Lo más pedido" y desde "Completá los sabores".
+  const vidr: any = { fila: {}, filaN: 0, sabOfr: {}, sabSum: {}, sabN: 0 };
   // 👁️ VER MÁS (v4.81): lo que hasta ahora era invisible — qué tarjetas se VIERON (no solo qué se
   // agarró), qué sacaron del carrito, si el cartel/las ofertas se tocan, qué se comparte, hasta dónde
   // bajan, y qué catálogo VIP abrió cada cliente.
@@ -709,6 +758,13 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     if (evento === 'encuesta') {
       if (detalle.startsWith('canal:')) { const c = detalle.slice(6).trim().slice(0, 20) || 'otro'; encuesta.canales[c] = (encuesta.canales[c] || 0) + 1; encuesta.respuestas++; }
       if (detalle === 'push:si') encuesta.pushSi++;
+      return;
+    }
+    if (evento === 'vidriera') {
+      const [dondeV, queV] = detalle.split(' · ');                 // fila · <producto> | sabores · ofrecido | sabores · <producto>
+      if (dondeV === 'fila' && queV) { vidr.filaN++; if (vid) vidr.fila[vid] = 1; }
+      else if (dondeV === 'sabores' && queV === 'ofrecido') { if (vid) vidr.sabOfr[vid] = 1; }
+      else if (dondeV === 'sabores' && queV) { vidr.sabN++; if (vid) vidr.sabSum[vid] = 1; }
       return;
     }
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
@@ -1075,7 +1131,11 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   productos.forEach((p: any) => {
     const k = kAna(p.nombre);
     stockDe[k] = (stockDe[k] || 0) + (parseInt(p.stock) || 0);
-    if (!infoProd[k]) infoProd[k] = { activo: p.activo !== false, dueno: String(p.dueno || ''), nombre: String(p.nombre || '') };
+    if (!infoProd[k]) infoProd[k] = { activo: p.activo !== false, dueno: String(p.dueno || ''), nombre: String(p.nombre || ''), id: '', stockId: -1 };
+    // ✨ v4.87: el id va para poder pedirle a la IA la ficha de ESE producto. Entre gemelos (mismo
+    // nombre), el que tiene stock: es el que la gente está viendo en la tienda.
+    const stP = parseInt(p.stock) || 0;
+    if (p.activo !== false && stP > infoProd[k].stockId) { infoProd[k].id = String(p.id); infoProd[k].stockId = stP; }
   });
   const vendidoU: any = {}, nomDeId: any = {};
   productos.forEach((p: any) => { nomDeId[String(p.id)] = String(p.nombre || ''); });
@@ -1113,7 +1173,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // antes de esta versión no existían, y "nadie lo vio" sería mentira).
   const verMas: any = {
     eventos: vistasEventos,
-    vistosSinCarrito: Object.keys(vistasK).filter((k) => !deseadoK[k]).map((k) => ({ nombre: vistasK[k].nombre, vistos: vistasK[k].veces, personas: Object.keys(vistasK[k].vids).length, stock: stockDe[k] === undefined ? null : stockDe[k], dueno: infoProd[k] ? infoProd[k].dueno : '' })).sort((a, b) => b.personas - a.personas || b.vistos - a.vistos).slice(0, 15),
+    vistosSinCarrito: Object.keys(vistasK).filter((k) => !deseadoK[k]).map((k) => ({ nombre: vistasK[k].nombre, vistos: vistasK[k].veces, personas: Object.keys(vistasK[k].vids).length, stock: stockDe[k] === undefined ? null : stockDe[k], dueno: infoProd[k] ? infoProd[k].dueno : '', id: infoProd[k] ? infoProd[k].id : '' })).sort((a, b) => b.personas - a.personas || b.vistos - a.vistos).slice(0, 15),
     nuncaVistos: vistasEventos ? Object.keys(stockDe).filter((k) => stockDe[k] > 0 && infoProd[k] && infoProd[k].activo && !vistasK[k]).map((k) => ({ nombre: infoProd[k].nombre, stock: stockDe[k], dueno: infoProd[k].dueno })).slice(0, 30) : null,
     quitados: Object.keys(quitK).map((k) => ({ nombre: (vistasK[k] && vistasK[k].nombre) || (infoProd[k] && infoProd[k].nombre) || k, veces: quitK[k] })).sort((a, b) => b.veces - a.veces).slice(0, 10),
     promos: { oferta: { veces: promos.oferta.veces, top: Object.entries(promos.oferta.productos).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([nombre, n]) => ({ nombre, n })) }, pack: { veces: promos.pack.veces, top: Object.entries(promos.pack.productos).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([nombre, n]) => ({ nombre, n })) } },
@@ -1185,7 +1245,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   if (venNoAgarran.length) acciones.push({
     id: 'ven-no-agarran', icono: '👁️', urgencia: 'media',
     titulo: venNoAgarran.length + (venNoAgarran.length === 1 ? ' producto lo ven muchos y nadie lo agarra' : ' productos los ven muchos y nadie los agarra'),
-    detalle: venNoAgarran.slice(0, 3).map((p: any) => p.nombre + ' (' + p.personas + ' personas)').join(' · ') + '. Con stock. Mirá el precio o la foto.',
+    detalle: venNoAgarran.slice(0, 3).map((p: any) => p.nombre + ' (' + p.personas + ' personas)').join(' · ') + '. Con stock. Mirá el precio o la foto: con ✨ la IA te propone una ficha mejor.',
     n: venNoAgarran.length, ir: 'deseo',
   });
   // 🔗 v4.81: catálogo VIP mandado hace más de 2 días y nunca abierto.
@@ -1329,6 +1389,16 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     compraron: rCar.filter((v) => embudoVids.pedido[v]).length,
   } : null;
 
+  // 🔥 ¿VENDEN LA VIDRIERA Y LOS SABORES? (v4.87) Cuánto se sumó al carrito desde cada lugar y
+  // cuántas de esas personas terminaron pidiendo.
+  const vFila = Object.keys(vidr.fila), vSabO = Object.keys(vidr.sabOfr), vSabS = Object.keys(vidr.sabSum);
+  const vSumaron = Array.from(new Set(vFila.concat(vSabS)));
+  const vidriera = vidr.filaN || vSabO.length || vidr.sabN ? {
+    fila: { sumados: vidr.filaN, personas: vFila.length },
+    sabores: { ofrecidos: vSabO.length, sumados: vidr.sabN, personas: vSabS.length },
+    compraron: vSumaron.filter((v) => embudoVids.pedido[v]).length,   // de los que sumaron algo desde ahí, cuántos pidieron
+  } : null;
+
   // 🤖 Cuántos de los que figuran como visitantes no parecen personas. Se informa, no se
   // borra: los números de arriba siguen siendo los reales, con esto se sabe cuánto descontar.
   const robots = visitantesTodos.filter((v) => v.perfil.pareceRobot);
@@ -1412,6 +1482,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     verMas, vipAbiertos,                // 👁️ v4.81
     heatmap, cohortes, proyeccion, dormidos,   // 🧠 v4.83
     recompra, encuesta,                 // 🔁 v4.86
+    vidriera,                           // 🔥 v4.87
   };
 }
 
@@ -1683,6 +1754,18 @@ function rarezaCalc(filas: any[], hoyK: string, horaAR: number) {
   const pct = Math.round((hoy - prom) / prom * 100);
   const nombres = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   return { hoy, promedio: Math.round(prom), pct, dia: nombres[new Date(hoyTs).getUTCDay()], semanas: pasados.length };
+}
+// 🔥 La vidriera de la tienda (v4.87): la recalcula el cron de cada hora y la guarda en config,
+// así la tienda la recibe junto con su estado, en la misma consulta que ya hace al abrir.
+async function refrescarVidriera() {
+  const desde = new Date(Date.now() - 31 * 86400000).toISOString();
+  const [vs, ps] = await Promise.all([
+    sbGet('ventas', 'select=fecha,creado,estado,cliente,stock_updates&creado=gte.' + encodeURIComponent(desde)),
+    sbGet('productos', 'select=id,stock,activo'),
+  ]);
+  const v = calcularVidriera(vs, ps, Date.now());
+  await setConfig('TIENDA_VIDRIERA', JSON.stringify(v));
+  return v;
 }
 // Lo que el cron de cada hora revisa: carritos colgados, el informe del domingo, y si hoy es raro.
 async function avisosDelCron() {
@@ -1997,11 +2080,14 @@ const BOT_SECRET = Deno.env.get('BOT_SECRET') || '';
 // igual que ScriptProperties en el motor viejo). Fallback: secret de la EF.
 async function claveIA() { return (await getConfig('ANTHROPIC_API_KEY', '')) || Deno.env.get('ANTHROPIC_API_KEY') || ''; }
 
-// Llamada cruda a la API de Anthropic (mismo payload que el motor viejo).
-async function anthropicMsg(apiKey: string, payload: any): Promise<{ code: number; body: any; texto: string }> {
+// Llamada cruda a la API de Anthropic (mismo payload que el motor viejo). `betas`: funciones de la
+// API que todavía van con encabezado propio (p. ej. el respaldo si el modelo se niega).
+async function anthropicMsg(apiKey: string, payload: any, betas: string[] = []): Promise<{ code: number; body: any; texto: string }> {
+  const headers: any = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' };
+  if (betas.length) headers['anthropic-beta'] = betas.join(',');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));
@@ -2056,6 +2142,84 @@ async function analizarFotoProducto(pUrl: string) {
     const t = JSON.parse(r.texto);
     return { ok: true, nombre: t.nombre || '', desc: t.desc || '', categoria: t.categoria || '' };
   } catch (err) { return { error: 'análisis: ' + err }; }
+}
+
+// ✨ FICHAS QUE VENDEN (v4.87). Para un producto que la gente mira y no pone en el carrito (o que
+// no tiene descripción), la IA mira su foto y propone descripción, nombre (solo si el actual no dice
+// qué es) y una idea para la foto. No se aplica nada solo: Jony aprueba cada cambio en el panel.
+// El pedido se arma aparte de la llamada para poder probarlo.
+const FICHA_IA_SCHEMA = {
+  type: 'object',
+  properties: {
+    desc: { type: 'string', description: 'La descripción propuesta, en el estilo de las fichas del catálogo' },
+    nombre: { type: 'string', description: 'El nombre propuesto; el mismo que el actual si no hace falta cambiarlo' },
+    cambiarNombre: { type: 'boolean', description: 'true solo si el nombre actual no dice qué es el producto' },
+    foto: { type: 'string', description: 'Una sola idea concreta para mejorar la foto' },
+    porque: { type: 'string', description: 'En una frase, por qué la ficha actual no ayuda a comprarlo' },
+  },
+  required: ['desc', 'nombre', 'cambiarNombre', 'foto', 'porque'], additionalProperties: false,
+};
+function pedidoFichaIA(p: any, ejemplos: string[], contexto: string, fotoUrl: string) {
+  const system = 'Escribís las fichas de la tienda online de «Shuk Mamtakim», un almacén de Buenos Aires que vende ' +
+    'golosinas y productos kosher importados de Israel. Te paso un producto que la gente mira y no pone en el carrito, ' +
+    'o que no tiene descripción. Proponé una ficha que ayude a decidir la compra.\n\n' +
+    'Así son las fichas reales del catálogo (nombre · descripción):\n' + ejemplos.join('\n') + '\n\n' +
+    'Reglas:\n' +
+    '- La descripción sigue ese estilo: una o dos frases cortas que dicen qué es, el sabor o el tipo, y el peso o la cantidad entre paréntesis si se ve en el envase.\n' +
+    '- Nada inventado: ni pesos, ni ingredientes, ni certificación kosher, ni origen que no estén en la foto o en los datos. Si algo no se ve, no va.\n' +
+    '- Sin frases de publicidad vacías («el mejor», «irresistible»), sin signos de exclamación y sin emojis.\n' +
+    '- El nombre se cambia solo si el actual no dice qué es el producto (una marca sola, una palabra genérica o un código). Si está bien, devolvé el mismo y cambiarNombre en false.\n' +
+    '- foto: una sola idea concreta que se pueda hacer con un celular (el producto abierto, el tamaño al lado de una mano, el envase de frente y sin reflejos).\n' +
+    '- porque: una sola frase con la razón más probable por la que la ficha actual no ayuda a comprarlo.\n' +
+    '- Escribí en castellano rioplatense, como la tienda.';
+  const kosher = [p.hashgaja, p.kosher_tipo].map((x: any) => String(x || '').trim()).filter(Boolean).join(' · ');
+  const texto = 'Producto: ' + String(p.nombre || '') +
+    '\nDescripción actual: ' + (String(p.descripcion || '').trim() || '(no tiene)') +
+    '\nCategoría: ' + String(p.categoria || 'Varios') +
+    ((parseFloat(p.precio_min) || 0) > 0 ? '\nPrecio en la tienda: $ ' + Math.round(parseFloat(p.precio_min)).toLocaleString('es-AR') : '') +
+    (kosher ? '\nKosher: ' + kosher : '') +
+    '\nLo que pasa en la tienda: ' + contexto +
+    (fotoUrl ? '' : '\nNo tiene foto cargada: la idea de foto es para la primera que se saque.');
+  const content: any[] = [];
+  if (fotoUrl) content.push({ type: 'image', source: { type: 'url', url: fotoUrl } });
+  content.push({ type: 'text', text: texto });
+  return {
+    model: 'claude-opus-5', max_tokens: 4000, fallbacks: 'default',
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: FICHA_IA_SCHEMA } },
+    system, messages: [{ role: 'user', content }],
+  };
+}
+// La foto que ve la IA: la primera que no sea video, a 800 px y en JPG (formato que la API lee siempre).
+function fotoParaIA(imagen: any) {
+  const u = fotosShukLista(imagen)[0] || '';
+  return u.indexOf('res.cloudinary.com') !== -1 && u.indexOf('/image/upload/') !== -1 ? u.replace('/image/upload/', '/image/upload/w_800,f_jpg,q_auto/') : u;
+}
+async function sugerirFicha(id: string, motivo: string, personas: number) {
+  const apiKey = await claveIA();
+  if (!apiKey) return { error: 'sin_clave', mensaje: 'Falta la clave de IA (se carga desde la card Preguntale a tu negocio).' };
+  const prods = await sbGet('productos', 'select=id,nombre,descripcion,categoria,imagen,precio_min,hashgaja,kosher_tipo,activo&order=id');
+  const p = prods.find((x: any) => String(x.id) === String(id));
+  if (!p) return { error: 'producto no encontrado' };
+  // Ejemplos de estilo: fichas con descripción, primero de la misma categoría.
+  const conDesc = prods.filter((x: any) => x.activo !== false && String(x.id) !== String(id) && x.nombre && String(x.descripcion || '').trim());
+  const misma = conDesc.filter((x: any) => (x.categoria || '') === (p.categoria || '')).slice(0, 8);
+  const otras = conDesc.filter((x: any) => (x.categoria || '') !== (p.categoria || '')).slice(0, 14 - misma.length);
+  const ejemplos = misma.concat(otras).map((x: any) => '- ' + x.nombre + ' · ' + x.descripcion);
+  const contexto = motivo === 'sin-desc' ? 'No tiene descripción.'
+    : personas > 0 ? 'La vieron ' + personas + ' personas en el último mes y nadie la puso en el carrito.'
+    : 'La miran y no la ponen en el carrito.';
+  try {
+    const r = await anthropicMsg(apiKey, pedidoFichaIA(p, ejemplos, contexto, fotoParaIA(p.imagen)), ['server-side-fallback-2026-07-01']);
+    if (r.code !== 200) return { error: 'IA error ' + r.code + (r.body.error ? ': ' + r.body.error.message : '') };
+    if (r.body.stop_reason === 'refusal') return { error: 'La IA no quiso escribir esta ficha. Probá de nuevo o escribila a mano.' };
+    const t = JSON.parse(r.texto);
+    const nombreN = String(t.nombre || '').trim().slice(0, 120), descN = String(t.desc || '').trim().slice(0, 400);
+    return {
+      ok: true, id: String(p.id), actual: { nombre: String(p.nombre || ''), desc: String(p.descripcion || '') },
+      desc: descN, nombre: nombreN, cambiarNombre: !!t.cambiarNombre && !!nombreN && nombreN !== String(p.nombre || '').trim(),
+      foto: String(t.foto || '').trim().slice(0, 300), porque: String(t.porque || '').trim().slice(0, 300),
+    };
+  } catch (err) { return { error: 'IA: ' + err }; }
 }
 
 // Error de IA que NO es culpa de la foto (saldo/rate/overload): no quema la foto.
@@ -2868,7 +3032,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4253,9 +4417,16 @@ Deno.serve(async (req) => {
     if (accion === 'getEstadoTienda') {
       // Una sola consulta para las 5 claves (antes eran 4 SELECT secuenciales en la ruta
       // que abre la tienda: sumar campos de a uno la hacía más lenta a cada release).
-      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG)');
+      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG,TIENDA_VIDRIERA)');
       const C: any = {};
       filasCfg.forEach((f: any) => { C[f.clave] = f.valor; });
+      // 🔥 v4.87: la vidriera viaja en esta misma consulta. Si todavía no existe o quedó vieja
+      // (el cron no corrió), se calcula acá una vez: son dos consultas chicas.
+      let vidriera: any = null;
+      try { vidriera = C.TIENDA_VIDRIERA ? JSON.parse(C.TIENDA_VIDRIERA) : null; } catch { vidriera = null; }
+      if (!vidriera || !(Date.now() - (vidriera.t || 0) < 3 * 3600000)) {
+        try { vidriera = await refrescarVidriera(); } catch { /* sin vidriera, la tienda ordena como siempre */ }
+      }
       const avisoTxt = C.TIENDA_AVISO || '';
       const avisoCol = C.TIENDA_AVISO_COLOR || 'verde';
       // avisoCfg = formato nuevo (v4.53). Si todavía no existe, se arma desde el viejo:
@@ -4266,6 +4437,7 @@ Deno.serve(async (req) => {
         estado: C.TIENDA_ESTADO || 'abierta', mensaje: C.TIENDA_MSG || '',
         aviso: avisoTxt, avisoColor: avisoCol,                                  // ← compat: front viejo en la calle
         avisoCfg: avNorm(avisoCfg || { txt: avisoTxt, color: avisoCol }),
+        vidriera: vidriera ? { t: vidriera.t, dias: vidriera.dias, top: vidriera.top, orden: vidriera.orden, agota: vidriera.agota } : null,
       });
     }
     if (accion === 'setAvisoTienda') {
@@ -4496,6 +4668,8 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
     if (accion === 'analizarFotoProducto') return json(await analizarFotoProducto(Q('url')));
+    // ✨ v4.87: la IA propone una ficha mejor para un producto (Jony la aplica o la descarta en el panel).
+    if (accion === 'sugerirFicha') return json(await sugerirFicha(Q('id'), Q('motivo'), parseInt(Q('personas')) || 0));
     if (accion === 'bandejaSubir') {
       const idB = 'B' + Date.now() + Math.floor(Math.random() * 1000);
       await sbInsert('bandeja_fotos', { id: idB, fecha: fechaAhora(), public_id: Q('publicId'), nombre: '', descripcion: '', categoria: '', estado: 'pendiente' });
@@ -4952,7 +5126,9 @@ Deno.serve(async (req) => {
       } catch { /**/ }
       let rAvisos: any = {};
       try { rAvisos = await avisosDelCron(); } catch (e) { rAvisos = { error: String(e) }; }   // 🔔 v4.82
-      return json({ ok: true, backup: rBk, cierre: rCierre, bandeja: rBand, avisos: rAvisos });
+      let rVidr: any = {};
+      try { const vV = await refrescarVidriera(); rVidr = { top: vV.top.length, agota: Object.keys(vV.agota).length, dias: vV.dias }; } catch (e) { rVidr = { error: String(e) }; }   // 🔥 v4.87
+      return json({ ok: true, backup: rBk, cierre: rCierre, bandeja: rBand, avisos: rAvisos, vidriera: rVidr });
     }
     return json({ error: 'acción no soportada aún: ' + accion });
   } catch (e) {

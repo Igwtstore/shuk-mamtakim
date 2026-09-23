@@ -129,7 +129,7 @@
   .dark-toggle:hover { background:rgba(255,255,255,0.1); }
 
   @media print {
-    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section, #admin-tab-panel, .recato-banner, #banner-wrap, .share-btn, .carousel-btn { display:none !important; }
+    .header, .modo-bar, .buscador-wrap, .filtros-wrap, .producto-controles, .carrito-btn, #carrito-overlay, .toast, #admin-section, #admin-tab-panel, .recato-banner, #banner-wrap, .share-btn, .carousel-btn, .vitrina, .sellos-foto, #sabores-pop { display:none !important; }
     .catalogo { grid-template-columns: repeat(3,1fr) !important; }
     .producto-card { break-inside:avoid; box-shadow:none !important; border:1px solid #ddd; }
     body { background:#fff !important; }
@@ -490,6 +490,50 @@
     border: 2px dashed rgba(255,255,255,0.55);
     z-index: 3;
   }
+
+  /* 🔥 v4.87 · LA VIDRIERA SE ORDENA SOLA: la fila de lo más pedido arriba del catálogo y los
+     sellos que dicen la verdad (salen de los pedidos y del stock, nunca inventados). */
+  .vitrina { grid-column: 1 / -1; min-width: 0; margin: 0.1rem 0 0.35rem; }
+  .vitrina-tit { font-family: 'Fraunces', serif; font-weight: 700; font-size: 1.05rem; color: var(--azul); margin: 0 0 0.55rem; display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+  .vitrina-tit small { font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 0.74rem; color: var(--texto-suave); }
+  .vitrina-fila { display: flex; gap: 0.7rem; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 10px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .vitrina-card { flex: 0 0 148px; scroll-snap-align: start; background: var(--blanco); border: 2px dashed #cfa96b; border-radius: 8px; padding: 6px 6px 8px; display: flex; flex-direction: column; gap: 4px; text-align: center; box-shadow: var(--sombra); }
+  .vitrina-foto { height: 104px; border: none; background: #faf6ec; border-radius: 6px; padding: 0; cursor: pointer; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; }
+  .vitrina-foto img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; padding: 6px; }
+  .vitrina-nombre { font-size: 0.74rem; font-weight: 600; color: var(--azul); line-height: 1.25; min-height: 2.5em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .vitrina-precio { font-weight: 800; font-size: 0.86rem; color: var(--dorado); font-variant-numeric: tabular-nums; }
+  .vitrina-btn { margin-top: auto; border: none; border-radius: 8px; padding: 6px 4px; font-size: 0.74rem; font-weight: 800; cursor: pointer; background: var(--verde); color: #fff; }
+  .vitrina-btn.en { background: var(--dorado-claro); color: var(--dorado); }
+  .foto-con-sellos { position: relative; }
+  .sellos-foto { position: absolute; left: 14px; right: 14px; bottom: 6px; display: flex; gap: 4px; flex-wrap: wrap; z-index: 3; pointer-events: none; }
+  .sello-v { font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 999px; box-shadow: 0 1px 3px rgba(0,0,0,0.16); white-space: nowrap; }
+  .sello-v.hot { background: #fff0e6; color: #b3401a; }
+  .sello-v.low { background: #fff7d6; color: #845c00; }
+  body.recato .sellos-foto { position: static; justify-content: center; padding: 8px 8px 0; }
+  body.dark .vitrina-card { background: #1f2937; border-color: #6b5a35; }
+  body.dark .vitrina-foto { background: #ece5d3; }
+  /* 🎨 Completá los sabores: en el carrito y al agregar desde la tarjeta */
+  .sabores-box { background: #fbf6ec; border: 1.5px dashed #d9b77a; border-radius: 10px; padding: 0.6rem 0.75rem; margin: 0.7rem 0 0.2rem; }
+  .sabores-tit { font-weight: 800; font-size: 0.86rem; color: #5c3d1e; margin-bottom: 2px; }
+  .sabores-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.8rem; padding: 5px 0; border-top: 1px solid #efe3cc; color: #3d2c1a; }
+  .sabores-tit + .sabores-row { border-top: none; }
+  .sabores-row b { font-variant-numeric: tabular-nums; }
+  .sabores-row button { flex-shrink: 0; background: var(--verde); color: #fff; border: none; border-radius: 8px; padding: 5px 10px; font-weight: 800; font-size: 0.74rem; cursor: pointer; }
+  body.dark .sabores-box { background: #2a2418; border-color: #6b5a35; }
+  body.dark .sabores-tit, body.dark .sabores-row { color: #eadcc0; }
+  body.dark .sabores-row { border-top-color: #4a3f2a; }
+  /* ✨ v4.87 · la ficha que propone la IA (panel, Analítica → Productos) */
+  .ficha-ia { background: #f5f1ff; border: 1.5px solid #d9ccf5; border-radius: 10px; padding: 0.6rem 0.75rem; margin: 6px 0 8px; font-size: 0.76rem; line-height: 1.5; color: #2d2340; display: flex; flex-direction: column; gap: 3px; }
+  .ficha-ia.err { background: #fdeaea; border-color: #f3c2c2; color: #8a2a2a; display: block; }
+  .ficha-ia.ok { background: #e8f6ec; border-color: #bfe3cb; color: #1e7a3c; font-weight: 700; }
+  .ficha-ia button, .ficha-ia-btn { border: none; border-radius: 7px; padding: 4px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; background: #6b4fbb; color: #fff; }
+  .ficha-ia button.gh { background: transparent; color: #6b4fbb; border: 1.5px solid #cbbbf0; }
+  .ficha-ia-btn { padding: 3px 8px; font-size: 0.68rem; white-space: nowrap; }
+  .ficha-ia-ok { color: #1e7a3c; font-weight: 800; }
+  body.dark .ficha-ia { background: #2a2340; border-color: #4a3f6b; color: #e6defa; }
+  #sabores-pop { position: fixed; left: 12px; right: 12px; bottom: 14px; z-index: 510; max-width: 440px; margin: 0 auto; background: #fff; border: 2px solid var(--dorado, #c9a227); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.2); padding: 0.7rem 0.85rem 0.6rem; font-family: 'DM Sans', sans-serif; }
+  #sabores-pop .sabores-box { margin: 0.35rem 0 0; }
+  body.dark #sabores-pop { background: #1f2937; }
 
   .producto-controles {
     padding: 0.7rem 1rem 1rem;
@@ -2525,6 +2569,9 @@ async function cargarEstadoTienda() {
     _avisoCfg = _avNormalizar(d.avisoCfg && d.avisoCfg.txt !== undefined
       ? d.avisoCfg
       : { txt: _tiendaAviso, color: _tiendaAvisoColor });
+    // 🔥 v4.87: la vidriera llega con el estado. Si el catálogo ya se dibujó con otra (o sin ninguna),
+    // se redibuja solo si la persona sigue arriba de todo: nunca se le mueve la página mientras mira.
+    if (_vidGuardar(d.vidriera) && productos.length && window.scrollY < 300) renderCatalogo();
   } catch (e) { _estadoTienda = 'abierta'; }
   pintarBannerTienda();
   pintarAvisoTienda();
@@ -2931,6 +2978,130 @@ function getMarcaIdx(p) {
 function getCatIdx(p) {
   const i = CATEGORIA_ORDEN.indexOf(p.categoria || 'Varios');
   return i === -1 ? CATEGORIA_ORDEN.length : i;
+}
+
+// 🔥 v4.87 · LA VIDRIERA SE ORDENA SOLA. El motor calcula con los pedidos de verdad qué se pide más
+// (el orden de 30 días, lo más pedido de la semana y lo que se agota) y lo manda junto con el estado
+// de la tienda. Acá se usa para la fila "Lo más pedido", para el orden dentro de cada categoría y para
+// los sellos. Queda guardada en el aparato: la próxima visita abre ya ordenada, sin esperar al servidor.
+const VIDRIERA_KEY = 'shuk_vidriera';
+let _vidriera = null, _vidCache = null;
+try {
+  const g = JSON.parse(localStorage.getItem(VIDRIERA_KEY) || 'null');
+  if (g && Array.isArray(g.orden) && Array.isArray(g.top) && Date.now() - (g.t || 0) < 3 * 86400000) _vidriera = g;
+} catch { /* sin memoria del aparato: se espera la del servidor */ }
+// Guarda la vidriera nueva y dice si cambió algo que se vea (para no redibujar de gusto).
+function _vidGuardar(v) {
+  if (!v || !Array.isArray(v.orden) || !Array.isArray(v.top)) return false;
+  const firma = x => JSON.stringify([x.top, x.orden, x.agota || {}, x.dias]);
+  const cambio = !_vidriera || firma(_vidriera) !== firma(v);
+  _vidriera = v; _vidCache = null;
+  try { localStorage.setItem(VIDRIERA_KEY, JSON.stringify(v)); } catch { /**/ }
+  return cambio;
+}
+const _normTxt = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// La LÍNEA de un producto: su primera palabra que no es genérica ("Tableta chocolate Pesek Zman" →
+// pesek, "Pitzujim-Mani Sabor Grill" → pitzujim). Es lo que se lleva junto: de los 25 pares que más
+// se compraron juntos, 24 son de la misma línea.
+const _GENERICAS = new Set(['chocolate', 'chocolates', 'tableta', 'tabletas', 'caramelo', 'caramelos', 'caramelitos', 'golosina', 'golosinas', 'pack', 'mini', 'sticks', 'bombon', 'bombones', 'barrita', 'barritas', 'snack', 'snacks', 'galletita', 'galletitas', 'pastillas', 'pastillitas', 'chupetin', 'chupetines', 'de', 'del', 'la', 'el', 'los', 'las', 'con', 'y', 'sabor']);
+function _lineaDe(p) {
+  const pals = _normTxt(p.nombre).replace(/[()·.,;:!¡?¿'"/+]/g, ' ').split(/[\s-]+/).filter(Boolean);
+  return pals.find(w => w.length > 1 && !/^\d/.test(w) && !_GENERICAS.has(w)) || pals[0] || '';
+}
+// La FAMILIA: el mismo producto en otro sabor. El nombre sin lo que va después del "·", sin los
+// colores entre paréntesis y sin el peso ("Chocolate Elite Crunch · Blanco" → chocolate elite crunch).
+function _famFina(p) {
+  return _normTxt(p.nombre).split('·')[0]
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\bx\s*\d+\b.*$/, ' ')
+    .replace(/\b\d+([.,]\d+)?\s*(g|gr|grs|gramos|kg|ml|cc|u|unid|unidades)\b\.?/g, ' ')
+    .replace(/[!.,;:'"]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+const _precioDelModo = p => modo === 'mayorista'
+  ? (parseFloat(String(p.precioMay || '0').replace(',', '.')) || 0)
+  : (parseFloat(p.precioMin) || 0);
+function _vidIdx() {
+  if (!_vidriera || !Array.isArray(_vidriera.orden)) return null;
+  const firma = _vidriera.t + '|' + productos.length;
+  if (_vidCache && _vidCache.firma === firma) return _vidCache;
+  const rank = new Map();
+  _vidriera.orden.forEach((id, i) => { if (!rank.has(Number(id))) rank.set(Number(id), i); });
+  // El mejor puesto de cada línea dentro de su categoría (lo que tiene stock aparte de lo agotado).
+  const grupo = p => (p.stock > 0 ? 'S' : 'N') + '|' + (p.categoria || 'Varios') + '|' + _lineaDe(p);
+  const mejor = new Map();
+  productos.forEach(p => { const r = rank.get(p.id); if (r === undefined) return; const g = grupo(p); if (!mejor.has(g) || r < mejor.get(g)) mejor.set(g, r); });
+  _vidCache = { firma, rank, mejor, grupo };
+  return _vidCache;
+}
+// Dentro de cada categoría: primero lo que tuvo pedidos, con cada línea junta y la que más vende
+// primero; después el resto como siempre (marca y nombre).
+function _vidComparar(a, b) {
+  const V = _vidIdx(); if (!V) return 0;
+  const ra = V.rank.get(a.id), rb = V.rank.get(b.id);
+  if ((ra === undefined) !== (rb === undefined)) return ra === undefined ? 1 : -1;
+  if (ra === undefined) return 0;
+  const ga = V.mejor.get(V.grupo(a)) ?? ra, gb = V.mejor.get(V.grupo(b)) ?? rb;
+  return ga - gb || ra - rb;
+}
+// "Lo más pedido": los primeros 6 del top que se pueden comprar ahora en este canal (visibles, con
+// stock y con precio). Un gemelo (mismo nombre) no aparece dos veces. Son los mismos que llevan 🔥.
+function _vidTopIds() {
+  if (!_vidriera || !Array.isArray(_vidriera.top)) return [];
+  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  const porId = new Map(productosVisibles().map(p => [p.id, p]));
+  const out = [], nombres = new Set();
+  for (const idRaw of _vidriera.top) {
+    const p = porId.get(Number(idRaw));
+    if (!p || p.stock <= 0 || p.activo === false) continue;
+    const vis = (p.visible || 'Ambos').trim();
+    if (vis !== 'Ambos' && vis !== tipoActual) continue;
+    if (!(_precioDelModo(p) > 0)) continue;
+    const n = _normTxt(p.nombre).trim();
+    if (nombres.has(n)) continue;
+    nombres.add(n); out.push(p.id);
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+// Los sellos de una tarjeta. "Se agota pronto" vale con el stock que había al calcularlo: si
+// después entró mercadería (hay más), el sello se apaga solo.
+function _sellosHtml(p, topSet) {
+  if (!(p.stock > 0)) return '';
+  const s = [];
+  if (topSet && topSet.has(p.id)) s.push('<span class="sello-v hot">🔥 Lo más pedido</span>');
+  const lim = _vidriera && _vidriera.agota ? _vidriera.agota[p.id] : undefined;
+  if (lim !== undefined && p.stock <= Number(lim)) s.push('<span class="sello-v low">⏳ Se agota pronto</span>');
+  return s.join('');
+}
+const _precioCorto = p => {
+  const v = (ofertaActiva(p) ? parseFloat(p.precioOferta) || 0 : 0) || _precioDelModo(p);
+  return esPesos(p) ? '$ ' + Math.round(v).toLocaleString('es-AR') : 'U$S ' + v.toFixed(2);
+};
+function _vitrinaHtml(ids) {
+  const cards = ids.map(id => {
+    const p = productos.find(x => x.id === id);
+    if (!p) return '';
+    const foto = (p.imagen || '').split(',').map(s => s.trim()).filter(x => x && !esVideo(x))[0];
+    const img = foto ? `<img src="${imgUrl(foto)[0]}" alt="" loading="lazy" onerror="this.replaceWith('🍬')">` : '🍬';
+    const enC = carrito[id] ? carrito[id].qty : 0;
+    return `<div class="vitrina-card">
+      <button class="vitrina-foto" onclick="vitrinaIr(${id})" aria-label="Ver ${esc(p.nombre)}">${img}</button>
+      <div class="vitrina-nombre" onclick="vitrinaIr(${id})">${esc(p.nombre)}</div>
+      <div class="vitrina-precio">${_precioCorto(p)}</div>
+      <button class="vitrina-btn${enC ? ' en' : ''}" onclick="vitrinaSumar(${id})">${enC ? '✓ ' + enC + ' · sumar otro' : '+ Agregar'}</button>
+    </div>`;
+  }).join('');
+  const cuando = _vidriera && _vidriera.dias === 14 ? 'en las últimas dos semanas' : 'esta semana';
+  return `<div class="vitrina"><div class="vitrina-tit">🔥 Lo más pedido <small>${cuando}</small></div><div class="vitrina-fila">${cards}</div></div>`;
+}
+// Tocar la foto o el nombre lleva a la tarjeta completa, en su categoría.
+function vitrinaIr(id) {
+  const c = document.getElementById('card-' + id);
+  if (!c) return;
+  c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  c.style.transition = 'box-shadow 0.3s';
+  c.style.boxShadow = '0 0 0 3px var(--dorado), 0 6px 20px rgba(0,0,0,0.18)';
+  setTimeout(() => { c.style.boxShadow = ''; }, 2200);
 }
 
 
@@ -3803,9 +3974,10 @@ function renderCatalogo() {
     const aOut = a.stock <= 0 ? 1 : 0;
     const bOut = b.stock <= 0 ? 1 : 0;
     if (aOut !== bOut) return aOut - bOut;
-    return getCatIdx(a) - getCatIdx(b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre);
+    return getCatIdx(a) - getCatIdx(b) || _vidComparar(a, b) || getMarcaIdx(a) - getMarcaIdx(b) || a.nombre.localeCompare(b.nombre);   // 🔥 v4.87: primero lo que se vende
   });
-  _ultResultados = filtrados.length;   // 🔎 lo usa filtrar() para saber si la búsqueda encontró algo
+  _ultResultados = filtrados.length;
+  const topIds = _vidTopIds(), topSet = new Set(topIds);   // 🔥 la fila de arriba y el sello son los mismos   // 🔎 lo usa filtrar() para saber si la búsqueda encontró algo
   if (!filtrados.length) {
     // Link VIP muerto (set vacío): el banner rojo ya lo explica — nada de "Sin resultados".
     catalogo.innerHTML = (_vipIds && _vipIds.size === 0) ? '' : '<div class="loading">Sin resultados</div>';
@@ -3837,7 +4009,7 @@ function renderCatalogo() {
       ${agotado ? '<div class="badge-agotado">Agotado</div>' : ''}
       ${!agotado && ofertaActiva(p) ? '<div class="sello-oferta">¡OFERTA<br>DEL DÍA!</div>' : ''}
       <button class="share-btn" onclick="compartirProducto(${p.id})" title="Compartir">📤</button>
-      ${renderImg(p)}
+      ${(() => { const sl = _sellosHtml(p, topSet); return sl ? `<div class="foto-con-sellos">${renderImg(p)}<div class="sellos-foto">${sl}</div></div>` : renderImg(p); })()}
       <div class="producto-info">
         <div class="producto-nombre">${p.nombre}</div>
         <div class="producto-desc">${p.desc}</div>
@@ -3872,12 +4044,15 @@ function renderCatalogo() {
   const conStock = filtrados.filter(p => p.stock > 0);
   const sinStock = filtrados.filter(p => p.stock <= 0);
   let html = '';
-  // 🔥 Ofertas arriba de todo (solo en la vista completa: sin búsqueda ni filtro de categoría). Se repiten abajo en su lugar.
+  // 🔥 v4.87: "Lo más pedido" arriba de todo, en la vista completa (sin búsqueda, filtros ni link VIP,
+  // que es una selección armada a mano). Con menos de 3, no hay fila: una fila flaca no vende.
+  if (_categoriaActiva === 'Todos' && !query && !_vipIds && !_kosherSup && !_kosherTipo && topIds.length >= 3) html += _vitrinaHtml(topIds);
+  // 🏷️ Ofertas arriba de todo (solo en la vista completa: sin búsqueda ni filtro de categoría). Se repiten abajo en su lugar.
   if (_categoriaActiva === 'Todos' && !query) {
     const promos = conStock.filter(p => ofertaActiva(p) || packActivo(p));
     if (promos.length) {
       html += `<div style="grid-column:1/-1;margin:0.2rem 0 0.7rem;text-align:center">
-        <div style="display:inline-block;background:#fde8e8;color:#c0392b;font-weight:800;font-size:0.9rem;padding:6px 18px;border-radius:20px">🔥 Ofertas</div></div>`;
+        <div style="display:inline-block;background:#fde8e8;color:#c0392b;font-weight:800;font-size:0.9rem;padding:6px 18px;border-radius:20px">🏷️ Ofertas</div></div>`;
       html += promos.map(card).join('');
       html += `<div style="grid-column:1/-1;margin:0.9rem 0 0.3rem;border-top:1.5px dashed #e8e0d0"></div>`;
     }
@@ -4371,11 +4546,106 @@ function agregarAlCarrito(id) {
   cantidades[id] = 0;
   actualizarBadge();
   renderCatalogo();
-  showToast(`${p.nombre} agregado ✓`);
+  if (!_popSabores(p)) showToast(`${p.nombre} agregado ✓`);   // 🎨 v4.87: si tiene otros sabores, el aviso los ofrece
   _contarInteraccion(p.nombre);
   track('carrito', { producto: p.nombre, ..._cartParaTrack() });
   // 🏷️ v4.81: si lo agarró con oferta o pack, queda dicho (¿el cartel vende?).
   try { if (ofertaActiva(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p)) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
+}
+
+// Suma UNA unidad (la fila de lo más pedido y los sabores sugeridos): sin elegir la cantidad antes,
+// como el "+ Agregar" de cualquier tienda. Respeta el stock, el precio cargado y la tienda cerrada.
+function _sumarUnidad(id, desde) {
+  if (_estadoTienda === 'cerrada') { agregarAlCarrito(id); return false; }
+  const p = productos.find(x => x.id === id);
+  if (!p) return false;
+  if (!(_precioDelModo(p) > 0)) { showToast('Este producto no tiene precio cargado — consultanos por WhatsApp 🙏'); return false; }
+  const ya = carrito[id] ? carrito[id].qty : 0;
+  if (ya + 1 > p.stock) { showToast('No hay más unidades disponibles'); return false; }
+  carrito[id] = { ...p, qty: ya + 1 };
+  actualizarBadge();
+  renderCatalogo();
+  if (document.getElementById('carrito-overlay').classList.contains('abierto')) renderCarrito();
+  showToast(`${p.nombre} agregado ✓`);
+  _contarInteraccion(p.nombre);
+  track('carrito', { producto: p.nombre, ..._cartParaTrack() });
+  try { if (ofertaActiva(p)) track('promo', { producto: 'oferta · ' + p.nombre }); else if (packActivo(p)) track('promo', { producto: 'pack · ' + p.nombre }); } catch { /**/ }
+  track('vidriera', { producto: desde + ' · ' + p.nombre });   // 🔥 de dónde salió: la fila o los sabores
+  return true;
+}
+function vitrinaSumar(id) { _sumarUnidad(id, 'fila'); }
+function saborSumar(id) {
+  const pop = document.getElementById('sabores-pop');
+  if (pop) pop.remove();
+  _sumarUnidad(id, 'sabores');
+}
+
+// 🎨 v4.87 · COMPLETÁ LOS SABORES. La gente lleva el mismo producto en varios sabores (de los 25 pares
+// que más se compran juntos, 24 son de la misma línea). Para lo que ya eligió se sugiere lo que le
+// falta: primero el mismo producto en otro sabor, después lo más pedido de su línea en la misma
+// categoría. Solo lo que se puede comprar ahora (visible en este canal, con stock y precio) y nada que
+// ya esté en el carrito, ni su gemelo.
+function _saboresPara(bases, max) {
+  const enCarrito = new Set(Object.keys(carrito).map(Number).concat(bases.map(b => Number(b.id))));
+  const nombresEnCarrito = new Set(Object.values(carrito).map(it => _normTxt(it.nombre).trim()));
+  const tipoActual = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
+  const claveLinea = p => (p.categoria || 'Varios') + '|' + _lineaDe(p);
+  const finas = new Set(bases.map(_famFina).filter(Boolean)), lineas = new Set(bases.map(claveLinea));
+  const V = _vidIdx();
+  const puesto = p => (V && V.rank.has(p.id) ? V.rank.get(p.id) : 1e6);
+  const cand = productosVisibles().filter(p => {
+    if (enCarrito.has(p.id) || !(p.stock > 0) || p.activo === false) return false;
+    if (_vipIds) { if (!_vipIds.has(String(p.id))) return false; }
+    else { const vis = (p.visible || 'Ambos').trim(); if (vis !== 'Ambos' && vis !== tipoActual) return false; }
+    if (!(_precioDelModo(p) > 0) || nombresEnCarrito.has(_normTxt(p.nombre).trim())) return false;
+    return finas.has(_famFina(p)) || lineas.has(claveLinea(p));
+  });
+  cand.sort((a, b) => (finas.has(_famFina(b)) - finas.has(_famFina(a))) || puesto(a) - puesto(b) || a.nombre.localeCompare(b.nombre));
+  const out = [], vistos = new Set();
+  for (const p of cand) {
+    const n = _normTxt(p.nombre).trim();
+    if (vistos.has(n)) continue;
+    vistos.add(n); out.push(p);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+const _saboresFilas = sug => sug.map(p => `<div class="sabores-row"><span>${esc(p.nombre)} · <b>${_precioCorto(p)}</b></span><button onclick="saborSumar(${p.id})">+ Sumar</button></div>`).join('');
+function _saboresOfrecido() {
+  try { if (sessionStorage.getItem('shuk_sab_ofr')) return; sessionStorage.setItem('shuk_sab_ofr', '1'); } catch { /**/ }
+  track('vidriera', { producto: 'sabores · ofrecido' });
+}
+// Al agregar desde la tarjeta: si ese producto viene en otros sabores, el aviso de "agregado" los
+// ofrece ahí mismo. Tres veces por visita como mucho y una sola vez por línea: ofrecer siempre cansa.
+function _popSabores(p) {
+  try {
+    if (adminAuth || document.getElementById('rescate-carrito')) return false;
+    const ya = parseInt(sessionStorage.getItem('shuk_sab_pop') || '0') || 0;
+    const lineasYa = JSON.parse(sessionStorage.getItem('shuk_sab_lineas') || '[]');
+    const lin = (p.categoria || 'Varios') + '|' + _lineaDe(p);
+    if (ya >= 3 || lineasYa.includes(lin)) return false;
+    const sug = _saboresPara([p], 2);
+    if (!sug.length) return false;
+    sessionStorage.setItem('shuk_sab_pop', String(ya + 1));
+    lineasYa.push(lin);
+    sessionStorage.setItem('shuk_sab_lineas', JSON.stringify(lineasYa.slice(-20)));
+    const prev = document.getElementById('sabores-pop');
+    if (prev) prev.remove();
+    const d = document.createElement('div');
+    d.id = 'sabores-pop';
+    d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <b style="font-size:0.86rem;color:var(--verde,#2e9e5b);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">✓ Agregado · ${esc(p.nombre)}</b>
+        <button onclick="document.getElementById('sabores-pop').remove()" aria-label="Cerrar" style="border:none;background:none;font-size:1.1rem;cursor:pointer;color:#8a7a68;flex-shrink:0">✕</button>
+      </div>
+      <div class="sabores-box"><div class="sabores-tit">🎨 ¿Completás los sabores?</div>${_saboresFilas(sug)}</div>`;
+    document.body.appendChild(d);
+    // Si todavía está el cartel de cookies abajo, el aviso se sube: no tiene que taparlo nada.
+    const ck = document.getElementById('cookie-aviso');
+    if (ck && ck.offsetHeight > 0 && getComputedStyle(ck).display !== 'none') d.style.bottom = (ck.offsetHeight + 10) + 'px';
+    _saboresOfrecido();
+    setTimeout(() => { if (d.isConnected) d.remove(); }, 9000);
+    return true;
+  } catch { return false; }
 }
 
 function actualizarBadge() {
@@ -4574,12 +4844,16 @@ function renderCarrito() {
     </div>`;
   }).join('');
 
+  // 🎨 v4.87: lo que le falta de los sabores que ya eligió
+  const sugSab = _saboresPara(items, 3);
+  const saboresHTML = sugSab.length ? `<div class="sabores-box"><div class="sabores-tit">🎨 Completá los sabores</div>${_saboresFilas(sugSab)}</div>` : '';
+  if (sugSab.length) _saboresOfrecido();
   const _savedNombre = localStorage.getItem('shuk_may_nombre') || '';
   // Dirección/nota y forma de pago se RECUERDAN como el nombre (feedback de cliente real 13/07:
   // tras un ajuste de stock se le volvían a pedir — engorroso y con el cliente esperando).
   const _savedNota = localStorage.getItem('shuk_nota_pedido') || '';
   const _savedPago = localStorage.getItem('shuk_forma_pago') || '';
-  cont.innerHTML = itemsHTML + `
+  cont.innerHTML = itemsHTML + saboresHTML + `
     <div class="nombre-campo">
       <label>Tu nombre</label>
       <input type="text" id="nombre-cliente" placeholder="Ej: Carlos García" value="${_savedNombre.replace(/"/g,'&quot;')}" />
@@ -14416,6 +14690,13 @@ function _vivoTexto(ev) {
   if (ev.evento === 'promo') return '🏷️ agarró con ' + esc(det);
   if (ev.evento === 'compartir') return '📤 compartió <b>' + esc(det) + '</b>';
   if (ev.evento === 'aviso') return '📣 tocó el aviso de la tienda';
+  if (ev.evento === 'recompra') return '🔁 «lo de siempre»: ' + esc(det.split(' · ')[0] === 'ofrecido' ? 'se lo ofrecimos' : det.split(' · ')[0] === 'cargado' ? 'lo cargó' : 'lo cerró');
+  if (ev.evento === 'encuesta') return det === 'push:si' ? '🔔 pidió que le avisemos las novedades' : '🗣️ nos conoció por <b>' + esc(det.replace(/^canal:/, '')) + '</b>';
+  if (ev.evento === 'vidriera') {
+    const [donde, que] = det.split(' · ');
+    if (donde === 'sabores' && que === 'ofrecido') return '🎨 le ofrecimos otros sabores';
+    return (donde === 'fila' ? '🔥 sumó <b>' + esc(que || '') + '</b> desde «Lo más pedido»' : '🎨 sumó <b>' + esc(que || '') + '</b> desde «Completá los sabores»');
+  }
   return esc(ev.evento);
 }
 
@@ -14921,6 +15202,18 @@ function _anaSecHoy(d) {
       </div>`);
   }
 
+  const vd = d.vidriera;   // 🔥 v4.87
+  if (vd) {
+    html += _anaCard(`<div class="admin-titulo">🔥 ¿Venden la vidriera y los sabores?</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo que la gente sumó al carrito desde la fila «Lo más pedido» de arriba de la tienda y desde «Completá los sabores», y cuántos de ellos terminaron pidiendo.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${_anaKpi(vd.fila.sumados, 'Desde «Lo más pedido»', 'var(--verde)')}
+        ${_anaKpi(vd.sabores.ofrecidos, 'Vieron otros sabores')}
+        ${_anaKpi(vd.sabores.sumados, 'Sumaron un sabor', 'var(--verde)')}
+        ${_anaKpi(vd.compraron, 'Y pidieron', 'var(--verde)')}
+      </div>`);
+  }
+
   const acc = d.acciones || [];
   const colorU = { alta: '#c0392b', media: '#e08a2a', baja: 'var(--texto-suave)' };
   const fondoU = { alta: '#fdeaea', media: '#fdf3e6', baja: 'var(--gris-claro)' };
@@ -15339,6 +15632,64 @@ function _anaSecDias(d) {
 }
 
 // ═══ 🔥 PRODUCTOS — deseo contra venta, y qué buscan ════════════════════════
+// ✨ v4.87 · FICHAS QUE VENDEN, CON IA. Para lo que se ve y no se agarra (o no tiene descripción), la
+// IA mira la foto y propone descripción, nombre (solo si el actual no dice qué es) y una idea de foto.
+// Nada se aplica solo: cada cambio lo aprueba Jony con su botón.
+const _fichaIA = {};
+function _fichaIAHtml(id) {
+  const st = _fichaIA[id];
+  if (!st) return '';
+  const idJ = esc(String(id));
+  if (st.estado === 'cargando') return '<div class="ficha-ia">✨ La IA está mirando la foto y escribiendo… tarda unos segundos.</div>';
+  if (st.estado === 'error') return `<div class="ficha-ia err">⚠️ ${esc(st.error)} <button class="gh" onclick="fichaIA('${idJ}','${st.motivo}',${st.personas || 0})">Reintentar</button></div>`;
+  if (st.estado === 'aplicado') return `<div class="ficha-ia ok">✓ ${esc(st.msg)}</div>`;
+  const r = st.res;
+  return `<div class="ficha-ia">
+    <div style="font-weight:800">✨ La IA te sugiere</div>
+    ${r.porque ? `<div style="opacity:.8">${esc(r.porque)}</div>` : ''}
+    <div><b>Descripción:</b> «${esc(r.desc)}»${r.descAplicada ? ' <span class="ficha-ia-ok">✓ aplicada</span>' : ''}</div>
+    ${r.actual && r.actual.desc ? `<div style="opacity:.7;font-size:0.7rem">Hoy dice: «${esc(r.actual.desc)}»</div>` : ''}
+    ${r.cambiarNombre ? `<div><b>Nombre:</b> «${esc(r.nombre)}» <span style="opacity:.7">(hoy: ${esc(r.actual.nombre)})</span>${r.nombreAplicado ? ' <span class="ficha-ia-ok">✓ aplicado</span>' : ''}</div>` : ''}
+    ${r.foto ? `<div><b>Foto:</b> ${esc(r.foto)}</div>` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+      ${r.descAplicada ? '' : `<button onclick="fichaIAAplicar('${idJ}','desc')">Aplicar descripción</button>`}
+      ${r.cambiarNombre && !r.nombreAplicado ? `<button onclick="fichaIAAplicar('${idJ}','nombre')">Aplicar nombre</button>` : ''}
+      <button class="gh" onclick="fichaIADescartar('${idJ}')">${r.descAplicada || r.nombreAplicado ? 'Listo' : 'Descartar'}</button>
+    </div>
+  </div>`;
+}
+function _fichaIARepintar(id) {
+  document.querySelectorAll('[data-ficha-ia="' + String(id).replace(/"/g, '') + '"]').forEach(el => { el.innerHTML = _fichaIAHtml(String(id)); });
+}
+async function fichaIA(id, motivo, personas) {
+  id = String(id);
+  if (_fichaIA[id] && _fichaIA[id].estado === 'cargando') return;
+  _fichaIA[id] = { estado: 'cargando', motivo, personas };
+  _fichaIARepintar(id);
+  const r = await _postSesion({ accion: 'sugerirFicha', id, motivo, personas: String(personas || 0) });
+  if (r && r.ok) _fichaIA[id] = { estado: 'ok', motivo, personas, res: r };
+  else {
+    const e = r && (r.mensaje || r.error);
+    _fichaIA[id] = { estado: 'error', motivo, personas, error: r && r.__transitorio ? 'El servidor tardó en contestar. Probá de nuevo.' : e === 'network' ? 'Sin conexión.' : (e || 'La IA no contestó.') };
+  }
+  _fichaIARepintar(id);
+}
+async function fichaIAAplicar(id, campo) {
+  const st = _fichaIA[id];
+  if (!st || !st.res) return;
+  const valor = campo === 'nombre' ? st.res.nombre : st.res.desc;
+  if (!valor) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: String(id), [campo]: valor }), campo === 'nombre' ? '✓ Nombre cambiado' : '✓ Descripción aplicada');
+  if (r.error) return;
+  const p = productos.find(x => String(x.id) === String(id));
+  if (p) { if (campo === 'nombre') p.nombre = valor; else p.desc = valor; }
+  if (campo === 'nombre') st.res.nombreAplicado = true; else st.res.descAplicada = true;
+  if (st.res.descAplicada && (!st.res.cambiarNombre || st.res.nombreAplicado)) _fichaIA[id] = { estado: 'aplicado', msg: 'Ficha actualizada: ya se ve así en la tienda.' };
+  _fichaIARepintar(id);
+  try { renderCatalogo(); } catch { /**/ }
+}
+function fichaIADescartar(id) { delete _fichaIA[id]; _fichaIARepintar(id); }
+
 function _anaSecProductos(d) {
   let html = '';
   const dv = d.deseoVsVenta || [];
@@ -15367,13 +15718,17 @@ function _anaSecProductos(d) {
   // 👁️ v4.81: lo que se ve y no se agarra, y lo que nadie llega a ver
   const vm = d.verMas || {};
   const vsc = vm.vistosSinCarrito || [];
+  // ✨ v4.87: la IA propone la ficha (solo Jony: la acción es suya en el servidor)
+  const puedeIA = !esVistaMiri() && socioActual === 'jony';
+  const btnIA = (id, motivo, personas) => puedeIA && id ? `<button class="ficha-ia-btn" onclick="fichaIA('${esc(String(id))}','${motivo}',${parseInt(personas) || 0})" title="La IA mira la foto y te propone una ficha mejor">✨ Mejorar</button>` : '';
+  const cajaIA = id => puedeIA && id ? `<div data-ficha-ia="${esc(String(id))}">${_fichaIAHtml(String(id))}</div>` : '';
   if (vm.eventos) {
     html += _anaCard(`<div class="admin-titulo">👁️ Los ven y no los agarran (${vsc.length})</div>
-      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Tarjetas que estuvieron a la vista (la mitad visible, un segundo seguido) y <b>nadie puso en el carrito</b> en el período. Si tiene stock y lo vieron muchos, el freno es el precio o la foto.</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Tarjetas que estuvieron a la vista (la mitad visible, un segundo seguido) y <b>nadie puso en el carrito</b> en el período. Si tiene stock y lo vieron muchos, el freno es el precio o la foto.${puedeIA ? ' Con <b>✨ Mejorar</b> la IA mira la foto y te propone descripción e idea de foto; vos la aplicás o la descartás.' : ''}</div>
       ${vsc.length ? vsc.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:5px 0;border-bottom:1px solid var(--gris-medio);gap:6px">
         <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nombre)}${x.stock !== null && x.stock <= 0 ? ' <span style="font-size:0.6rem;background:#fdeaea;color:#c0392b;border-radius:5px;padding:1px 6px;font-weight:700">SIN STOCK</span>' : ''}</span>
-        <span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem"><b>${x.personas}</b> pers · ${x.vistos} vistas${x.stock !== null ? ' · stock ' + x.stock : ''}</span>
-      </div>`).join('') : '<div class="sinpedidos">Todo lo que se vio, alguien lo agarró ✓</div>'}`);
+        <span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem;display:flex;align-items:center;gap:6px"><span><b>${x.personas}</b> pers · ${x.vistos} vistas${x.stock !== null ? ' · stock ' + x.stock : ''}</span>${x.stock > 0 ? btnIA(x.id, 'no-agarran', x.personas) : ''}</span>
+      </div>${x.stock > 0 ? cajaIA(x.id) : ''}`).join('') : '<div class="sinpedidos">Todo lo que se vio, alguien lo agarró ✓</div>'}`);
     const nv = vm.nuncaVistos || [];
     html += _anaCard(`<div class="admin-titulo">🙈 Nadie llega a verlos (${nv.length})</div>
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Productos <b>con stock</b> que en todo el período no estuvieron a la vista de nadie. Están muy abajo, en una categoría que nadie abre, o el nombre no ayuda. Subilos, destacalos o cambiales la foto.</div>
@@ -15385,6 +15740,14 @@ function _anaSecProductos(d) {
   } else {
     html += _anaCard(`<div class="admin-titulo">👁️ Qué se ve de verdad</div><div class="sinpedidos">Desde la v4.81 la tienda anota qué tarjetas estuvieron a la vista. En cuanto haya visitas nuevas, acá aparece qué se ve y no se agarra, y qué nadie llega a ver.</div>`);
   }
+  // 📝 v4.87: lo que se vende sin descripción (la tarjeta queda con el nombre solo)
+  const sinDesc = productosVisibles().filter(p => p.activo !== false && p.stock > 0 && !String(p.desc || '').trim());
+  html += _anaCard(`<div class="admin-titulo">📝 Con stock y sin descripción (${sinDesc.length})</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Sin descripción, la tarjeta de la tienda muestra solo el nombre.${puedeIA ? ' Con <b>✨ Mejorar</b> la IA mira la foto y te propone una.' : ''}</div>
+    ${sinDesc.length ? sinDesc.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;padding:5px 0;border-bottom:1px solid var(--gris-medio);gap:6px">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nombre)}</span>
+      <span style="color:var(--texto-suave);flex-shrink:0;font-size:0.72rem;display:flex;align-items:center;gap:6px"><span>stock ${p.stock}</span>${btnIA(p.id, 'sin-desc', 0)}</span>
+    </div>${cajaIA(p.id)}`).join('') : '<div class="sinpedidos">Todo lo que tiene stock tiene descripción ✓</div>'}`);
   const bs = d.busquedas || [];
   const vacias = bs.filter(b => b.vacias > 0);
   html += _anaCard(`<div class="admin-titulo">🔎 Qué buscan en la tienda</div>

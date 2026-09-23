@@ -214,8 +214,8 @@ const FICHA = {
   const ficha = await pg.evaluate(() => { const m = document.getElementById('ana-ficha-modal'); return m ? m.innerText : ''; });
   ok('FICHA: abre con el nombre y el teléfono', ficha.includes('Débora Levy') && ficha.includes('1144556677'));
   ok('FICHA: muestra sus compras anteriores', ficha.includes('Pedido #88'));
-  ok('FICHA: muestra el recorrido paso por paso', ficha.includes('Entró a la tienda') && ficha.includes('Empezó el pedido'));
-  ok('FICHA: muestra la búsqueda que no encontró nada', ficha.includes('Buscó: halva') && ficha.includes('0 resultados'));
+  ok('FICHA: muestra el recorrido visita por visita (v4.85)', ficha.includes('Su recorrido, visita por visita') && ficha.includes('entró') && ficha.includes('llegó al checkout'));
+  ok('FICHA: muestra la búsqueda que no encontró nada', ficha.includes('buscó "halva"') && ficha.includes('sin resultados'));
   ok('FICHA: muestra su ficha técnica (huso, idioma, aparato)', ficha.includes('Ficha técnica') && ficha.includes('Buenos_Aires') && ficha.includes('iPhone'));
   ok('FICHA: dice cuánto se quedó', ficha.includes('180 segundos'));
   ok('FICHA: muestra su apodo estable', ficha.includes('#VABC'));
