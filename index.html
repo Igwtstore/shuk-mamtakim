@@ -3021,6 +3021,7 @@ async function cargarProductos() {
     renderCatalogo();
     renderFiltros();
     _ofrecerCarritoGuardado();   // 🛒 "dejaste esto armado, ¿seguimos?"
+    _ofrecerLoDeSiempre();       // 🔁 v4.86: "¿te armo lo de siempre?"
     _vipCargar();
     poblarEditorProductos();
     renderStockAdmin();
@@ -4455,6 +4456,63 @@ function _ofrecerCarritoGuardado() {
     track('rescate', { producto: 'ofrecido · ' + n + ' items' });
   } catch { /* el rescate nunca puede romper la tienda */ }
 }
+// 🔁 LO DE SIEMPRE (v4.86). Quien ya compró desde este aparato ve su pedido habitual arriba del
+// catálogo y lo carga con un toque, solo con lo que hay en stock y al precio de hoy. Solo en la
+// tienda minorista (decisión del 22/09: en mayorista, no). Si hay un carrito guardado para
+// retomar, primero va ése: nunca los dos juntos.
+let _habitual = null;
+async function _ofrecerLoDeSiempre() {
+  try {
+    if (adminAuth || localStorage.getItem('shuk_no_track') || modo !== 'minorista' || _vipToken) return;
+    if (Object.keys(carrito || {}).length || document.getElementById('rescate-carrito')) return;
+    if (sessionStorage.getItem('shuk_habitual')) return;              // una vez por visita
+    const j = await (await fetch(APPS_SCRIPT_URL + '?accion=miHabitual&vid=' + encodeURIComponent(_vid()))).json();
+    if (Object.keys(carrito || {}).length || document.getElementById('rescate-carrito')) return;
+    const vivos = ((j && j.items) || []).map(it => {
+      const p = (productos || []).find(x => String(x.id) === String(it.id));
+      if (!p || p.stock <= 0 || p.activo === false) return null;
+      const vis = (p.visible || 'Ambos').trim();
+      if (vis !== 'Ambos' && vis !== 'Minorista') return null;
+      return { p, q: Math.max(1, Math.min(parseInt(it.q) || 1, p.stock)) };
+    }).filter(Boolean);
+    if (!vivos.length) return;
+    sessionStorage.setItem('shuk_habitual', '1');
+    _habitual = vivos;
+    const total = vivos.reduce((t, x) => t + x.q * Math.round(x.p.precioMin || 0), 0);
+    const nombre = (localStorage.getItem('shuk_may_nombre') || '').trim().split(' ')[0];
+    const b = document.createElement('div');
+    b.id = 'lo-de-siempre';
+    b.style.cssText = 'max-width:900px;margin:0.6rem auto 0.4rem;padding:0 1rem';
+    b.innerHTML = `<div style="background:#fff;border:2px solid var(--verde,#1a7a3c);border-radius:14px;padding:0.8rem 0.95rem;box-shadow:0 6px 20px -12px rgba(0,0,0,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="min-width:0">
+          <div style="font-size:0.78rem;color:#6b5a48">👋 Hola de nuevo${nombre ? ', ' + esc(nombre) : ''}</div>
+          <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.05rem;color:#1a1a2e">${(j.pedidos || 0) >= 2 ? '¿Te armo lo de siempre?' : '¿Repetimos tu último pedido?'}</div>
+        </div>
+        <button onclick="descartarLoDeSiempre()" aria-label="Cerrar" style="background:none;border:none;font-size:1.1rem;color:#8a7a68;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div style="font-size:0.82rem;color:#3d2b1a;margin:6px 0 9px;line-height:1.55">${vivos.slice(0, 5).map(x => '<b>' + x.q + '×</b> ' + esc(x.p.nombre)).join(' · ')}${vivos.length > 5 ? ' y ' + (vivos.length - 5) + ' más' : ''}</div>
+      <button onclick="cargarLoDeSiempre()" style="width:100%;background:var(--verde,#1a7a3c);color:#fff;border:none;border-radius:10px;padding:0.65rem;font-weight:800;font-size:0.9rem;cursor:pointer">🛒 Cargar lo de siempre · $ ${Math.round(total).toLocaleString('es-AR')}</button>
+    </div>`;
+    const cs = document.getElementById('catalogo-section'), cat = document.getElementById('catalogo');
+    if (cs && cat) cs.insertBefore(b, cat); else return;
+    track('recompra', { producto: 'ofrecido · ' + vivos.length + ' items' });
+  } catch { /* "lo de siempre" nunca puede romper la tienda */ }
+}
+function cargarLoDeSiempre() {
+  const vivos = _habitual || [];
+  const el = document.getElementById('lo-de-siempre'); if (el) el.remove();
+  if (!vivos.length) return;
+  vivos.forEach(({ p, q }) => { const ya = (productos || []).find(x => x.id === p.id) || p; carrito[p.id] = { ...ya, qty: Math.min(q, ya.stock) }; });
+  actualizarBadge(); renderCatalogo();
+  track('recompra', { producto: 'cargado · ' + vivos.length + ' items', ..._cartParaTrack() });
+  showToast('¡Listo! Tu pedido de siempre está en el carrito ✓');
+  abrirCarrito();
+}
+function descartarLoDeSiempre() {
+  const el = document.getElementById('lo-de-siempre'); if (el) el.remove();
+  track('recompra', { producto: 'descartado' });
+}
 function _cerrarRescate() { const b = document.getElementById('rescate-carrito'); if (b) b.remove(); }
 function retomarCarrito() {
   const g = _leerCarritoGuardado();
@@ -4796,6 +4854,37 @@ function mostrarConfirmacionWA(msg, msgMiri) {
       <button onclick="document.getElementById('wa-confirm-modal').remove()" style="width:100%;padding:0.6rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;color:var(--texto-suave)">Cerrar</button>
     </div>`;
   document.body.appendChild(modal);
+  _preguntasPostPedido(modal);   // 🗣️ v4.86
+}
+
+// 🗣️ DOS PREGUNTAS DESPUÉS DEL PEDIDO (v4.86), debajo del botón de WhatsApp, chiquitas: nunca
+// le compiten al "Enviar pedido". ① ¿Te avisamos cuando llegue algo nuevo? (suma gente a las
+// notificaciones) ② ¿Cómo nos conociste? (una sola vez por aparato; para que Canales deje de
+// decir "directo").
+function _preguntasPostPedido(modal) {
+  try {
+    const caja = modal && modal.firstElementChild; if (!caja) return;
+    const puedePush = ('Notification' in window) && Notification.permission === 'default' && typeof OneSignalDeferred !== 'undefined';
+    let yaRespondio = false; try { yaRespondio = !!localStorage.getItem('shuk_encuesta_canal'); } catch { /**/ }
+    if (!puedePush && yaRespondio) return;
+    const chip = (v, t) => `<button onclick="responderEncuesta('${v}',this)" style="background:#f7f2e8;border:1px solid #e6dcc8;border-radius:999px;padding:5px 11px;font-size:0.78rem;font-weight:600;color:#3d2b1a;cursor:pointer">${t}</button>`;
+    const d = document.createElement('div');
+    d.id = 'post-preguntas';
+    d.style.cssText = 'margin-top:1rem;padding-top:0.85rem;border-top:1px solid #eee;text-align:left;display:grid;gap:0.7rem';
+    d.innerHTML = (puedePush ? `<div id="pp-push" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:0.82rem;color:#3d2b1a"><span>🔔 ¿Te avisamos cuando llegue algo nuevo?</span><button onclick="aceptarAvisosPostPedido()" style="background:#1a7a3c;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;flex-shrink:0">Sí, avisame</button></div>` : '')
+      + (!yaRespondio ? `<div id="pp-encuesta" style="font-size:0.82rem;color:#3d2b1a"><div style="margin-bottom:6px">¿Cómo nos conociste?</div><div style="display:flex;flex-wrap:wrap;gap:6px">${chip('whatsapp', 'WhatsApp')}${chip('instagram', 'Instagram')}${chip('amigo', 'Un amigo')}${chip('google', 'Google')}${chip('otro', 'Otro')}</div></div>` : '');
+    caja.appendChild(d);
+  } catch { /* nunca frena la confirmación del pedido */ }
+}
+function responderEncuesta(canal, btn) {
+  try { localStorage.setItem('shuk_encuesta_canal', canal); } catch { /**/ }
+  track('encuesta', { producto: 'canal:' + canal });
+  const e = document.getElementById('pp-encuesta'); if (e) e.innerHTML = '<span style="color:#1a7a3c;font-weight:700">¡Gracias! 🙌</span>';
+}
+function aceptarAvisosPostPedido() {
+  track('encuesta', { producto: 'push:si' });
+  const e = document.getElementById('pp-push'); if (e) e.innerHTML = '<span style="color:#1a7a3c;font-weight:700">🔔 ¡Listo! Te vamos a avisar.</span>';
+  try { activarNotificaciones(); } catch { /**/ }
 }
 
 function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, arsJONY, arsMyri, usdMyri, comiARS, comiUSD, lineas, notaPedido, usdJONY) {
@@ -14182,7 +14271,7 @@ async function renderAnalitica() {
     d.busquedas = [];                                   // no se puede saber de quién buscaban
     d.visitantes = (d.visitantes || []).map(v => ({ ...v, productos: (v.productos || []).filter(n => !soloJony(n)) }));
     d.diasDetalle = (d.diasDetalle || []).map(x => ({ ...x, top: (x.top || []).filter(t => !soloJony(t.nombre)) }));
-    d.acciones = (d.acciones || []).filter(a => a.id !== 'sin-stock' && a.id !== 'busquedas-vacias' && a.id !== 'ven-no-agarran' && a.id !== 'vip-sin-abrir');
+    d.acciones = (d.acciones || []).filter(a => a.id !== 'sin-stock' && a.id !== 'busquedas-vacias' && a.id !== 'ven-no-agarran' && a.id !== 'vip-sin-abrir' && a.id !== 'esperan-stock');
     if (d.verMas) {   // 👁️ v4.81: mismas reglas para lo que se ve, se saca o se comparte
       d.verMas.vistosSinCarrito = (d.verMas.vistosSinCarrito || []).filter(x => !soloJony(x.nombre));
       d.verMas.nuncaVistos = d.verMas.nuncaVistos ? d.verMas.nuncaVistos.filter(x => !soloJony(x.nombre)) : null;
@@ -14820,6 +14909,18 @@ function _anaSecHoy(d) {
       </div>`);
   }
 
+  const rc = d.recompra;   // 🔁 v4.86
+  if (rc) {
+    html += _anaCard(`<div class="admin-titulo">🔁 ¿Sirve «lo de siempre»?</div>
+      <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">A quien ya compró desde su aparato, la tienda le ofrece cargar su pedido habitual con un toque.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${_anaKpi(rc.ofrecidos, 'Se lo ofrecimos')}
+        ${_anaKpi(rc.cargados, 'Lo cargaron', 'var(--verde)')}
+        ${_anaKpi(rc.compraron, 'Y pidieron', 'var(--verde)')}
+        ${_anaKpi(rc.descartados, 'Lo cerraron', 'var(--texto-suave)')}
+      </div>`);
+  }
+
   const acc = d.acciones || [];
   const colorU = { alta: '#c0392b', media: '#e08a2a', baja: 'var(--texto-suave)' };
   const fondoU = { alta: '#fdeaea', media: '#fdf3e6', baja: 'var(--gris-claro)' };
@@ -14949,6 +15050,7 @@ function _anaCardAlertas() {
     ${sw('carrito', '🛒 Carrito colgado con teléfono', `<span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">Entre 1 y 3 horas sin terminar, de al menos $ <input type="number" data-alerta="carritoMin" value="${c.carritoMin}" min="0" step="1000" onchange="alertasGuardar()" style="width:80px;padding:2px 4px;border:1px solid var(--gris-medio);border-radius:5px;font-size:0.72rem">. Se revisa cada hora.</span>`)}
     ${sw('informe', '📊 Informe del domingo a las 20:00', 'La semana en un mensaje: visitas, sesiones, personas, pedidos, carritos sin terminar y 3 cosas para el lunes.')}
     ${sw('rareza', '📉📈 Días raros', 'A las 13 y a las 20: si hoy vas 50 % abajo o el doble de un día igual de las últimas 4 semanas.')}
+    ${sw('avisame', '🔔 Volvió algo que alguien esperaba', 'Cuando un producto de la lista de espera vuelve a tener stock. Una vez cada 3 días por producto.')}
   </div>`;
 }
 
@@ -15351,6 +15453,15 @@ function _anaSecCanales(d) {
   let html = _anaCard(`<div class="admin-titulo">🧭 Links por canal (para que esto no mienta)</div>
     <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px;line-height:1.5">WhatsApp e Instagram <b>no dicen de dónde viene</b> la gente: hoy ${sinEtiqueta ? '<b>' + sinEtiqueta + '</b> visitas' : 'casi todo'} figura${sinEtiqueta === 1 ? '' : 'n'} como "directo". Compartí <b>estos</b> links (tocá para copiar) y cada visita queda con su canal. Los links viejos siguen andando, solo que cuentan como directo. Los QR de la pestaña Inicio ya salen etiquetados.</div>
     ${filasCanal}`);
+  // 🗣️ v4.86: lo que dicen los clientes al terminar el pedido
+  const enc = d.encuesta || { canales: {}, respuestas: 0, pushSi: 0 };
+  const encNom = { whatsapp: '🟢 WhatsApp', instagram: '📸 Instagram', amigo: '🤝 Un amigo', google: '🔍 Google', otro: '🌐 Otro' };
+  const encFilas = Object.entries(enc.canales || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `
+    <div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px"><span>${encNom[k] || esc(k)}</span><span style="color:var(--texto-suave)">${n} · ${_anaPct(n, enc.respuestas)}%</span></div>
+    <div style="background:var(--gris-medio);border-radius:5px;height:10px;overflow:hidden"><div style="width:${_anaPct(n, enc.respuestas)}%;height:100%;background:#a8712a;border-radius:5px"></div></div></div>`).join('');
+  html += _anaCard(`<div class="admin-titulo">🗣️ ¿Cómo nos conocieron?</div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:8px">Lo contestan los clientes con un toque, al terminar el pedido. Es la única fuente que no depende de los links.${enc.pushSi ? ' Además, <b>' + enc.pushSi + '</b> pidieron que les avisemos las novedades.' : ''}</div>
+    ${encFilas || '<div class="sinpedidos">Se empieza a preguntar desde la v4.86: las respuestas van a ir apareciendo acá.</div>'}`);
   html += _anaCard(`<div class="admin-titulo">📲 De dónde vienen</div>${origenRows || '<div class="sinpedidos">Sin datos</div>'}`);
   // 🗓️ v4.83: mapa de calor día × hora — cuándo entran, para saber cuándo publicar.
   if (d.heatmap) {

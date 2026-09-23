@@ -17,6 +17,8 @@ const DATA = {
   abandonados: [], acciones: [], accionable: { identificados: 1, conTelefono: 1, anonimos: 30, oportunidadARS: 0, oportunidadUSD: 0, carritosContactables: 0 },
   visitantes: [{ vid: 'v_abc', nombre: 'Débora Levy', telefono: '1144556677', esCliente: true, compras: 3, gastadoARS: 145000, apodo: '#VABC', leDijiste: false, etiqueta: 'compró', visitas: 3, dias: 2, productos: [], perfil: {} }],
   visitantesTotal: 1, diasDetalle: [], deseoVsVenta: [], busquedas: [], candado: null, comparativo: null, mironesTop: [], rescate: null, radiografia: null,
+  recompra: { ofrecidos: 5, cargados: 3, descartados: 1, compraron: 2 },
+  encuesta: { canales: { whatsapp: 3, amigo: 1 }, respuestas: 4, pushSi: 2 },
   heatmap: Array.from({ length: 7 }, (_, d) => Array.from({ length: 24 }, (_, h) => (d === 4 && h === 20) ? 30 : (h % 5))),
   cohortes: [{ semana: '08/09', nuevos: 40, volvieron: 12, compraron: 2, pctVolvieron: 30, pctCompraron: 5 }, { semana: '15/09', nuevos: 55, volvieron: 9, compraron: 1, pctVolvieron: 16, pctCompraron: 2 }],
   proyeccion: { visitas: 300, visitasProy: 700, pedidos: 3, pedidosProy: 7, diasTranscurridos: 3, cubierta: true },
@@ -69,7 +71,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
     if (u.includes('getAnalitica')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(DATA) });
     if (u.includes('eventosDelDia')) { const m = u.match(/dia=(\d{4}-\d{2}-\d{2})/); pedidosDia.push(m ? m[1] : ''); return route.fulfill({ contentType: 'application/json', body: JSON.stringify(m && m[1] !== hoyBA ? { dia: m[1], esHoy: false, eventos: [] } : DIA) }); }
     if (u.includes('getFichaVisitante')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(FICHA) });
-    if (u.includes('getAlertasPush')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, cfg: { checkout: 1, conocido: 1, busqueda: 0, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1 } }) });
+    if (u.includes('getAlertasPush')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, cfg: { checkout: 1, conocido: 1, busqueda: 0, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1, avisame: 1 } }) });
     // El catálogo (Supabase REST) con productos de mentira: sin tarjetas no hay vistas que medir.
     if (/\/rest\/v1\/productos\?/.test(u)) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PRODS_SB) });
     if (u.startsWith(SITIO)) return route.continue();
@@ -106,6 +108,8 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => setAnaTab('hoy'));
   await pg.waitForTimeout(500);
   { const c = await txt(); const h = await pg.content();
+    ok('v4.86: "Qué hacer" mide si sirve «lo de siempre»', c.includes('¿Sirve «lo de siempre»?') && c.includes('Lo cargaron'));
+    ok('v4.86: la tarjeta de avisos tiene "Volvió algo que alguien esperaba", prendido', c.includes('Volvió algo que alguien esperaba') && h.includes('data-alerta="avisame" checked'));
     ok('v4.82: "Qué hacer" termina con la tarjeta de avisos al celular, con la config cargada', c.includes('Avisos al celular') && c.includes('Informe del domingo') && h.includes('data-alerta="busqueda"') && !h.includes('data-alerta="busqueda" checked') && h.includes('data-alerta="checkout" checked')); }
   await pg.evaluate(() => setAnaTab('productos'));
   await pg.waitForTimeout(200);
@@ -118,6 +122,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
     ok('v4.83: Gente muestra mayoristas dormidos con botón para despertarlo y las cohortes', c.includes('Mayoristas dormidos') && c.includes('Fabio Pallero') && h.includes('wa.me/5491130001111') && c.includes('¿Vuelven?') && c.includes('30%')); }
   await pg.evaluate(() => setAnaTab('canales'));
   await pg.waitForTimeout(200);
+  ok('v4.86: Canales muestra "¿Cómo nos conocieron?" con lo que contestaron los clientes', (await txt()).includes('¿Cómo nos conocieron?') && (await txt()).includes('Un amigo') && (await txt()).includes('2 pidieron que les avisemos'));
   ok('v4.83: Canales muestra el mapa de calor con el pico (jueves 20:00)', (await txt()).includes('Cuándo entran') && (await txt()).includes('Jue a las 20:00'));
   await pg.evaluate(() => setAnaTab('hoy'));
   await pg.waitForTimeout(200);

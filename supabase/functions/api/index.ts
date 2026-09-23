@@ -525,6 +525,45 @@ function compactarEvento(r: any) {
   if (r.carrito && (ev === 'carrito' || ev === 'checkout' || ev === 'pedido')) o.carrito = String(r.carrito);
   return o;
 }
+// 🔁 LO DE SIEMPRE (v4.86): el pedido habitual de un aparato, a partir de sus últimos pedidos
+// minoristas. Del último pedido entra todo; de los dos anteriores, lo que se repite. La cantidad
+// es la del pedido más reciente que lo tiene. No devuelve nombres ni teléfonos: solo productos.
+function pedidoHabitual(ventas: any[]) {
+  const validas = ventas.filter((v: any) => !['cancelado', 'cotizacion'].includes(String(v.estado || '')) && String(v.tipo || 'Minorista') !== 'Mayorista').slice(0, 3);
+  if (!validas.length) return { items: [], pedidos: 0, ultima: '' };
+  const cuenta: any = {}, ultimaQ: any = {};
+  const idsDe = (v: any) => {
+    const vistos: any = {}, out: any[] = [];
+    String(v.stock_updates || '').split(',').forEach((u: string) => {
+      const par = u.split(':'), id = String(par[0] || '').trim(), q = parseInt(par[1]) || 0;
+      if (!id || q <= 0 || vistos[id]) return;
+      vistos[id] = 1; out.push([id, q]);
+    });
+    return out;
+  };
+  validas.forEach((v: any) => idsDe(v).forEach((x: any) => { cuenta[x[0]] = (cuenta[x[0]] || 0) + 1; if (ultimaQ[x[0]] === undefined) ultimaQ[x[0]] = x[1]; }));
+  const delUltimo: any = {};
+  idsDe(validas[0]).forEach((x: any) => { delUltimo[x[0]] = 1; });
+  const items = Object.keys(cuenta).filter((id) => delUltimo[id] || cuenta[id] >= 2)
+    .map((id) => ({ id, q: ultimaQ[id], veces: cuenta[id] }))
+    .sort((a: any, b: any) => b.veces - a.veces);
+  return { items: items.slice(0, 25), pedidos: validas.length, ultima: String(validas[0].fecha || '') };
+}
+// 🔔 EL AVISAME QUE SE CUMPLE (v4.86): de la lista de espera, los productos que YA tienen stock,
+// con cuántas personas los esperan. Lo usa el aviso a tu celular y "Qué hacer" en la Analítica.
+function productosQueVolvieron(pendientes: any[], productos: any[]) {
+  const porId: any = {};
+  productos.forEach((p: any) => { porId[String(p.id)] = p; });
+  const grupos: any = {};
+  pendientes.forEach((n: any) => {
+    if (String(n.estado || 'pendiente') !== 'pendiente') return;
+    const pid = String(n.producto_id || ''), p = porId[pid];
+    if (!p || (parseInt(p.stock) || 0) <= 0 || p.activo === false) return;
+    const g = grupos[pid] = grupos[pid] || { id: pid, nombre: String(p.nombre || n.producto || ''), stock: parseInt(p.stock) || 0, esperan: 0 };
+    g.esperan++;
+  });
+  return Object.values(grupos).sort((a: any, b: any) => b.esperan - a.esperan);
+}
 // 👤 LA FICHA DE UN VISITANTE (v4.85), armada a partir de sus eventos. Antes se contaba como
 // "producto" cualquier texto de un evento, y desde que cada visita trae su ficha técnica (y cada
 // salida sus segundos) en formato de código, eso aparecía en "Lo que más miró" y en el recorrido.
@@ -630,6 +669,9 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // 🛒 El rescate del carrito: a cuántos se les ofreció, cuántos lo retomaron y —lo único
   // que importa de verdad— cuántos de ésos terminaron comprando.
   const resc: any = { ofrecidos: {}, retomados: {}, descartados: {} };
+  // 🔁 v4.86: "lo de siempre" (ofrecido/cargado/descartado) y la encuesta de después del pedido.
+  const recom: any = { ofrecidos: {}, cargados: {}, descartados: {} };
+  const encuesta: any = { canales: {}, respuestas: 0, pushSi: 0 };
   // 👁️ VER MÁS (v4.81): lo que hasta ahora era invisible — qué tarjetas se VIERON (no solo qué se
   // agarró), qué sacaron del carrito, si el cartel/las ofertas se tocan, qué se comparte, hasta dónde
   // bajan, y qué catálogo VIP abrió cada cliente.
@@ -657,6 +699,16 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     if (evento === 'rescate') {
       const cual = detalle.split(' ')[0];                      // ofrecido | retomado | descartado
       if (vid && resc[cual + 's']) resc[cual + 's'][vid] = 1;
+      return;
+    }
+    if (evento === 'recompra') {
+      const cual = detalle.split(' ')[0];                      // ofrecido | cargado | descartado
+      if (vid && recom[cual + 's']) recom[cual + 's'][vid] = 1;
+      return;
+    }
+    if (evento === 'encuesta') {
+      if (detalle.startsWith('canal:')) { const c = detalle.slice(6).trim().slice(0, 20) || 'otro'; encuesta.canales[c] = (encuesta.canales[c] || 0) + 1; encuesta.respuestas++; }
+      if (detalle === 'push:si') encuesta.pushSi++;
       return;
     }
     if (vid && (evento === 'carrito' || evento === 'checkout' || evento === 'pedido')) {
@@ -1145,6 +1197,18 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     n: vipSinAbrir.length, ir: 'visitantes',
   });
 
+  // 🔔 v4.86: personas en lista de espera de productos que YA volvieron (nadie les avisó todavía).
+  const volvieron = productosQueVolvieron((opciones && opciones.esperando) || [], productos);
+  if (volvieron.length) {
+    const nEsp = volvieron.reduce((t: number, g: any) => t + g.esperan, 0);
+    acciones.push({
+      id: 'esperan-stock', icono: '🔔', urgencia: 'alta',
+      titulo: nEsp + (nEsp === 1 ? ' persona espera un producto que ya volvió' : ' personas esperan productos que ya volvieron'),
+      detalle: volvieron.slice(0, 3).map((g: any) => g.nombre + ' (' + g.esperan + ')').join(' · ') + '. Avisales desde **Stock → Lista de espera**: el mensaje ya está armado.',
+      n: nEsp, ir: '',
+    });
+  }
+
   const vacias = busquedas.filter((b) => b.vacias > 0);
   if (vacias.length) acciones.push({
     id: 'busquedas-vacias', icono: '🔎', urgencia: 'media',
@@ -1257,6 +1321,14 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     pctCompra: ret.length ? Math.round(retomaronYCompraron / ret.length * 100) : 0,
   } : null;
 
+  // 🔁 ¿SIRVE "LO DE SIEMPRE"? (v4.86) Igual que el rescate: a cuántos se les ofreció, cuántos lo
+  // cargaron y cuántos de ésos terminaron pidiendo.
+  const rOfr = Object.keys(recom.ofrecidos), rCar = Object.keys(recom.cargados);
+  const recompra = rOfr.length || rCar.length ? {
+    ofrecidos: rOfr.length, cargados: rCar.length, descartados: Object.keys(recom.descartados).length,
+    compraron: rCar.filter((v) => embudoVids.pedido[v]).length,
+  } : null;
+
   // 🤖 Cuántos de los que figuran como visitantes no parecen personas. Se informa, no se
   // borra: los números de arriba siguen siendo los reales, con esto se sabe cuánto descontar.
   const robots = visitantesTodos.filter((v) => v.perfil.pareceRobot);
@@ -1339,6 +1411,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
     excluidos, soloHoy,                 // 🧹 v4.80
     verMas, vipAbiertos,                // 👁️ v4.81
     heatmap, cohortes, proyeccion, dormidos,   // 🧠 v4.83
+    recompra, encuesta,                 // 🔁 v4.86
   };
 }
 
@@ -1490,9 +1563,10 @@ async function calcularAnalitica(dias: number, soloHoy = false) {
     sbGet('productos', 'select=id,nombre,stock,activo,dueno,moneda'),
   ]);
   // 🏷️ Los nombres que Jony le puso a mano a visitantes que no se identificaron.
-  const [aliasRows, vipRows] = await Promise.all([
+  const [aliasRows, vipRows, esperando] = await Promise.all([
     sbGet('config', 'select=clave,valor&clave=like.vid_alias:*'),
     sbGet('config', 'select=clave,valor&clave=like.VIP_*'),   // 🔗 v4.81
+    sbGet('notificaciones', 'select=producto_id,producto,estado&estado=eq.pendiente'),   // 🔔 v4.86
   ]);
   // 🔗 Las aperturas VIP de toda la historia (no solo del período): "nunca lo abrió" tiene que
   // mirar todo. Son pocas filas: solo visitas que traen "vip" en la ficha técnica (desde v4.81).
@@ -1508,7 +1582,7 @@ async function calcularAnalitica(dias: number, soloHoy = false) {
     if (!vidA) return;
     try { aliasMap[vidA] = JSON.parse(r.valor || '{}'); } catch { aliasMap[vidA] = { alias: String(r.valor || '') }; }
   });
-  return analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy, vipCatalogos, vipTotales });
+  return analitica(trA, dias, vtA, clA, prA, aliasMap, { soloHoy, vipCatalogos, vipTotales, esperando });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1516,7 +1590,7 @@ async function calcularAnalitica(dias: number, soloHoy = false) {
 //  Van por OneSignal SOLO a los aparatos con la etiqueta rol=jony (el panel la pone al entrar).
 //  NUNCA a "All": hay clientes suscriptos a las novedades de la tienda y no tienen por qué ver esto.
 // ══════════════════════════════════════════════════════════════════════════════
-const ALERTAS_DEF: any = { checkout: 1, conocido: 1, busqueda: 1, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1 };
+const ALERTAS_DEF: any = { checkout: 1, conocido: 1, busqueda: 1, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1, avisame: 1 };
 async function alertasCfg() {
   try { return { ...ALERTAS_DEF, ...JSON.parse(await getConfig('ALERTAS_PUSH', '{}')) }; } catch { return { ...ALERTAS_DEF }; }
 }
@@ -1613,7 +1687,7 @@ function rarezaCalc(filas: any[], hoyK: string, horaAR: number) {
 // Lo que el cron de cada hora revisa: carritos colgados, el informe del domingo, y si hoy es raro.
 async function avisosDelCron() {
   const cfg = await alertasCfg();
-  const out: any = { carritos: 0, informe: false, rareza: null };
+  const out: any = { carritos: 0, informe: false, rareza: null, avisame: 0 };
   const f = fechaAhora();
   const horaAR = parseInt(f.slice(11, 13), 10);
   const [dd, mm, yy] = f.slice(0, 10).split('/');
@@ -1627,6 +1701,21 @@ async function avisosDelCron() {
       const r = await pushJony('🛒 ' + (c.nombre || 'Visitante ' + c.apodo) + ' dejó ' + plataCorta(c.total, c.totalUSD) + ' en el carrito hace ' + c.horas + ' h', '📞 ' + c.telefono + (c.items && c.items.length ? ' · ' + c.items.slice(0, 3).map((it: any) => it.q + '× ' + String(it.n || '').slice(0, 28)).join(' · ') : '') + '. Escribile desde 🛒 Carritos.');
       if (r.ok) out.carritos++;
     }
+  }
+  // 🔔 v4.86: volvió algo que alguien esperaba. Una vez cada 3 días por producto.
+  if (cfg.avisame) {
+    try {
+      const pend = await sbGet('notificaciones', 'select=producto_id,producto,estado&estado=eq.pendiente');
+      if (pend.length) {
+        const ids = [...new Set(pend.map((n: any) => String(n.producto_id || '')).filter(Boolean))];
+        const prods = ids.length ? await sbGet('productos', 'select=id,nombre,stock,activo&id=in.(' + ids.map((x) => encodeURIComponent(x)).join(',') + ')') : [];
+        for (const g of productosQueVolvieron(pend, prods) as any[]) {
+          if (await avisoReciente('av:' + g.id, 72)) continue;
+          const r = await pushJony('🔔 Volvió ' + g.nombre + ': ' + g.esperan + (g.esperan === 1 ? ' persona lo esperaba' : ' personas lo esperaban'), 'Avisales desde Stock → Lista de espera: el mensaje ya está armado.');
+          if (r.ok) out.avisame++;
+        }
+      }
+    } catch { /* un aviso nunca frena el cron */ }
   }
   if (cfg.informe && dow === 0 && horaAR === 20 && !(await avisoReciente('informe:' + hoyK, 20))) {
     const a7 = await calcularAnalitica(7, false);
@@ -2770,7 +2859,7 @@ Deno.serve(async (req) => {
   }
   // ── ZONA PÚBLICA: las acciones de la TIENDA (clientes, sin login) — espejo exacto
   //    de lo que queda FUERA de PROTECTED_ACTIONS/PROTECTED_HIJOS en motor-v2.js.
-  const PUBLICAS = ['getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
+  const PUBLICAS = ['miHabitual', 'getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'notificarPedido', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
@@ -2796,6 +2885,13 @@ Deno.serve(async (req) => {
 
   try {
     // ═══ TIENDA PÚBLICA (sin login) ═══════════════════════════════════════════
+    // 🔁 v4.86: "lo de siempre" de este aparato (solo productos y cantidades, nada personal).
+    if (accion === 'miHabitual') {
+      const vidH = Q('vid').replace(/[^a-z0-9_]/gi, '').slice(0, 60);
+      if (vidH.length < 8) return json({ items: [], pedidos: 0 });
+      const vsH = await sbGet('ventas', 'select=fecha,estado,tipo,stock_updates&vid=eq.' + encodeURIComponent(vidH) + '&order=n_venta.desc&limit=6');
+      return json(pedidoHabitual(vsH));
+    }
     if (accion === 'venta') {
       // Anti pedidos falsos: límite por dispositivo (vid) — 90s entre pedidos, máx 4/hora.
       // (El motor viejo usaba CacheService; acá se mira el timestamp 'creado' de las ventas del vid.)

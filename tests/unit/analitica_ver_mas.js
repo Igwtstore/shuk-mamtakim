@@ -22,7 +22,7 @@ function fnReal(nombre) {
     .replace(/(\w+)!\[/g, '$1[')
     .replace(/\)!\./g, ').');
 }
-const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('leerVistas') + '\n' + fnReal('fechaAhora') + '\n' + fnReal('hoyVsSemana') + '\n' + fnReal('analitica') + '\nreturn { analitica, fechaAhora };';
+const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('leerVistas') + '\n' + fnReal('productosQueVolvieron') + '\n' + fnReal('fechaAhora') + '\n' + fnReal('hoyVsSemana') + '\n' + fnReal('analitica') + '\nreturn { analitica, fechaAhora };';
 const { analitica, fechaAhora } = new Function(codigo)();
 
 const hoyBA = fechaAhora().slice(0, 10);

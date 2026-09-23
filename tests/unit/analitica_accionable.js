@@ -24,7 +24,7 @@ function fnReal(nombre) {
     .replace(/(\w+)!\[/g, '$1[')
     .replace(/\)!\./g, ').');
 }
-const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('leerVistas') + '\n' + fnReal('fechaAhora') + '\n' + fnReal('hoyVsSemana') + '\n' + fnReal('analitica') + '\nreturn { analitica };';
+const codigo = 'const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + fnReal('tsDeFecha') + '\n' + fnReal('leerVistas') + '\n' + fnReal('productosQueVolvieron') + '\n' + fnReal('fechaAhora') + '\n' + fnReal('hoyVsSemana') + '\n' + fnReal('analitica') + '\nreturn { analitica };';
 const { analitica } = new Function(codigo)();
 
 // ── El caso: dos días de tráfico, un cliente que vuelve y un desconocido ───────
