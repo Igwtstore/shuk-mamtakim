@@ -47,6 +47,11 @@ async function run() {
   const reSU = new RegExp(TS.match(/if \(stockUpdates && !\/(.+?)\/\.test\(stockUpdates\)\) return json\(\{ error: 'pedido inválido' \}\);/)[1]);
   t.eq('formato del pedido: lo de la tienda pasa, lo inventado no', ['12:3', '12:3,45:10', "12:3,45'x:1", '12:3;DROP', '-1:2', '12:'].map((x) => reSU.test(x)), [true, true, false, false, false, false]);
 
+  // ✉️ v4.99: la entrada de SMS está cerrada con llave (sin llave cargada, no entra ni se anota nada).
+  const sms = TS.slice(TS.indexOf("if (body && body.event === 'sms:received' && body.payload) {"), TS.indexOf("// ── ZONA PÚBLICA"));
+  t.ok('SMS: sin la llave (SMS_WEBHOOK_TOKEN en config y ?clave= en la dirección) rebota ANTES de anotar nada', /const llaveSms = await getConfig\('SMS_WEBHOOK_TOKEN', ''\);\s*if \(!llaveSms \|\| Q\('clave'\) !== llaveSms\) return json\(\{ error: 'no autorizado' \}\);/.test(sms) && sms.indexOf('llaveSms') < sms.indexOf("sbInsert('sms_log'"));
+  t.ok('SMS: la llave termina en _TOKEN, así el backup no la guarda', /_TOKEN/.test('SMS_WEBHOOK_TOKEN'));
+
   // El aviso de la tienda Candy manda WhatsApp SOLO a la familia.
   const src = bloque(TS, "if (accion === 'avisarmeCandy') {");
   const probarAviso = async (wa) => {

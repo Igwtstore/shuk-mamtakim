@@ -3281,8 +3281,12 @@ Deno.serve(async (req) => {
   const Q = (k: string) => { const v = body[k]; if (v !== undefined && v !== null && v !== '') return String(v); const q = url.searchParams.get(k); return q == null ? '' : q; };
   const QN = (k: string) => { const n = parseFloat(Q(k)); return isNaN(n) ? 0 : n; };
   // ── Webhook del gateway de SMS (capcom6): SMS entrante → cerebro de Shuki → respuesta SMS.
-  //    Sin token (el gateway no sabe de sesiones); protección = SIM configurada + modo captura.
+  //    🔒 v4.99: CERRADO CON LLAVE. El gateway no sabe de sesiones, así que la llave va en su dirección:
+  //    …/functions/v1/api?clave=<SMS_WEBHOOK_TOKEN>. Sin llave cargada en config (hoy: el SMS no se usa desde junio)
+  //    no entra NADA, ni se anota. Para REABRIRLO: cargar SMS_WEBHOOK_TOKEN (larga, al azar) y ponerla en el gateway.
   if (body && body.event === 'sms:received' && body.payload) {
+    const llaveSms = await getConfig('SMS_WEBHOOK_TOKEN', '');
+    if (!llaveSms || Q('clave') !== llaveSms) return json({ error: 'no autorizado' });
     try {
       const from = (body.payload.phoneNumber || '').toString().trim();
       const text = (body.payload.message || '').toString().trim();
