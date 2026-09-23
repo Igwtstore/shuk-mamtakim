@@ -1967,7 +1967,7 @@ function compartirTienda() {
   </div>`;
 }
 function _compartirLink(kid, nombre) {
-  const url = `https://shuk-mamtakim.vercel.app/tienda.html?kid=${kid}`;
+  const url = `https://shukmamtakim.com.ar/tienda.html?kid=${kid}`;   // v4.99: el sitio vive en el VPS (Vercel solo desvía acá)
   const msg = `🍬 ¡Mirá la tienda de golosinas de ${nombre}! Elegí lo que quieras y hacé el pedido 👇\n${url}`;
   if (navigator.share) {
     navigator.share({ title: 'Candy Shop ' + nombre, text: msg, url }).catch(() => {});

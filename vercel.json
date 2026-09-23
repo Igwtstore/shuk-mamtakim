@@ -2,6 +2,9 @@
   "functions": {
     "api/*.js": { "maxDuration": 300 }
   },
+  "redirects": [
+    { "source": "/(.*)", "has": [{ "type": "host", "value": ".*\\.vercel\\.app" }], "destination": "https://shukmamtakim.com.ar/$1", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/tienda", "destination": "/index.html" },
     { "source": "/mayorista", "destination": "/index.html" },
