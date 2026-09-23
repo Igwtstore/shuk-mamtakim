@@ -121,7 +121,9 @@ export function crearEnVivo({ ahora = () => Date.now() } = {}) {
 // Miri no la ve (⚠️ regla sagrada: en vista Miri no se ve NADA de Jony, y acá se ven los
 // productos y los clientes en tiempo real). Se recuerda cada token 5 minutos para no
 // consultar Auth en cada reconexión.
-export function crearPortero({ sbUrl, anon, mailMiri, fetchFn = globalThis.fetch, ahora = () => Date.now(), ttlMs = 5 * 60 * 1000 }) {
+// 🔐 v4.92: `permitidos` = las ÚNICAS cuentas que pueden ver el En vivo (nombres y teléfonos de quien
+// está en la tienda). Antes pasaba cualquier sesión válida menos la de Miri: la cuenta de Candy también.
+export function crearPortero({ sbUrl, anon, mailMiri, permitidos = null, fetchFn = globalThis.fetch, ahora = () => Date.now(), ttlMs = 5 * 60 * 1000 }) {
   const cache = new Map();
   async function emailDe(token) {
     const c = cache.get(token);
@@ -140,6 +142,7 @@ export function crearPortero({ sbUrl, anon, mailMiri, fetchFn = globalThis.fetch
     const email = await emailDe(token);
     if (!email) return { ok: false, motivo: 'sesión inválida o vencida' };
     if (mailMiri && email === mailMiri) return { ok: false, motivo: 'no disponible para esta cuenta' };
+    if (Array.isArray(permitidos) && !permitidos.includes(email)) return { ok: false, motivo: 'no disponible para esta cuenta' };
     return { ok: true, email };
   }
   return { puedeVer };

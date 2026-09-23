@@ -67,11 +67,12 @@ async function run() {
     return { ok: true, json: async () => ({ email: mails[tok] }) };
   };
   let ahoraP = 0;
-  const portero = crearPortero({ sbUrl: 'https://x', anon: 'a', mailMiri: 'myri@shukmamtakim.com', fetchFn: fetchFalso, ahora: () => ahoraP, ttlMs: 1000 });
+  const portero = crearPortero({ sbUrl: 'https://x', anon: 'a', mailMiri: 'myri@shukmamtakim.com', permitidos: ['admin@shukmamtakim.com'], fetchFn: fetchFalso, ahora: () => ahoraP, ttlMs: 1000 });
   t.eq('sin token: afuera', (await portero.puedeVer('')).ok, false);
   t.eq('token inválido: afuera', (await portero.puedeVer('nadie')).ok, false);
   t.eq('Jony: adentro', (await portero.puedeVer('jony')).ok, true);
   t.eq('⚠️ Miri: afuera aunque su sesión sea válida (regla sagrada)', (await portero.puedeVer('miri')).ok, false);
+  t.eq('🔐 v4.92: la cuenta de Candy tampoco ve el En vivo (nombres y teléfonos de los clientes)', (await portero.puedeVer('kids')).ok, false);
   const antes = consultas; await portero.puedeVer('jony');
   t.eq('el token válido se recuerda (no se consulta Auth otra vez)', consultas, antes);
   ahoraP = 5000; await portero.puedeVer('jony');

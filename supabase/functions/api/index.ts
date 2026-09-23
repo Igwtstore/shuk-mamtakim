@@ -1524,9 +1524,13 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
 }
 
 // ── Infra ───────────────────────────────────────────────────────────────────────
+// 🔐 v4.92 · SOLO LAS CUENTAS DEL EQUIPO. El login de Supabase traía de fábrica la inscripción
+// abierta y el motor dejaba pasar a CUALQUIER usuario con sesión válida. Además de cerrar la
+// inscripción (23/09), el motor acepta solo estas cuentas: una cuenta nueva, aunque alguien la
+// lograra crear, no puede pedir nada. Sumar una cuenta = agregarla acá.
+const MAILS_EQUIPO = ['admin@shukmamtakim.com', 'myri@shukmamtakim.com', 'kids@candyshop.com'];
 async function sesionValida(token: string): Promise<boolean> {
-  if (!token) return false;
-  try { const r = await fetch(SB_URL + '/auth/v1/user', { headers: { Authorization: 'Bearer ' + token, apikey: ANON } }); return r.ok; } catch { return false; }
+  return !!(await usuarioSesion(token));
 }
 // ── IDENTIDAD (v4.49) ───────────────────────────────────────────────────────────
 // sesionValida() solo contesta "¿es un usuario válido?" — nunca CUÁL. Con eso, el token
@@ -1541,7 +1545,9 @@ async function usuarioSesion(token: string): Promise<Usuario | null> {
     const r = await fetch(SB_URL + '/auth/v1/user', { headers: { Authorization: 'Bearer ' + token, apikey: ANON } });
     if (!r.ok) return null;
     const u = await r.json();
-    return { email: String(u?.email || '').trim().toLowerCase(), id: String(u?.id || '') };
+    const email = String(u?.email || '').trim().toLowerCase();
+    if (!MAILS_EQUIPO.includes(email)) return null;   // 🔐 v4.92: una sesión válida de alguien de afuera no alcanza
+    return { email, id: String(u?.id || '') };
   } catch { return null; }
 }
 const esJony = (u: Usuario | null) => !!u && u.email === MAIL_JONY;

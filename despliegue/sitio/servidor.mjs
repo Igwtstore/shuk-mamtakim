@@ -74,7 +74,7 @@ function geoDe(req) {
   try { const g = geoip.lookup(ipDe(req)); return g ? { city: g.city || '', region: g.region || '', country: g.country || '' } : null; } catch { return null; }
 }
 const vivo = crearEnVivo();
-const portero = crearPortero({ sbUrl: SB_URL, anon: SB_ANON, mailMiri: MAIL_MIRI });
+const portero = crearPortero({ sbUrl: SB_URL, anon: SB_ANON, mailMiri: MAIL_MIRI, permitidos: ['admin@shukmamtakim.com'] });   // 🔐 v4.92: el En vivo es solo de Jony
 const leerParams = [express.urlencoded({ extended: false, limit: '64kb' }), express.json({ limit: '64kb' })];
 // 🍪 La identidad anónima que Safari no borra (v4.80). El iPhone tira lo que la página guarda a
 // los 7 días sin visitas, y la persona volvía como "nueva" (los "nuevos" estaban inflados). Una
