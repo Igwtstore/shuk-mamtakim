@@ -1843,6 +1843,7 @@
       <button class="psec-btn" style="font-size:0.72rem;padding:0.3rem 0.7rem" onclick="document.getElementById('ia-pregunta').value=this.textContent;preguntarIAUI()">¿Cómo les va a los chicos?</button>
     </div>
     <div id="ia-respuesta" style="display:none;margin-top:0.75rem;background:var(--gris);border-radius:10px;padding:0.85rem 1rem;font-size:0.88rem;line-height:1.55;white-space:pre-wrap"></div>
+    <div id="ia-claves" hidden style="margin-top:0.8rem;border-top:1px dashed var(--gris-medio);padding-top:0.6rem;font-size:0.78rem"></div>
   </div>
   <div class="admin-card" data-seccion="catalogo">
     <div class="admin-titulo">🙈 Mostrar / ocultar productos</div>
@@ -6541,8 +6542,56 @@ async function preguntarIAUI() {
 async function guardarClaveIA() {
   const clave = (document.getElementById('ia-clave')?.value || '').trim();
   if (!clave) return;
-  const r = await apiWrite(new URLSearchParams({ accion: 'guardarClaveIA', clave }), '🔑 Clave guardada ✓');
+  // 🔒 v4.93: la clave va en el CUERPO del pedido (POST), no en la dirección: así no queda en ningún registro.
+  const r = await apiWritePost({ accion: 'guardarClaveIA', clave }, '🔑 Clave probada y guardada ✓');
   if (!r.error) preguntarIAUI();   // reintenta la pregunta que quedó pendiente
+}
+
+// ─── 🔑 CLAVES DE IA (v4.93) ─────────────────────────────────────────────────
+// Solo Jony. Dice si cada clave está cargada y desde cuándo (el motor NUNCA devuelve la clave, ni
+// un pedazo) y deja cambiarla: el motor la prueba contra Anthropic / Google ANTES de guardarla, así
+// que una clave mal pegada no deja la IA muerta. Sirve para rotarlas cuando haga falta.
+let _clavesIA = null, _clavesIAAbierto = false;
+async function cargarClavesIA() {
+  const box = document.getElementById('ia-claves'); if (!box) return;
+  if (!adminAuth || socioActual !== 'jony' || esVistaMiri()) { box.hidden = true; return; }
+  try { const r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=estadoClavesIA'); if (r && r.anthropic) _clavesIA = r; } catch { /**/ }
+  renderClavesIA();
+}
+function _claveIALinea(nombre, x) {
+  if (!x) return `<span style="color:var(--texto-suave)">${nombre}: …</span>`;
+  if (!x.cargada) return `<span style="color:#c0392b">${nombre}: ❌ falta</span>`;
+  const desde = x.origen === 'panel' ? (x.fecha ? ' (cargada el ' + esc(x.fecha.slice(0, 10)) + ')' : '') : ' (la de respaldo del motor)';
+  return `<span>${nombre}: ✅${desde}</span>`;
+}
+function renderClavesIA() {
+  const box = document.getElementById('ia-claves'); if (!box) return;
+  box.hidden = false;
+  const c = _clavesIA || {};
+  const form = (tipo, ph, ayuda) => `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.45rem">
+      <input id="ia-clave-${tipo}" type="password" autocomplete="off" placeholder="${ph}" style="flex:1;min-width:180px;padding:0.45rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-size:0.8rem">
+      <button id="ia-clave-btn-${tipo}" onclick="cambiarClaveIA('${tipo}')" style="padding:0.45rem 0.9rem;background:var(--verde);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">Probar y guardar</button>
+      <span style="flex-basis:100%;font-size:0.7rem;color:var(--texto-suave)">${ayuda}</span>
+    </div>`;
+  box.innerHTML = `<div style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:center">
+      <b>🔑 Claves de IA</b> ${_claveIALinea('Claude (Anthropic)', c.anthropic)} ${_claveIALinea('Gemini (flyers)', c.gemini)}
+      <button onclick="_clavesIAAbierto=!_clavesIAAbierto;renderClavesIA()" class="psec-btn" style="font-size:0.72rem;padding:0.25rem 0.65rem;margin-left:auto">${_clavesIAAbierto ? 'Cerrar' : 'Cambiar'}</button>
+    </div>` + (_clavesIAAbierto
+      ? form('anthropic', 'sk-ant-…', 'Se crea en console.anthropic.com → API Keys → Create Key.') +
+        form('gemini', 'AIza… o AQ.…', 'Se crea en aistudio.google.com → Get API key → Create API key.') +
+        '<div style="font-size:0.7rem;color:var(--texto-suave);margin-top:0.4rem">Antes de guardarla se prueba contra el servicio: si no funciona, no se toca la que está. Después de cambiarla, borrá la vieja en la consola del servicio.</div>'
+      : '');
+}
+async function cambiarClaveIA(tipo) {
+  const inp = document.getElementById('ia-clave-' + tipo), btn = document.getElementById('ia-clave-btn-' + tipo);
+  const clave = (inp && inp.value || '').trim();
+  if (!clave) { if (inp) inp.focus(); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Probando…'; }
+  const r = await apiWritePost({ accion: tipo === 'anthropic' ? 'guardarClaveIA' : 'guardarClaveGemini', clave },
+    tipo === 'anthropic' ? '🔑 Clave de Claude probada y guardada ✓' : '🔑 Clave de Gemini probada y guardada ✓');
+  if (inp) inp.value = '';
+  if (btn) { btn.disabled = false; btn.textContent = 'Probar y guardar'; }
+  if (r && r.ok) { _clavesIAAbierto = false; await cargarClavesIA(); }
 }
 
 // ─── FLYER CON IA (Shuk) — espejo del motor del Candy Shop ───────
@@ -6974,7 +7023,7 @@ function _formClaveGemini() {
 async function _guardarClaveGemini() {
   const clave = (document.getElementById('gemini-clave').value || '').trim();
   if (!clave) return;
-  const r = await apiWrite(new URLSearchParams({ accion: 'guardarClaveGemini', clave }), '🔑 Clave de Gemini guardada ✓');
+  const r = await apiWritePost({ accion: 'guardarClaveGemini', clave }, '🔑 Clave de Gemini probada y guardada ✓');   // 🔒 v4.93: por el cuerpo, no la dirección
   if (r && r.ok) generarTextoFlyer();
 }
 
@@ -13280,6 +13329,7 @@ function setPanelSeccion(s, btn) {
   if (typeof verificarStockBajo === 'function') verificarStockBajo();   // re-evalúa la alerta (solo va en Stock)
   if (s === 'catalogo' && typeof cargarFlyers === 'function') { cargarFlyers(); cargarBandeja(); }
   if (s === 'catalogo' && typeof cargarEstadoPush === 'function' && !esVistaMiri()) cargarEstadoPush();
+  if (s === 'inicio' && typeof cargarClavesIA === 'function') cargarClavesIA();   // 🔑 v4.93 (solo Jony; la función se fija)
   if (s === 'bot') { const ch = document.getElementById('bot-chat'); if (ch && !ch.children.length) botPintarMsg('Escribí o hablá natural para probar a Shuki 👇 (ej: "hola, qué tenés?")', 'bot'); }
   // 🇮🇱 La calculadora se carga recién al abrir la sección: es medio mega y no tiene por qué
   // bajarlo quien nunca entra. Se setea una sola vez; después queda viva con su estado.

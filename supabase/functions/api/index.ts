@@ -16,7 +16,7 @@ const SITIO_PUSH = 'https://shukmamtakim.com.ar/';
 // ── Notificaciones push (OneSignal) ─────────────────────────────────────────────
 const OS_APP_ID = '0e4a5058-d7a1-405b-86c9-86ae42940ab4';
 // La clave sale del secret ONESIGNAL_KEY; si no está, cae al valor viejo del código (vencido).
-const osKey = () => Deno.env.get('ONESIGNAL_KEY') || 'os_v2_app_bzffawgxufafxbwjq2xeffakwte3mjhkcfje2qevxjorgj4osj3vac6be2h2xriszbv7b7okaqv6ug4v6e4omyx6p6u74imuvhszyei';
+const osKey = () => Deno.env.get('ONESIGNAL_KEY') || '';   // 🔒 v4.93: nada de clave escrita acá (el repo es público)
 
 const CAJAS_ARS = ['MP_GABY', 'EFT_MYRI', 'EFT_JONY', 'MP_JONY', 'CTA_CTE_ARS'];
 const _CAJAS_JONY_ENV = ['MP_JONY', 'EFT_JONY', 'ETF_USD_JONY', 'COMI_USD_JONY'];
@@ -2122,6 +2122,19 @@ const BOT_SECRET = Deno.env.get('BOT_SECRET') || '';
 // La clave de IA vive en la tabla config (la carga el panel con guardarClaveIA,
 // igual que ScriptProperties en el motor viejo). Fallback: secret de la EF.
 async function claveIA() { return (await getConfig('ANTHROPIC_API_KEY', '')) || Deno.env.get('ANTHROPIC_API_KEY') || ''; }
+async function claveGemini() { return (await getConfig('GEMINI_API_KEY', '')) || Deno.env.get('GEMINI_API_KEY') || ''; }
+// 🔑 v4.93: antes de guardar una clave nueva se PRUEBA contra el servicio (una lista de modelos: no
+// gasta nada). Así un pegado a medias no deja la IA muerta hasta que alguien se dé cuenta.
+async function probarClaveIA(tipo: string, clave: string): Promise<string> {
+  try {
+    const r = tipo === 'anthropic'
+      ? await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': clave, 'anthropic-version': '2023-06-01' } })
+      : await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': clave } });
+    if (r.ok) return '';
+    return r.status === 401 || r.status === 403 || r.status === 400 ? 'la clave no funciona (el servicio la rechazó)' : 'el servicio respondió ' + r.status + ' — probá de nuevo en un rato';
+  } catch { return 'no se pudo comprobar la clave (sin conexión con el servicio)'; }
+}
+async function fechasClavesIA(): Promise<any> { try { return JSON.parse(await getConfig('CLAVES_IA_FECHAS', '{}')) || {}; } catch { return {}; } }
 
 // Llamada cruda a la API de Anthropic (mismo payload que el motor viejo). `betas`: funciones de la
 // API que todavía van con encabezado propio (p. ej. el respaldo si el modelo se niega).
@@ -3075,7 +3088,7 @@ function cazarImagenB64(o: any, prof = 0): { data: string; mime?: string } | nul
 // Claude lee el flyer generado y transcribe los importes; se comparan contra lo
 // esperado (solo dígitos). null = no se pudo verificar (sin clave) → se avisa.
 async function verificarPreciosFlyer(b64: string, mime: string, prods: any[]): Promise<{ ok: boolean; problemas: string[] } | null> {
-  const aKey = Deno.env.get('ANTHROPIC_API_KEY') || (await getConfig('ANTHROPIC_API_KEY', ''));
+  const aKey = await claveIA();   // 🔑 v4.93: la misma clave que todo lo demás (antes acá mandaba el secreto viejo)
   if (!aKey || b64.length > 4800000) return null;
   try {
     const r = await anthropicMsg(aKey, {
@@ -3144,7 +3157,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4792,7 +4805,10 @@ Deno.serve(async (req) => {
     if (accion === 'guardarClaveIA') {
       const clave = Q('clave').trim();
       if (!clave.startsWith('sk-ant-')) return json({ error: 'Esa no parece una clave de Anthropic (empiezan con sk-ant-)' });
+      const mal = await probarClaveIA('anthropic', clave);
+      if (mal) return json({ error: 'Anthropic: ' + mal + '. No se guardó nada.' });
       await setConfig('ANTHROPIC_API_KEY', clave);
+      const f = await fechasClavesIA(); f.anthropic = fechaAhora(); await setConfig('CLAVES_IA_FECHAS', JSON.stringify(f));
       return json({ ok: true });
     }
     if (accion === 'analizarFotoProducto') return json(await analizarFotoProducto(Q('url')));
@@ -4999,14 +5015,26 @@ Deno.serve(async (req) => {
       // Google tiene DOS formatos vivos: el clásico 'AIza…' y el nuevo 'AQ.…'
       // (el que usa hoy AI Studio). Validar solo el viejo rechazaba la clave buena.
       if (!/^(AIza|AQ\.)/.test(claveG) || claveG.length < 30) return json({ error: 'Esa no parece una clave de Gemini (empiezan con AIza… o AQ.…)' });
+      const mal = await probarClaveIA('gemini', claveG);
+      if (mal) return json({ error: 'Gemini: ' + mal + '. No se guardó nada.' });
       await setConfig('GEMINI_API_KEY', claveG);
+      const f = await fechasClavesIA(); f.gemini = fechaAhora(); await setConfig('CLAVES_IA_FECHAS', JSON.stringify(f));
       return json({ ok: true });
+    }
+    // 🔑 v4.93: en qué estado están las claves de IA — NUNCA devuelve la clave, ni un pedazo.
+    if (accion === 'estadoClavesIA') {
+      const f = await fechasClavesIA();
+      const est = async (clave: string, env: string, fecha: string) => {
+        const enPanel = !!(await getConfig(clave, '')), enSecreto = !!Deno.env.get(env);
+        return { cargada: enPanel || enSecreto, origen: enPanel ? 'panel' : enSecreto ? 'secreto' : 'ninguna', fecha: enPanel ? (fecha || '') : '' };
+      };
+      return json({ anthropic: await est('ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY', f.anthropic), gemini: await est('GEMINI_API_KEY', 'GEMINI_API_KEY', f.gemini) });
     }
     if (accion === 'disenoFlyerIA') {
       // 🪄 Gemini diseña el flyer ENTERO; los precios se verifican leyendo la
       // imagen ANTES de entregarla (y si no cierran, se reintenta una vez).
       try {
-        const gKey = (await getConfig('GEMINI_API_KEY', '')) || Deno.env.get('GEMINI_API_KEY') || '';
+        const gKey = await claveGemini();
         if (!gKey) return json({ error: 'sin_clave_gemini', mensaje: 'Falta la clave de Gemini (se carga desde el armador de flyers).' });
         let prodsIA: any[] = [];
         try { prodsIA = JSON.parse(Q('productos') || '[]'); } catch { prodsIA = []; }

@@ -1700,7 +1700,7 @@ function doGet(e) {
       if (!mensaje) return json({error:'sin mensaje'});
       UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
         method: 'post',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Key os_v2_app_bzffawgxufafxbwjq2xeffakwte3mjhkcfje2qevxjorgj4osj3vac6be2h2xriszbv7b7okaqv6ug4v6e4omyx6p6u74imuvhszyei' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + PropertiesService.getScriptProperties().getProperty('ONESIGNAL_KEY') },
         payload: JSON.stringify({ app_id: '0e4a5058-d7a1-405b-86c9-86ae42940ab4', included_segments: ['All'], headings: { es: titulo, en: titulo }, contents: { es: mensaje, en: mensaje }, url: 'https://shuk-mamtakim.vercel.app/' }),
         muteHttpExceptions: true
       });
