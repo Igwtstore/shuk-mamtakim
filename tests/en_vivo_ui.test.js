@@ -36,8 +36,15 @@ const DIA = { dia: hoyBA, esHoy: true, eventos: [
   { id: 'm2', t: HACE2H + 20000, vid: 'v_rivka', pagina: 'tienda', evento: 'vistas', vistos: ['Klik', 'Bamba', 'Elite'], total: 0 },
   { id: 'm3', t: HACE2H + 40000, vid: 'v_rivka', pagina: 'tienda', evento: 'vistas', vistos: ['Elite'], total: 0 },
   { id: 'm4', t: HACE2H + 60000, vid: 'v_rivka', pagina: 'tienda', evento: 'carrito', detalle: 'Klik', carrito: '[{"n":"Klik","q":2,"p":7999}]', total: 15998 },
-  { id: 'm5', t: HACE2H + 90000, vid: 'v_rivka', pagina: 'tienda', evento: 'pedido', total: 15998 },
+  { id: 'm5', t: HACE2H + 90000, vid: 'v_rivka', pagina: 'tienda', evento: 'pedido', total: 15998, carrito: '[{"n":"Klik","q":2,"p":7999}]' },
 ] };
+// v4.85: la ficha del visitante con la forma nueva (productos de verdad + recorrido en eventos compactos)
+const FICHA = { vid: 'v_rivka', nombre: 'Rivka Mañana', telefono: '1144448888', ciudad: 'Once', pais: 'Argentina', dispositivo: 'celular', origen: 'whatsapp',
+  fichaTecnica: { tz: 'America/Argentina/Buenos_Aires', idi: 'es-AR', ap: 'iPhone', px: '390x844', toq: 1, hl: 10 }, segundos: 95, interacciones: 3,
+  apodo: '#IVKA', aliasPuesto: '', notaPuesta: '', eventos: { visita: 1, vistas: 2, carrito: 1, pedido: 1 }, dias: 1, primera: '22/09/2026 10:00', ultima: '22/09/2026 10:02',
+  productos: [{ nombre: 'Elite', n: 2 }, { nombre: 'Klik', n: 1 }, { nombre: 'Bamba', n: 1 }], agregados: [{ nombre: 'Klik', n: 1 }],
+  compras: [{ nVenta: 157, fecha: '22/09/2026 10:02', cliente: 'Rivka Mañana', estado: 'pendiente', totalARS: 15998, totalUSD: 0 }], gastadoARS: 15998,
+  linea: DIA.eventos.map(e => ({ ...e, fecha: '' })) };
 const pedidosDia = [];
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
 
@@ -61,6 +68,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
     const u = route.request().url();
     if (u.includes('getAnalitica')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(DATA) });
     if (u.includes('eventosDelDia')) { const m = u.match(/dia=(\d{4}-\d{2}-\d{2})/); pedidosDia.push(m ? m[1] : ''); return route.fulfill({ contentType: 'application/json', body: JSON.stringify(m && m[1] !== hoyBA ? { dia: m[1], esHoy: false, eventos: [] } : DIA) }); }
+    if (u.includes('getFichaVisitante')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(FICHA) });
     if (u.includes('getAlertasPush')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, cfg: { checkout: 1, conocido: 1, busqueda: 0, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1 } }) });
     // El catálogo (Supabase REST) con productos de mentira: sin tarjetas no hay vistas que medir.
     if (/\/rest\/v1\/productos\?/.test(u)) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PRODS_SB) });
@@ -144,6 +152,16 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => vivoDiaFiltro('todas'));
   await pg.evaluate(() => { const b = [...document.querySelectorAll('#vivo-dia button')].find(x => x.textContent.includes('Paso a paso') && x.closest('div[style*="border-bottom"]').textContent.includes('Rivka')); if (b) b.click(); });
   { const x = await txt(); ok('v4.84: el paso a paso junta las dos tandas de vistas en un renglón, con hora y segundos', x.includes('miró 3: Klik, Bamba, Elite') && /\d\d:\d\d:\d\d/.test(x)); }
+  // v4.85: la ficha del visitante, visita por visita y sin texto de código
+  await pg.evaluate(() => abrirFichaVisitante('v_rivka'));
+  await hasta(async () => (await pg.evaluate(() => (document.getElementById('ana-ficha-modal') || {}).innerText || '')).includes('Su recorrido'));
+  { const fx = await pg.evaluate(() => document.getElementById('ana-ficha-modal').innerText);
+    ok('v4.85: la ficha muestra lo que más miró y lo que puso en el carrito, con productos de verdad', fx.includes('Lo que más miró') && fx.includes('Elite') && fx.includes('Lo que puso en el carrito'));
+    ok('v4.85: el recorrido va visita por visita, con fecha y resumen', fx.includes('Su recorrido, visita por visita') && /\d\d\/\d\d/.test(fx) && fx.includes('miró 3 productos') && fx.includes('pidió'));
+    ok('v4.85: la ficha no muestra ningún texto de código', !fx.includes('{"') && !fx.includes('"tz"') && !fx.includes('"seg"')); }
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#ficha-recorrido button')].find(x => x.textContent.includes('Paso a paso')); if (b) b.click(); });
+  ok('v4.85: el paso a paso de la ficha muestra qué llevaba en el pedido', (await pg.evaluate(() => document.getElementById('ficha-recorrido').innerText)).includes('2× Klik'));
+  await pg.evaluate(() => cerrarFichaVisitante());
   await pg.evaluate(() => vivoDiaIr(-1));
   ok('v4.84: "Día anterior" le pide al motor el día de ayer y lo muestra', await hasta(async () => pedidosDia.length >= 2 && pedidosDia[pedidosDia.length - 1] < hoyBA && (await txt()).includes('Todo el ')));
   await pg.evaluate(() => vivoDiaIr(0));

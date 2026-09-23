@@ -18,7 +18,7 @@ const sinTipos = t => t.replace(/(\w+)\s*:\s*(?:string|number|boolean|any)(\[\])
   .replace(/\(([a-z]\w*)\s*:\s*any\)/g, '($1)').replace(/\s+as\s+(any|number|string|boolean)\b/g, '');
 const M = new Function('const esJSON = x => (x || \'\').charCodeAt(0) === 123;\n' + sinTipos(bloque(TS, 'leerVistas')) + '\n' + sinTipos(bloque(TS, 'compactarEvento')) + '\nreturn { leerVistas, compactarEvento };')();
 const stubs = "const esc = s => String(s == null ? '' : s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]); const _anaPlata = n => '$ ' + Math.round(n || 0).toLocaleString('es-AR'); const _anaPlataMix = (a, u) => '$ ' + a; const _VIVO_SESION_MS = 30 * 60000;\n";
-const nombres = ['_vivoDur', '_vivoHora', '_vivoVistos', '_vivoTexto', '_vivoUnir', '_vivoSesionNueva', '_vivoSesionSumar', '_vivoSesiones', '_vivoResumenSesion', '_vivoPasos', '_vivoHoyK', '_vivoInicioDe'];
+const nombres = ['_vivoDur', '_vivoHora', '_vivoFechaCorta', '_vivoTsDeFecha', '_vivoVistos', '_vivoTexto', '_vivoUnir', '_vivoSesionNueva', '_vivoSesionSumar', '_vivoSesiones', '_vivoResumenSesion', '_vivoPasos', '_vivoHoyK', '_vivoInicioDe'];
 const P = new Function(stubs + nombres.map(n => bloque(HTML, n)).join('\n') + '\nreturn {' + nombres.join(',') + '};')();
 
 async function run() {
@@ -85,6 +85,12 @@ async function run() {
   t.ok('texto: aviso y compartir', P._vivoTexto({ evento: 'aviso' }).includes('aviso') && P._vivoTexto({ evento: 'compartir', detalle: 'Klik' }).includes('compartió'));
   t.ok('el día de hoy es el de Buenos Aires (AAAA-MM-DD)', /^\d{4}-\d{2}-\d{2}$/.test(P._vivoHoyK()));
   t.eq('el día arranca a las 00:00 de Buenos Aires', new Date(P._vivoInicioDe('2026-09-22')).toISOString(), '2026-09-22T03:00:00.000Z');
+  // v4.85: la ficha usa fecha corta y fechas de texto viejas
+  t.eq('fecha corta en Buenos Aires', P._vivoFechaCorta(Date.UTC(2026, 8, 23, 1, 0)), '22/09');
+  t.eq('"22/09/2026 20:06" (Buenos Aires) a milisegundos', new Date(P._vivoTsDeFecha('22/09/2026 20:06')).toISOString(), '2026-09-22T23:06:00.000Z');
+  t.eq('fecha de texto rota: 0, no explota', P._vivoTsDeFecha('cualquier cosa'), 0);
+  const conPedido = P._vivoSesiones([e('p1', 'v_p', 'visita', 0), e('p2', 'v_p', 'pedido', 30, { total: 20000, carrito: '[{"n":"Klik","q":2,"p":7999},{"n":"Elite","q":1,"p":4002}]' })])[0];
+  t.ok('paso a paso: el pedido muestra qué llevaba', P._vivoPasos(conPedido).includes('2× Klik · 1× Elite'));
   return t.result();
 }
 module.exports = { run };

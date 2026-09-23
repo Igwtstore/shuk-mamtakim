@@ -525,6 +525,40 @@ function compactarEvento(r: any) {
   if (r.carrito && (ev === 'carrito' || ev === 'checkout' || ev === 'pedido')) o.carrito = String(r.carrito);
   return o;
 }
+// 👤 LA FICHA DE UN VISITANTE (v4.85), armada a partir de sus eventos. Antes se contaba como
+// "producto" cualquier texto de un evento, y desde que cada visita trae su ficha técnica (y cada
+// salida sus segundos) en formato de código, eso aparecía en "Lo que más miró" y en el recorrido.
+// Ahora: lo que más miró sale de las tandas de vistas, lo que puso en el carrito de los eventos de
+// carrito, y el recorrido viaja como eventos compactos para dibujarlo visita por visita.
+function resumirFicha(evs: any[]) {
+  let nombre = '', telefono = '', ciudad = '', pais = '', dispositivo = '', origen = '';
+  const dias: any = {}, vistos: any = {}, agregados: any = {}, cuenta: any = {};
+  const linea: any[] = [];
+  evs.forEach((r: any) => {
+    const ev = String(r.evento || 'visita');
+    cuenta[ev] = (cuenta[ev] || 0) + 1;
+    // Lo último que dejó es lo que vale: si corrigió su nombre, manda el corregido.
+    if (r.nombre) nombre = String(r.nombre);
+    if (r.telefono) telefono = String(r.telefono);
+    if (r.ciudad) ciudad = String(r.ciudad);
+    if (r.pais) pais = String(r.pais);
+    if (r.dispositivo) dispositivo = String(r.dispositivo);
+    if (r.origen && !origen) origen = String(r.origen);   // el canal es el primer toque: el que lo trajo
+    const f = String(r.fecha || '');
+    if (f) dias[f.slice(0, 10)] = 1;
+    if (ev === 'bloqueado' || ev === 'geo') return;
+    const det = String(r.detalle || '');
+    if (ev === 'vistas') leerVistas(det).forEach((n: string) => { vistos[n] = (vistos[n] || 0) + 1; });
+    if (ev === 'carrito' && det && !esJSON(det)) agregados[det] = (agregados[det] || 0) + 1;
+    const c = compactarEvento(r);
+    c.fecha = f;
+    if (!c.t) c.t = tsDeFecha(f) || 0;
+    linea.push(c);
+  });
+  const top = (o: any) => Object.entries(o).sort((a: any, b: any) => b[1] - a[1]).map(([nombre, n]) => ({ nombre, n }));
+  return { nombre, telefono, ciudad, pais, dispositivo, origen, cuenta, dias: Object.keys(dias).length,
+    productos: top(vistos), agregados: top(agregados), linea };
+}
 async function eventosDelDia(dia: string, hoyK: string) {
   const [y, mo, d] = dia.split('-').map((x) => parseInt(x, 10));
   const sig = new Date(Date.UTC(y, mo - 1, d + 1));
@@ -4065,24 +4099,9 @@ Deno.serve(async (req) => {
         sbGet('ventas', 'select=id,n_venta,fecha,cliente,estado,total_ars,total_usd,productos&vid=eq.' + encodeURIComponent(vidF) + '&order=n_venta'),
       ]);
       if (!evs.length && !vtsF.length) return json({ error: 'sin datos de ese visitante' });
-      let nombreF = '', telF = '', ciudadF = '', paisF = '', dispF = '', ogF = '';
-      const dias: any = {}, prods: any = {}, cuenta: any = {};
-      const linea = evs.map((r: any) => {
-        const ev = (r.evento || 'visita').toString();
-        cuenta[ev] = (cuenta[ev] || 0) + 1;
-        if (r.nombre && !nombreF) nombreF = String(r.nombre);
-        if (r.telefono && !telF) telF = String(r.telefono);
-        if (r.ciudad && !ciudadF) ciudadF = String(r.ciudad);
-        if (r.pais && !paisF) paisF = String(r.pais);
-        if (r.dispositivo && !dispF) dispF = String(r.dispositivo);
-        if (r.origen && !ogF) ogF = String(r.origen);
-        const f = (r.fecha || '').toString();
-        dias[f.slice(0, 10)] = 1;
-        if (r.detalle && ev !== 'busqueda') prods[String(r.detalle)] = (prods[String(r.detalle)] || 0) + 1;
-        let items = null;
-        try { const arr = JSON.parse(String(r.carrito || '')); if (Array.isArray(arr) && arr.length) items = arr; } catch { /**/ }
-        return { fecha: f, evento: ev, pagina: (r.pagina || '').toString(), detalle: (r.detalle || '').toString(), total: parseFloat(r.total) || 0, items, origen: (r.origen || '').toString() };
-      });
+      const rf = resumirFicha(evs);
+      let nombreF = rf.nombre, telF = rf.telefono;
+      const ciudadF = rf.ciudad, paisF = rf.pais, dispF = rf.dispositivo, ogF = rf.origen, cuenta = rf.cuenta;
       const compras = vtsF.filter((v: any) => (v.estado || '') !== 'cancelado').map((v: any) => ({ nVenta: v.n_venta, fecha: v.fecha, cliente: v.cliente, estado: v.estado, totalARS: v.total_ars || 0, totalUSD: v.total_usd || 0, productos: (v.productos || '').toString().slice(0, 400) }));
       if (!nombreF && compras.length) nombreF = String(compras[compras.length - 1].cliente || '');
       if (!telF && nombreF) {
@@ -4108,10 +4127,10 @@ Deno.serve(async (req) => {
         fichaTecnica: fichaTec, segundos: segF, interacciones: intF,
         apodo: '#' + vidF.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(),
         aliasPuesto: puestoF.alias || '', notaPuesta: puestoF.nota || '',
-        eventos: cuenta, dias: Object.keys(dias).length, primera: linea.length ? linea[0].fecha : '', ultima: linea.length ? linea[linea.length - 1].fecha : '',
-        productos: Object.entries(prods).sort((a: any, b: any) => b[1] - a[1]).map(([nombre, n]) => ({ nombre, n })),
+        eventos: cuenta, dias: rf.dias, primera: evs.length ? String(evs[0].fecha || '') : '', ultima: evs.length ? String(evs[evs.length - 1].fecha || '') : '',
+        productos: rf.productos, agregados: rf.agregados,
         compras, gastadoARS: compras.reduce((t: number, c: any) => t + (parseFloat(c.totalARS) || 0), 0),
-        linea: linea.slice(-200),
+        linea: rf.linea.slice(-800),
       });
     }
     if (accion === 'auditarHijos') {

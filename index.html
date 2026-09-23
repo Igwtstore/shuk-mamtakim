@@ -14298,6 +14298,17 @@ function _vivoHora(ms) {
   catch { const dt = new Date(ms), p = n => String(n).padStart(2, '0'); return p(dt.getHours()) + ':' + p(dt.getMinutes()) + ':' + p(dt.getSeconds()); }
 }
 
+function _vivoFechaCorta(ms) {
+  // (es-AR no rellena el mes: da "22/9". Se arma desde el formato ISO, que sí lo rellena.)
+  try { _vivoFechaCorta.f = _vivoFechaCorta.f || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }); const p = _vivoFechaCorta.f.format(new Date(ms)).split('-'); return p[2] + '/' + p[1]; }
+  catch { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0'); }
+}
+// "22/09/2026 20:06" (hora de Buenos Aires) → milisegundos. Para eventos que no traen la hora exacta.
+function _vivoTsDeFecha(f) {
+  const m = String(f || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  return m ? Date.parse(m[3] + '-' + m[2] + '-' + m[1] + 'T' + String(m[4] || '0').padStart(2, '0') + ':' + (m[5] || '00') + ':00-03:00') : 0;
+}
+
 // Lo que dice cada evento, en criollo.
 function _vivoTexto(ev) {
   const det = ev.detalle || '';
@@ -14458,7 +14469,13 @@ function _vivoPasos(s) {
     tanda = null;
     lineas.push({ t: ev.t, ev });
   });
-  return lineas.map(l => `<div style="display:flex;gap:8px;font-size:0.72rem;padding:2px 0;line-height:1.45"><span style="flex-shrink:0;color:var(--texto-suave);font-variant-numeric:tabular-nums">${_vivoHora(l.t)}</span><span style="min-width:0">${l.ev ? _vivoTexto(l.ev) : '👁️ miró ' + (l.nombres.length ? l.nombres.length + ': ' + l.nombres.map(esc).join(', ') : 'productos')}</span></div>`).join('');
+  return lineas.map(l => {
+    let items = '';
+    if (l.ev && (l.ev.evento === 'checkout' || l.ev.evento === 'pedido') && l.ev.carrito) {
+      try { const arr = JSON.parse(l.ev.carrito); if (Array.isArray(arr) && arr.length) items = `<div style="color:var(--texto-suave);font-size:0.68rem">${arr.map(it => (parseFloat(it.q) || 0) + '× ' + esc(it.n)).join(' · ')}</div>`; } catch { /**/ }
+    }
+    return `<div style="display:flex;gap:8px;font-size:0.72rem;padding:2px 0;line-height:1.45"><span style="flex-shrink:0;color:var(--texto-suave);font-variant-numeric:tabular-nums">${_vivoHora(l.t)}</span><span style="min-width:0">${l.ev ? _vivoTexto(l.ev) : '👁️ miró ' + (l.nombres.length ? l.nombres.length + ': ' + l.nombres.map(esc).join(', ') : 'productos')}${items}</span></div>`;
+  }).join('');
 }
 function _vivoDiaEventos() {
   const d = _vivo.dia;
@@ -15499,17 +15516,10 @@ async function abrirFichaVisitante(vid) {
   const caja = inner => `<div style="background:var(--fondo-card,#fff);border-radius:16px;max-width:520px;width:100%;max-height:86vh;overflow-y:auto;padding:1rem 1.1rem">${inner}</div>`;
   if (!f || f.error) { m.innerHTML = caja(`<div class="sinpedidos">${esc((f && f.error) || 'no se pudo cargar')}</div><button onclick="cerrarFichaVisitante()" style="width:100%;margin-top:10px;padding:0.5rem;border:none;border-radius:9px;background:var(--gris-claro);font-weight:700;cursor:pointer">Cerrar</button>`); return; }
 
-  const evIcono = { visita: '👣', carrito: '🛒', checkout: '🔥', pedido: '✅', registro: '📝', busqueda: '🔎' };
-  const evTxt = { visita: 'Entró a la tienda', carrito: 'Agregó al carrito', checkout: 'Empezó el pedido', pedido: 'Envió el pedido', registro: 'Dejó sus datos', busqueda: 'Buscó' };
-  const linea = (f.linea || []).slice().reverse().map(l => `
-    <div style="display:flex;gap:7px;padding:4px 0;border-bottom:1px solid var(--gris-medio);font-size:0.75rem">
-      <span style="flex-shrink:0">${evIcono[l.evento] || '•'}</span>
-      <div style="min-width:0;flex:1">
-        <div>${evTxt[l.evento] || esc(l.evento)}${l.detalle ? ': <b>' + esc(l.detalle) + '</b>' : ''}${l.evento === 'busqueda' ? ` <span style="color:${l.total ? 'var(--texto-suave)' : '#c0392b'}">(${l.total || 0} resultado${l.total !== 1 ? 's' : ''})</span>` : ''}</div>
-        ${l.items && l.items.length ? `<div style="color:var(--texto-suave);font-size:0.7rem">${l.items.map(it => it.q + '× ' + esc(it.n)).join(' · ')}${l.total ? ' — ' + _anaPlata(l.total) : ''}</div>` : ''}
-      </div>
-      <span style="flex-shrink:0;color:var(--texto-suave);font-size:0.68rem">${esc((l.fecha || '').slice(0, 16))}</span>
-    </div>`).join('');
+  // 🧭 v4.85: el recorrido, visita por visita, igual que "Todo el día" en 🔴 En vivo. Antes era una
+  // lista plana de eventos y la ficha técnica de cada visita se veía como texto de código.
+  const evsF = (f.linea || []).map(e => ({ ...e, vid: e.vid || f.vid, t: e.t || _vivoTsDeFecha(e.fecha) }));
+  _fichaSes = { vid: f.vid, ses: _vivoSesiones(evsF), mostrar: 12, abiertas: {} };
   const compras = (f.compras || []).map(c => `
     <div style="border:1.5px solid #cfe6d8;background:#f4fbf7;border-radius:9px;padding:0.45rem 0.6rem;margin-bottom:4px;font-size:0.75rem">
       <b>Pedido #${c.nVenta}</b> · ${esc(c.fecha)} · <b>${_anaPlata(c.totalARS)}</b>${c.totalUSD ? ' + U$S ' + c.totalUSD : ''}
@@ -15545,11 +15555,37 @@ async function abrirFichaVisitante(vid) {
     </div>
     ${compras ? `<div style="font-weight:700;font-size:0.82rem;margin:8px 0 5px">🛍️ Le compró ${(f.compras || []).length} vez${(f.compras || []).length !== 1 ? 'ces' : ''}</div>${compras}` : ''}
     ${(f.productos || []).length ? `<div style="font-weight:700;font-size:0.82rem;margin:9px 0 4px">👀 Lo que más miró</div>
-      <div style="font-size:0.75rem;color:#444;line-height:1.6">${f.productos.slice(0, 8).map(p => esc(p.nombre) + ' <span style="color:var(--texto-suave)">×' + p.n + '</span>').join(' · ')}</div>` : ''}
-    <div style="font-weight:700;font-size:0.82rem;margin:11px 0 4px">🧭 Su recorrido (lo último primero)</div>
-    ${linea || '<div class="sinpedidos">Sin eventos</div>'}
+      <div style="font-size:0.75rem;color:#444;line-height:1.6">${f.productos.slice(0, 8).map(p => esc(p.nombre) + ' <span style="color:var(--texto-suave)" title="veces que lo tuvo en pantalla">×' + p.n + '</span>').join(' · ')}</div>` : ''}
+    ${(f.agregados || []).length ? `<div style="font-weight:700;font-size:0.82rem;margin:9px 0 4px">🛒 Lo que puso en el carrito</div>
+      <div style="font-size:0.75rem;color:#444;line-height:1.6">${f.agregados.slice(0, 8).map(p => esc(p.nombre) + ' <span style="color:var(--texto-suave)">×' + p.n + '</span>').join(' · ')}</div>` : ''}
+    <div style="font-weight:700;font-size:0.82rem;margin:11px 0 4px">🧭 Su recorrido, visita por visita</div>
+    <div id="ficha-recorrido">${_fichaHtmlRecorrido()}</div>
   `);
 }
+let _fichaSes = null;
+function _fichaHtmlRecorrido() {
+  const F = _fichaSes;
+  if (!F || !F.ses.length) return '<div class="sinpedidos">Sin movimientos registrados</div>';
+  const btn = (fn, txt) => `<button onclick="${fn}" style="background:var(--gris-claro);color:var(--azul);border:none;border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:700;cursor:pointer">${txt}</button>`;
+  const filas = F.ses.slice(0, F.mostrar).map(ses => {
+    const abierta = !!F.abiertas[ses.key];
+    const dur = ses.seg || Math.round((ses.fin - ses.inicio) / 1000);
+    const res = _vivoResumenSesion(ses);
+    return `<div style="display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--gris-medio)">
+      <div style="width:50px;flex-shrink:0;font-variant-numeric:tabular-nums;font-size:0.74rem;font-weight:700;color:#2d1a0a;line-height:1.35">${_vivoFechaCorta(ses.inicio)}<div>${_vivoHora(ses.inicio).slice(0, 5)}</div><div style="font-weight:500;color:var(--texto-suave);font-size:0.64rem">${dur ? _vivoDur(dur) : ''}</div></div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:0.75rem;color:#2d1a0a;line-height:1.5">${res.length ? res.join(' · ') : 'sin movimientos'}</div>
+        ${abierta ? `<div style="margin-top:5px;padding:5px 8px;background:var(--gris-claro);border-radius:8px">${_vivoPasos(ses)}</div>` : ''}
+        <div style="margin-top:4px">${btn(`fichaAbrirVisita('${esc(ses.key)}')`, abierta ? '▲ Cerrar' : '▼ Paso a paso')}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const quedan = F.ses.length - Math.min(F.mostrar, F.ses.length);
+  return filas + (quedan > 0 ? `<button onclick="fichaMasVisitas()" style="width:100%;margin-top:6px;background:var(--gris-claro);color:var(--azul);border:none;border-radius:8px;padding:6px;font-size:0.74rem;font-weight:700;cursor:pointer">Ver ${Math.min(12, quedan)} visitas más · quedan ${quedan}</button>` : '');
+}
+function _fichaRepintar() { const c = document.getElementById('ficha-recorrido'); if (c) c.innerHTML = _fichaHtmlRecorrido(); }
+function fichaAbrirVisita(k) { if (!_fichaSes) return; if (_fichaSes.abiertas[k]) delete _fichaSes.abiertas[k]; else _fichaSes.abiertas[k] = 1; _fichaRepintar(); }
+function fichaMasVisitas() { if (!_fichaSes) return; _fichaSes.mostrar += 12; _fichaRepintar(); }
 function cerrarFichaVisitante() {
   const m = document.getElementById('ana-ficha-modal');
   if (m) m.style.display = 'none';
