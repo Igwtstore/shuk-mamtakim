@@ -136,7 +136,7 @@ async function run() {
     ev('v_c', 'visita', '00:01'), ev('v_c', 'vidriera', '00:02', 'sabores · ofrecido'),
   ];
   const d = motor.analitica(rows, 7, [], [], [{ id: 1, nombre: 'Klik', stock: 3 }], null, {});
-  t.eq('desde la fila 3 sumados (2 personas); sabores: 2 los vieron, 1 sumó; pidió 1 (sin contarlo dos veces)', d.vidriera, { fila: { sumados: 3, personas: 2 }, fiesta: { sumados: 0, personas: 0 }, sabores: { ofrecidos: 2, sumados: 1, personas: 1 }, compraron: 1 });
+  t.eq('desde la fila 3 sumados (2 personas); sabores: 2 los vieron, 1 sumó; pidió 1 (sin contarlo dos veces)', d.vidriera, { envio: { alcanzaron: 0, compraron: 0 }, fila: { sumados: 3, personas: 2 }, fiesta: { sumados: 0, personas: 0 }, sabores: { ofrecidos: 2, sumados: 1, personas: 1 }, compraron: 1 });
   t.eq('sin esos eventos, no hay tarjeta', motor.analitica([ev('v_z', 'visita', '00:01')], 7, [], [], [], null, {}).vidriera, null);
   const vis = (vid, n) => ({ ...ev(vid, 'vistas', '00:0' + n), detalle: JSON.stringify({ v: [{ n: 'Gemelo' }] }) });
   const dG = motor.analitica([vis('v1', 1), vis('v2', 2)], 7, [], [], [{ id: 10, nombre: 'Gemelo', stock: 0, activo: true }, { id: 11, nombre: 'Gemelo', stock: 6, activo: true }], null, {});

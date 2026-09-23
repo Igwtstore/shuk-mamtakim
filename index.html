@@ -558,12 +558,28 @@
   body.dark .lr-fila.en { background: #1c2e24; }
   body.dark .lr-nombre { color: #e5e7eb; }
 
+  /* 🚚 v4.90 · la barra del envío gratis en el carrito, y la marca en el panel */
+  .envio-barra { margin: 0.7rem 0 0.2rem; background: #f4f8fd; border: 1.5px solid #d6e4f5; border-radius: 10px; padding: 0.55rem 0.75rem; }
+  .envio-barra.ok { background: #e8f6ec; border-color: #bfe3cb; }
+  .envio-txt { font-size: 0.84rem; color: #1a3d5c; line-height: 1.35; }
+  .envio-barra.ok .envio-txt { color: #1e6b3a; }
+  .envio-txt b { font-variant-numeric: tabular-nums; }
+  .envio-riel { height: 7px; background: #dbe6f2; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .envio-riel > div { height: 100%; background: #2c6fad; border-radius: 999px; transition: width 0.3s; }
+  .envio-barra.ok .envio-riel { background: #cfe9d8; }
+  .envio-barra.ok .envio-riel > div { background: var(--verde); }
+  .envio-chip { font-size: 0.66rem; font-weight: 800; color: #1e6b3a; background: #e8f6ec; border-radius: 6px; padding: 1px 7px; }
+  body.dark .envio-barra { background: #1d2a3a; border-color: #34506e; }
+  body.dark .envio-txt { color: #cfe0f3; }
+  body.dark .envio-barra.ok { background: #1c2e24; border-color: #2f5a3e; }
+  body.dark .envio-barra.ok .envio-txt { color: #bfe8cc; }
+
   /* 🎨 Completá los sabores: en el carrito y al agregar desde la tarjeta */
   .sabores-box { background: #fbf6ec; border: 1.5px dashed #d9b77a; border-radius: 10px; padding: 0.6rem 0.75rem; margin: 0.7rem 0 0.2rem; }
   .sabores-tit { font-weight: 800; font-size: 0.86rem; color: #5c3d1e; margin-bottom: 2px; }
   .sabores-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.8rem; padding: 5px 0; border-top: 1px solid #efe3cc; color: #3d2c1a; }
   .sabores-tit + .sabores-row { border-top: none; }
-  .sabores-row b { font-variant-numeric: tabular-nums; }
+  .sabores-row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sabores-row button { flex-shrink: 0; background: var(--verde); color: #fff; border: none; border-radius: 8px; padding: 5px 10px; font-weight: 800; font-size: 0.74rem; cursor: pointer; }
   body.dark .sabores-box { background: #2a2418; border-color: #6b5a35; }
   body.dark .sabores-tit, body.dark .sabores-row { color: #eadcc0; }
@@ -1481,6 +1497,18 @@
     <div class="admin-titulo">🗓️ Fiestas y Shabat en la tienda</div>
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Dos semanas antes de cada fiesta, la tienda muestra sola su cartel con la cuenta regresiva y sus productos. Elegís una vez qué va en cada una y queda para todos los años; si no elegís, van los más pedidos de sus categorías.</div>
     <div id="fiestas-panel"><div class="sinpedidos">Cargando…</div></div>
+  </div>
+  <!-- 🚚 v4.90 · Envío gratis. SOLO la ve Jony (la muestra cargarAccesoMiri). -->
+  <div class="admin-card" data-seccion="inicio" id="card-envio" style="display:none">
+    <div class="admin-titulo">🚚 Envío gratis</div>
+    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Pedidos <b>minoristas</b> en pesos con los productos desde el mínimo: el carrito muestra cuánto les falta, el mensaje del pedido lo dice, y en el panel el pedido, el remito y el cobro lo marcan para no cobrarles envío.</div>
+    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;font-size:0.82rem">
+      <label style="display:inline-flex;align-items:center;gap:5px;font-weight:700;cursor:pointer"><input type="checkbox" id="envio-on" onchange="_envioPreview()"> Prendido</label>
+      <span>desde $</span><input type="number" id="envio-min" min="1" step="1000" oninput="_envioPreview()" style="width:110px;padding:0.4rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem">
+      <span>dentro de</span><input type="text" id="envio-zona" maxlength="40" placeholder="CABA" oninput="_envioPreview()" style="width:120px;padding:0.4rem 0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.85rem">
+    </div>
+    <div id="envio-preview" style="font-size:0.74rem;color:var(--texto-suave);margin-top:0.5rem"></div>
+    <button class="guardar-stock-btn" onclick="guardarEnvio()" style="margin-top:0.6rem">Guardar envío gratis</button>
   </div>
   <!-- 🎚️ Interruptor del acceso de Miri (v4.52). SOLO la ve Jony: cargarAccesoMiri() la muestra
        únicamente si socioActual==='jony' (en la sesión de Miri ni se dibuja ni se consulta). -->
@@ -2484,6 +2512,7 @@
         </div>
       </div>
       <div style="font-size:0.64rem;color:#b08a3a;margin-top:0.3rem">Va a la 📦 Caja Envíos. Si el cadete lo pagó el otro socio, queda en la Cuenta entre socios.</div>
+      <div id="cobro-envio-gratis" hidden style="font-size:0.74rem;font-weight:700;color:#1e6b3a;background:#e8f6ec;border-radius:7px;padding:5px 8px;margin-top:6px">🚚 Envío gratis: este pedido no paga envío. Dejá «Cobrado al cliente» en 0 y cargá igual el costo del cadete.</div>
     </div>
     <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
       <button onclick="cerrarModalCobro()" style="flex:1;padding:0.75rem;background:var(--gris);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancelar</button>
@@ -2651,6 +2680,7 @@ async function cargarEstadoTienda() {
     // 🔥 v4.87: la vidriera llega con el estado. Si el catálogo ya se dibujó con otra (o sin ninguna),
     // se redibuja solo si la persona sigue arriba de todo: nunca se le mueve la página mientras mira.
     const cambioF = _fiestasGuardar(d.fiestas);   // 🗓️ v4.88: fiestas y Shabat
+    _envioGuardar(d.envio);                       // 🚚 v4.90: envío gratis
     if ((_vidGuardar(d.vidriera) || cambioF) && productos.length && window.scrollY < 300) renderCatalogo();
   } catch (e) { _estadoTienda = 'abierta'; }
   pintarShabat();
@@ -2846,6 +2876,31 @@ function marcarEstadoTiendaBtn() {
   const inp = document.getElementById('estado-tienda-msg'); if (inp && _tiendaMsg && !inp.value) inp.value = _tiendaMsg;
 }
 
+// 🚚 v4.90 · ENVÍO GRATIS (panel, solo Jony)
+function cargarEnvioEnPanel() {
+  const on = document.getElementById('envio-on'), min = document.getElementById('envio-min'), zona = document.getElementById('envio-zona');
+  if (!on || !min || !zona) return;
+  on.checked = !!_envioCfg.on; min.value = _envioCfg.min; zona.value = _envioCfg.zona || '';
+  _envioPreview();
+}
+function _envioLeerPanel() {
+  return { on: document.getElementById('envio-on').checked, min: parseInt(document.getElementById('envio-min').value) || 0, zona: (document.getElementById('envio-zona').value || '').trim() };
+}
+function _envioPreview() {
+  const c = _envioLeerPanel(), pv = document.getElementById('envio-preview');
+  if (!pv) return;
+  if (!c.on) { pv.textContent = 'Apagado: la tienda no muestra la barra y ningún pedido se marca con envío gratis.'; return; }
+  if (!(c.min > 0)) { pv.textContent = '⚠️ Poné desde cuánto.'; return; }
+  const ej = Math.max(0, Math.round(c.min * 0.8 / 1000) * 1000);
+  pv.innerHTML = `En el carrito, con ${_plataAR(ej)} elegidos: <b>«🚚 Te faltan ${_plataAR(c.min - ej)} para el envío gratis${esc(_envioZonaTxt(c))}»</b>.`;
+}
+async function guardarEnvio() {
+  const c = _envioLeerPanel();
+  if (c.on && !(c.min > 0)) { showToast('Poné desde cuánto es el envío gratis'); return; }
+  const r = await apiWrite(new URLSearchParams({ accion: 'setEnvioTienda', on: c.on ? '1' : '0', min: String(c.min || 120000), zona: c.zona }), '🚚 Envío gratis guardado ✓');
+  if (r && r.ok && r.envio) { _envioGuardar(r.envio); cargarEnvioEnPanel(); try { renderPedidos(); } catch { /**/ } }
+}
+
 // 🗓️ v4.88 · FIESTAS Y SHABAT (panel, solo Jony). Se edita una copia y se guarda con un botón.
 let _fiestasEdit = null, _fiestasTocado = false, _fiestaElige = null;
 const _fiestasDefault = () => ({ shabat: { on: true, dia: 4, hora: 20, txt: '' }, fiestas: Object.fromEntries(Object.keys(FIESTAS_DEF).filter(k => !FIESTAS_DEF[k].sinVidriera).map(k => [k, { on: true, txt: '', ids: [] }])) });
@@ -2937,6 +2992,7 @@ async function cargarAccesoMiri() {
   if (typeof socioActual !== 'undefined' && socioActual !== 'jony') return;   // en sesión de Miri: nada
   const card = document.getElementById('card-acceso-miri'); if (card) card.style.display = '';
   const cardF = document.getElementById('card-fiestas'); if (cardF) { cardF.style.display = ''; renderFiestasPanel(true); }   // 🗓️ v4.88
+  const cardE = document.getElementById('card-envio'); if (cardE) { cardE.style.display = ''; cargarEnvioEnPanel(); }        // 🚚 v4.90
   try {
     const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=accesoMiri');
     if (d && d.acceso !== undefined) _accesoMiri = String(d.acceso) !== '0';
@@ -3481,6 +3537,45 @@ function _lrPintarPie() {
   });
   const plata = [usd > 0 ? 'U$S ' + usd.toFixed(2) : '', ars > 0 ? '$ ' + Math.round(ars).toLocaleString('es-AR') : ''].filter(Boolean).join(' + ') || '$ 0';
   pie.innerHTML = `<span><b>${items.length}</b> ${items.length === 1 ? 'renglón' : 'renglones'} · ${u} u.<br><b>${plata}</b></span><button onclick="abrirCarrito()">Ver pedido →</button>`;
+}
+
+// 🚚 v4.90 · ENVÍO GRATIS, COBRADO DE VERDAD. Un pedido minorista, todo en pesos, con los productos en
+// el mínimo o más (hoy $ 120.000), tiene envío gratis dentro de la zona (CABA). La tienda lo muestra en
+// el carrito ("te faltan $ X") y en el mensaje del pedido; el panel lo marca en el pedido, en el remito
+// y al cobrar, para no cobrarle envío a quien no corresponde. Nunca se carga un cobro solo: el costo
+// del cadete se sigue cargando al cobrar, como siempre. (var/function: el carrito puede usarlo apenas
+// carga la página.)
+var _envioCfg = { on: true, min: 120000, zona: 'CABA' };
+try { const g = JSON.parse(localStorage.getItem('shuk_envio') || 'null'); if (g && typeof g.min === 'number' && g.min > 0) _envioCfg = g; } catch { /**/ }
+function _envioGuardar(c) {
+  if (!c || typeof c.min !== 'number' || !(c.min > 0)) return;
+  _envioCfg = { on: c.on !== false, min: c.min, zona: String(c.zona || '') };
+  try { localStorage.setItem('shuk_envio', JSON.stringify(_envioCfg)); } catch { /**/ }
+}
+function envioGratisDe(tipo, totalARS, totalUSD, cfg) {
+  const c = cfg || _envioCfg;
+  return !!(c && c.on && c.min > 0 && String(tipo || 'Minorista') !== 'Mayorista'
+    && !((parseFloat(totalUSD) || 0) > 0) && (parseFloat(totalARS) || 0) >= c.min);
+}
+function _envioZonaTxt(c) { const z = String((c || _envioCfg).zona || '').trim(); return z ? ' dentro de ' + z : ''; }
+function _plataAR(n) { return '$ ' + Math.round(n || 0).toLocaleString('es-AR'); }
+// La barra del carrito: cuánto falta (o que ya está). Total igual al del pedido: precio de lista redondeado.
+function _envioBarraHtml(items) {
+  if (modo !== 'minorista' || !_envioCfg.on || !(_envioCfg.min > 0) || !items.length) return '';
+  const total = items.reduce((t, it) => t + Math.round(parseFloat(it.precioMin) || 0) * (it.qty || 0), 0);
+  const falta = _envioCfg.min - total, zona = esc(_envioZonaTxt());
+  if (falta <= 0) return `<div class="envio-barra ok"><div class="envio-txt">🚚 <b>¡Tu pedido tiene envío gratis${zona}!</b></div><div class="envio-riel"><div style="width:100%"></div></div></div>`;
+  const pct = Math.max(4, Math.min(100, Math.round(total / _envioCfg.min * 100)));
+  return `<div class="envio-barra"><div class="envio-txt">🚚 Te faltan <b>${_plataAR(falta)}</b> para el envío gratis${zona}</div><div class="envio-riel"><div style="width:${pct}%"></div></div></div>`;
+}
+// Si la barra lo tuvo abajo y el carrito llegó al mínimo, queda anotado (¿la barra empuja?).
+var _envioVioFalta = false;
+function _envioMedir(items) {
+  if (modo !== 'minorista' || !_envioCfg.on || !items.length) return;
+  const total = items.reduce((t, it) => t + Math.round(parseFloat(it.precioMin) || 0) * (it.qty || 0), 0);
+  if (total < _envioCfg.min) { _envioVioFalta = true; return; }
+  try { if (!_envioVioFalta || sessionStorage.getItem('shuk_envio_ok')) return; sessionStorage.setItem('shuk_envio_ok', '1'); } catch { return; }
+  track('vidriera', { producto: 'envio · alcanzado' });
 }
 
 // 🕯️ v4.88 · CIERRE PARA SHABAT. "Pedí hasta el jueves a las 20 h y llega para Shabat": arriba de la
@@ -5268,6 +5363,9 @@ function renderCarrito() {
     </div>`;
   }).join('');
 
+  // 🚚 v4.90: cuánto le falta para el envío gratis (minorista)
+  const barraEnvio = _envioBarraHtml(items);
+  _envioMedir(items);
   // 🎨 v4.87: lo que le falta de los sabores que ya eligió
   const sugSab = _saboresPara(items, 3);
   const saboresHTML = sugSab.length ? `<div class="sabores-box"><div class="sabores-tit">🎨 Completá los sabores</div>${_saboresFilas(sugSab)}</div>` : '';
@@ -5277,7 +5375,7 @@ function renderCarrito() {
   // tras un ajuste de stock se le volvían a pedir — engorroso y con el cliente esperando).
   const _savedNota = localStorage.getItem('shuk_nota_pedido') || '';
   const _savedPago = localStorage.getItem('shuk_forma_pago') || '';
-  cont.innerHTML = itemsHTML + saboresHTML + `
+  cont.innerHTML = itemsHTML + barraEnvio + saboresHTML + `
     <div class="nombre-campo">
       <label>Tu nombre</label>
       <input type="text" id="nombre-cliente" placeholder="Ej: Carlos García" value="${_savedNombre.replace(/"/g,'&quot;')}" />
@@ -5462,7 +5560,9 @@ async function enviarPedido(_stockVerificado) {
     : totalARS > 0 ? `\n\n*Total:* $ ${Math.round(totalARS).toLocaleString('es-AR')}`
     : totalUSD > 0 ? `\n\n*Total:* U$S ${totalUSD.toFixed(2)}` : '';
   const notaLine = notaPedido ? `\n\n📝 *Nota:* ${notaPedido}` : '';
-  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
+  // 🚚 v4.90: si llegó al mínimo, el mensaje lo dice (y el panel lo marca en el pedido y el remito)
+  const envioLine = envioGratisDe(tipoCliente, totalARS, totalUSD) ? `\n🚚 *Envío gratis*${_envioZonaTxt()} (compra de ${_plataAR(_envioCfg.min)} o más)` : '';
+  const msg = `🛒 *Nuevo pedido - Shuk Mamtakim*\n\n👤 *Cliente:* ${nombre} (${tipoCliente})\n\n*Productos:*\n${lineas.join('\n')}${totalLine}${envioLine}${notaLine}\n\n📅 *Tu pedido queda reservado por 7 días. Pasado ese plazo será cancelado automáticamente.*\n\n_Pedido enviado desde el catálogo online_`;
   // ⚠️ REGLA SAGRADA: el mensaje para MIRI lleva SOLO sus renglones y SU total (nada de Jony).
   // Si el pedido no tiene nada de ella → msgMiri = null y el 2º botón NI APARECE.
   const totalMiriLine = arsMyri > 0 && usdMyri > 0
@@ -6123,6 +6223,7 @@ async function renderPedidos() {
           <button onclick="window.open('${wa}','_blank')" style="background:#25d366;color:white;border:none;border-radius:8px;padding:0.45rem 0.9rem;font-family:'DM Sans',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap">💬 Recordar</button>
         </div>`;
       }
+      const _envGratis = _envioGratisPorVenta[v.id] = envioGratisDe(v.tipo, v.totalARS, v.totalUSD);   // 🚚 v4.90
       return `
       <div class="pedido-item ${estado !== 'pendiente' ? estado : ''}" id="pedido-${v.id}">
         <div class="pedido-item-header">
@@ -6133,6 +6234,7 @@ async function renderPedidos() {
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
             <span class="estado-pill estado-${estado}">${estado}</span>
             ${totalStr ? `<span style="font-size:0.8rem;font-weight:700;color:var(--verde)">${totalStr}</span>` : ''}
+            ${_envGratis ? `<span class="envio-chip" title="Productos por ${_plataAR(v.totalARS)}: no se le cobra envío${esc(_envioZonaTxt())}">🚚 Envío gratis</span>` : ''}
             ${cobrado
               ? (_debeV ? `<span style="font-size:0.68rem;color:#c0392b;font-weight:700">🟠 cobro parcial · debe ${_vivaStr}</span>` : `<span style="font-size:0.68rem;color:var(--verde);font-weight:600">✓ cobrado</span>`)
               : (_huboPagoCta
@@ -8590,6 +8692,7 @@ function actualizarTotalManual() {
     if (t.descGlobal > 0) filas.push(fila(`🏷️ Descuento global −${t.descGlobal}%`, '− ' + _montoManualTxt(t.descGlobalARS, t.descGlobalUSD), '#c0392b'));
   }
   filas.push(fila('Total' + _uTxt, _montoManualTxt(t.netoARS, t.netoUSD)));
+  if (envioGratisDe(document.getElementById('manual-tipo').value, t.netoARS, t.netoUSD)) filas.push(fila('🚚 Envío gratis' + esc(_envioZonaTxt()), 'no se cobra envío', '#1e6b3a'));   // v4.90
   document.getElementById('manual-total').innerHTML = filas.join('');
   renderManualSeleccion();
 }
@@ -17670,6 +17773,7 @@ function abrirConfirmarCobro(id, arsJ, arsM, usdM, cliente, usdJ) {
   const ec = document.getElementById('cobro-envio-cobrado'); if (ec) ec.value = env.cobrado ? env.cobrado : '';
   const eco = document.getElementById('cobro-envio-costo'); if (eco) eco.value = env.costo ? env.costo : '';
   const eq = document.getElementById('cobro-envio-quien'); if (eq) eq.value = env.quienPago || '';
+  const eg = document.getElementById('cobro-envio-gratis'); if (eg) eg.hidden = !_envioGratisPorVenta[id];   // 🚚 v4.90
   cobro_onSelectChange();   // ajusta TC y, al final, el bloque de "monto recibido"
   document.getElementById('cobro-modal').style.display = 'flex';
 }
@@ -18866,6 +18970,7 @@ if ('serviceWorker' in navigator) {
 // ─── REMITO ──────────────────────────────────────────────────────────────────
 let _remitoTexto = '';
 let _remitoVenta = null;
+var _envioGratisPorVenta = {};   // 🚚 v4.90: lo anota cada tarjeta de pedido; lo lee el cobro
 let _telPorCliente = {};
 
 // TC elegido en el modal (0 = no mostrar conversión). 'Mostrar en pesos' tildado + valor > 0.
@@ -18901,6 +19006,7 @@ function _buildRemitoTexto(v, tc) {
     lines.push(`   Subtotal productos: ${subt.join(' + ')}`);
     lines.push(`   📦 Envío: $ ${envio.toLocaleString('es-AR')}`);
   }
+  if (envio === 0 && envioGratisDe(v.tipo, v.totalARS, v.totalUSD)) lines.push(`   🚚 Envío: sin cargo${_envioZonaTxt()}`);   // v4.90
   const totales = [];
   if (ars > 0) totales.push(`$ ${Math.round(ars).toLocaleString('es-AR')}`);
   if (usd > 0) totales.push(`U$S ${usd.toFixed(2)}`);
@@ -18984,6 +19090,8 @@ function abrirRemito(v) {
   const envInp = document.getElementById('remito-envio-input');
   if (envInp) { const ec = Math.round(parseFloat((_enviosPorVenta[v.id] || {}).cobrado) || 0); envInp.value = ec > 0 ? ec : ''; }
   const envSt = document.getElementById('remito-envio-status'); if (envSt) envSt.textContent = '';
+  const envG = document.getElementById('remito-envio-gratis');   // 🚚 v4.90
+  if (envG) { const g = envioGratisDe(v.tipo, v.totalARS, v.totalUSD); envG.hidden = !g; envG.textContent = g ? `🚚 Envío gratis: los productos suman ${_plataAR(v.totalARS)} (mínimo ${_plataAR(_envioCfg.min)}${_envioZonaTxt()}). Dejalo en 0 y el remito dice «sin cargo».` : ''; }
   _remitoRender();
   const telCli = _telPorCliente[v.cliente] || '';
   document.getElementById('remito-phone').value = telCli ? (telCli.length === 10 ? '549' + telCli : telCli) : '';
@@ -19151,7 +19259,10 @@ function abrirRemitoPDF(v, autoPrint) {
   ${envioPDF > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 24px;background:#f7fbf8;border-top:1px solid #f0ebe3">
     <span style="font-size:0.78rem;color:#666">📦 Envío a domicilio</span>
     <span style="font-size:0.9rem;font-weight:700;color:#2d1a0a">$ ${envioPDF.toLocaleString('es-AR')}</span>
-  </div>` : ''}
+  </div>` : (envioGratisDe(v.tipo, v.totalARS, v.totalUSD) ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 24px;background:#f7fbf8;border-top:1px solid #f0ebe3">
+    <span style="font-size:0.78rem;color:#666">🚚 Envío${esc(_envioZonaTxt())}</span>
+    <span style="font-size:0.9rem;font-weight:700;color:#1e6b3a">Sin cargo</span>
+  </div>` : '')}
   <div class="total-bar">
     <span class="lbl">Total del pedido${envioPDF > 0 ? ' (con envío)' : ''}</span>
     <span class="val">${totales.join(' + ')}</span>
@@ -20088,6 +20199,7 @@ function cerrarEditPedido() {
           <span id="remito-envio-status" style="font-size:0.7rem;color:#2f7a4e"></span>
         </div>
         <div style="font-size:0.68rem;color:#6a9a7c;margin-top:6px">Aparece en el remito y queda guardado en la 📦 Caja Envíos. El costo del cadete se completa al cobrar.</div>
+        <div id="remito-envio-gratis" hidden style="font-size:0.74rem;font-weight:700;color:#1e6b3a;background:#e8f6ec;border-radius:7px;padding:5px 8px;margin-top:6px"></div>
       </div>
       <div id="remito-tc-box" style="display:none;background:#fff8ec;border:1px solid #f0d9a8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
         <label style="display:flex;align-items:center;gap:7px;font-size:0.82rem;font-weight:700;color:#9a6b00;cursor:pointer">

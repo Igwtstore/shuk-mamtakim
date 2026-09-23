@@ -585,6 +585,17 @@ function normFiestas(raw: any) {
   });
   return out;
 }
+// 🚚 ENVÍO GRATIS (v4.90): desde cuánto (los productos, en pesos, de un pedido minorista) y en qué
+// zona. Sin nada guardado: prendido, $ 120.000, CABA (lo que decidió Jony el 22/09). Lista blanca.
+function normEnvio(raw: any) {
+  const c = raw && typeof raw === 'object' ? raw : {};
+  const min = parseInt(c.min);
+  return {
+    on: c.on !== false && c.on !== 'false' && c.on !== 0 && c.on !== '0',
+    min: Number.isFinite(min) && min > 0 && min <= 100000000 ? min : 120000,
+    zona: String(c.zona == null ? 'CABA' : c.zona).replace(/\s+/g, ' ').trim().slice(0, 40),
+  };
+}
 // 🔥 LA VIDRIERA SE ORDENA SOLA (v4.87), a partir de los pedidos (no de las visitas):
 //  · orden: lo que tuvo pedidos en 30 días, de más a menos. Con eso la tienda pone primero, en
 //    cada categoría, lo que se vende.
@@ -741,7 +752,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   const recom: any = { ofrecidos: {}, cargados: {}, descartados: {} };
   const encuesta: any = { canales: {}, respuestas: 0, pushSi: 0 };
   // 🔥 v4.87: lo que se suma desde la fila "Lo más pedido" y desde "Completá los sabores".
-  const vidr: any = { fila: {}, filaN: 0, sabOfr: {}, sabSum: {}, sabN: 0, fiesta: {}, fiestaN: 0 };
+  const vidr: any = { fila: {}, filaN: 0, sabOfr: {}, sabSum: {}, sabN: 0, fiesta: {}, fiestaN: 0, envio: {} };
   // 👁️ VER MÁS (v4.81): lo que hasta ahora era invisible — qué tarjetas se VIERON (no solo qué se
   // agarró), qué sacaron del carrito, si el cartel/las ofertas se tocan, qué se comparte, hasta dónde
   // bajan, y qué catálogo VIP abrió cada cliente.
@@ -785,6 +796,7 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
       const [dondeV, queV] = detalle.split(' · ');                 // fila · <producto> | sabores · ofrecido | sabores · <producto>
       if (dondeV === 'fila' && queV) { vidr.filaN++; if (vid) vidr.fila[vid] = 1; }
       else if (dondeV === 'fiesta' && queV) { vidr.fiestaN++; if (vid) vidr.fiesta[vid] = 1; }   // 🗓️ v4.88
+      else if (dondeV === 'envio' && queV === 'alcanzado') { if (vid) vidr.envio[vid] = 1; }       // 🚚 v4.90: la barra lo empujó al mínimo
       else if (dondeV === 'sabores' && queV === 'ofrecido') { if (vid) vidr.sabOfr[vid] = 1; }
       else if (dondeV === 'sabores' && queV) { vidr.sabN++; if (vid) vidr.sabSum[vid] = 1; }
       return;
@@ -1415,7 +1427,9 @@ function analitica(rows: any[], dias: number, ventas: any[] = [], clientes: any[
   // cuántas de esas personas terminaron pidiendo.
   const vFila = Object.keys(vidr.fila), vSabO = Object.keys(vidr.sabOfr), vSabS = Object.keys(vidr.sabSum), vFie = Object.keys(vidr.fiesta);
   const vSumaron = Array.from(new Set(vFila.concat(vSabS, vFie)));
-  const vidriera = vidr.filaN || vSabO.length || vidr.sabN || vidr.fiestaN ? {
+  const vEnv = Object.keys(vidr.envio);
+  const vidriera = vidr.filaN || vSabO.length || vidr.sabN || vidr.fiestaN || vEnv.length ? {
+    envio: { alcanzaron: vEnv.length, compraron: vEnv.filter((v) => embudoVids.pedido[v]).length },
     fila: { sumados: vidr.filaN, personas: vFila.length },
     fiesta: { sumados: vidr.fiestaN, personas: vFie.length },
     sabores: { ofrecidos: vSabO.length, sumados: vidr.sabN, personas: vSabS.length },
@@ -3124,7 +3138,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4509,7 +4523,7 @@ Deno.serve(async (req) => {
     if (accion === 'getEstadoTienda') {
       // Una sola consulta para las 5 claves (antes eran 4 SELECT secuenciales en la ruta
       // que abre la tienda: sumar campos de a uno la hacía más lenta a cada release).
-      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG,TIENDA_VIDRIERA,TIENDA_FIESTAS)');
+      const filasCfg = await sbGet('config', 'select=clave,valor&clave=in.(TIENDA_ESTADO,TIENDA_MSG,TIENDA_AVISO,TIENDA_AVISO_COLOR,TIENDA_AVISO_CFG,TIENDA_VIDRIERA,TIENDA_FIESTAS,TIENDA_ENVIO)');
       const C: any = {};
       filasCfg.forEach((f: any) => { C[f.clave] = f.valor; });
       // 🔥 v4.87: la vidriera viaja en esta misma consulta. Si todavía no existe o quedó vieja
@@ -4531,7 +4545,14 @@ Deno.serve(async (req) => {
         avisoCfg: avNorm(avisoCfg || { txt: avisoTxt, color: avisoCol }),
         vidriera: vidriera ? { t: vidriera.t, dias: vidriera.dias, top: vidriera.top, orden: vidriera.orden, agota: vidriera.agota } : null,
         fiestas: (() => { try { return normFiestas(C.TIENDA_FIESTAS ? JSON.parse(C.TIENDA_FIESTAS) : null); } catch { return normFiestas(null); } })(),   // 🗓️ v4.88
+        envio: (() => { try { return normEnvio(C.TIENDA_ENVIO ? JSON.parse(C.TIENDA_ENVIO) : null); } catch { return normEnvio(null); } })(),         // 🚚 v4.90
       });
+    }
+    // 🚚 v4.90: el envío gratis (desde cuánto y en qué zona). Solo Jony.
+    if (accion === 'setEnvioTienda') {
+      const cfgE = normEnvio({ on: P(body, 'on') || Q('on'), min: P(body, 'min') || Q('min'), zona: body.zona !== undefined ? P(body, 'zona') : Q('zona') });
+      await setConfig('TIENDA_ENVIO', JSON.stringify(cfgE));
+      return json({ ok: true, envio: cfgE });
     }
     // 🗓️ v4.88: fiestas y Shabat. Llega por POST (la lista de productos de cada fiesta puede ser larga).
     if (accion === 'setFiestasTienda') {
