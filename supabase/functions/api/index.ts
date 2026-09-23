@@ -1899,6 +1899,96 @@ const _tel = (s: any) => String(s ?? '').replace(/[^\d+ ()\-]/g, '').slice(0, 25
 // A quién puede avisar la tienda Candy por WhatsApp (los chicos y Jony): antes era el número que mandara
 // cualquiera, o sea un relevo de mensajes gratis con el nombre del negocio.
 const WA_CANDY = ['5491171046383', '5491150987261', '5491131754540'];
+
+// 💰 v4.99 — EL TOTAL DE UN PEDIDO DE LA TIENDA LO CALCULA EL MOTOR. Es la MISMA cuenta que hace la tienda
+// (index.html: _cuentaPedido + precioEfectivo + el descuento del link VIP de _vipCargar): antes el motor guardaba
+// el total que mandaba el navegador, y alguien podía pedir 10 Klik con «Total: $ 150». tests/unit/precio_real.js
+// compara esta función con la de la tienda en cientos de pedidos: si cambia una, tiene que cambiar la otra.
+const _hoyISO_AR = () => { const f = fechaAhora(); return f.slice(6, 10) + '-' + f.slice(3, 5) + '-' + f.slice(0, 2); };
+function _fechaOfertaISO(f: string) {
+  const t = String(f || '').trim();
+  let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+}
+function _conDescVip(v: number, pct: number, esDolar: boolean) { if (!pct || pct <= 0) return v; const r = v * (1 - pct / 100); return esDolar ? Math.ceil(r * 100) / 100 : Math.ceil(r); }
+function calcularPedidoTienda(pares: any[], filas: any[], mayorista: boolean, vip: any, hoyISO: string) {
+  const porId: any = {};
+  (filas || []).forEach((r: any) => { porId[String(r.id)] = r; });
+  const vipIds = vip && Array.isArray(vip.ids) ? new Set(vip.ids.map(String)) : null;
+  const descG = vip ? (Number(vip.desc) || 0) : 0;
+  const descP: any = vip && vip.descProd && typeof vip.descProd === 'object' ? vip.descProd : {};
+  let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0;
+  const lineas: string[] = [], sinPrecio: string[] = [];
+  for (const par of pares) {
+    const id = String(par.id), qty = par.qty;
+    const p = porId[id];
+    if (!p) return null;   // un producto que no está: no hay con qué comparar (el control de stock ya lo frena antes)
+    const moneda = String(p.moneda || '$').trim() === 'U$S' ? 'U$S' : '$';
+    const esJonyP = String(p.dueno || '').trim() === 'Jony';
+    let may = parseFloat(String(p.precio_may == null ? '' : p.precio_may).replace(',', '.')) || 0;
+    let min = parseFloat(p.precio_min) || 0;
+    if (vipIds && vipIds.has(id)) {
+      const x = descP[id];
+      const pct = (x !== undefined && x !== '' && !isNaN(x)) ? (Number(x) || 0) : descG;
+      if (pct > 0) { if (may > 0) may = _conDescVip(may, pct, moneda === 'U$S'); if (min > 0) min = _conDescVip(min, pct, false); }
+    }
+    let unit: number, mon: string;
+    if (mayorista) {
+      mon = moneda;
+      if (mon === 'U$S') { unit = may; if (esJonyP) usdJONY += unit * qty; else usdMyri += unit * qty; }
+      else { unit = Math.round(may); if (esJonyP) arsJONY += unit * qty; else arsMyri += unit * qty; }
+    } else {
+      let v = min;
+      const of = parseFloat(p.precio_oferta) || 0, vence = _fechaOfertaISO(String(p.fecha_oferta || '').trim());
+      if (of > 0 && !(vence && hoyISO > vence) && of < v) v = of;
+      const cp = parseInt(p.cant_pack) || 0, pp = parseFloat(p.precio_pack) || 0;
+      if (cp > 0 && pp > 0 && qty >= cp && pp < v) v = pp;
+      unit = Math.round(v); mon = '$';
+      if (esJonyP) arsJONY += unit * qty; else arsMyri += unit * qty;
+    }
+    if (!(unit > 0)) sinPrecio.push(String(p.nombre || '#' + id));   // la tienda no deja pedir algo sin precio: si llega, alguien lo armó a mano
+    const subtotal = mon === 'U$S' ? (unit * qty).toFixed(2) : Math.round(unit * qty).toLocaleString('es-AR');
+    const unitStr = mon === 'U$S' ? unit.toFixed(2) : unit.toLocaleString('es-AR');
+    const desc = String(p.descripcion || '');
+    lineas.push(`• ${qty}x ${p.nombre || ''}${desc ? ' · ' + desc.substring(0, 45) : ''} — ${mon} ${unitStr} c/u = ${mon} ${subtotal}`);
+  }
+  return { totalARS: arsJONY + arsMyri, totalUSD: usdMyri + usdJONY, arsJONY, arsMyri, usdMyri, usdJONY, comiARS: Math.round(arsMyri * 0.15), comiUSD: parseFloat((usdMyri * 0.15).toFixed(2)), lineas, sinPrecio };
+}
+// ¿Lo que mandó el navegador (ya redondeado como lo manda la tienda) cierra con la cuenta real? Pesos al peso, dólares al centavo.
+const PARTES_PEDIDO = ['totalARS', 'totalUSD', 'arsJONY', 'arsMyri', 'usdJONY', 'usdMyri', 'comiARS', 'comiUSD'];
+function totalNoCierra(mandado: any, real: any) {
+  return PARTES_PEDIDO.some((k) => Math.abs((Number(mandado[k]) || 0) - (Number(real[k]) || 0)) > (k.indexOf('ARS') !== -1 ? 0.5 : 0.011));
+}
+const _plataTxt = (ars: number, usd: number) => [ars > 0 ? '$ ' + Math.round(ars).toLocaleString('es-AR') : '', usd > 0 ? 'U$S ' + usd.toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+
+// 🚨 v4.99 — FRENO DE PEDIDOS FALSOS que no depende de algo que elige el navegador (el vid se cambia borrando las
+// cookies). Por CONEXIÓN (se guarda solo una huella de la IP, nunca la IP) y en TOTAL, por hora. Solo cuentan los
+// pedidos de las tiendas públicas (los manuales de Jony no). Si salta, a Jony le llega UN aviso por hora.
+const FRENO_POR_CONEXION = 5, FRENO_TOTAL_HORA = 30;
+async function huellaIP(req: Request): Promise<string> {
+  const ip = (req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || (req.headers.get('x-forwarded-for') || '').split(',')[0] || '').trim();
+  if (!ip) return '';
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('shuk-ip|' + (BOT_SECRET || '') + '|' + ip));
+  return Array.from(new Uint8Array(d)).slice(0, 10).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function frenoPedidos(tabla: string, ipH: string): Promise<string> {
+  const desde = encodeURIComponent(new Date(Date.now() - 3600000).toISOString());
+  if (ipH && (await sbGet(tabla, 'select=creado&ip_h=eq.' + ipH + '&creado=gte.' + desde)).length >= FRENO_POR_CONEXION) return 'conexion';
+  if ((await sbGet(tabla, 'select=creado&ip_h=not.is.null&creado=gte.' + desde)).length >= FRENO_TOTAL_HORA) return 'total';
+  return '';
+}
+async function avisarFreno(tabla: string, motivo: string) {
+  try {
+    const clave = 'FRENO_AVISO_' + tabla, ultimo = parseInt(await getConfig(clave, '0')) || 0;
+    if (Date.now() - ultimo < 3600000) return;   // un solo aviso por hora
+    await setConfig(clave, String(Date.now()));
+    await sendTwilioWA('+5491131754540', '⚠️ *Freno de pedidos (' + (tabla === 'ventas' ? 'tienda del Shuk' : 'tienda del Candy') + ')*\n\n'
+      + (motivo === 'conexion' ? 'Entraron ' + FRENO_POR_CONEXION + ' pedidos en una hora desde la MISMA conexión.' : 'Entraron más de ' + FRENO_TOTAL_HORA + ' pedidos en una hora.')
+      + ' Los siguientes se frenan hasta que baje.\n\nSi es gente de verdad (por ejemplo, un evento), avisale a Claude para subir el límite.');
+  } catch { /* el aviso nunca frena nada */ }
+}
 // ⚠️ Teléfono con pinta de trucho: <10 dígitos reales (área+número en AR), >13, o todos iguales.
 // Defensa del lado del motor para 'notificacion' y 'avisarmeCandy' (la tienda ya valida, pero
 // un fetch directo la saltea). Mismo criterio que _telDudoso del front.
@@ -3217,6 +3307,17 @@ Deno.serve(async (req) => {
       return json(pedidoHabitual(vsH));
     }
     if (accion === 'venta') {
+      // Pedido MANUAL del panel: viaja con la sesión de Jony y los precios los pone él → ni freno ni recálculo.
+      const quienVenta = token ? await usuarioSesion(token) : null;
+      const ventaManual = esJony(quienVenta);
+      // El panel marca su pedido como manual: sin la sesión de Jony NO entra (el panel renueva la sesión y reintenta
+      // solo). Así un pedido manual jamás se toma por uno de la tienda y se le "corrigen" los precios a mano.
+      if (Q('manual') === '1' && !ventaManual) return json({ error: 'no autorizado' });
+      const ipVenta = ventaManual ? '' : await huellaIP(req);
+      if (!ventaManual) {
+        const freno = await frenoPedidos('ventas', ipVenta);
+        if (freno) { await avisarFreno('ventas', freno); return json({ error: 'rate' }); }
+      }
       // Anti pedidos falsos: límite por dispositivo (vid) — 90s entre pedidos, máx 4/hora.
       // (El motor viejo usaba CacheService; acá se mira el timestamp 'creado' de las ventas del vid.)
       const vidVenta = _ident(Q('vid'));   // 🔒 v4.95
@@ -3264,7 +3365,29 @@ Deno.serve(async (req) => {
           if (faltan.length) return json({ error: 'stock', detalle: faltan.join(' · '), items: faltanItems });
         }
       }
-      const fila: any = { fecha: fechaAhora(), cliente, tipo: _libre(Q('tipo'), 30), productos: _libre(Q('productos'), 20000), forma_pago: _libre(Q('formaPago'), 60), notas: _libre(Q('notas'), 1000), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: QN('totalARS'), total_usd: QN('totalUSD'), ars_jony: QN('arsJONY'), ars_myri: QN('arsMyri'), usd_myri: QN('usdMyri'), comi_ars: QN('comiARS'), comi_usd: QN('comiUSD'), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: QN('usdJONY'), vid: vidVenta };
+      // 💰 v4.99: en un pedido de la TIENDA el total lo calcula el motor con los precios reales. Si lo que mandó el
+      // navegador no cierra, se guarda lo REAL y el pedido queda marcado para que Jony lo revise antes de cobrar.
+      // Si cierra, se guarda exactamente lo de siempre (nada cambia para un pedido honesto).
+      let correccion = '', cuenta: any = null, productosReales = '';
+      if (!ventaManual && stockUpdates) {
+        const pares = stockUpdates.split(',').map((u: string) => { const pp = u.split(':'); return { id: String(parseInt(pp[0])), qty: parseInt(pp[1]) || 0 }; }).filter((x: any) => x.qty > 0);
+        const filasP = await sbGet('productos', 'select=id,nombre,descripcion,dueno,moneda,precio_min,precio_may,precio_oferta,fecha_oferta,cant_pack,precio_pack&id=in.(' + pares.map((x: any) => x.id).join(',') + ')');
+        const vipT = Q('vip').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+        let vip: any = null;
+        if (vipT) { try { vip = JSON.parse((await getConfig('VIP_' + vipT, '')) || 'null'); } catch { vip = null; } }
+        cuenta = calcularPedidoTienda(pares, filasP, Q('tipo') === 'Mayorista', vip, _hoyISO_AR());   // el modo con que la tienda armó el pedido (el link VIP lo pone al abrir, pero el botón de modo sigue ahí)
+        if (cuenta) {
+          // Los renglones salen SIEMPRE de la cuenta real (en un pedido honesto son idénticos a los de la tienda): así nadie
+          // puede mandar "10x Klik" en el texto y cobrarse 1 en la plata — texto, plata y stock salen de lo mismo.
+          productosReales = _libre(cuenta.lineas.join(' || '), 20000);
+          const mandado: any = {}; PARTES_PEDIDO.forEach((k) => { mandado[k] = QN(k); });
+          if (totalNoCierra(mandado, cuenta)) correccion = '⚠️ TOTAL CORREGIDO: la tienda mandó ' + _plataTxt(mandado.totalARS, mandado.totalUSD) + ' y con los precios de hoy es ' + _plataTxt(cuenta.totalARS, cuenta.totalUSD) + ' (un precio que cambió con la página abierta, o un pedido armado a mano). Revisalo antes de cobrar. · ';
+          if (cuenta.sinPrecio.length) correccion += '⚠️ SIN PRECIO: ' + cuenta.sinPrecio.join(', ') + '. · ';
+        }
+      }
+      const V = (k: string, real: number) => (correccion && cuenta ? Math.round(real * 100) / 100 : QN(k));
+      const fila: any = { fecha: fechaAhora(), cliente, tipo: _libre(Q('tipo'), 30), productos: productosReales || _libre(Q('productos'), 20000), forma_pago: _libre(Q('formaPago'), 60), notas: (_libre(correccion, 400) + _libre(Q('notas'), 1000)).slice(0, 1000), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: V('totalARS', cuenta?.totalARS), total_usd: V('totalUSD', cuenta?.totalUSD), ars_jony: V('arsJONY', cuenta?.arsJONY), ars_myri: V('arsMyri', cuenta?.arsMyri), usd_myri: V('usdMyri', cuenta?.usdMyri), comi_ars: V('comiARS', cuenta?.comiARS), comi_usd: V('comiUSD', cuenta?.comiUSD), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: V('usdJONY', cuenta?.usdJONY), vid: vidVenta };
+      if (ipVenta) fila.ip_h = ipVenta;
       // Numeración atómica: índice ÚNICO en n_venta + reintento (la versión SQL del LockService del
       // motor viejo — dos pedidos simultáneos NUNCA toman el mismo número).
       const ins = await insertarVentaAtomica(fila);
@@ -3290,9 +3413,10 @@ Deno.serve(async (req) => {
         try {
           let resu = (fila.productos || '').split(' || ').join('\n');
           const totNP: string[] = [];
-          if (QN('totalARS') > 0) totNP.push('$ ' + Math.round(QN('totalARS')).toLocaleString('es-AR'));
-          if (QN('totalUSD') > 0) totNP.push('U$S ' + QN('totalUSD').toFixed(2));
+          if (fila.total_ars > 0) totNP.push('$ ' + Math.round(fila.total_ars).toLocaleString('es-AR'));
+          if (fila.total_usd > 0) totNP.push('U$S ' + Number(fila.total_usd).toFixed(2));
           let cuerpoV = '🛍️ *Nuevo pedido #' + nVenta + ' - Shuk Mamtakim*\n\n👤 *' + cliente + '* (' + fila.tipo + ')\n\n' + resu + (totNP.length ? '\n\n*Total:* ' + totNP.join(' + ') : '');
+          if (correccion) cuerpoV = '⚠️ *REVISALO ANTES DE COBRAR*\n' + correccion.split(' · ').filter(Boolean).join('\n') + '\n\n' + cuerpoV;
           if (cuerpoV.length > 1500) cuerpoV = cuerpoV.slice(0, 1450) + '\n…\n📋 *Pedido largo: el detalle completo está en el panel.*';
           await sendTwilioWA('+5491131754540', cuerpoV);
         } catch { /* la notificación jamás frena una venta */ }
@@ -3313,6 +3437,9 @@ Deno.serve(async (req) => {
       // Anti pedidos falsos (paridad con la tienda Shuk): límite por dispositivo (vid) —
       // 90s entre pedidos, máx 4/hora. El WhatsApp igual se abre (el chico recibe el mensaje).
       const vidPH = _ident(Q('vid'));
+      const ipPH = await huellaIP(req);   // 🚨 v4.99: freno por conexión y total (el vid lo elige el navegador)
+      const frenoPH = await frenoPedidos('candy_pedidos', ipPH);
+      if (frenoPH) { await avisarFreno('candy_pedidos', frenoPH); return json({ error: 'rate' }); }
       // 🚫 Dispositivo bloqueado (pedidos truchos 13/07: amigos de los chicos jugando)
       if (vidPH && (await getConfig('VIDBLOCK_' + vidPH, '')) === '1') return json({ error: 'rate' });
       if (vidPH) {
@@ -3354,7 +3481,7 @@ Deno.serve(async (req) => {
       const pedidoId = _ident(Q('pedidoId'), 40) || 'PH' + Date.now();
       // Anti-duplicado (reintento por red caída): pedido_id es UNIQUE → el segundo insert rebota
       // ANTES de reservar stock (equivale al cache de 15 min del motor viejo, pero permanente).
-      const r = await fetch(SB_URL + '/rest/v1/candy_pedidos', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ hijo, cliente, telefono: telPH, items: JSON.stringify(items), total: Math.round(total), estado: 'pendiente', pedido_id: pedidoId, nota: _libre(Q('nota'), 500), vid: vidPH }) });
+      const r = await fetch(SB_URL + '/rest/v1/candy_pedidos', { method: 'POST', headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ hijo, cliente, telefono: telPH, items: JSON.stringify(items), total: Math.round(total), estado: 'pendiente', pedido_id: pedidoId, nota: _libre(Q('nota'), 500), vid: vidPH, ...(ipPH ? { ip_h: ipPH } : {}) }) });
       if (r.status === 409) return json({ ok: true, dup: true });
       if (!r.ok) return json({ error: 'insert pedido ' + r.status + ' ' + (await r.text()).slice(0, 150) });
       // Reserva: descuenta el depósito por cada item (la tienda ve menos stock → no se sobrevende).

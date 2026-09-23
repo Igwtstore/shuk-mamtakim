@@ -5466,6 +5466,48 @@ function _modalStockAjustado(lineas) {
     </div>`;
   document.body.appendChild(m);
 }
+// 💰 LA CUENTA DEL PEDIDO (v4.99: función aparte, SIN cambiar ni una operación). El motor repite esta MISMA
+// cuenta (calcularPedidoTienda en index.ts) para no creerle al navegador el total; tests/unit/precio_real.js
+// compara las dos con cientos de pedidos. Si cambiás algo acá, cambialo allá también (la prueba avisa).
+// Reparto 2×2: dueño (Jony/Myri) × moneda ($/U$S). En mayorista la moneda la define el producto;
+// en minorista todo es pesos. La comisión (15%) es SOLO sobre lo de Myri.
+function _cuentaPedido(items) {
+  let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0, ahorroOfertas = 0;
+  const lineasMiri = [];   // ⚠️ REGLA SAGRADA: el WhatsApp que el cliente le manda a MIRI lleva SOLO los renglones de ella
+  const lineas = items.map(item => {
+    const esJony = item.dueno === 'Jony';
+    // Default por convención para productos sin el campo moneda aún (Jony→$, Myri→U$S).
+    const monedaProd = item.moneda || (esJony ? '$' : 'U$S');
+    let precioUnit, moneda;
+    if (modo === 'mayorista') {
+      moneda = (monedaProd === 'U$S') ? 'U$S' : '$';
+      if (moneda === 'U$S') {
+        precioUnit = parseFloat((item.precioMay||'0').toString().replace(',','.'));
+        if (esJony) usdJONY += precioUnit * item.qty; else usdMyri += precioUnit * item.qty;
+      } else {
+        precioUnit = Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.')));
+        if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
+      }
+    } else {
+      precioUnit = Math.round(precioEfectivo(item, item.qty)); moneda = '$';   // 🏷️ v4.91: oferta o pack, cobrados
+      ahorroOfertas += (Math.round(item.precioMin) - precioUnit) * item.qty;
+      if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
+    }
+    const subtotal = moneda === 'U$S' ? (precioUnit * item.qty).toFixed(2) : Math.round(precioUnit * item.qty).toLocaleString('es-AR');
+    const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
+    const descCorta = item.desc ? ` · ${item.desc.substring(0, 45)}` : '';
+    const lineaTxt = `• ${item.qty}x ${item.nombre}${descCorta} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`;
+    if (!esJony) lineasMiri.push(lineaTxt);
+    return lineaTxt;
+  });
+
+  const comiARS = Math.round(arsMyri * 0.15);
+  const comiUSD = parseFloat((usdMyri * 0.15).toFixed(2));
+  const totalARS = arsJONY + arsMyri;
+  const totalUSD = usdMyri + usdJONY;
+  return { lineas, lineasMiri, arsJONY, arsMyri, usdMyri, usdJONY, ahorroOfertas, comiARS, comiUSD, totalARS, totalUSD };
+}
+
 async function enviarPedido(_stockVerificado) {
   if (_enviando) return;
   const nombre = document.getElementById('nombre-cliente').value.trim();
@@ -5541,41 +5583,7 @@ async function enviarPedido(_stockVerificado) {
     }
   } catch (e) {}
 
-  // Reparto 2×2: dueño (Jony/Myri) × moneda ($/U$S). En mayorista la moneda la define el producto;
-  // en minorista todo es pesos. La comisión (15%) es SOLO sobre lo de Myri.
-  let arsJONY = 0, arsMyri = 0, usdMyri = 0, usdJONY = 0, ahorroOfertas = 0;
-  const lineasMiri = [];   // ⚠️ REGLA SAGRADA: el WhatsApp que el cliente le manda a MIRI lleva SOLO los renglones de ella
-  const lineas = items.map(item => {
-    const esJony = item.dueno === 'Jony';
-    // Default por convención para productos sin el campo moneda aún (Jony→$, Myri→U$S).
-    const monedaProd = item.moneda || (esJony ? '$' : 'U$S');
-    let precioUnit, moneda;
-    if (modo === 'mayorista') {
-      moneda = (monedaProd === 'U$S') ? 'U$S' : '$';
-      if (moneda === 'U$S') {
-        precioUnit = parseFloat((item.precioMay||'0').toString().replace(',','.'));
-        if (esJony) usdJONY += precioUnit * item.qty; else usdMyri += precioUnit * item.qty;
-      } else {
-        precioUnit = Math.round(parseFloat((item.precioMay||'0').toString().replace(',','.')));
-        if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
-      }
-    } else {
-      precioUnit = Math.round(precioEfectivo(item, item.qty)); moneda = '$';   // 🏷️ v4.91: oferta o pack, cobrados
-      ahorroOfertas += (Math.round(item.precioMin) - precioUnit) * item.qty;
-      if (esJony) arsJONY += precioUnit * item.qty; else arsMyri += precioUnit * item.qty;
-    }
-    const subtotal = moneda === 'U$S' ? (precioUnit * item.qty).toFixed(2) : Math.round(precioUnit * item.qty).toLocaleString('es-AR');
-    const unitStr = moneda === 'U$S' ? precioUnit.toFixed(2) : precioUnit.toLocaleString('es-AR');
-    const descCorta = item.desc ? ` · ${item.desc.substring(0, 45)}` : '';
-    const lineaTxt = `• ${item.qty}x ${item.nombre}${descCorta} — ${moneda} ${unitStr} c/u = ${moneda} ${subtotal}`;
-    if (!esJony) lineasMiri.push(lineaTxt);
-    return lineaTxt;
-  });
-
-  const comiARS = Math.round(arsMyri * 0.15);
-  const comiUSD = parseFloat((usdMyri * 0.15).toFixed(2));
-  const totalARS = arsJONY + arsMyri;
-  const totalUSD = usdMyri + usdJONY;
+  const { lineas, lineasMiri, arsJONY, arsMyri, usdMyri, usdJONY, ahorroOfertas, comiARS, comiUSD, totalARS, totalUSD } = _cuentaPedido(items);
 
   const tipoCliente = modo === 'mayorista' ? 'Mayorista' : 'Minorista';
   const totalLine = totalARS > 0 && totalUSD > 0
@@ -5622,7 +5630,7 @@ async function enviarPedido(_stockVerificado) {
   if (_respVenta && _respVenta.error === 'rate') {
     _enviando = false;
     if (btnPedido) { btnPedido.disabled = false; btnPedido.textContent = _btnTxt; }
-    alert('🕐 Recibimos varios pedidos seguidos desde este dispositivo. Esperá un minutito y volvé a intentar.');
+    alert('🕐 Recibimos muchos pedidos seguidos. Esperá unos minutos y volvé a intentar, o mandanos tu pedido por WhatsApp 🙏');
     return;
   }
   const _esDup = !!(_respVenta && _respVenta.dup);
@@ -5729,7 +5737,8 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     usdMyri: (usdMyri || 0).toFixed(2), usdJONY: (usdJONY || 0).toFixed(2),
     comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
     notas: (_estadoTienda === 'cotizacion' ? '🟡 COTIZACIÓN · ' : '') + (notaPedido || ''),
-    vid: _vid()
+    vid: _vid(),
+    vip: _vipToken || ''   // 💰 v4.99: el motor recalcula el total y necesita saber si hubo descuento de link VIP
   });
   if (_estadoTienda === 'cotizacion') params.set('cotizacion', '1');   // no descuenta stock hasta aceptar
   // Se ESPERA la respuesta del servidor (antes iba a ciegas con no-cors): así el cliente se entera
@@ -8924,7 +8933,7 @@ function cargarPedidoManual() {
   const nota = (document.getElementById('manual-nota')?.value || '').trim();
 
   const params = new URLSearchParams({
-    accion: 'venta', cliente, tipo, formaPago: pago, notas: nota || 'Manual',
+    accion: 'venta', manual: '1', cliente, tipo, formaPago: pago, notas: nota || 'Manual',   // 💰 v4.99: manual → el motor exige la sesión de Jony y respeta estos precios
     productos: lineas.join(' || '),
     // El total se arma SUMANDO las partes ya redondeadas → nunca queda $1 de diferencia
     // entre total_ars y (ars_jony + ars_myri), que es lo que miran deuda y cajas.
@@ -8937,8 +8946,7 @@ function cargarPedidoManual() {
   const _envManual = Math.round(parseFloat(document.getElementById('manual-envio')?.value) || 0);
   if (_envManual > 0) params.set('envioCobrado', String(_envManual));
 
-  fetch(APPS_SCRIPT_URL + '?' + params.toString())
-    .then(r => r.json())
+  fetchConSesion(APPS_SCRIPT_URL + '?' + params.toString())   // si la sesión venció, la renueva y reintenta (antes: fetch pelado)
     .then(data => {
       if (data.ok) {
         showToast('Pedido registrado ✓');
