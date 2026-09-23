@@ -2245,6 +2245,75 @@ async function sugerirFicha(id: string, motivo: string, personas: number) {
   } catch (err) { return { error: 'IA: ' + err }; }
 }
 
+// ✨ PEDIDO POR MENSAJE, CON IA (v4.89). Jony pega el mensaje del cliente (o sube la foto de su lista)
+// y la IA lo convierte en productos del catálogo con su cantidad. No se registra nada solo: el pedido
+// cae en "Cargar pedido manual" para revisarlo y confirmarlo.
+const PEDIDO_IA_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: { type: 'array', items: { type: 'object', properties: {
+      id: { type: 'integer', description: 'El id del producto en el catálogo' },
+      cantidad: { type: 'integer', description: 'Cuántas unidades pidió' },
+      pedido: { type: 'string', description: 'Lo que escribió el cliente para este producto, tal cual' },
+      dudoso: { type: 'boolean', description: 'true si no queda claro cuál de varios productos del catálogo es' },
+    }, required: ['id', 'cantidad', 'pedido', 'dudoso'], additionalProperties: false } },
+    noEncontrados: { type: 'array', items: { type: 'string' }, description: 'Lo que pidió y no está en el catálogo, como lo escribió' },
+    cliente: { type: 'string', description: 'El nombre del cliente si aparece en el mensaje; si no, vacío' },
+    nota: { type: 'string', description: 'Algo que Jony tenga que saber (una cantidad dudosa, una aclaración); vacío si no hay nada' },
+  },
+  required: ['items', 'noEncontrados', 'cliente', 'nota'], additionalProperties: false,
+};
+function pedidoMensajeIA(prods: any[], texto: string, imagen: any) {
+  const catalogo = prods.map((p: any) => p.id + ' | ' + String(p.nombre || '').trim() + (String(p.descripcion || '').trim() ? ' | ' + String(p.descripcion).trim().slice(0, 70) : '') + ((parseInt(p.stock) || 0) <= 0 ? ' | SIN STOCK' : '')).join('\n');
+  const system = 'Armás pedidos para el panel de «Shuk Mamtakim», un almacén de Buenos Aires de golosinas y productos kosher importados de Israel. ' +
+    'Te paso el catálogo (id | nombre | detalle) y el mensaje o la foto de la lista de un cliente. Devolvé cada producto que pidió, con su id del catálogo y la cantidad.\n\n' +
+    'Reglas:\n' +
+    '- Usá solo ids del catálogo. Lo que no esté va en noEncontrados, escrito como lo puso el cliente.\n' +
+    '- Los clientes escriben como hablan: «klik de leche» es el Klik chocolate con leche y «pitzujim de maní» es un Pitzujim de maní. Si puede ser más de un producto y no hay forma de saber cuál, elegí el más probable y marcá dudoso.\n' +
+    '- Cantidades: «una docena» son 12 y «media docena» 6; si no dice cuántas, 1. Si pide cajas o paquetes y no se sabe cuántas unidades son, poné las que dijo y aclaralo en la nota.\n' +
+    '- No inventes productos ni cantidades. El nombre del cliente va solo si lo dice.\n\n' +
+    'CATÁLOGO:\n' + catalogo;
+  const content: any[] = [];
+  if (imagen) content.push({ type: 'image', source: { type: 'base64', media_type: imagen.tipo, data: imagen.data } });
+  content.push({ type: 'text', text: texto ? 'MENSAJE DEL CLIENTE:\n' + texto : 'La lista del cliente está en la foto.' });
+  return {
+    model: 'claude-opus-5', max_tokens: 8000, fallbacks: 'default',
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: PEDIDO_IA_SCHEMA } },
+    system, messages: [{ role: 'user', content }],
+  };
+}
+// Lo que devuelve la IA pasa por el catálogo real: un id que no existe va a "no encontré", el mismo
+// producto dos veces se suma, y cada renglón lleva el stock para avisar si no alcanza.
+function limpiarPedidoIA(t: any, prods: any[]) {
+  const porId: any = {};
+  prods.forEach((p: any) => { porId[String(p.id)] = p; });
+  const items: any[] = [], noEnc: string[] = [], yaEsta: any = {};
+  (Array.isArray(t && t.items) ? t.items : []).forEach((it: any) => {
+    const p = porId[String(it && it.id)], q = Math.max(0, Math.min(9999, parseInt(it && it.cantidad) || 0));
+    if (!p) { if (it && it.pedido) noEnc.push(String(it.pedido).trim().slice(0, 80)); return; }
+    if (!q) return;
+    if (yaEsta[p.id]) { yaEsta[p.id].cantidad += q; return; }
+    const x = { id: parseInt(p.id), nombre: String(p.nombre || ''), cantidad: q, pedido: String(it.pedido || '').trim().slice(0, 80), dudoso: !!it.dudoso, stock: parseInt(p.stock) || 0 };
+    yaEsta[p.id] = x; items.push(x);
+  });
+  (Array.isArray(t && t.noEncontrados) ? t.noEncontrados : []).forEach((s: any) => { const v = String(s || '').trim().slice(0, 80); if (v) noEnc.push(v); });
+  return { items, noEncontrados: noEnc.slice(0, 20), cliente: String((t && t.cliente) || '').trim().slice(0, 60), nota: String((t && t.nota) || '').trim().slice(0, 300) };
+}
+async function armarPedidoIA(texto: string, imagen: any) {
+  const apiKey = await claveIA();
+  if (!apiKey) return { error: 'sin_clave', mensaje: 'Falta la clave de IA (se carga desde la card Preguntale a tu negocio).' };
+  const txt = String(texto || '').slice(0, 4000);
+  const img = imagen && typeof imagen === 'object' && /^image\/(jpeg|png|webp|gif)$/.test(String(imagen.tipo || '')) && typeof imagen.data === 'string' && imagen.data.length < 7000000 ? { tipo: imagen.tipo, data: imagen.data } : null;
+  if (!txt.trim() && !img) return { error: 'Pegá el mensaje o subí la foto de la lista.' };
+  const prods = (await sbGet('productos', 'select=id,nombre,descripcion,stock,activo&order=id')).filter((p: any) => p.activo !== false);
+  try {
+    const r = await anthropicMsg(apiKey, pedidoMensajeIA(prods, txt, img), ['server-side-fallback-2026-07-01']);
+    if (r.code !== 200) return { error: 'IA error ' + r.code + (r.body.error ? ': ' + r.body.error.message : '') };
+    if (r.body.stop_reason === 'refusal') return { error: 'La IA no quiso armar este pedido. Cargalo a mano.' };
+    return { ok: true, ...limpiarPedidoIA(JSON.parse(r.texto), prods) };
+  } catch (err) { return { error: 'IA: ' + err }; }
+}
+
 // Error de IA que NO es culpa de la foto (saldo/rate/overload): no quema la foto.
 const esErrorIATransitorio = (msg: string) => /credit|billing|too low|saldo|rate.?limit|overloaded|529|429|quota|insufficient|unavailable/i.test((msg || '').toString());
 
@@ -3055,7 +3124,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4702,6 +4771,8 @@ Deno.serve(async (req) => {
     if (accion === 'analizarFotoProducto') return json(await analizarFotoProducto(Q('url')));
     // ✨ v4.87: la IA propone una ficha mejor para un producto (Jony la aplica o la descarta en el panel).
     if (accion === 'sugerirFicha') return json(await sugerirFicha(Q('id'), Q('motivo'), parseInt(Q('personas')) || 0));
+    // ✨ v4.89: el pedido armado por la IA desde el mensaje o la foto del cliente (llega por POST).
+    if (accion === 'armarPedidoIA') return json(await armarPedidoIA(P(body, 'texto'), body.imagen));
     if (accion === 'bandejaSubir') {
       const idB = 'B' + Date.now() + Math.floor(Math.random() * 1000);
       await sbInsert('bandeja_fotos', { id: idB, fecha: fechaAhora(), public_id: Q('publicId'), nombre: '', descripcion: '', categoria: '', estado: 'pendiente' });

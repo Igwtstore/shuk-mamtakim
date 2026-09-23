@@ -528,6 +528,36 @@
   #shabat-franja { max-width: 900px; margin: 0.75rem auto 0; padding: 0.5rem 1rem; box-sizing: border-box; text-align: center; font-weight: 700; font-size: 0.86rem; color: #3b2a12; background: #fdf3e3; border: 1.5px solid #ecd9b4; border-radius: 10px; width: calc(100% - 2rem); }
   body.dark #shabat-franja { background: #2a2418; border-color: #6b5a35; color: #f0dfb8; }
 
+  /* 📋 v4.89 · pedido rápido mayorista: lista compacta con − y + y el pie con los totales */
+  .vista-toggle { max-width: 900px; margin: 0.55rem auto 0; padding: 0 1rem; display: flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+  .vista-toggle span { font-size: 0.74rem; color: var(--texto-suave); margin-right: auto; }
+  .vista-toggle button { border: 1.5px solid var(--gris-medio); background: var(--blanco); border-radius: 999px; padding: 5px 12px; font-size: 0.78rem; font-weight: 700; cursor: pointer; color: var(--azul); }
+  .vista-toggle button.on { background: var(--azul); color: #fff; border-color: var(--azul); }
+  @media (max-width: 480px) { .vista-toggle span { display: none; } }
+  .lista-rapida { grid-column: 1 / -1; min-width: 0; background: var(--blanco); border: 2px dashed #cfa96b; border-radius: 10px; overflow: hidden; }
+  .lr-cat { background: #f7f0e1; padding: 6px 12px; font-weight: 800; font-size: 0.74rem; color: #5c3d1e; letter-spacing: 0.04em; text-transform: uppercase; }
+  .lr-fila { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #efe6d4; }
+  .lr-cat + .lr-fila { border-top: none; }
+  .lr-fila.en { background: #f1f9f3; }
+  .lr-fila.agotado { opacity: 0.6; }
+  .lr-info { flex: 1; min-width: 0; }
+  .lr-nombre { font-size: 0.86rem; font-weight: 600; color: var(--azul); line-height: 1.25; }
+  .lr-sub { font-size: 0.74rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+  .lr-sub b { color: var(--dorado); }
+  .lr-paso { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .lr-paso button { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--gris-medio); background: var(--gris); color: var(--texto); font-size: 1.1rem; line-height: 1; cursor: pointer; }
+  .lr-paso input { width: 48px; height: 32px; text-align: center; border: 1.5px solid var(--gris-medio); border-radius: 8px; font-weight: 700; font-size: 0.9rem; font-variant-numeric: tabular-nums; font-family: inherit; background: #fff; color: var(--texto); }
+  .lr-fila.en .lr-paso input { border-color: var(--verde); background: #e8f5ee; }
+  .lr-avisame { flex-shrink: 0; background: var(--dorado-claro); color: var(--dorado); border: 1.5px solid var(--dorado); border-radius: 8px; padding: 5px 10px; font-weight: 700; font-size: 0.74rem; cursor: pointer; }
+  #lr-pie { position: fixed; left: 0; right: 0; bottom: 0; z-index: 505; background: var(--azul); color: #fff; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.84rem; line-height: 1.35; box-shadow: 0 -4px 18px rgba(0,0,0,.22); }
+  #lr-pie b { font-variant-numeric: tabular-nums; }
+  #lr-pie button { flex-shrink: 0; background: var(--dorado); color: #1a1a2e; border: none; border-radius: 10px; padding: 9px 14px; font-weight: 800; font-size: 0.86rem; cursor: pointer; }
+  body.dark .lista-rapida { background: #1f2937; border-color: #6b5a35; }
+  body.dark .lr-cat { background: #2a2418; color: #e8d3a8; }
+  body.dark .lr-fila { border-top-color: #374151; }
+  body.dark .lr-fila.en { background: #1c2e24; }
+  body.dark .lr-nombre { color: #e5e7eb; }
+
   /* 🎨 Completá los sabores: en el carrito y al agregar desde la tarjeta */
   .sabores-box { background: #fbf6ec; border: 1.5px dashed #d9b77a; border-radius: 10px; padding: 0.6rem 0.75rem; margin: 0.7rem 0 0.2rem; }
   .sabores-tit { font-weight: 800; font-size: 0.86rem; color: #5c3d1e; margin-bottom: 2px; }
@@ -538,6 +568,19 @@
   body.dark .sabores-box { background: #2a2418; border-color: #6b5a35; }
   body.dark .sabores-tit, body.dark .sabores-row { color: #eadcc0; }
   body.dark .sabores-row { border-top-color: #4a3f2a; }
+  /* ✨ v4.89 · el pedido armado por la IA (panel, Cargar pedido manual) */
+  .pia-caja { background: #f5f1ff; border: 1.5px solid #d9ccf5; border-radius: 10px; padding: 0.65rem 0.75rem; }
+  .pia-caja textarea { width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem; border: 1.5px solid #d9ccf5; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; resize: vertical; background: #fff; }
+  .pia-foto-btn { background: #fff; color: #6b4fbb; border: 1.5px solid #cbbbf0; border-radius: 8px; padding: 5px 10px; font-size: 0.76rem; font-weight: 700; cursor: pointer; }
+  .pia-armar { margin-left: auto; background: #6b4fbb; color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 0.82rem; font-weight: 800; cursor: pointer; }
+  .pia-armar:disabled { opacity: 0.6; cursor: wait; }
+  .pia-res { margin-top: 8px; background: #fff; border: 1.5px solid #d9ccf5; border-radius: 8px; padding: 0.55rem 0.7rem; font-size: 0.8rem; line-height: 1.5; }
+  .pia-res .pia-fila { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid #efe9fb; }
+  .pia-res .pia-fila:last-of-type { border-bottom: none; }
+  .pia-res small { color: var(--texto-suave); }
+  .pia-ojo { color: #b3401a; font-weight: 700; }
+  body.dark .pia-caja { background: #2a2340; border-color: #4a3f6b; }
+  body.dark .pia-caja textarea, body.dark .pia-res { background: #1f2937; border-color: #4a3f6b; color: #e5e7eb; }
   /* ✨ v4.87 · la ficha que propone la IA (panel, Analítica → Productos) */
   .ficha-ia { background: #f5f1ff; border: 1.5px solid #d9ccf5; border-radius: 10px; padding: 0.6rem 0.75rem; margin: 6px 0 8px; font-size: 0.76rem; line-height: 1.5; color: #2d2340; display: flex; flex-direction: column; gap: 3px; }
   .ficha-ia.err { background: #fdeaea; border-color: #f3c2c2; color: #8a2a2a; display: block; }
@@ -1194,6 +1237,7 @@
   </div>
   <div class="filtros-wrap" id="filtros-wrap"></div>
   <div class="filtros-wrap" id="kosher-filtros-wrap" style="margin-top:0.35rem"></div>
+  <div class="vista-toggle" id="vista-toggle" hidden><span>¿Ya sabés lo que querés?</span><button id="vista-fotos" onclick="setVistaMay(false)">🖼️ Con fotos</button><button id="vista-lista" onclick="setVistaMay(true)">📋 Lista rápida</button></div>
   <div class="catalogo" id="catalogo"></div>
 
   <div id="cookie-aviso" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#2d1a0a;color:#fff;font-size:0.74rem;padding:10px 14px;display:flex;align-items:center;justify-content:center;gap:12px;z-index:800">
@@ -1894,6 +1938,18 @@
   <div class="admin-card">
     <div class="admin-titulo">✏️ Cargar pedido manual</div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <!-- ✨ v4.89 · Pedido por mensaje, con IA: pegás el mensaje o subís la foto y la IA carga las cantidades acá abajo -->
+      <div class="pia-caja" id="pia-caja">
+        <div style="font-weight:800;font-size:0.9rem">✨ Armar el pedido con IA</div>
+        <div style="font-size:0.74rem;color:var(--texto-suave);margin:2px 0 6px">Pegá el mensaje del cliente o subí la foto de su lista. La IA carga los productos acá abajo; vos revisás y registrás.</div>
+        <textarea id="pia-texto" rows="3" placeholder="Ej: hola! mandame 12 klik de leche, 24 barritas pesek zman y 5 pitzujim de maní 🙏"></textarea>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <label class="pia-foto-btn">📷 Foto de la lista<input type="file" accept="image/*" id="pia-foto" hidden onchange="piaFoto(this)"></label>
+          <span id="pia-foto-nombre" style="font-size:0.72rem;color:var(--texto-suave);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px"></span>
+          <button class="pia-armar" id="pia-armar" onclick="armarPedidoConIA()">✨ Armar el pedido</button>
+        </div>
+        <div id="pia-res"></div>
+      </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
         <div class="nombre-campo" style="margin:0;flex:2;min-width:170px">
           <label>Cliente</label>
@@ -3343,6 +3399,90 @@ function _fiestaHtml(excluir) {
 }
 function fiestaSumar(id) { _sumarUnidad(id, 'fiesta'); }
 
+// 📋 v4.89 · PEDIDO RÁPIDO MAYORISTA. Una lista compacta con − y + en lugar de las tarjetas con fotos:
+// quien ya sabe lo que quiere arma sus 9 o 18 renglones sin bajar entre fotos grandes. Cada toque va
+// directo al carrito; abajo, los renglones y el total en U$S y en $ por separado (nunca sumados).
+// La vista elegida queda guardada en el aparato. Solo en la tienda mayorista.
+// (var y function a propósito: actualizarBadge las llama y puede correr antes de llegar a esta línea)
+var _vistaLista = false;
+try { _vistaLista = localStorage.getItem('shuk_vista_may') === 'lista'; } catch { /**/ }
+function _usaLista() { return modo === 'mayorista' && _vistaLista === true && !adminAuth; }
+function setVistaMay(lista) {
+  _vistaLista = !!lista;
+  try { localStorage.setItem('shuk_vista_may', _vistaLista ? 'lista' : 'fotos'); } catch { /**/ }
+  renderCatalogo();
+  const cat = document.getElementById('catalogo');
+  if (cat && window.scrollY > cat.offsetTop) cat.scrollIntoView({ block: 'start' });
+}
+function _pintarVistaToggle() {
+  const t = document.getElementById('vista-toggle');
+  if (!t) return;
+  t.hidden = modo !== 'mayorista' || adminAuth;
+  document.getElementById('vista-fotos').classList.toggle('on', !_vistaLista);
+  document.getElementById('vista-lista').classList.toggle('on', _vistaLista);
+}
+// Lo que cobra el carrito por unidad (el total del pie tiene que ser el mismo que el del pedido).
+function _precioCobrado(p) { return _precioDelModo(p); }
+function _lrFila(p) {
+  if (!(p.stock > 0)) return `<div class="lr-fila agotado" id="lr-${p.id}"><div class="lr-info"><div class="lr-nombre">${esc(p.nombre)}</div><div class="lr-sub">Sin stock por ahora</div></div><button class="lr-avisame" onclick="abrirNotifModal(${p.id})">🔔 Avisame</button></div>`;
+  const q = carrito[p.id] ? carrito[p.id].qty : 0;
+  const trae = (parseInt(p.unidadesPorPaquete) || 1) > 1 ? ' · trae ' + p.unidadesPorPaquete : '';
+  return `<div class="lr-fila${q ? ' en' : ''}" id="lr-${p.id}">
+    <div class="lr-info"><div class="lr-nombre">${esc(p.nombre)}</div><div class="lr-sub"><b>${_precioCorto(p)}</b>${trae}</div></div>
+    <div class="lr-paso"><button onclick="lrCambiar(${p.id},-1)" aria-label="Uno menos">−</button><input inputmode="numeric" value="${q}" aria-label="Cantidad de ${esc(p.nombre)}" onfocus="this.select()" onchange="lrPoner(${p.id},this.value)"><button onclick="lrCambiar(${p.id},1)" aria-label="Uno más">+</button></div>
+  </div>`;
+}
+function _listaRapidaHtml(conStock, sinStock) {
+  let html = '<div class="lista-rapida">', cat = null;
+  conStock.forEach(p => {
+    const c = p.categoria || 'Varios';
+    if (c !== cat) { cat = c; html += `<div class="lr-cat">${esc(c)}</div>`; }
+    html += _lrFila(p);
+  });
+  if (sinStock.length) html += '<div class="lr-cat">🔔 Sin stock</div>' + sinStock.map(_lrFila).join('');
+  return html + '</div>';
+}
+function lrPoner(id, valor) {
+  if (_estadoTienda === 'cerrada') { agregarAlCarrito(id); return; }
+  const p = productos.find(x => x.id === id);
+  if (!p) return;
+  let q = Math.max(0, parseInt(valor) || 0);
+  if (q > p.stock) { q = p.stock; showToast('No hay más unidades disponibles'); }
+  if (q > 0 && !(_precioDelModo(p) > 0)) { showToast('Este producto no tiene precio cargado — consultanos por WhatsApp 🙏'); q = 0; }
+  const antes = carrito[id] ? carrito[id].qty : 0;
+  if (q === antes) { _lrSincronizarFilas(); return; }
+  if (q > 0) carrito[id] = { ...p, qty: q }; else delete carrito[id];
+  actualizarBadge();
+  if (!antes) { _contarInteraccion(p.nombre); track('carrito', { producto: p.nombre, ..._cartParaTrack() }); }
+  else if (q < antes) track('quitar', { producto: p.nombre, total: String(q) });
+}
+function lrCambiar(id, delta) { lrPoner(id, (carrito[id] ? carrito[id].qty : 0) + delta); }
+// Cada renglón muestra lo que hay en el carrito (también si se cambió desde el carrito mismo).
+function _lrSincronizarFilas() {
+  if (!_usaLista()) return;
+  document.querySelectorAll('#catalogo .lr-fila:not(.agotado)').forEach(el => {
+    const id = Number(el.id.replace('lr-', '')), q = carrito[id] ? carrito[id].qty : 0;
+    el.classList.toggle('en', q > 0);
+    const inp = el.querySelector('input');
+    if (inp && String(inp.value) !== String(q)) inp.value = q;
+  });
+}
+function _lrPintarPie() {
+  let pie = document.getElementById('lr-pie');
+  const items = Object.values(carrito || {});
+  if (!_usaLista() || !items.length) { if (pie) pie.remove(); return; }
+  if (!pie) { pie = document.createElement('div'); pie.id = 'lr-pie'; document.body.appendChild(pie); }
+  let usd = 0, ars = 0, u = 0;
+  items.forEach(it => {
+    const p = productos.find(x => x.id === it.id) || it;
+    const v = _precioCobrado(p) * it.qty;
+    if (esPesos(p)) ars += v; else usd += v;
+    u += it.qty;
+  });
+  const plata = [usd > 0 ? 'U$S ' + usd.toFixed(2) : '', ars > 0 ? '$ ' + Math.round(ars).toLocaleString('es-AR') : ''].filter(Boolean).join(' + ') || '$ 0';
+  pie.innerHTML = `<span><b>${items.length}</b> ${items.length === 1 ? 'renglón' : 'renglones'} · ${u} u.<br><b>${plata}</b></span><button onclick="abrirCarrito()">Ver pedido →</button>`;
+}
+
 // 🕯️ v4.88 · CIERRE PARA SHABAT. "Pedí hasta el jueves a las 20 h y llega para Shabat": arriba de la
 // tienda de domingo hasta la hora de corte (hora de Buenos Aires). Es una promesa: el día, la hora y
 // el texto se cambian (o se apaga) desde el panel → Inicio.
@@ -4315,6 +4455,15 @@ function renderCatalogo() {
   };
   const conStock = filtrados.filter(p => p.stock > 0);
   const sinStock = filtrados.filter(p => p.stock <= 0);
+  _pintarVistaToggle();
+  if (_usaLista()) {   // 📋 v4.89: la lista rápida del mayorista (sin fotos, sin filas de arriba)
+    catalogo.innerHTML = _listaRapidaHtml(conStock, sinStock);
+    _observarVistas();
+    document.getElementById('carrito-btn-header').style.display = 'flex';
+    _lrPintarPie();
+    return;
+  }
+  _lrPintarPie();
   let html = '';
   // 🔥 v4.87: "Lo más pedido" arriba de todo, en la vista completa (sin búsqueda, filtros ni link VIP,
   // que es una selección armada a mano). Con menos de 3, no hay fila: una fila flaca no vende.
@@ -4925,6 +5074,8 @@ function actualizarBadge() {
   const total = Object.values(carrito).reduce((s,i) => s + i.qty, 0);
   document.getElementById('carrito-count').textContent = total;
   _guardarCarritoLocal();
+  _lrPintarPie();                 // 📋 v4.89: el pie de la lista rápida, siempre al día
+  _lrSincronizarFilas();
 }
 
 // ═══ 🛒 RESCATE DEL CARRITO (v4.72) ══════════════════════════════════════════
@@ -8300,6 +8451,100 @@ function cargarComoPedido(i) {
   setTimeout(() => { document.getElementById('manual-cliente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
   showToast(noMatch.length ? `📋 Cargado. Faltan (cargá a mano): ${noMatch.join(', ')}` : '📋 Pedido cargado — revisá y confirmá ↓');
 }
+// ✨ v4.89 · PEDIDO POR MENSAJE, CON IA. El mensaje (o la foto de la lista) va al motor, la IA lo
+// convierte en productos del catálogo y se muestra acá: qué entendió de cada renglón, lo dudoso, lo
+// que no está y lo que no alcanza. "Cargar en el pedido" llena las cantidades del pedido manual; el
+// registro sigue siendo el de siempre, con su revisión.
+let _piaImg = null, _piaRes = null;
+// La foto se achica en el celular antes de mandarla (1600 px, JPG): sube rápido y la IA la lee igual.
+function _achicarFoto(file, max = 1600, calidad = 0.85) {
+  return new Promise((ok, mal) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok({ tipo: 'image/jpeg', data: c.toDataURL('image/jpeg', calidad).split(',')[1] });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('foto')); };
+    img.src = url;
+  });
+}
+async function piaFoto(inp) {
+  const f = inp.files && inp.files[0];
+  const nom = document.getElementById('pia-foto-nombre');
+  if (!f) { _piaImg = null; if (nom) nom.textContent = ''; return; }
+  try { _piaImg = await _achicarFoto(f); if (nom) nom.textContent = '📷 ' + f.name; }
+  catch { _piaImg = null; inp.value = ''; if (nom) nom.textContent = ''; showToast('No pude leer esa foto: probá con una captura de pantalla'); }
+}
+async function armarPedidoConIA() {
+  const texto = (document.getElementById('pia-texto').value || '').trim();
+  const res = document.getElementById('pia-res'), btn = document.getElementById('pia-armar');
+  if (!texto && !_piaImg) { showToast('Pegá el mensaje o subí la foto de la lista'); return; }
+  btn.disabled = true; btn.textContent = '✨ Leyendo…';
+  res.innerHTML = '<div class="pia-res">✨ La IA está leyendo el pedido y buscando cada producto en el catálogo… tarda unos segundos.</div>';
+  const r = await _postSesion({ accion: 'armarPedidoIA', texto, imagen: _piaImg });
+  btn.disabled = false; btn.textContent = '✨ Armar el pedido';
+  if (!r || !r.ok) {
+    const e = r && (r.mensaje || r.error);
+    res.innerHTML = `<div class="pia-res pia-ojo">⚠️ ${esc(r && r.__transitorio ? 'El servidor tardó en contestar. Probá de nuevo.' : e === 'network' ? 'Sin conexión.' : (e || 'La IA no contestó.'))}</div>`;
+    return;
+  }
+  _piaRes = r;
+  _piaPintar();
+}
+function _piaPintar() {
+  const r = _piaRes, res = document.getElementById('pia-res');
+  if (!r || !res) return;
+  const filas = r.items.map(it => {
+    const avisos = [];
+    if (it.stock <= 0) avisos.push('<span class="pia-ojo">sin stock: no se carga</span>');
+    else if (it.cantidad > it.stock) avisos.push(`<span class="pia-ojo">hay ${it.stock}: se cargan ${it.stock}</span>`);
+    if (it.dudoso) avisos.push('<span class="pia-ojo">⚠️ revisá cuál es</span>');
+    return `<div class="pia-fila"><span><b>${it.cantidad}×</b> ${esc(it.nombre)}${it.pedido ? `<br><small>«${esc(it.pedido)}»</small>` : ''}</span><span style="text-align:right;flex-shrink:0">${avisos.join('<br>')}</span></div>`;
+  }).join('');
+  res.innerHTML = `<div class="pia-res">
+    <div style="font-weight:800;margin-bottom:3px">✨ La IA armó el pedido${r.cliente ? ' de <b>' + esc(r.cliente) + '</b>' : ''} (${r.items.length} producto${r.items.length !== 1 ? 's' : ''})</div>
+    ${filas || '<div>No encontré ningún producto del catálogo en el mensaje.</div>'}
+    ${r.noEncontrados.length ? `<div style="margin-top:5px"><b>❓ No lo encontré en el catálogo:</b> ${r.noEncontrados.map(esc).join(' · ')}</div>` : ''}
+    ${r.nota ? `<div style="margin-top:5px"><b>📝 Ojo:</b> ${esc(r.nota)}</div>` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${r.items.some(it => it.stock > 0) ? '<button class="pia-armar" style="margin-left:0" onclick="piaCargar()">📋 Cargar en el pedido</button>' : ''}
+      <button class="pia-foto-btn" onclick="piaDescartar()">Descartar</button>
+    </div></div>`;
+}
+function piaCargar() {
+  const r = _piaRes;
+  if (!r) return;
+  const yaHay = Object.values(_manualQtys).some(q => q > 0);
+  if (!yaHay || confirm('Ya hay productos cargados en este pedido.\n\nAceptar = reemplazarlos por los de la IA\nCancelar = sumarlos a los que ya están')) {
+    if (yaHay) { _manualQtys = {}; _manualPrecios = {}; _manualDescs = {}; }
+  }
+  const noEntran = [];
+  r.items.forEach(it => {
+    const p = productos.find(x => x.id === it.id);
+    if (!p || p.stock <= 0) return;
+    const q = Math.min(p.stock, (_manualQtys[it.id] || 0) + it.cantidad);
+    _manualQtys[it.id] = q;
+    if (!_manualElegibles().some(x => x.id === it.id)) noEntran.push(p.nombre);
+  });
+  const cli = document.getElementById('manual-cliente');
+  if (cli && r.cliente && !cli.value.trim()) cli.value = r.cliente;
+  const buscador = document.getElementById('manual-buscar'); if (buscador) buscador.value = '';
+  renderManualProductos();
+  actualizarTotalManual();
+  setTimeout(() => { document.getElementById('manual-seleccion')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+  showToast(noEntran.length ? '📋 Cargado. No se ven en este tipo de pedido: ' + noEntran.join(', ') : '📋 Pedido cargado — revisá y registrá ↓');
+}
+function piaDescartar() {
+  _piaRes = null; _piaImg = null;
+  ['pia-texto', 'pia-foto'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const nom = document.getElementById('pia-foto-nombre'); if (nom) nom.textContent = '';
+  const res = document.getElementById('pia-res'); if (res) res.innerHTML = '';
+}
+
 // Plata del pedido manual en un solo lugar (lo usan el total de pantalla Y el registro):
 // bruto (precio de lista o el editado) → menos el Desc% de cada línea → menos el descuento
 // global. La comisión de Myri sale del NETO, igual que en el editor de pedidos.
@@ -18299,13 +18544,13 @@ function _observarVistas() {
     Object.keys(_vistasTs).forEach(k => { clearTimeout(_vistasTs[k]); delete _vistasTs[k]; });
     _vistasObs = _vistasObs || new IntersectionObserver(entradas => {
       entradas.forEach(e => {
-        const id = (e.target.id || '').replace('card-', '');
+        const id = (e.target.id || '').replace(/^(card|lr)-/, '');   // tarjeta o renglón de la lista rápida
         if (!id || _vistasVistos[id]) return;
         if (e.isIntersecting) { if (!_vistasTs[id]) _vistasTs[id] = setTimeout(() => _vistaRegistrar(id), 1000); }
         else if (_vistasTs[id]) { clearTimeout(_vistasTs[id]); delete _vistasTs[id]; }
       });
     }, { threshold: 0.5 });
-    document.querySelectorAll('#catalogo .producto-card').forEach(el => _vistasObs.observe(el));
+    document.querySelectorAll('#catalogo .producto-card, #catalogo .lr-fila').forEach(el => _vistasObs.observe(el));
   } catch { /**/ }
 }
 function _vistaRegistrar(id) {
