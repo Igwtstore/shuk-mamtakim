@@ -3218,6 +3218,24 @@ function _bolsaEstadoTxt(b) {
   const c = parseInt(b && b.stock) || 0, su = parseInt(b && b.sueltas) || 0;
   return c + ' cerrada' + (c === 1 ? '' : 's') + (su > 0 ? ' + ' + su + ' suelta' + (su === 1 ? '' : 's') : '');
 }
+// ✂️ Cuánto se puede llevar de `p` como MÁXIMO en el carrito, contando lo que ya hay de la MISMA bolsa (la bolsa entera y
+// sus fracciones comparten las unidades). Es la misma cuenta que hace el motor al recibir el pedido (faltantesStock):
+// las bolsas cerradas no usan sueltas; las fracciones usan las sueltas y lo que queda de las cerradas. Producto normal:
+// su stock de siempre. La línea del propio `p` no cuenta (el carrito la reemplaza con la cantidad nueva).
+function stockDisponible(p) {
+  if (!p) return 0;
+  const bid = esFraccion(p) ? String(p.fraccionDe) : String(p.id);
+  const hermanas = productos.filter(x => String(x.fraccionDe || '') === bid);
+  if (!esFraccion(p) && !hermanas.length) return p.stock;
+  const b = productos.find(x => String(x.id) === bid);
+  if (!b) return p.stock;   // la bolsa no está a la venta (oculta): el stock calculado por la base alcanza
+  const upp = Math.max(1, parseInt(b.unidadesPorPaquete) || 1), su = Math.max(0, parseInt(b.sueltas) || 0), cerr = Math.max(0, parseInt(b.stock) || 0);
+  const q = id => (typeof carrito !== 'undefined' && carrito[id]) ? (parseInt(carrito[id].qty) || 0) : 0;
+  const otrasU = hermanas.filter(f => String(f.id) !== String(p.id)).reduce((t, f) => t + q(f.id) * Math.max(1, parseInt(f.fraccionCant) || 1), 0);
+  if (!esFraccion(p)) return Math.max(0, cerr - Math.max(0, Math.ceil((otrasU - su) / upp)));
+  const unidades = Math.max(0, cerr - q(b.id)) * upp + su - otrasU;
+  return Math.max(0, Math.floor(unidades / Math.max(1, parseInt(p.fraccionCant) || 1)));
+}
 function productosVisibles() {
   return esVistaMiri() ? productos.filter(p => p.dueno !== 'Jony') : productos;
 }
@@ -3546,7 +3564,8 @@ function lrPoner(id, valor) {
   const p = productos.find(x => x.id === id);
   if (!p) return;
   let q = Math.max(0, parseInt(valor) || 0);
-  if (q > p.stock) { q = p.stock; showToast('No hay más unidades disponibles'); }
+  const _max = stockDisponible(p);   // ✂️ v5.03
+  if (q > _max) { q = _max; showToast('No hay más unidades disponibles'); }
   if (q > 0 && !(_precioDelModo(p) > 0)) { showToast('Este producto no tiene precio cargado — consultanos por WhatsApp 🙏'); q = 0; }
   const antes = carrito[id] ? carrito[id].qty : 0;
   if (q === antes) { _lrSincronizarFilas(); return; }
@@ -3874,7 +3893,7 @@ function precioUnidadHtml(p) {
   // en mayorista y en dólares, el equivalente en pesos ayuda a comparar con el precio minorista
   if (!enPesos && _tc > 0) txt += ' <span style="opacity:0.75">(≈ $ ' + Math.round(u * _tc).toLocaleString('es-AR') + ')</span>';
   return `<div style="display:flex;align-items:center;justify-content:center;gap:5px;background:#eef4fb;border:1px solid #d8e6f5;border-radius:6px;padding:3px 8px;font-size:0.72rem;color:#1a5c8a;font-weight:600;margin-top:4px">
-    <span style="opacity:0.8">📦 trae ${upp}</span><span style="font-weight:800">${txt} c/u</span></div>`;
+    <span style="opacity:0.8">${esFraccion(p) ? '✂️ ' + upp + ' unidades' : '📦 trae ' + upp}</span><span style="font-weight:800">${txt} c/u</span></div>`;
 }
 function esPesos(p) {
   if (modo === 'minorista') return true;
@@ -4562,7 +4581,7 @@ function renderCatalogo() {
     const qty = cantidades[p.id] || 0;
     const enCarrito = !!carrito[p.id];
     const agotado = p.stock <= 0;
-    const maxQty = p.stock;
+    const maxQty = stockDisponible(p);   // ✂️ v5.03: descuenta lo que ya llevás de la misma bolsa
     const precio = formatPrecio(p);
     const esPeso = esPesos(p);
     // 🏷️ Link VIP con descuento: precio original tachado + chip del % (el precio nuevo ya viene rebajado)
@@ -5146,7 +5165,7 @@ function _sumarUnidad(id, desde) {
   if (!p) return false;
   if (!(_precioDelModo(p) > 0)) { showToast('Este producto no tiene precio cargado — consultanos por WhatsApp 🙏'); return false; }
   const ya = carrito[id] ? carrito[id].qty : 0;
-  if (ya + 1 > p.stock) { showToast('No hay más unidades disponibles'); return false; }
+  if (ya + 1 > stockDisponible(p)) { showToast('No hay más unidades disponibles'); return false; }
   carrito[id] = { ...p, qty: ya + 1 };
   actualizarBadge();
   renderCatalogo();
@@ -5546,7 +5565,7 @@ function cambiarCarritoQty(id, delta) {
   if (!carrito[id]) return;
   const nueva = carrito[id].qty + delta;
   if (nueva <= 0) { eliminarDelCarrito(id); return; }
-  if (nueva > (p ? p.stock : 999)) { showToast('No hay más stock'); return; }
+  if (nueva > (p ? stockDisponible(p) : 999)) { showToast('No hay más stock'); return; }
   if (delta < 0 && p) track('quitar', { producto: p.nombre, total: String(nueva) });   // 🗑️ bajó la cantidad
   carrito[id].qty = nueva;
   actualizarBadge();
@@ -5659,9 +5678,9 @@ async function enviarPedido(_stockVerificado) {
   // El catálogo del navegador puede estar viejo (la página abierta hace rato): antes de
   // mandar el pedido se relee el stock real de la planilla. Evita sobreventas.
   if (!_stockVerificado) {
-    fetch(SB_REST + '/productos?select=id,stock&t=' + Date.now(), { headers: SB_ANON_H }).then(r => r.json()).then(data => {
+    fetch(SB_REST + '/productos?select=id,stock,sueltas&t=' + Date.now(), { headers: SB_ANON_H }).then(r => r.json()).then(data => {
       const frescos = {};
-      data.forEach(p => { frescos[parseInt(p.id)] = parseInt(p.stock) || 0; });
+      data.forEach(p => { frescos[parseInt(p.id)] = parseInt(p.stock) || 0; const pl = productos.find(x => x.id === parseInt(p.id)); if (pl && p.sueltas != null) pl.sueltas = parseInt(p.sueltas) || 0; });
       const cortos = items.filter(it => frescos[it.id] !== undefined && it.qty > frescos[it.id]);
       if (cortos.length) {
         cortos.forEach(it => {
