@@ -1339,6 +1339,7 @@
   </div>
   <!-- CLIENTES TAB -->
   <div id="admin-tab-clientes" style="display:none">
+    <div id="tetoca-card"></div>
     <div class="admin-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
         <div style="font-weight:700;color:var(--azul)">👥 Clientes</div>
@@ -8746,6 +8747,105 @@ function _precioMoneda(p, modo) {
 }
 
 // Levanta un carrito abandonado como pedido manual: va a Ventas, precarga cliente + cantidades.
+// ═══ 🔔 TE TOCA (v5.01) ══════════════════════════════════════════════════════
+// A quién le toca volver a pedir, según SU PROPIO ritmo (cada cuántos días te compra, sale de sus compras).
+// Un toque y le llega su pedido de siempre como link armado: lo abre con todo cargado y confirma.
+async function renderTeToca() {
+  const cont = document.getElementById('tetoca-card');
+  if (!cont || esVistaMiri()) { if (cont) cont.innerHTML = ''; return; }
+  cont.innerHTML = '<div class="admin-card"><div class="admin-titulo">🔔 Te toca</div><div class="sinpedidos">Mirando el ritmo de cada cliente…</div></div>';
+  const d = await fetchConSesion(APPS_SCRIPT_URL + '?accion=teToca').catch(() => null);
+  if (!d || d.error || !Array.isArray(d.lista)) { cont.innerHTML = '<div class="admin-card"><div class="admin-titulo">🔔 Te toca</div><div class="sinpedidos">No se pudo cargar 😕</div></div>'; return; }
+  window._teToca = d;
+  const L = d.lista;
+  const hoy = L.filter(x => !x.yaEscrito && (x.estado === 'le toca' || x.estado === 'atrasado'));
+  const frios = L.filter(x => !x.yaEscrito && x.estado === 'se enfrió');
+  const escritos = L.filter(x => x.yaEscrito);
+  const pronto = L.filter(x => !x.yaEscrito && x.estado === 'pronto');
+  const fila = x => _teTocaFila(x, L.indexOf(x));
+  const grupo = (titulo, arr, abierto) => arr.length ? `<details ${abierto ? 'open' : ''} style="margin-top:0.55rem"><summary style="cursor:pointer;font-weight:700;font-size:0.8rem;color:var(--azul)">${titulo} (${arr.length})</summary>${arr.map(fila).join('')}</details>` : '';
+  const unaVez = (d.unaVez || []).map((x, i) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:0.4rem 0;border-bottom:1px solid var(--gris-medio);font-size:0.78rem">
+      <span style="min-width:0">${esc(x.nombre)} <span style="color:var(--texto-suave)">· compró una vez, hace ${x.dias} días · ${esc(_plataArmado({ ars: x.ticketARS, usd: x.ticketUSD }))}</span></span>
+      <button onclick="teTocaSaludar(${i}, true)" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:3px 9px;font-size:0.72rem;font-weight:700;cursor:pointer;flex-shrink:0">👋</button>
+    </div>`).join('');
+  const ocultos = (d.ocultos || []).map(o => `<button onclick="teTocaMostrar('${jsAttr(o.clave)}')" style="background:var(--gris-claro);border:none;border-radius:6px;padding:3px 9px;font-size:0.72rem;cursor:pointer;margin:2px">↩️ ${esc(o.nombre)}</button>`).join('');
+  cont.innerHTML = `<div class="admin-card" style="border:2px solid #c9954a">
+    <div class="admin-titulo">🔔 Te toca — a quién le toca volver a pedir</div>
+    <div style="font-size:0.74rem;color:var(--texto-suave);margin-bottom:8px;line-height:1.45">Cada cliente tiene su ritmo: cada cuántos días te compra, sacado de sus propias compras${d.ritmoGeneral ? ` (en general, tus clientes vuelven cada ~${d.ritmoGeneral} días)` : ''}. Estos ya se pasaron. Con <b>💬 Mandarle lo de siempre</b> le llega su pedido habitual como link: lo abre con todo cargado y confirma.</div>
+    ${hoy.length ? `<div style="font-weight:800;font-size:0.84rem;margin-bottom:2px">Para escribirles hoy (${hoy.length})</div>${hoy.map(fila).join('')}` : '<div class="sinpedidos" style="padding:0.4rem 0">Hoy no hay nadie atrasado: tus clientes vienen al día ✓</div>'}
+    ${grupo('🧊 Se enfriaron — hace mucho que no vuelven', frios, false)}
+    ${grupo('⏳ Les toca en los próximos días', pronto, false)}
+    ${grupo('✓ Ya les escribiste', escritos, false)}
+    ${unaVez ? `<details style="margin-top:0.55rem"><summary style="cursor:pointer;font-weight:700;font-size:0.8rem;color:var(--azul)">🌱 Compraron una sola vez (${d.unaVez.length})</summary><div style="font-size:0.7rem;color:var(--texto-suave);margin:4px 0">Todavía no tienen ritmo. Un saludo a tiempo puede convertirlos en clientes de siempre.</div>${unaVez}</details>` : ''}
+    ${ocultos ? `<details style="margin-top:0.55rem"><summary style="cursor:pointer;font-size:0.74rem;color:var(--texto-suave)">🙈 Ocultos (${d.ocultos.length}) — tocá para volver a mostrarlos</summary><div style="margin-top:4px">${ocultos}</div></details>` : ''}
+  </div>`;
+}
+function _teTocaLista(x) {
+  // Lo de siempre, con lo que HOY se puede vender en su canal (con stock, visible y con precio).
+  const canal = x.tipo === 'Mayorista' ? 'mayorista' : 'minorista', tipoV = x.tipo === 'Mayorista' ? 'Mayorista' : 'Minorista';
+  const vivos = [], sin = [];
+  (x.habitual || []).forEach(it => {
+    const p = productos.find(pp => String(pp.id) === String(it.id));
+    const vis = p ? (p.visible || 'Ambos').trim() : '';
+    if (!p || p.stock <= 0 || p.activo === false || (vis !== 'Ambos' && vis !== tipoV) || !(_conModo(canal, () => _precioDelModo(p)) > 0)) { if (p) sin.push(p.nombre); return; }
+    vivos.push({ p, q: Math.max(1, Math.min(parseInt(it.q) || 1, p.stock)) });
+  });
+  return { canal, vivos, sin };
+}
+function _teTocaFila(x, i) {
+  const { vivos, sin } = _teTocaLista(x);
+  const chip = x.estado === 'le toca' ? '<span style="background:#e8f6ec;color:#1e7a3c;font-size:0.64rem;font-weight:800;padding:1px 7px;border-radius:6px">🔔 le toca</span>'
+    : x.estado === 'atrasado' ? `<span style="background:#fdf3e6;color:#e08a2a;font-size:0.64rem;font-weight:800;padding:1px 7px;border-radius:6px">⏰ ${x.dias - x.ritmo} día${x.dias - x.ritmo !== 1 ? 's' : ''} atrasado</span>`
+    : x.estado === 'se enfrió' ? '<span style="background:#eef4fb;color:#2c6fad;font-size:0.64rem;font-weight:800;padding:1px 7px;border-radius:6px">🧊 se enfrió</span>'
+    : `<span style="background:var(--gris-claro);color:var(--texto-suave);font-size:0.64rem;font-weight:800;padding:1px 7px;border-radius:6px">le toca en ${x.enDias} día${x.enDias !== 1 ? 's' : ''}</span>`;
+  const siempre = vivos.length ? vivos.slice(0, 4).map(v => v.q + '× ' + esc(v.p.nombre)).join(' · ') + (vivos.length > 4 ? ' y ' + (vivos.length - 4) + ' más' : '') : '<i>lo de siempre está sin stock</i>';
+  return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.55rem 0.7rem;margin-top:0.45rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap">
+      <div style="font-weight:700;font-size:0.86rem;color:var(--azul)">${esc(x.nombre)} ${chip} ${x.tipo === 'Mayorista' ? '<span style="font-size:0.6rem;background:#eef4fb;color:#2c6fad;border-radius:5px;padding:1px 5px;font-weight:700">📦 mayorista</span>' : ''}</div>
+      <div style="font-size:0.66rem;color:var(--texto-suave)">${x.telefono ? '📞 ' + esc(x.telefono) : 'sin teléfono'}</div>
+    </div>
+    <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:2px">Compra cada ~${x.ritmo} días · la última hace ${x.dias} · ${x.pedidos} compras · ticket ${esc(_plataArmado({ ars: x.ticketARS, usd: x.ticketUSD }))}</div>
+    <div style="font-size:0.74rem;color:#3d2b1a;margin-top:3px">🔁 ${siempre}${sin.length ? ` <span style="color:#c0392b">(sin stock: ${esc(sin.slice(0, 2).join(', '))}${sin.length > 2 ? '…' : ''})</span>` : ''}</div>
+    ${x.yaEscrito ? `<div style="font-size:0.7rem;color:#1e7a3c;margin-top:3px">✓ Le escribiste ${x.diasAvisado === 0 ? 'hoy' : 'hace ' + x.diasAvisado + ' día' + (x.diasAvisado !== 1 ? 's' : '')}</div>` : ''}
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      ${vivos.length ? `<button onclick="teTocaMandar(${i})" style="background:#25d366;color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:0.74rem;font-weight:800;cursor:pointer">💬 Mandarle lo de siempre</button>` : ''}
+      <button onclick="teTocaSaludar(${i})" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:7px;padding:5px 11px;font-size:0.74rem;font-weight:700;cursor:pointer">👋 Solo saludar</button>
+      <button onclick="teTocaOcultar(${i})" title="No mostrarlo más (ej: es de la familia, o pidió que no le escriban)" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:7px;padding:5px 9px;font-size:0.74rem;font-weight:700;cursor:pointer">🙈</button>
+    </div>
+  </div>`;
+}
+async function _teTocaAnotar(clave) {
+  await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'teTocaMarcar', clave, avisado: '1' })).catch(() => null);
+  renderTeToca();
+}
+async function teTocaMandar(i) {
+  const x = ((window._teToca || {}).lista || [])[i];
+  if (!x) return;
+  const { canal, vivos } = _teTocaLista(x);
+  if (!vivos.length) { showToast('Lo de siempre está sin stock: mejor saludalo'); return; }
+  await crearLinkArmado({ nombre: x.nombre, canal, items: vivos, telefono: x.telefono, origen: 'tetoca', intro: '¿Te armo lo de siempre? Ya te lo dejé listo:', alMandar: () => _teTocaAnotar(x.clave) });
+}
+function teTocaSaludar(i, deUnaVez) {
+  const x = deUnaVez ? ((window._teToca || {}).unaVez || [])[i] : ((window._teToca || {}).lista || [])[i];
+  if (!x) return;
+  const primer = String(x.nombre || '').trim().split(' ')[0];
+  const url = SITIO + (x.tipo === 'Mayorista' ? '/mayorista' : '/');
+  const msg = `¡Hola ${primer}! 👋 ¿Cómo andás? Te escribo de *Shuk Mamtakim* 🍬\n¿Te preparo algo esta semana? Si querés mirar lo nuevo, está todo acá: ${url}`;
+  const tel = String(x.telefono || '').replace(/\D/g, '');
+  window.open(tel.length >= 10 ? `https://wa.me/549${tel.slice(-10)}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  _teTocaAnotar(x.clave);
+}
+async function teTocaOcultar(i) {
+  const x = ((window._teToca || {}).lista || [])[i];
+  if (!x || !confirm('¿No mostrar más a ' + x.nombre + ' en Te toca?\n(Queda en "Ocultos" por si te arrepentís.)')) return;
+  await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'teTocaMarcar', clave: x.clave, oculto: '1' })).catch(() => null);
+  renderTeToca();
+}
+async function teTocaMostrar(clave) {
+  await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'teTocaMarcar', clave, oculto: '0' })).catch(() => null);
+  renderTeToca();
+}
+
 // ═══ 🔗 PEDIDO ARMADO (v5.00) — lado panel ═══════════════════════════════════
 // El total del mensaje se calcula COMO LA TIENDA en ese canal (ofertas, packs, moneda): es exactamente el
 // que va a ver el cliente al abrir el link. `_conModo` presta el modo un instante y lo devuelve.
@@ -8768,16 +8868,16 @@ function _productoDeRenglon(it) {
   const cand = productos.filter(p => (p.nombre || '').trim().toLowerCase() === n || (p.nombre || '').substring(0, 40).trim().toLowerCase() === n);
   return cand.find(p => (parseInt(p.stock) || 0) > 0) || cand[0] || null;
 }
-async function crearLinkArmado({ nombre, canal, items, nota, telefono, origen, intro }) {
+async function crearLinkArmado({ nombre, canal, items, nota, telefono, origen, intro, alMandar }) {
   const lista = (items || []).filter(x => x.p && x.q > 0);
   if (!lista.length) { showToast('No hay productos para armar el link'); return null; }
   const r = await apiWrite(new URLSearchParams({ accion: 'crearPedidoArmado', nombre: nombre || 'cliente', canal, items: lista.map(x => x.p.id + ':' + x.q).join(','), nota: nota || '', origen: origen || '' }), '');
   if (!r || !r.ok || !r.token) { showToast('⚠️ No se pudo crear el link' + (r && r.error ? ': ' + r.error : '')); return null; }
   const url = SITIO + (canal === 'mayorista' ? '/mayorista' : '/') + '?pedido=' + r.token;
-  _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro });
+  _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro, alMandar });
   return r.token;
 }
-function _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro }) {
+function _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro, alMandar }) {
   const tot = _totalArmado(lista, canal);
   const primer = String(nombre || '').trim().split(' ')[0];
   const renglones = lista.slice(0, 15).map(x => `• ${x.q}× ${x.p.nombre}`).join('\n') + (lista.length > 15 ? `\n• …y ${lista.length - 15} más` : '');
@@ -8786,6 +8886,7 @@ function _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro }) {
   const tel = String(telefono || (window._telDeCliente || {})[norm(nombre || '')] || '').replace(/\D/g, '');
   const wa = tel.length >= 10 ? `https://wa.me/549${tel.slice(-10)}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window._armadoMsg = msg;
+  window._armadoAlMandar = typeof alMandar === 'function' ? alMandar : null;   // se llama una vez, al mandarlo o copiarlo
   let ov = document.getElementById('armado-overlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'armado-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
   ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:460px;width:100%;max-height:88vh;overflow-y:auto">
@@ -8794,12 +8895,13 @@ function _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro }) {
     <div style="white-space:pre-wrap;font-size:0.78rem;background:#f4faf6;border:1px solid #cfe6d8;border-radius:10px;padding:0.6rem 0.75rem;margin-top:0.7rem;color:#2d1a0a;line-height:1.45">${esc(msg)}</div>
     <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:6px">${tel.length >= 10 ? '💬 Va directo a su WhatsApp (' + esc(tel.slice(-10)) + ').' : '💬 No tengo su teléfono: WhatsApp te va a dejar elegir el contacto.'} Cuando lo abra o lo confirme, lo vas a ver en 🗂 Enviados.</div>
     <div style="display:flex;gap:6px;margin-top:0.8rem;flex-wrap:wrap">
-      <button onclick="window.open('${jsAttr(wa)}','_blank')" style="flex:2;padding:0.65rem;background:#25d366;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💬 Mandar por WhatsApp</button>
-      <button onclick="navigator.clipboard.writeText(window._armadoMsg).then(()=>showToast('Mensaje copiado ✓'))" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">📋 Copiar</button>
+      <button onclick="_armadoMandado();window.open('${jsAttr(wa)}','_blank')" style="flex:2;padding:0.65rem;background:#25d366;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💬 Mandar por WhatsApp</button>
+      <button onclick="_armadoMandado();navigator.clipboard.writeText(window._armadoMsg).then(()=>showToast('Mensaje copiado ✓'))" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">📋 Copiar</button>
       <button onclick="document.getElementById('armado-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
     </div>
   </div>`;
 }
+function _armadoMandado() { const f = window._armadoAlMandar; window._armadoAlMandar = null; if (f) { try { f(); } catch { /**/ } } }
 async function mandarPedidoManualComoLink() {
   const cliente = document.getElementById('manual-cliente').value.trim();
   if (!cliente) { showToast('Poné el nombre del cliente (el link lo saluda por su nombre)'); return; }
@@ -15221,6 +15323,7 @@ function setVistaSocio(v) {
 
 let _clientesRaw = [];
 async function renderClientes() {
+  renderTeToca();   // 🔔 v5.01: a quién le toca volver a pedir (en paralelo, no frena la lista)
   await cargarNotasClientes();
   const lista = document.getElementById('clientes-lista');
   lista.innerHTML = '<div class="sinpedidos">Cargando...</div>';
@@ -16288,6 +16391,7 @@ function _anaCardAlertas() {
     ${sw('informe', '📊 Informe del domingo a las 20:00', 'La semana en un mensaje: visitas, sesiones, personas, pedidos, carritos sin terminar y 3 cosas para el lunes.')}
     ${sw('rareza', '📉📈 Días raros', 'A las 13 y a las 20: si hoy vas 50 % abajo o el doble de un día igual de las últimas 4 semanas.')}
     ${sw('avisame', '🔔 Volvió algo que alguien esperaba', 'Cuando un producto de la lista de espera vuelve a tener stock. Una vez cada 3 días por producto.')}
+    ${sw('tetoca', '🔔 Te toca: a quién le toca volver a pedir', 'Cada mañana a las 11 (menos los sábados): los clientes que ya se pasaron de su ritmo de compra, con un toque para mandarles su pedido de siempre.')}
   </div>`;
 }
 

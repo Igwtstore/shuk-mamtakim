@@ -528,8 +528,8 @@ function compactarEvento(r: any) {
 // 🔁 LO DE SIEMPRE (v4.86): el pedido habitual de un aparato, a partir de sus últimos pedidos
 // minoristas. Del último pedido entra todo; de los dos anteriores, lo que se repite. La cantidad
 // es la del pedido más reciente que lo tiene. No devuelve nombres ni teléfonos: solo productos.
-function pedidoHabitual(ventas: any[]) {
-  const validas = ventas.filter((v: any) => !['cancelado', 'cotizacion'].includes(String(v.estado || '')) && String(v.tipo || 'Minorista') !== 'Mayorista').slice(0, 3);
+function pedidoHabitual(ventas: any[], incluirMayorista = false) {
+  const validas = ventas.filter((v: any) => !['cancelado', 'cotizacion'].includes(String(v.estado || '')) && (incluirMayorista || String(v.tipo || 'Minorista') !== 'Mayorista')).slice(0, 3);
   if (!validas.length) return { items: [], pedidos: 0, ultima: '' };
   const cuenta: any = {}, ultimaQ: any = {};
   const idsDe = (v: any) => {
@@ -548,6 +548,93 @@ function pedidoHabitual(ventas: any[]) {
     .map((id) => ({ id, q: ultimaQ[id], veces: cuenta[id] }))
     .sort((a: any, b: any) => b.veces - a.veces);
   return { items: items.slice(0, 25), pedidos: validas.length, ultima: String(validas[0].fecha || '') };
+}
+// ══════════════════════════════════════════════════════════════════════════════
+//  🔔 TE TOCA (v5.01): a quién le toca volver a pedir, según SU PROPIO ritmo.
+//  Cada cliente que compró 2+ veces tiene su intervalo típico (la mediana de días entre compras). Si ya
+//  pasó ese tiempo desde la última, le toca. No es un número inventado para todos: es su costumbre.
+//  Dos pedidos a menos de 2 días cuentan como UNA compra (se agregó algo, se corrigió un pedido).
+//  El ritmo mínimo es 3 días: el que compró dos veces en una semana no queda "atrasado" para siempre.
+// ══════════════════════════════════════════════════════════════════════════════
+function normNombreTT(x: any) { return String(x || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').replace(/[^a-z0-9 ]/g, '').slice(0, 60); }
+function calcularTeToca(ventas: any[], clientes: any[], marcas: any, ahoraAR: number) {
+  const tel: any = {};
+  clientes.forEach((c: any) => { const k = normNombreTT(c.nombre); if (k && c.telefono) tel[k] = String(c.telefono); });
+  const porCli: any = {};
+  ventas.forEach((v: any) => {
+    const est = String(v.estado || '');
+    if (est === 'cancelado' || est === 'cotizacion') return;
+    const k = normNombreTT(v.cliente), ts = tsDeFecha(String(v.fecha || ''));
+    if (!k || !ts) return;
+    (porCli[k] = porCli[k] || { nombre: String(v.cliente || '').trim(), ventas: [] }).ventas.push({ ...v, ts });
+  });
+  const lista: any[] = [], unaVez: any[] = [], todosInt: number[] = [], ocultos: any[] = [];
+  const mediana = (a: number[]) => { const b = a.slice().sort((x, y) => x - y); const m = Math.floor(b.length / 2); return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+  for (const k of Object.keys(porCli)) {
+    const c = porCli[k], marca = marcas[k] || {};
+    if (marca.oculto) { ocultos.push({ nombre: c.nombre, clave: k }); continue; }
+    c.ventas.sort((a: any, b: any) => a.ts - b.ts);
+    const ocas: any[] = [];
+    c.ventas.forEach((v: any) => { const u = ocas[ocas.length - 1]; if (u && v.ts - u.ultTs < 2 * 86400000) { u.ventas.push(v); u.ultTs = v.ts; } else ocas.push({ ts: v.ts, ultTs: v.ts, ventas: [v] }); });
+    const ult = c.ventas[c.ventas.length - 1];
+    const dias = Math.max(0, Math.floor((ahoraAR - ult.ts) / 86400000));
+    let ars = 0, usd = 0;
+    c.ventas.forEach((v: any) => { ars += parseFloat(v.total_ars) || 0; usd += parseFloat(v.total_usd) || 0; });
+    const tipo = String(ult.tipo || '') === 'Mayorista' ? 'Mayorista' : 'Minorista';
+    const avisadoTs = marca.avisado ? (tsDeFecha(String(marca.avisado)) || 0) : 0;
+    const base = {
+      nombre: c.nombre, clave: k, telefono: tel[k] || '', tipo, pedidos: ocas.length, ultima: String(ult.fecha || ''), dias,
+      ticketARS: Math.round(ars / ocas.length), ticketUSD: Math.round(usd / ocas.length * 100) / 100,
+      avisado: marca.avisado || '', diasAvisado: avisadoTs ? Math.floor((ahoraAR - avisadoTs) / 86400000) : null,
+    };
+    if (ocas.length < 2) {
+      if (dias >= 21 && dias <= 180) unaVez.push(base);
+      continue;
+    }
+    const ints: number[] = [];
+    for (let i = 1; i < ocas.length; i++) ints.push((ocas[i].ts - ocas[i - 1].ultTs) / 86400000);
+    ints.forEach((x) => todosInt.push(x));
+    const ritmo = Math.max(3, Math.round(mediana(ints)));
+    const ratio = dias / ritmo;
+    if (ratio < 0.8) continue;
+    // El avisado de los últimos días no desaparece, pero baja: ya le escribiste, no hace falta insistir hoy.
+    const yaEscrito = base.diasAvisado !== null && base.diasAvisado < 5 && avisadoTs >= ult.ts;
+    const estado = ratio < 1 ? 'pronto' : (ratio < 1.5 ? 'le toca' : (ratio < 3 ? 'atrasado' : 'se enfrió'));
+    // Lo de siempre se arma por COMPRA, no por pedido: lo que pidió el mismo día en dos veces es una sola canasta
+    // (si no, "lo que agregó después" tapaba lo que había pedido primero). Las cantidades se suman.
+    const porCompra = ocas.slice().reverse().map((o: any) => {
+      const q: any = {}, orden: string[] = [];
+      o.ventas.forEach((v: any) => String(v.stock_updates || '').split(',').forEach((u: string) => {
+        const pp = u.split(':'), id = String(pp[0] || '').trim(), n = parseInt(pp[1]) || 0;
+        if (!id || n <= 0) return;
+        if (q[id] === undefined) { q[id] = 0; orden.push(id); }
+        q[id] += n;
+      }));
+      const uv = o.ventas[o.ventas.length - 1];
+      return { fecha: uv.fecha, estado: 'entregado', tipo: uv.tipo, stock_updates: orden.map((id) => id + ':' + q[id]).join(',') };
+    });
+    const habitual = pedidoHabitual(porCompra, tipo === 'Mayorista');
+    lista.push({ ...base, ritmo, ratio: Math.round(ratio * 100) / 100, estado, yaEscrito, enDias: Math.max(0, ritmo - dias), habitual: habitual.items });
+  }
+  const pesoEstado: any = { 'le toca': 0, 'atrasado': 1, 'se enfrió': 2, 'pronto': 3 };
+  const valor = (x: any) => (x.ticketARS || 0) + (x.ticketUSD || 0) * 1400;
+  lista.sort((a, b) => (Number(a.yaEscrito) - Number(b.yaEscrito)) || (pesoEstado[a.estado] - pesoEstado[b.estado]) || (valor(b) - valor(a)));
+  unaVez.sort((a, b) => a.dias - b.dias);
+  return {
+    lista, unaVez: unaVez.slice(0, 20), ocultos,
+    ritmoGeneral: todosInt.length ? Math.round(mediana(todosInt)) : null,
+    cuantos: { leToca: lista.filter((x) => x.estado === 'le toca' && !x.yaEscrito).length, atrasados: lista.filter((x) => x.estado === 'atrasado' && !x.yaEscrito).length, enfriados: lista.filter((x) => x.estado === 'se enfrió' && !x.yaEscrito).length, pronto: lista.filter((x) => x.estado === 'pronto').length },
+  };
+}
+async function teTocaDesdeLaBase() {
+  const [vtT, clT, mkT] = await Promise.all([
+    sbGet('ventas', 'select=cliente,fecha,estado,tipo,total_ars,total_usd,stock_updates&order=n_venta'),
+    sbGet('clientes', 'select=nombre,telefono,tipo'),
+    sbGet('config', 'select=clave,valor&clave=like.TETOCA_*'),
+  ]);
+  const marcas: any = {};
+  mkT.forEach((r: any) => { try { marcas[String(r.clave || '').slice(7)] = JSON.parse(r.valor || '{}'); } catch { /**/ } });
+  return calcularTeToca(vtT, clT, marcas, Date.now() - 3 * 3600000);   // Argentina = UTC−3 todo el año (las fechas se guardan en hora de acá)
 }
 // 🔔 EL AVISAME QUE SE CUMPLE (v4.86): de la lista de espera, los productos que YA tienen stock,
 // con cuántas personas los esperan. Lo usa el aviso a tu celular y "Qué hacer" en la Analítica.
@@ -1721,7 +1808,7 @@ async function calcularAnalitica(dias: number, soloHoy = false) {
 //  Van por OneSignal SOLO a los aparatos con la etiqueta rol=jony (el panel la pone al entrar).
 //  NUNCA a "All": hay clientes suscriptos a las novedades de la tienda y no tienen por qué ver esto.
 // ══════════════════════════════════════════════════════════════════════════════
-const ALERTAS_DEF: any = { checkout: 1, conocido: 1, busqueda: 1, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1, avisame: 1 };
+const ALERTAS_DEF: any = { checkout: 1, conocido: 1, busqueda: 1, pico: 1, carrito: 1, carritoMin: 20000, picoMin: 15, informe: 1, rareza: 1, avisame: 1, tetoca: 1 };
 async function alertasCfg() {
   try { return { ...ALERTAS_DEF, ...JSON.parse(await getConfig('ALERTAS_PUSH', '{}')) }; } catch { return { ...ALERTAS_DEF }; }
 }
@@ -1830,7 +1917,7 @@ async function refrescarVidriera() {
 // Lo que el cron de cada hora revisa: carritos colgados, el informe del domingo, y si hoy es raro.
 async function avisosDelCron() {
   const cfg = await alertasCfg();
-  const out: any = { carritos: 0, informe: false, rareza: null, avisame: 0 };
+  const out: any = { carritos: 0, informe: false, rareza: null, avisame: 0, tetoca: false };
   const f = fechaAhora();
   const horaAR = parseInt(f.slice(11, 13), 10);
   const [dd, mm, yy] = f.slice(0, 10).split('/');
@@ -1857,6 +1944,19 @@ async function avisosDelCron() {
           const r = await pushJony('🔔 Volvió ' + g.nombre + ': ' + g.esperan + (g.esperan === 1 ? ' persona lo esperaba' : ' personas lo esperaban'), 'Avisales desde Stock → Lista de espera: el mensaje ya está armado.');
           if (r.ok) out.avisame++;
         }
+      }
+    } catch { /* un aviso nunca frena el cron */ }
+  }
+  // 🔔 v5.01: Te toca — cada mañana a las 11 (menos los sábados), a quiénes les toca volver a pedir hoy.
+  if (cfg.tetoca && dow !== 6 && horaAR === 11 && !(await avisoReciente('tetoca:' + hoyK, 20))) {
+    try {
+      const tt = await teTocaDesdeLaBase();
+      const hoy = tt.lista.filter((x: any) => !x.yaEscrito && (x.estado === 'le toca' || x.estado === 'atrasado'));
+      if (hoy.length) {
+        const nombres = hoy.slice(0, 3).map((x: any) => String(x.nombre).split(' ')[0]);
+        const r = await pushJony('🔔 Hoy le toca pedir a ' + hoy.length + (hoy.length === 1 ? ' cliente' : ' clientes'),
+          nombres.join(', ') + (hoy.length > 3 ? ' y ' + (hoy.length - 3) + ' más' : '') + '. Mandales su pedido de siempre desde 👥 Clientes → Te toca (un toque cada uno).');
+        out.tetoca = !!r.ok;
       }
     } catch { /* un aviso nunca frena el cron */ }
   }
@@ -3313,7 +3413,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary', 'crearPedidoArmado', 'listarPedidosArmados', 'borrarPedidoArmado'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary', 'crearPedidoArmado', 'listarPedidosArmados', 'borrarPedidoArmado', 'teToca', 'teTocaMarcar'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -4719,6 +4819,18 @@ Deno.serve(async (req) => {
     }
     // 🏷️ Bautizar a un visitante que no dejó nombre (o anotarle algo). Es una deducción de
     // Jony, no un dato que la persona haya dado: se guarda aparte y se muestra marcado.
+    // 🔔 v5.01: Te toca — a quién le toca volver a pedir (solo Jony)
+    if (accion === 'teToca') return json({ ok: true, ...(await teTocaDesdeLaBase()) });
+    if (accion === 'teTocaMarcar') {
+      const kT = normNombreTT(P(body, 'clave') || Q('clave'));
+      if (!kT) return json({ error: 'falta el cliente' });
+      let mT: any = {}; try { mT = JSON.parse(await getConfig('TETOCA_' + kT, '{}')) || {}; } catch { mT = {}; }
+      if ((P(body, 'avisado') || Q('avisado')) === '1') mT.avisado = fechaAhora();
+      const oc = P(body, 'oculto') || Q('oculto');
+      if (oc === '1') mT.oculto = true; else if (oc === '0') delete mT.oculto;
+      await setConfig('TETOCA_' + kT, JSON.stringify(mT));
+      return json({ ok: true, marca: mT });
+    }
     // 🔔 v4.82: los avisos al celular (solo Jony)
     if (accion === 'getAlertasPush') return json({ ok: true, cfg: await alertasCfg() });
     if (accion === 'setAlertasPush') {
