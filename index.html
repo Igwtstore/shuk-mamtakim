@@ -1589,8 +1589,8 @@
       </div>
       <div style="display:flex;gap:0.5rem">
         <select id="saldo-dueno" onchange="saldoDuenoChange()" style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;background:#fff">
-          <option value="Myri">Golosinas (Myri)</option>
           <option value="Jony">Pitzujim (Jony)</option>
+          <option value="Myri">Golosinas (Myri)</option>
         </select>
         <select id="saldo-comision" style="flex:1;padding:0.55rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;background:#fff">
           <option value="no">NO saca comisión (ya se cobró)</option>
@@ -1675,8 +1675,7 @@
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:120px">
           <label>Dueño</label>
-          <select id="np-dueno" onchange="duenoAltaChange()" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
-            <option value="Miri">Miri</option>
+          <select id="np-dueno" onchange="duenoAltaChange()" disabled title="Todo producto nuevo es de Jony" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="Jony">Jony</option>
           </select>
         </div>
@@ -1902,7 +1901,7 @@
       </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem">
         <div class="nombre-campo" style="margin:0;flex:1;min-width:110px"><label>Dueño</label>
-          <select id="ep-dueno" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Miri</option><option>Jony</option></select>
+          <select id="ep-dueno" disabled title="El dueño no se cambia desde la ficha" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option value="Jony">Jony</option></select>
         </div>
         <div class="nombre-campo" style="margin:0;flex:1;min-width:110px"><label>Moneda (may.)</label>
           <select id="ep-moneda" onchange="epMonedaChange()" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option value="$">$ Pesos</option><option value="U$S">U$S Dólares</option></select>
@@ -2153,12 +2152,6 @@
     <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Revisa automáticamente que no haya errores: caja, repartos, duplicados, stock. En vez de chequear a mano.</div>
     <button class="guardar-stock-btn" style="margin-top:0" onclick="auditarSistema()">🔍 Revisar todo</button>
     <div id="auditoria-resultado" style="margin-top:0.75rem"></div>
-  </div>
-  <div class="admin-card" data-seccion="dinero">
-    <div class="admin-titulo">🔧 Recalcular reparto Jony/Myri</div>
-    <div style="font-size:0.78rem;color:var(--texto-suave);margin-bottom:0.6rem">Arregla pedidos viejos cuyo reparto Pitzujim/golosinas quedó mal (por ediciones). Hace backup y te muestra una vista previa antes de tocar nada.</div>
-    <button class="guardar-stock-btn" style="margin-top:0" onclick="previewMigracionSplits()">👀 Ver qué se corregiría</button>
-    <div id="migracion-splits-resultado" style="margin-top:0.75rem"></div>
   </div>
   <div class="admin-card" data-seccion="dinero">
     <div class="admin-titulo">🔢 Renumerar pedidos</div>
@@ -6332,7 +6325,9 @@ async function renderPedidos() {
       // descripción con otro "·") → se prueba del nombre más largo al más corto.
       const _suV = _suIdsDe(v.stockUpdates);   // cantidades por ID de esta venta → desambigua gemelos
       const _lineasV = v.productos ? v.productos.split(' || ') : [];
+      const _sinMiriV = !pedidoEsDeMiri(v);    // 🆔 v5.07: Miri no cobró nada de este pedido → todo lo que tiene es de Jony
       const _duenoLinea = (l, li) => {
+        if (_sinMiriV) return /\d+x\s+.+?\s+—/.test(l) ? 'J' : '';
         if (_lineaEsDeJony(l, nombresJony, _suV, _lineasV, li)) return 'J';   // mismo criterio que la privacidad (gemelos: el ID decide)
         const m = l.match(/\d+x\s+(.+?)\s+—/);
         if (!m) return '';
@@ -8620,7 +8615,7 @@ function renderMasivo() {
     const _thSort = (c, lbl, extra) => `<th style="${_mTh}cursor:pointer;user-select:none" ${extra||''} onclick="masivoSort('${c}')" title="Ordenar por ${lbl}">${lbl}${_flecha(c)}</th>`;
     html = `<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:#f3f0ea;z-index:1">${_thSort('nombre','Producto')}<th style="${_mTh}">Dueño</th><th style="${_mTh}">Visible</th><th style="${_mTh}">Categoría</th><th style="${_mTh}">Mon</th>${_thSort('precioMay','P.May')}${_thSort('precioMin','P.Min')}${_thSort('costo','Costo')}${_thSort('margen','Margen')}${_thSort('stock','Stock')}<th style="${_mTh}" title="Unidades por paquete (Circuito Candy)">U/paq</th><th style="${_mTh}" title="Peso por bolsa en gramos (para orden de compra)">Peso g</th><th style="${_mTh}" title="Código de barras — sugiere el producto al recibir mercadería de Israel">🔢 EAN</th><th style="${_mTh}" title="Cinta diagonal en la tarjeta de la tienda (texto corto)">🎗️ Cinta</th></tr></thead><tbody>`;
     list.forEach(p => {
-      html += `<tr data-mrow="${esc(p.id)}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}">${_mPills(p.id, 'dueno', [['Jony', 'Jony'], ['Miri', 'Miri']], _mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${esc(p.id)}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:118px">${inp(p.id, 'ean', 'type="text" inputmode="numeric" maxlength="14"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
+      html += `<tr data-mrow="${esc(p.id)}" style="border-bottom:1px solid var(--gris-medio)"><td style="${_mTd}min-width:170px">${inp(p.id, 'nombre', 'type="text"')}${p.nombresPrev ? `<div style="font-size:0.58rem;color:var(--texto-suave)" title="Nombres anteriores">antes: ${esc(p.nombresPrev)}</div>` : ''}</td><td style="${_mTd}font-size:0.74rem;font-weight:700;color:${_mVal(p.id, 'dueno') === 'Jony' ? '#9a6b00' : '#9b2d77'}" title="El dueño no se cambia desde la planilla">${esc(_mVal(p.id, 'dueno'))}</td><td style="${_mTd}">${_mPills(p.id, 'visible', [['Ambos', 'Amb'], ['Mayorista', 'May'], ['Minorista', 'Min'], ['Oculto', '🙈']], _mVal(p.id, 'visible'))}</td><td style="${_mTd}">${_mCatSelect(p.id)}</td><td style="${_mTd}">${_mPills(p.id, 'moneda', [['$', '$'], ['U$S', 'U$S']], _mVal(p.id, 'moneda'))}</td><td style="${_mTd}width:62px">${inp(p.id, 'precioMay', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:70px">${inp(p.id, 'precioMin', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:58px">${inp(p.id, 'costo', 'type="text" inputmode="decimal"')}</td><td style="${_mTd}width:50px"><span id="mmargen-${esc(p.id)}" style="font-size:0.74rem;font-weight:700">${_mMargen(p.id)}</span></td><td style="${_mTd}width:56px">${inp(p.id, 'stock', 'type="number" min="0"')}</td><td style="${_mTd}width:52px">${inp(p.id, 'unidadesPorPaquete', 'type="number" min="1"')}</td><td style="${_mTd}width:60px">${inp(p.id, 'peso', 'type="number" min="0"')}</td><td style="${_mTd}width:118px">${inp(p.id, 'ean', 'type="text" inputmode="numeric" maxlength="14"')}</td><td style="${_mTd}width:96px">${inp(p.id, 'etiqueta', 'type="text" maxlength="40"')}</td></tr>`;
     });
   }
   body.innerHTML = html + '</tbody></table>';
@@ -10219,7 +10214,12 @@ function cargarProductoEditor(id) {
   document.getElementById('ep-pmin').value = p.precioMin || '';
   document.getElementById('ep-stock').value = p.stock || 0;
   { const ec = document.getElementById('ep-costo'); if (ec) ec.value = p.costo > 0 ? p.costo : ''; }
-  document.getElementById('ep-dueno').value = p.dueno || 'Miri';
+  { // 🆔 v5.07: el dueño NO se toca desde la ficha. Lo nuevo es de Jony; las fichas viejas de Miri (todas en stock 0)
+    // quedan como historial de sus ventas, y se ven así. Para volver a vender una: 👯 Clonar (el clon es de Jony).
+    // Cambiarle el dueño al original haría que sus ventas viejas cuenten de nuevo para el Maaser (ver abrirClonarProducto).
+    const ed = document.getElementById('ep-dueno'), d = (p.dueno || '').trim() || 'Miri';
+    ed.innerHTML = d === 'Jony' ? '<option value="Jony">Jony</option>' : `<option value="${esc(d)}">${esc(d)} · ficha vieja (no se cambia)</option>`;
+    ed.value = d; ed.disabled = true; }
   document.getElementById('ep-moneda').value = (p.moneda === 'U$S') ? 'U$S' : '$';
   epMonedaChange();
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
@@ -10618,7 +10618,7 @@ function epFracPorChange() {
 function _epFraccionUI(p) {
   const box = document.getElementById('ep-frac'); if (!box) return;
   const fr = esFraccion(p);
-  ['ep-stock', 'ep-costo', 'ep-dueno', 'ep-moneda', 'ep-upp', 'ep-pmay', 'ep-fracpor', 'ep-gramos'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = fr; el.style.opacity = fr ? '0.55' : ''; } });
+  ['ep-stock', 'ep-costo', 'ep-moneda', 'ep-upp', 'ep-pmay', 'ep-fracpor', 'ep-gramos'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = fr; el.style.opacity = fr ? '0.55' : ''; } });
   const vis = document.getElementById('ep-visible');
   if (vis) [...vis.options].forEach(o => { o.disabled = fr && (o.value === 'Ambos' || o.value === 'Mayorista'); });
   if (fr) {
@@ -10808,7 +10808,6 @@ function abrirClonarProducto() {
   if (!_epId) { showToast('Abrí primero la ficha de un producto'); return; }
   const p = (productos || []).find(x => String(x.id) === String(_epId));
   if (!p) { showToast('No encontré el producto'); return; }
-  const otro = (p.dueno === 'Jony') ? 'Miri' : 'Jony';
   const ov = document.createElement('div');
   ov.id = 'clon-overlay';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem';
@@ -10822,9 +10821,8 @@ function abrirClonarProducto() {
       <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:3px">hoy es de <b>${esc(p.dueno || '—')}</b></div>
     </div>
     <label style="font-size:0.8rem;font-weight:700;color:var(--azul);display:block;margin-bottom:0.25rem">El clon va a ser de:</label>
-    <select id="clon-dueno" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.9rem;background:#fff;margin-bottom:0.7rem">
-      <option value="${otro}" selected>${otro}</option>
-      <option value="${esc(p.dueno || 'Miri')}">${esc(p.dueno || 'Miri')} (mismo dueño)</option>
+    <select id="clon-dueno" disabled style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit;font-size:0.9rem;background:#fff;margin-bottom:0.7rem">
+      <option value="Jony" selected>Jony</option>
     </select>
     <label style="display:flex;align-items:center;gap:7px;font-size:0.8rem;cursor:pointer;margin-bottom:0.9rem">
       <input type="checkbox" id="clon-ocultar-orig" style="width:16px;height:16px"> Ocultar el original de la tienda
@@ -10844,7 +10842,7 @@ function abrirClonarProducto() {
 async function confirmarClonarProducto() {
   const p = (productos || []).find(x => String(x.id) === String(_epId));
   if (!p) { showToast('No encontré el producto'); return; }
-  const dueno = document.getElementById('clon-dueno')?.value || 'Jony';
+  const dueno = 'Jony';   // 🆔 v5.07: el clon es siempre de Jony (Miri ya no existe)
   const ocultarOrig = !!document.getElementById('clon-ocultar-orig')?.checked;
   const btn = document.getElementById('clon-btn');
   const prev = _bloquearBtn(btn, '⏳ Clonando...');
@@ -10911,7 +10909,6 @@ async function guardarEdicionProducto() {
     precioMin: document.getElementById('ep-pmin').value.trim().replace(',', '.') || '0',
     stock: document.getElementById('ep-stock').value || '0',
     costo: (document.getElementById('ep-costo')?.value || '').trim().replace(',', '.') || '0',
-    dueno: document.getElementById('ep-dueno').value,
     moneda: document.getElementById('ep-moneda').value === 'U$S' ? 'U$S' : '$',
     visible: document.getElementById('ep-visible').value,
     unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
@@ -11165,7 +11162,7 @@ async function guardarNuevoProducto() {
     return;
   }
   const visible = document.getElementById('np-visible').value || 'Ambos';
-  const dueno = document.getElementById('np-dueno').value || 'Miri';
+  const dueno = 'Jony';   // 🆔 v5.07: Miri ya no existe → todo producto nuevo es de Jony (el motor también lo fuerza)
   const moneda = document.getElementById('np-moneda').value === 'U$S' ? 'U$S' : '$';
   if (!nombre) { showToast('Ingresá el nombre del producto'); return; }
   _guardandoProducto = true;
@@ -11334,7 +11331,7 @@ function _renderImportarCandy() {
         <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Visible</div>
           <select id="imp-visible" style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option value="Ambos">Ambos</option><option value="Minorista">Solo minorista</option><option value="Mayorista">Solo mayorista</option><option value="Oculto">Oculto</option></select></div>
         <div style="flex:1;min-width:90px"><div style="font-size:0.6rem;color:var(--texto-suave)">Dueño</div>
-          <select id="imp-dueno" ${esVistaMiri() ? 'disabled' : ''} style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem">${esVistaMiri() ? '<option>Miri</option>' : '<option>Miri</option><option>Jony</option>'}</select></div>
+          <select id="imp-dueno" disabled style="width:100%;padding:5px;border:1.5px solid var(--gris-medio);border-radius:6px;font-size:0.78rem"><option>Jony</option></select></div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.74rem;cursor:pointer"><input type="checkbox" id="imp-todos" onchange="impToggleTodos(this)" style="width:16px;height:16px"> Marcar / desmarcar todos</label>
     </div>
@@ -11352,7 +11349,7 @@ function impToggleTodos(cb) {
 async function importarCandySeleccionados() {
   const moneda = document.getElementById('imp-moneda').value === 'U$S' ? 'U$S' : '$';
   const visible = document.getElementById('imp-visible').value || 'Ambos';
-  const dueno = esVistaMiri() ? 'Miri' : (document.getElementById('imp-dueno').value || 'Miri');   // REGLA: en vista Miri no se crea nada de Jony
+  const dueno = 'Jony';   // 🆔 v5.07: todo producto nuevo es de Jony (Miri ya no existe)
   const sel = [];
   _candyCat.forEach((p, i) => {
     if (!document.getElementById('imp-chk-' + i)?.checked) return;
@@ -11486,12 +11483,14 @@ function _gemeloMasViejo(gemelos) {
 //      mostrar uno u otro es idéntico — se garantiza que cada dueño vea EXACTAMENTE la cantidad
 //      de renglones suyos. Jamás se oculta de más ni de menos.
 // Devuelve Map(índice de línea → esDeJony) para las líneas de ese nombre, o null si no aplica.
-function _resolverGemelosMixtos(nom, todas, suMap) {
+// (v5.07) twinsDados/grupoDado: las fichas y los renglones ya elegidos por ID (gemelos RENOMBRADOS, que por el
+// nombre actual no se reconocen) → mismo apareo por cantidades.
+function _resolverGemelosMixtos(nom, todas, suMap, twinsDados, grupoDado) {
   if (!todas || !suMap || !suMap.get) return null;
-  const twins = productos.filter(p => (p.nombre || '').trim() === nom && suMap.has(String(p.id)))
-    .sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0));
-  const grupo = [];
-  todas.forEach((l, i) => { if (_nombreLineaCat(l) === nom) grupo.push(i); });
+  const twins = (twinsDados || productos.filter(p => (p.nombre || '').trim() === nom && suMap.has(String(p.id))))
+    .slice().sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0));
+  const grupo = grupoDado ? grupoDado.slice() : [];
+  if (!grupoDado) todas.forEach((l, i) => { if (_nombreLineaCat(l) === nom) grupo.push(i); });
   if (!twins.length || !grupo.length) return null;
   const lineas = grupo.map(i => {
     const l = todas[i];
@@ -11541,10 +11540,40 @@ function _resolverGemelosMixtos(nom, todas, suMap) {
   lineas.forEach((li, j) => out.set(li.idx, (twins[mejores[0][j]].dueno || '') === 'Jony'));
   return out;
 }
+// 🆔 v5.07 — Las fichas que ESTA venta descontó (stock_updates) y que el renglón nombra, por nombre actual
+// O ANTERIOR, del más largo al más corto. Caso #157 (24/09/2026): el chocolate #344 de Jony se renombró
+// después del pedido; el renglón dice el nombre viejo y, buscando solo nombres actuales, caía en
+// "Chocolate Elite" = la ficha vieja de Miri (#1) → el pedido mostraba MIRI en algo que cobró Jony.
+function _fichasDeLineaEnVenta(linea, suIds) {
+  if (!suIds || !suIds.size) return [];
+  const m = (linea || '').match(/\d+x\s+(.+?)\s+—/);
+  if (!m) return [];
+  const parts = m[1].replace(/\s*\[-\d+%\]/g, '').trim().split(' · ');
+  const deLaVenta = productos.filter(p => suIds.has(String(p.id)));
+  for (let i = parts.length; i >= 1; i--) {
+    const nom = parts.slice(0, i).join(' · ').trim();
+    const hit = deLaVenta.filter(p => _matchNombreProd(p, nom));
+    if (hit.length) return hit;
+  }
+  return [];
+}
 function _lineaEsDeJony(linea, setJony, suIds, todasLineas, idxLinea) {
   const sj = setJony || _nombresJony();
   const m = (linea || '').match(/\d+x\s+(.+?)\s+—/);
   if (!m) return /pitzujim/i.test(linea || '');
+  // El ID manda: si el renglón nombra fichas que la venta descontó y son todas del mismo dueño, es de ese
+  // dueño (gemelos de AMBOS dueños en la misma venta → sigue el apareo de siempre, más abajo).
+  const _enVenta = _fichasDeLineaEnVenta(linea, suIds);
+  if (_enVenta.length && _enVenta.every(p => (p.dueno || '') === (_enVenta[0].dueno || ''))) return (_enVenta[0].dueno || '') === 'Jony';
+  if (_enVenta.length && todasLineas) {
+    // Gemelos de AMBOS dueños que la venta descontó (reconocidos también por nombre anterior): el mismo apareo por
+    // cantidades, entre los renglones que nombran exactamente esas fichas.
+    const clave = _enVenta.map(p => String(p.id)).sort().join(',');
+    const grupo = [];
+    todasLineas.forEach((l, i) => { if (_fichasDeLineaEnVenta(l, suIds).map(p => String(p.id)).sort().join(',') === clave) grupo.push(i); });
+    const asigV = _resolverGemelosMixtos(null, todasLineas, suIds, _enVenta, grupo);
+    if (asigV && asigV.has(idxLinea)) return asigV.get(idxLinea);
+  }
   const parts = m[1].replace(/\s*\[-\d+%\]/g, '').trim().split(' · ');
   for (let i = parts.length; i >= 1; i--) {
     const nom = parts.slice(0, i).join(' · ').trim();
@@ -13511,84 +13540,11 @@ async function confirmarUsarPlataMyri() {
   if (okAll) { showToast('Registrado ✓'); cerrarUsarPlataMyri(); setTimeout(() => refreshAdmin(), 800); }
 }
 
-// ─── MIGRACIÓN: recalcular el reparto Jony/Myri de pedidos viejos ───────────────
-// Recalcula el split desde el string de productos (Pitzujim → Jony, resto → Myri, USD → Myri).
-function _recomputeSplit(v) {
-  const lineas = parsearLineasPedido(v.productos || '');
-  let arsJ = 0, arsM = 0, usdM = 0, usdJ = 0, descG = 0;
-  lineas.forEach(l => {
-    const raw = (l.raw || l.nombre || '');
-    const mg = raw.match(/Descuento global:\s*([\d.]+)\s*%/i);
-    if (mg) { descG = parseFloat(mg[1]) || 0; return; }
-    const sub = (parseFloat(l.precio) || 0) * (l.qty || 0);
-    if (sub <= 0) return;
-    const nom = (l.nombre || '');
-    const p = productos.find(x => (x.nombre || '').trim().toLowerCase() === nom.trim().toLowerCase());
-    // El campo dueño MANDA cuando el producto está en el catálogo; el nombre ('pitzujim') solo
-    // es red de seguridad para productos viejos que ya no están en el catálogo.
-    const esJony = p ? (p.dueno === 'Jony') : /pitzujim/i.test(nom);
-    if (l.moneda === 'U$S') { if (esJony) usdJ += sub; else usdM += sub; return; }
-    if (esJony) arsJ += sub; else arsM += sub;
-  });
-  if (descG > 0 && descG <= 100) { const fg = 1 - descG / 100; arsJ *= fg; arsM *= fg; usdM *= fg; usdJ *= fg; }
-  return { arsJONY: Math.round(arsJ), arsMyri: Math.round(arsM), usdMyri: +usdM.toFixed(2), usdJONY: +usdJ.toFixed(2), comiARS: Math.round(arsM * 0.15), comiUSD: +(usdM * 0.15).toFixed(2) };
-}
-
-let _migracionPendiente = [];
-async function previewMigracionSplits() {
-  const out = document.getElementById('migracion-splits-resultado');
-  out.innerHTML = 'Analizando pedidos...';
-  const ventas = await apiGet('ventas').catch(() => null);
-  if (!Array.isArray(ventas)) { out.innerHTML = '<span style="color:var(--rojo)">Error al leer pedidos.</span>'; return; }
-  _migracionPendiente = [];
-  ventas.forEach(v => {
-    if (!v.id) return;
-    const nuevo = _recomputeSplit(v);
-    const viejo = {
-      arsJONY: Math.round(parseFloat(v.arsJONY) || 0),
-      arsMyri: Math.round(parseFloat(v.arsMyri) || 0),
-      usdMyri: +(parseFloat(v.usdMyri) || 0).toFixed(2),
-      usdJONY: +(parseFloat(v.usdJONY) || 0).toFixed(2)
-    };
-    const dif = Math.abs(nuevo.arsJONY - viejo.arsJONY) > 1 || Math.abs(nuevo.arsMyri - viejo.arsMyri) > 1 || Math.abs(nuevo.usdMyri - viejo.usdMyri) > 0.01 || Math.abs(nuevo.usdJONY - viejo.usdJONY) > 0.01;
-    if (dif) _migracionPendiente.push({ v, nuevo, viejo });
-  });
-  if (!_migracionPendiente.length) { out.innerHTML = '<span style="color:var(--verde)">✓ Todos los pedidos tienen el reparto correcto. No hay nada que corregir.</span>'; return; }
-  const fp = n => '$ ' + Math.round(n).toLocaleString('es-AR');
-  const filas = _migracionPendiente.map(({ v, nuevo, viejo }) =>
-    `<div style="font-size:0.72rem;padding:5px 0;border-bottom:1px solid var(--gris-medio)">
-      <b>#${v.nVenta || '?'} · ${esc(v.cliente || 's/nombre')}</b><br>
-      Golosinas Myri: <span style="color:var(--rojo);text-decoration:line-through">${fp(viejo.arsMyri)}</span> → <span style="color:var(--verde);font-weight:700">${fp(nuevo.arsMyri)}</span>
-    </div>`).join('');
-  out.innerHTML = `<div style="font-size:0.8rem;font-weight:700;margin-bottom:4px;color:var(--azul)">${_migracionPendiente.length} pedido(s) a corregir:</div>
-    <div style="max-height:280px;overflow-y:auto;border:1px solid var(--gris-medio);border-radius:8px;padding:6px">${filas}</div>
-    <button class="guardar-stock-btn" style="margin-top:0.6rem;background:var(--azul)" onclick="aplicarMigracionSplits()">💾 Hacer backup y aplicar</button>`;
-}
-
-async function aplicarMigracionSplits() {
-  if (!_migracionPendiente.length) return;
-  if (!confirm(`Se hará un backup de la planilla y se corregirá el reparto de ${_migracionPendiente.length} pedido(s).\n\n¿Seguir?`)) return;
-  const out = document.getElementById('migracion-splits-resultado');
-  out.innerHTML = '💾 Haciendo backup...';
-  const bk = await apiWrite(new URLSearchParams({ accion: 'backupAhora' }), '');
-  if (!bk.ok) { out.innerHTML = '<span style="color:var(--rojo)">⚠️ No se pudo hacer el backup. No se aplicó nada.</span>'; return; }
-  let hechos = 0;
-  for (const item of _migracionPendiente) {
-    const { v, nuevo } = item;
-    const p = new URLSearchParams({
-      accion: 'actualizarPedido', id: v.id,
-      arsJONY: nuevo.arsJONY, arsMyri: nuevo.arsMyri, usdMyri: nuevo.usdMyri.toFixed(2),
-      usdJONY: nuevo.usdJONY.toFixed(2),
-      comiARS: nuevo.comiARS, comiUSD: nuevo.comiUSD.toFixed(2)
-    });
-    const r = await apiWrite(p, '');
-    if (r.ok) hechos++;
-    out.innerHTML = `Aplicando correcciones... ${hechos}/${_migracionPendiente.length}`;
-  }
-  out.innerHTML = `<span style="color:var(--verde)">✓ Listo: ${hechos} de ${_migracionPendiente.length} pedido(s) corregidos. Backup hecho en Drive.</span>`;
-  _migracionPendiente = [];
-  setTimeout(() => refreshAdmin(), 1500);
-}
+// ─── (v5.07) Se retiró la tarjeta "🔧 Recalcular reparto Jony/Myri" ─────────────────────────────
+// Rehacía el reparto de TODOS los pedidos leyendo solo el texto: cortaba el nombre en el primer " · " y todo
+// lo que no reconocía como Jony se lo daba a Miri. El 24/09/2026, corrida en seco sobre los datos reales,
+// "corregía" 76 pedidos y le pasaba a Miri $ 1.406.541 + U$S 5.898 (más el 15%). El reparto de un pedido
+// se arma UNA sola vez, en _armarPedidoDesdeLineas, con las fichas que el pedido descontó.
 
 // ─── RENUMERAR PEDIDOS (arregla # duplicados viejos) ───────────────────────────
 async function previewRenumerar(btn) {
@@ -15789,7 +15745,7 @@ function epMonedaChange() {
 
 // Al cambiar el dueño, preselecciona la moneda típica (Jony→$, Myri→U$S) pero queda editable.
 function duenoAltaChange() {
-  const dueno = document.getElementById('np-dueno')?.value || 'Miri';
+  const dueno = document.getElementById('np-dueno')?.value || 'Jony';
   const m = document.getElementById('np-moneda');
   if (m) m.value = (dueno === 'Jony') ? '$' : 'U$S';
   actualizarLabelPmay();
@@ -15816,12 +15772,12 @@ function actualizarLabelPmay() {
   else { label.textContent = 'Precio Mayorista ($ pesos)'; inp.placeholder = '63000'; }
 }
 
-// En vista Miri, el alta de producto queda forzada a dueño Miri.
+// 🆔 v5.07: el alta de producto es SIEMPRE de Jony, en cualquier vista (Miri ya no existe en el negocio;
+// antes el desplegable arrancaba en "Miri" y había que acordarse de cambiarlo).
 function aplicarBloqueoDuenoMiri() {
   const sel = document.getElementById('np-dueno');
   if (!sel) return;
-  if (esVistaMiri()) { sel.value = 'Miri'; sel.disabled = true; }
-  else { sel.disabled = false; }
+  sel.value = 'Jony'; sel.disabled = true;
   // Sincroniza la moneda típica del dueño actual (Miri→U$S, Jony→$); queda editable.
   // Solo corre al (re)montar la barra de socio, no mientras se tipea un alta.
   if (!sel.dataset.monedaInit) { sel.dataset.monedaInit = '1'; duenoAltaChange(); }
@@ -20290,7 +20246,9 @@ let _editNotaOrig = '', _editNotaPrefijo = '';
 // Sutileza intencional que se respeta tal cual estaba: el TOTAL agrupa por la moneda de la LÍNEA
 // (lo que se le cobró al cliente) y el REPARTO por la moneda del PRODUCTO en el catálogo.
 // Las líneas con cantidad 0 no entran (así el "levantar" saca lo que no hay sin cuentas raras).
-function _armarPedidoDesdeLineas(lineas, notas, descGlobal, tipo, prods) {
+// 🆔 v5.07 soloJony: el pedido ORIGINAL no le daba nada a Miri → editarlo o levantarlo tampoco puede
+// darle (Miri ya no existe: aunque un renglón se empareje con una ficha vieja de ella, la plata es de Jony).
+function _armarPedidoDesdeLineas(lineas, notas, descGlobal, tipo, prods, soloJony) {
   const cat = prods || productos;
   const fmt = (n, m) => m === 'U$S' ? n.toFixed(2) : Math.round(n).toLocaleString('es-AR');
   const dg = parseFloat(descGlobal) || 0;
@@ -20310,7 +20268,7 @@ function _armarPedidoDesdeLineas(lineas, notas, descGlobal, tipo, prods) {
     if (l.moneda === 'U$S') totalUSD += sub; else totalARS += sub;
     // Dueño y moneda mandan por el CATÁLOGO; el nombre ('pitzujim') solo si el producto ya no existe.
     const p = l.prodId ? cat.find(x => String(x.id) === String(l.prodId)) : null;
-    const esJ = p ? (p.dueno === 'Jony') : /pitzujim/i.test(l.nombre || '');
+    const esJ = soloJony || (p ? (p.dueno === 'Jony') : /pitzujim/i.test(l.nombre || ''));
     const mon = p ? _precioMoneda(p, tipo).moneda : (l.moneda || '$');
     if (mon === 'U$S') { if (esJ) usdJONY += sub; else usdMyri += sub; }
     else if (esJ) arsJONY += sub;
@@ -20340,23 +20298,82 @@ function _identificarLineasPedido(lineas, v, prods) {
   // se vendieron. Ante GEMELOS de distinto dueño con nombre Y descripción idénticos (Kukiman
   // #68 Miri / #153 Jony), el match por nombre+desc empataba y podía elegir el del dueño
   // EQUIVOCADO → stock y reparto Jony/Miri corruptos al guardar. El ID manda (blindaje 2026-07-10).
-  const _suIds = new Set((v.stockUpdates || '').toString().split(',').map(u => u.split(':')[0].trim()).filter(x => /^\d+$/.test(x)));
-  // Identificar el producto de cada línea (por nombre, desempatando por descripción o precio):
-  // hace falta para ajustar stock al guardar y para reparar descripciones perdidas.
-  lineas.forEach(l => {
-    if (!l.nombre) return;
-    // Match por nombre actual O anteriores (historial) → renombrar no rompe pedidos viejos.
+  const _suCant = new Map();   // id → unidades que la venta descontó de ese producto
+  (v.stockUpdates || '').toString().split(',').forEach(u => {
+    const pp = u.split(':'), id = (pp[0] || '').trim();
+    if (/^\d+$/.test(id)) _suCant.set(id, (_suCant.get(id) || 0) + (parseInt(pp[1]) || 0));
+  });
+  const _suIds = new Set(_suCant.keys());
+  // 🆔 v5.07 — PRIMERO, LOS PRODUCTOS QUE ESTA VENTA DESCONTÓ (caso #157, 24/09/2026): el chocolate #344
+  // (de Jony) se renombró después del pedido. El renglón guarda el nombre VIEJO, que ya no es de ninguna
+  // ficha, y el emparejamiento caía en "Chocolate Elite" = una ficha VIEJA de Miri (#1, stock 0): abrir
+  // el pedido y guardarlo sin tocar nada le pasaba la plata a ella (13 pedidos estaban así). Ahora cada
+  // renglón se busca primero entre los IDs de stock_updates, por nombre actual O anterior (nombres_prev);
+  // el catálogo entero queda solo para lo que no encaja (productos borrados, ventas viejas sin registro).
+  const _deLaVenta = _suIds.size ? cat.filter(p => _suIds.has(String(p.id))) : [];
+  const _quedan = new Map(_suCant);   // lo que falta repartir de cada ID entre los renglones
+  const _esMay = (v.tipo || '') === 'Mayorista';
+  const _precioCat = c => _esMay ? parseFloat((c.precioMay || '0').toString().replace(',', '.')) : (parseFloat(c.precioMin) || 0);
+  const _asignar = (l, p) => {
+    l.prodId = p.id;
+    if (!l.descripcion && p.desc) l.descripcion = p.desc.substring(0, 45);
+    const k = String(p.id);
+    if (_quedan.has(k)) _quedan.set(k, _quedan.get(k) - (l.qty || 0));
+  };
+  const _datosLinea = l => {
     const ld = (l.descripcion || '').trim().toLowerCase();
-    const _descOk = c => { const pd = (c.desc || '').trim().toLowerCase(); return pd && ld && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim())); };
+    const descOk = c => { const pd = (c.desc || '').trim().toLowerCase(); return pd && ld && (pd.startsWith(ld) || ld.startsWith(pd.substring(0, 45).trim())); };
     // 🛡️ NOMBRE CON " · " (caso #104, 30/07/2026): parsearLineasPedido corta el nombre en el
     // PRIMER " · ", así que "Chocolate Elite Blondi · Caramel blanco…" quedaba como
     // "Chocolate Elite Blondi" — nombre que existe como producto VIEJO de Miri. El renglón
     // terminaba apuntando al dueño equivocado y la plata se iba a la cuenta de ella.
     // Fix: reconstruir "nombre · descripción" y probar prefijos de MÁS LARGO a más corto
-    // (el nombre más específico gana), igual que _lineaEsDeJony. Y con prioridad para los IDs
-    // que esta venta realmente descontó.
-    const _completo = (l.nombre + (l.descripcion ? ' · ' + l.descripcion : '')).trim();
-    const _partes = _completo.split(' · ');
+    // (el nombre más específico gana), igual que _lineaEsDeJony.
+    const completo = (l.nombre + (l.descripcion ? ' · ' + l.descripcion : '')).trim();
+    return { ld, descOk, partes: completo.split(' · ') };
+  };
+  // ① PRIMERA PASADA — cada renglón contra lo que la venta descontó (nombre actual o anterior, del más
+  // largo al más corto). Va entera ANTES del camino de siempre para que un renglón dudoso no le "robe"
+  // el ID a otro que lo nombra con todas las letras.
+  const _tent = [];
+  lineas.forEach(l => {
+    if (!l.nombre || !_deLaVenta.length) return;
+    const { ld, descOk, partes } = _datosLinea(l);
+    let hit = [];
+    for (let i = partes.length; i >= 1 && !hit.length; i--) {
+      const nom = partes.slice(0, i).join(' · ').trim();
+      if (nom) hit = _deLaVenta.filter(p => _matchNombreProd(p, nom));
+    }
+    // Gemelos del mismo nombre descontados en la MISMA venta (ej. 5 de Miri + 3 de Jony): se reparten
+    // por lo que le queda a cada ID → la cantidad exacta → la descripción → el precio. Si aun así quedan
+    // dos de distinto dueño, acá no se adivina: sigue la segunda pasada, como siempre.
+    const achicar = f => { const h = hit.filter(f); if (h.length) hit = h; };
+    if (hit.length > 1) achicar(c => (_quedan.get(String(c.id)) || 0) >= (l.qty || 0));
+    if (hit.length > 1) achicar(c => (_quedan.get(String(c.id)) || 0) === (l.qty || 0));
+    if (hit.length > 1 && ld) achicar(descOk);
+    if (hit.length > 1) achicar(c => Math.abs(_precioCat(c) - l.precio) < 0.01);
+    if (hit.length && hit.every(c => (c.dueno || '') === (hit[0].dueno || ''))) {
+      _tent.push({ l, p: hit[0] });
+      const k = String(hit[0].id);
+      _quedan.set(k, (_quedan.get(k) || 0) - (l.qty || 0));
+    }
+  });
+  // Un nombre viejo GENÉRICO atrapa renglones ajenos (la #44 se llamó "Pitzujim" a secas, como todos los
+  // Pitzujim de junio): si a una ficha le tocan MÁS unidades de las que la venta le descontó, el nombre no
+  // alcanza para decidir → esos renglones van a la segunda pasada, como antes.
+  const _porFicha = new Map();
+  _tent.forEach(t => { const k = String(t.p.id); _porFicha.set(k, (_porFicha.get(k) || 0) + (t.l.qty || 0)); });
+  _tent.forEach(t => {
+    const k = String(t.p.id);
+    if ((_porFicha.get(k) || 0) > (_suCant.get(k) || 0)) { _quedan.set(k, (_quedan.get(k) || 0) + (t.l.qty || 0)); return; }
+    t.l.prodId = t.p.id;
+    if (!t.l.descripcion && t.p.desc) t.l.descripcion = t.p.desc.substring(0, 45);
+  });
+  // ② SEGUNDA PASADA — lo que no encajó con los IDs de la venta, por el catálogo entero (el camino de
+  // siempre, con las mismas prioridades para los IDs que la venta tocó).
+  lineas.forEach(l => {
+    if (!l.nombre || l.prodId) return;
+    const { ld, descOk: _descOk, partes: _partes } = _datosLinea(l);
     let cands = [], _nombreExacto = false;
     for (let i = _partes.length; i >= 2 && !cands.length; i--) {   // i>=2: el nombre ARMADO (con ' · ')
       const nom = _partes.slice(0, i).join(' · ').trim();
@@ -20387,28 +20404,24 @@ function _identificarLineasPedido(lineas, v, prods) {
       pl = (_nombreExacto || !ld || !(cands[0].desc || '').trim() || _descOk(cands[0])) ? cands[0] : null;
     } else if (cands.length > 1) {
       if (l.descripcion) pl = cands.find(_descOk) || null;
-      else {
-        const esMay = (v.tipo || '') === 'Mayorista';
-        pl = cands.find(c => {
-          const precio = esMay ? parseFloat((c.precioMay || '0').toString().replace(',', '.')) : (parseFloat(c.precioMin) || 0);
-          return Math.abs(precio - l.precio) < 0.01;
-        }) || null;
-      }
+      else pl = cands.find(c => Math.abs(_precioCat(c) - l.precio) < 0.01) || null;
     }
     // Fallback DIFUSO: el producto que más palabras (>2 letras) comparte con "nombre · desc" de la línea,
     // mirando su nombre + descripción. Cubre el renombrado sin historial (Pitzujim → Pitzujim-Sabor).
+    // 🆔 v5.07: primero entre lo que la venta descontó y todavía no tiene renglón; después, el catálogo.
     if (!pl) {
-      const palabras = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[()0-9.,!¡¿?·\-]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+      const palabras = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[()0-9.,!¡¿?·\-]/g, ' ').split(/\s+/).filter(w => w.length > 2);
       const lp = palabras(l.nombre + ' ' + (l.descripcion || ''));
       if (lp.length) {
-        let best = null, score = 0;
-        cat.forEach(p => { const cp = palabras((p.nombre || '') + ' ' + (p.desc || '')); const sc = lp.filter(w => cp.indexOf(w) !== -1).length; if (sc > score) { score = sc; best = p; } });
-        if (score >= 2) pl = best;
+        const mejor = lista => {
+          let best = null, score = 0;
+          lista.forEach(p => { const cp = palabras((p.nombre || '') + ' ' + (p.desc || '')); const sc = lp.filter(w => cp.indexOf(w) !== -1).length; if (sc > score) { score = sc; best = p; } });
+          return score >= 2 ? best : null;
+        };
+        pl = mejor(_deLaVenta.filter(p => (_quedan.get(String(p.id)) || 0) > 0)) || mejor(cat);
       }
     }
-    if (!pl) return;
-    l.prodId = pl.id;
-    if (!l.descripcion && pl.desc) l.descripcion = pl.desc.substring(0, 45);
+    if (pl) _asignar(l, pl);
   });
   return lineas;
 }
@@ -20498,7 +20511,7 @@ function _renderLevantar() {
   if (!ov || !_lvPed) return;
   const v = _lvPed, tipo = v.tipo || 'Minorista';
   const quedan = _lvLineas.filter(l => (parseInt(l.qty) || 0) > 0);
-  const arm = _armarPedidoDesdeLineas(quedan, _lvNotas, _lvDesc, tipo);
+  const arm = _armarPedidoDesdeLineas(quedan, _lvNotas, _lvDesc, tipo, null, !pedidoEsDeMiri(v));
   const fmtM = (n, m) => m === 'U$S' ? 'U$S ' + n.toFixed(2) : '$ ' + Math.round(n).toLocaleString('es-AR');
   const totalTxt = t => [t.ars > 0.5 ? fmtM(t.ars, '$') : '', t.usd > 0.005 ? fmtM(t.usd, 'U$S') : ''].filter(Boolean).join(' + ') || '$ 0';
   const antes = { ars: parseFloat(v.totalARS) || 0, usd: parseFloat(v.totalUSD) || 0 };
@@ -20640,7 +20653,7 @@ async function confirmarLevantarPedido() {
   const btn = document.getElementById('lv-btn-ok');
   if (btn) { btn.textContent = 'Levantando...'; btn.disabled = true; }
   const tipo = _lvPed.tipo || 'Minorista';
-  const arm = _armarPedidoDesdeLineas(quedan, _lvNotas, _lvDesc, tipo);
+  const arm = _armarPedidoDesdeLineas(quedan, _lvNotas, _lvDesc, tipo, null, !pedidoEsDeMiri(_lvPed));
   const params = new URLSearchParams({
     accion: 'levantarPedido',
     id: _lvPed.id,
@@ -20998,7 +21011,7 @@ async function guardarEditPedido() {
   }
 
   // Texto del pedido, totales y reparto 2×2: UNA sola cuenta, compartida con "levantar pedido".
-  const _arm = _armarPedidoDesdeLineas(_editLineas, _editNotas, desc, tipo);
+  const _arm = _armarPedidoDesdeLineas(_editLineas, _editNotas, desc, tipo, null, !pedidoEsDeMiri(_editPedidoActual));
 
   // Ajuste de stock por diferencia con lo que había al abrir (agregados, quitados, cantidades)
   const qtysAhora = _arm.qtys;
