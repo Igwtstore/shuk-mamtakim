@@ -311,8 +311,21 @@ function duenoVenta(arsJ: number, usdJ: number, arsM: number, usdM: number) {
   const miri = (parseFloat(String(arsM)) || 0) + (parseFloat(String(usdM)) || 0);
   if (miri > 0 && jony === 0) return 'Miri';
   if (jony > 0 && miri === 0) return 'Jony';
-  return miri >= jony ? 'Miri' : 'Jony';
+  return miri > jony ? 'Miri' : 'Jony';   // v5.07: el empate (y el pedido en $ 0) es de Jony
 }
+// 🆔 v5.07 — MIRI YA NO EXISTE: una venta NUEVA, o la edición de un pedido que no le daba nada, no puede darle plata.
+// Lo que llegue a su nombre (una ficha vieja de ella, un navegador con el panel viejo abierto) pasa a Jony en la MISMA
+// moneda y la comisión queda en 0. `base` = la venta como estaba (para una edición que no manda todas las partes).
+// Los pedidos viejos que SÍ tenían plata de Miri no pasan por acá: son la historia de la cuenta con ella.
+function sinPlataMiri(f: any, base?: any) {
+  const num = (k: string) => (k in f ? Number(f[k]) : Number(base ? base[k] : 0)) || 0;
+  const aM = Number(f.ars_myri) || 0, uM = Number(f.usd_myri) || 0;
+  if (aM) f.ars_jony = num('ars_jony') + aM;
+  if (uM) f.usd_jony = Math.round((num('usd_jony') + uM) * 100) / 100;
+  f.ars_myri = 0; f.usd_myri = 0; f.comi_ars = 0; f.comi_usd = 0;
+  return f;
+}
+const tienePlataMiri = (v: any) => (parseFloat(v.ars_myri) || 0) > 0 || (parseFloat(v.usd_myri) || 0) > 0;
 async function upsertEnvio(ventaId: string, patch: any) {
   const ex = await sbGet('envios', 'select=id&venta_id=eq.' + encodeURIComponent(ventaId));
   if (ex.length) {
@@ -326,7 +339,7 @@ async function upsertEnvio(ventaId: string, patch: any) {
     if (patch.nota !== undefined) p.nota = patch.nota;
     await sbPatch('envios', 'id=eq.' + ex[0].id, p);
   } else {
-    await sbInsert('envios', { fecha: fechaAhora(), venta_id: ventaId, n_venta: String(patch.nVenta || ''), cliente: patch.cliente || '', dueno: patch.dueno || 'Miri', cobrado: patch.cobrado !== undefined ? patch.cobrado : 0, costo: patch.costo !== undefined ? patch.costo : 0, quien_pago: patch.quienPago || '', nota: patch.nota || '' });
+    await sbInsert('envios', { fecha: fechaAhora(), venta_id: ventaId, n_venta: String(patch.nVenta || ''), cliente: patch.cliente || '', dueno: patch.dueno || 'Jony', cobrado: patch.cobrado !== undefined ? patch.cobrado : 0, costo: patch.costo !== undefined ? patch.costo : 0, quien_pago: patch.quienPago || '', nota: patch.nota || '' });
   }
 }
 // confirmarCobro — PORTADO 1:1 de motor-v2.js (la operación de cobro más compleja).
@@ -2912,7 +2925,7 @@ async function botLeerProductos() {
     return vis === 'Ambos' || vis === 'Minorista';
   }).map((p: any) => ({ id: p.id.toString(), nombre: (p.nombre || '').toString(), desc: (p.descripcion || '').toString(), precioMin: parseFloat(p.precio_min) || 0, stock: parseInt(p.stock) || 0, categoria: (p.categoria || 'Varios').toString(),
     precio_min: p.precio_min, precio_oferta: p.precio_oferta, fecha_oferta: p.fecha_oferta, cant_pack: p.cant_pack, precio_pack: p.precio_pack,   // 🏷️ v5.02: el bot cobra ofertas y packs
-    dueno: (p.dueno || 'Miri').toString(), moneda: ((p.moneda || '$').toString() === 'U$S') ? 'U$S' : '$', descBot: (p.desc_bot || '').toString() }));
+    dueno: (p.dueno || 'Jony').toString(), moneda: ((p.moneda || '$').toString() === 'U$S') ? 'U$S' : '$', descBot: (p.desc_bot || '').toString() }));
 }
 // ══════════════════════════════════════════════════════════════════════════════
 //  🤖🏷️ EL BOT CON OFERTAS (v5.02). Hasta acá el bot cobraba SIEMPRE el precio de lista: la oferta que se veía
@@ -3699,6 +3712,7 @@ Deno.serve(async (req) => {
       const V = (k: string, real: number) => (correccion && cuenta ? Math.round(real * 100) / 100 : QN(k));
       const fila: any = { fecha: fechaAhora(), cliente, tipo: _libre(Q('tipo'), 30), productos: productosReales || _libre(Q('productos'), 20000), forma_pago: _libre(Q('formaPago'), 60), notas: (_libre(correccion, 400) + _libre(Q('notas'), 1000)).slice(0, 1000), estado: esCotizacion ? 'cotizacion' : 'pendiente', total_ars: V('totalARS', cuenta?.totalARS), total_usd: V('totalUSD', cuenta?.totalUSD), ars_jony: V('arsJONY', cuenta?.arsJONY), ars_myri: V('arsMyri', cuenta?.arsMyri), usd_myri: V('usdMyri', cuenta?.usdMyri), comi_ars: V('comiARS', cuenta?.comiARS), comi_usd: V('comiUSD', cuenta?.comiUSD), caja_jony: '', caja_myri: '', tipo_cambio: 0, stock_updates: stockUpdates, usd_jony: V('usdJONY', cuenta?.usdJONY), vid: vidVenta };
       if (ipVenta) fila.ip_h = ipVenta;
+      sinPlataMiri(fila);   // 🆔 v5.07: ninguna venta nueva le da plata a Miri
       // Numeración atómica: índice ÚNICO en n_venta + reintento (la versión SQL del LockService del
       // motor viejo — dos pedidos simultáneos NUNCA toman el mismo número).
       const ins = await insertarVentaAtomica(fila);
@@ -3749,7 +3763,7 @@ Deno.serve(async (req) => {
       }
       // Envío cobrado al cliente → Caja Envíos del dueño del pedido (el costo se carga al cobrar).
       const envCob = QN('envioCobrado');
-      if (envCob > 0) await upsertEnvio(fila.id, { nVenta, cliente, dueno: duenoVenta(QN('arsJONY'), QN('usdJONY'), QN('arsMyri'), QN('usdMyri')), cobrado: Math.round(envCob) });
+      if (envCob > 0) await upsertEnvio(fila.id, { nVenta, cliente, dueno: duenoVenta(fila.ars_jony, fila.usd_jony, fila.ars_myri, fila.usd_myri), cobrado: Math.round(envCob) });
       return json({ ok: true, nVenta, id: fila.id });
     }
     if (accion === 'registrarPedidoHijo') {
@@ -3899,7 +3913,9 @@ Deno.serve(async (req) => {
       if (!pr.length) return json({ error: 'producto no encontrado' });
       const esFraccionEP = !!(pr[0].fraccion_de || '').toString().trim();
       const patch: any = {};
-      const map: any = { nombre: 'nombre', desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda', imagen: 'imagen', hashgaja: 'hashgaja', kosherTipo: 'kosher_tipo', jalav: 'jalav' };
+      // 🆔 v5.07: el dueño NO está en la lista — no se cambia editando (lo nuevo es de Jony; las fichas viejas de Miri
+      // son la historia de sus ventas: cambiarles el dueño haría contar de nuevo esas ventas en el Maaser → 👯 Clonar).
+      const map: any = { nombre: 'nombre', desc: 'descripcion', categoria: 'categoria', descBot: 'desc_bot', moneda: 'moneda', imagen: 'imagen', hashgaja: 'hashgaja', kosherTipo: 'kosher_tipo', jalav: 'jalav' };
       // '__VACIO__' = el front quiere VACIAR el campo (has() ignora '' → hace falta el centinela).
       // Sin esta traducción el texto literal quedaba guardado — 4 productos terminaron con
       // vinculo='__VACIO__' y el sistema los agrupaba como gemelos falsos (reparado 2026-07-05).
@@ -3971,7 +3987,7 @@ Deno.serve(async (req) => {
     if (accion === 'editarProductosLote') {
       let cambios: any[]; try { cambios = JSON.parse(P(body, 'cambios') || '[]'); } catch { return json({ error: 'json inválido' }); }
       if (!cambios.length) return json({ ok: true, n: 0 });
-      const map: any = { desc: 'descripcion', categoria: 'categoria', dueno: 'dueno', descBot: 'desc_bot', moneda: 'moneda', hashgaja: 'hashgaja', kosherTipo: 'kosher_tipo', jalav: 'jalav' };
+      const map: any = { desc: 'descripcion', categoria: 'categoria', descBot: 'desc_bot', moneda: 'moneda', hashgaja: 'hashgaja', kosherTipo: 'kosher_tipo', jalav: 'jalav' };   // 🆔 v5.07: sin dueño (no se cambia)
       let n = 0;
       for (const c of cambios) {
         const id = (c.id || '').toString(); if (!id) continue;
@@ -4036,7 +4052,7 @@ Deno.serve(async (req) => {
       const all = await sbGet('productos', 'select=id');
       let maxId = 0; all.forEach((p: any) => { const n = parseInt(p.id) || 0; if (n > maxId) maxId = n; });
       const nid = String(maxId + 1); const stockIni = parseInt(P(body, 'stock')) || 0;
-      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: P(body, 'dueno') || 'Miri', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), peso: parseFloat(String(P(body, 'peso') || '').replace(',', '.')) || 0, ean: normEAN(P(body, 'ean')), etiqueta: P(body, 'etiqueta').trim().slice(0, 40), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
+      await sbInsert('productos', { id: nid, nombre: P(body, 'nombre'), descripcion: P(body, 'desc'), precio_may: parseFloat((P(body, 'pMay') || '').replace(',', '.')) || null, precio_min: parseFloat((P(body, 'pMin') || '').replace(',', '.')) || 0, stock: stockIni, imagen: P(body, 'imagen'), activo: true, categoria: P(body, 'categoria') || 'Varios', visible: P(body, 'visible') !== 'No', visible_cat: has('visible') ? P(body, 'visible') : 'Ambos', dueno: 'Jony', desc_bot: P(body, 'descBot'), moneda: P(body, 'moneda') === 'U$S' ? 'U$S' : '$', costo: parseFloat((P(body, 'costo') || '').replace(',', '.')) || null, unidades_por_paquete: Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1), peso: parseFloat(String(P(body, 'peso') || '').replace(',', '.')) || 0, ean: normEAN(P(body, 'ean')), etiqueta: P(body, 'etiqueta').trim().slice(0, 40), hashgaja: P(body, 'hashgaja'), kosher_tipo: P(body, 'kosherTipo'), jalav: P(body, 'jalav') });
       if (stockIni > 0) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: nid, producto: P(body, 'nombre'), cambio: stockIni, antes: 0, despues: stockIni, origen: 'Alta de producto' });
       return json({ ok: true, id: nid });
     }
@@ -4259,6 +4275,8 @@ Deno.serve(async (req) => {
       if (body.comiARS !== undefined) patch.comi_ars = N(body, 'comiARS');
       if (body.comiUSD !== undefined) patch.comi_usd = N(body, 'comiUSD');
       if (body.usdJONY !== undefined) patch.usd_jony = N(body, 'usdJONY');
+      // 🆔 v5.07: un pedido que no le daba nada a Miri no empieza a darle al editarlo
+      if (!tienePlataMiri(v) && ['ars_myri', 'usd_myri', 'comi_ars', 'comi_usd'].some((k) => k in patch)) sinPlataMiri(patch, v);
       if (has('tipoCambio') && N(body, 'tipoCambio') > 0) patch.tipo_cambio = N(body, 'tipoCambio');
       if (has('stockUpdatesNuevo')) patch.stock_updates = P(body, 'stockUpdatesNuevo');
       const estadoPed = (v.estado || '').toString().trim();
@@ -4296,11 +4314,12 @@ Deno.serve(async (req) => {
           if (vmA > 0 && cM) tram.push({ balde: 'arsM', dueno: 'M', moneda: 'ARS', caja: cM, monto: vmA });
           if (vmU > 0 && cM) tram.push({ balde: 'usdM', dueno: 'M', moneda: 'USD', caja: cajaUSDde(cM, 'ETF_USD_MYRI'), monto: vmU });
         }
+        // (v5.07) del PATCH, no del body: el reparto ya pasó por sinPlataMiri (patch[k] existe ⇔ vino en el body)
         const obj: any = {
-          jA: body.arsJONY !== undefined ? N(body, 'arsJONY') : (parseFloat(v.ars_jony) || 0),
-          mA: body.arsMyri !== undefined ? N(body, 'arsMyri') : (parseFloat(v.ars_myri) || 0),
-          jU: body.usdJONY !== undefined ? N(body, 'usdJONY') : (parseFloat(v.usd_jony) || 0),
-          mU: body.usdMyri !== undefined ? N(body, 'usdMyri') : (parseFloat(v.usd_myri) || 0)
+          jA: 'ars_jony' in patch ? Number(patch.ars_jony) || 0 : (parseFloat(v.ars_jony) || 0),
+          mA: 'ars_myri' in patch ? Number(patch.ars_myri) || 0 : (parseFloat(v.ars_myri) || 0),
+          jU: 'usd_jony' in patch ? Number(patch.usd_jony) || 0 : (parseFloat(v.usd_jony) || 0),
+          mU: 'usd_myri' in patch ? Number(patch.usd_myri) || 0 : (parseFloat(v.usd_myri) || 0)
         };
         const duenoDe = (t: any) => t.dueno === 'J' ? 'J' : 'M';
         for (const cur of ['ARS', 'USD']) {
@@ -4351,10 +4370,10 @@ Deno.serve(async (req) => {
       }
       await sbPatch('ventas', 'id=eq.' + encodeURIComponent(id), patch);
       if (has('envioCobrado')) {
-        const _aJ = body.arsJONY !== undefined ? N(body, 'arsJONY') : (v.ars_jony || 0);
-        const _uJ = body.usdJONY !== undefined ? N(body, 'usdJONY') : (v.usd_jony || 0);
-        const _aM = body.arsMyri !== undefined ? N(body, 'arsMyri') : (v.ars_myri || 0);
-        const _uM = body.usdMyri !== undefined ? N(body, 'usdMyri') : (v.usd_myri || 0);
+        const _aJ = 'ars_jony' in patch ? patch.ars_jony : (v.ars_jony || 0);   // (v5.07) del patch ya corregido
+        const _uJ = 'usd_jony' in patch ? patch.usd_jony : (v.usd_jony || 0);
+        const _aM = 'ars_myri' in patch ? patch.ars_myri : (v.ars_myri || 0);
+        const _uM = 'usd_myri' in patch ? patch.usd_myri : (v.usd_myri || 0);
         await upsertEnvio(id, { nVenta: v.n_venta, cliente: (v.cliente || '').toString(), dueno: duenoVenta(_aJ, _uJ, _aM, _uM), cobrado: Math.round(N(body, 'envioCobrado')) });
       }
       return json({ ok: true, deudaNueva, sobrecobro });
@@ -5004,6 +5023,7 @@ Deno.serve(async (req) => {
       if (body.usdJONY !== undefined) patchLv.usd_jony = N(body, 'usdJONY');
       if (body.comiARS !== undefined) patchLv.comi_ars = N(body, 'comiARS');
       if (body.comiUSD !== undefined) patchLv.comi_usd = N(body, 'comiUSD');
+      if (!tienePlataMiri(vLv)) sinPlataMiri(patchLv, vLv);   // 🆔 v5.07: levantarlo no le da plata a Miri
       // 🔁 Marcador de "levantado": reinicia el reloj de la reserva de 7 días (la fecha del pedido
       // y su número NO se tocan: son la historia contable). Va como prefijo de la nota y el panel
       // lo muestra; el remito y los mensajes al cliente lo esconden.
