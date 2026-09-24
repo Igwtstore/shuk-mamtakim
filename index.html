@@ -2032,6 +2032,11 @@
       </div>
       <div id="manual-total" style="background:var(--gris);border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;font-weight:600;color:var(--azul)">Total: $ 0</div>
       <button class="guardar-stock-btn" onclick="cargarPedidoManual()" style="margin-top:0">Registrar pedido</button>
+      <div style="display:flex;gap:6px">
+        <button onclick="mandarPedidoManualComoLink()" style="flex:1;padding:0.6rem;background:#fff;color:#8a5a1e;border:1.5px solid #c9954a;border-radius:10px;font-weight:800;font-size:0.84rem;cursor:pointer;font-family:inherit">🔗 Mandárselo como link para que confirme</button>
+        <button onclick="verLinksArmados()" title="Los links que mandaste y qué pasó con cada uno" style="padding:0.6rem 0.8rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;font-size:0.8rem;cursor:pointer;font-family:inherit">🗂 Enviados</button>
+      </div>
+      <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:-0.4rem">En vez de registrarlo vos, le mandás el pedido listo: lo abre con todo en el carrito, al precio de hoy, y confirma con un toque.</div>
     </div>
   </div>
   <div class="admin-card">
@@ -3169,6 +3174,8 @@ let modo = 'mayorista';
 // link (tildados en el armador — ocultos, de Miri, lo que sea) con el canal de precios
 // elegido al crearlo. El token del link ES el secreto: sin él, catálogo normal.
 const _vipToken = (new URLSearchParams(location.search).get('vip') || '').replace(/[^a-z0-9]/gi, '');
+// 🔗 v5.00: link con un pedido ARMADO por Jony (?pedido=…): la tienda abre con el carrito ya cargado.
+const _armadoToken = (new URLSearchParams(location.search).get('pedido') || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
 let _vipIds = null, _vipInfo = null;
 let cantidades = {};
 let adminAuth = false;
@@ -3709,6 +3716,7 @@ async function cargarProductos() {
     }
     renderCatalogo();
     renderFiltros();
+    _cargarPedidoArmado();       // 🔗 v5.00: vino con un pedido armado → carrito cargado, a confirmar
     _ofrecerCarritoGuardado();   // 🛒 "dejaste esto armado, ¿seguimos?"
     _ofrecerLoDeSiempre();       // 🔁 v4.86: "¿te armo lo de siempre?"
     _vipCargar();
@@ -5244,6 +5252,7 @@ function _rearmarCarrito(g) {
 function _ofrecerCarritoGuardado() {
   try {
     if (adminAuth || localStorage.getItem('shuk_no_track')) return;      // el equipo no
+    if (_armadoToken) return;                                            // vino con un pedido armado: ése manda
     if (Object.keys(carrito || {}).length) return;                       // ya está armando uno
     if (sessionStorage.getItem('shuk_rescate')) return;                  // una vez por visita
     const g = _leerCarritoGuardado();
@@ -5277,6 +5286,70 @@ function _ofrecerCarritoGuardado() {
     track('rescate', { producto: 'ofrecido · ' + n + ' items' });
   } catch { /* el rescate nunca puede romper la tienda */ }
 }
+// ═══ 🔗 PEDIDO ARMADO (v5.00) ════════════════════════════════════════════════
+// Jony arma el pedido en el panel y le manda el link al cliente: acá se abre con el carrito YA cargado,
+// al precio de HOY y solo con lo que hay en stock — el cliente revisa y confirma con un toque. El link
+// guarda qué y cuánto, nunca precios. Si ya lo confirmó, reabrirlo NO vuelve a cargar nada.
+let _armadoInfo = null, _armadoHecho = false;
+async function _cargarPedidoArmado() {
+  if (!_armadoToken || _armadoHecho) return;
+  _armadoHecho = true;
+  try {
+    const equipo = (adminAuth || localStorage.getItem('shuk_no_track')) ? '&equipo=1' : '';   // si lo prueba Jony, no cuenta como "lo abrió"
+    const d = await fetch(APPS_SCRIPT_URL + '?accion=getPedidoArmado&t=' + encodeURIComponent(_armadoToken) + equipo).then(r => r.json()).catch(() => null);
+    const cs = document.getElementById('catalogo-section'), cat = document.getElementById('catalogo');
+    if (!cs || !cat) return;
+    const caja = html => {
+      let b = document.getElementById('armado-banner');
+      if (!b) { b = document.createElement('div'); b.id = 'armado-banner'; b.style.cssText = 'max-width:900px;margin:0.6rem auto 0.4rem;padding:0 1rem'; cs.insertBefore(b, cat); }
+      b.innerHTML = html;
+    };
+    if (!d || d.error) {
+      caja(`<div style="background:#fde8e8;color:#c0392b;border-radius:12px;padding:0.8rem 1rem;font-weight:700">⚠️ Este pedido ya no está disponible — escribinos y te lo armamos de nuevo 🍬</div>`);
+      return;
+    }
+    const nombre = String(d.nombre || '').trim().split(' ')[0];
+    if (d.confirmado) {
+      caja(`<div style="background:#e8f6ec;color:#1e7a3c;border-radius:12px;padding:0.8rem 1rem;font-weight:700">✅ ${nombre ? esc(nombre) + ', este' : 'Este'} pedido ya lo mandaste${d.nVenta ? ' (#' + esc(String(d.nVenta)) + ')' : ''}. ¡Gracias! Si querés algo más, lo agregás acá abajo 🍬</div>`);
+      return;
+    }
+    const canal = d.canal === 'mayorista' ? 'mayorista' : 'minorista';
+    if (modo !== canal) setModo(canal);
+    const tipoActual = canal === 'mayorista' ? 'Mayorista' : 'Minorista';
+    const vivos = [], faltan = [], menos = [];
+    (d.items || []).forEach(it => {
+      const p = (productos || []).find(x => String(x.id) === String(it.id));
+      const vis = p ? (p.visible || 'Ambos').trim() : '';
+      if (!p || p.stock <= 0 || p.activo === false || (vis !== 'Ambos' && vis !== tipoActual) || !(_precioDelModo(p) > 0)) { faltan.push(p ? p.nombre : 'un producto que ya no está'); return; }
+      const pedido = Math.max(1, parseInt(it.q) || 1), q = Math.min(pedido, p.stock);
+      if (q < pedido) menos.push(p.nombre + ' (quedan ' + p.stock + ')');
+      vivos.push({ p, q });
+    });
+    if (!vivos.length) {
+      caja(`<div style="background:#fdf3e6;color:#8a5a1e;border-radius:12px;padding:0.8rem 1rem;font-weight:700">😕 Lo que te armamos justo se agotó. Escribinos y te proponemos algo parecido 🍬</div>`);
+      return;
+    }
+    carrito = {};
+    vivos.forEach(({ p, q }) => { carrito[p.id] = { ...p, qty: q }; });
+    _armadoInfo = d;
+    actualizarBadge(); renderCatalogo();
+    let ars = 0, usd = 0;
+    vivos.forEach(({ p, q }) => { const u = precioEfectivo(p, q); if (esPesos(p)) ars += Math.round(u) * q; else usd += u * q; });
+    const totalTxt = (ars > 0 || !usd ? '$ ' + Math.round(ars).toLocaleString('es-AR') : '') + (usd > 0 ? (ars > 0 ? ' + ' : '') + 'U$S ' + usd.toFixed(2) : '');
+    caja(`<div style="background:#fff;border:2px solid #c9954a;border-radius:14px;padding:0.85rem 1rem;box-shadow:0 6px 20px -12px rgba(0,0,0,.25)">
+      <div style="font-size:0.78rem;color:#6b5a48">🤝 Pedido armado para vos</div>
+      <div style="font-family:'Fraunces',serif;font-weight:700;font-size:1.08rem;color:#1a1a2e">${nombre ? esc(nombre) + ', ya' : 'Ya'} está todo en tu carrito</div>
+      ${d.nota ? `<div style="font-size:0.82rem;color:#5c3d1e;margin-top:4px;font-style:italic">“${esc(d.nota)}”</div>` : ''}
+      <div style="font-size:0.82rem;color:#3d2b1a;margin:7px 0 4px;line-height:1.55">${vivos.slice(0, 6).map(x => '<b>' + x.q + '×</b> ' + esc(x.p.nombre)).join(' · ')}${vivos.length > 6 ? ' y ' + (vivos.length - 6) + ' más' : ''}</div>
+      ${faltan.length ? `<div style="font-size:0.74rem;color:#c0392b;margin-bottom:4px">Se agotó: ${esc(faltan.join(', '))}</div>` : ''}
+      ${menos.length ? `<div style="font-size:0.74rem;color:#8a5a1e;margin-bottom:4px">Te pusimos lo que queda de: ${esc(menos.join(', '))}</div>` : ''}
+      <button onclick="abrirCarrito()" style="width:100%;margin-top:6px;background:var(--verde,#1a7a3c);color:#fff;border:none;border-radius:10px;padding:0.65rem;font-weight:800;font-size:0.92rem;cursor:pointer">✅ Revisar y confirmar · ${totalTxt}</button>
+      <div style="font-size:0.7rem;color:#8a7a68;margin-top:5px;text-align:center">Podés cambiar cantidades o sumar más cosas antes de mandarlo.</div>
+    </div>`);
+    track('armado', { producto: 'abierto · ' + vivos.length + ' items' });
+    setTimeout(abrirCarrito, 400);
+  } catch { /* el pedido armado nunca puede romper la tienda */ }
+}
 // 🔁 LO DE SIEMPRE (v4.86). Quien ya compró desde este aparato ve su pedido habitual arriba del
 // catálogo y lo carga con un toque, solo con lo que hay en stock y al precio de hoy. Solo en la
 // tienda minorista (decisión del 22/09: en mayorista, no). Si hay un carrito guardado para
@@ -5284,7 +5357,7 @@ function _ofrecerCarritoGuardado() {
 let _habitual = null;
 async function _ofrecerLoDeSiempre() {
   try {
-    if (adminAuth || localStorage.getItem('shuk_no_track') || modo !== 'minorista' || _vipToken) return;
+    if (adminAuth || localStorage.getItem('shuk_no_track') || modo !== 'minorista' || _vipToken || _armadoToken) return;
     if (Object.keys(carrito || {}).length || document.getElementById('rescate-carrito')) return;
     if (sessionStorage.getItem('shuk_habitual')) return;              // una vez por visita
     const j = await (await fetch(APPS_SCRIPT_URL + '?accion=miHabitual&vid=' + encodeURIComponent(_vid()))).json();
@@ -5406,7 +5479,8 @@ function renderCarrito() {
   const sugSab = _saboresPara(items, 3);
   const saboresHTML = sugSab.length ? `<div class="sabores-box"><div class="sabores-tit">🎨 Completá los sabores</div>${_saboresFilas(sugSab)}</div>` : '';
   if (sugSab.length) _saboresOfrecido();
-  const _savedNombre = localStorage.getItem('shuk_may_nombre') || '';
+  // 🔗 v5.00: con un pedido armado, el nombre ya lo sabemos → un paso menos para confirmar.
+  const _savedNombre = localStorage.getItem('shuk_may_nombre') || (_armadoInfo && !_armadoInfo.confirmado ? _armadoInfo.nombre : '') || '';
   // Dirección/nota y forma de pago se RECUERDAN como el nombre (feedback de cliente real 13/07:
   // tras un ajuste de stock se le volvían a pedir — engorroso y con el cliente esperando).
   const _savedNota = localStorage.getItem('shuk_nota_pedido') || '';
@@ -5670,6 +5744,7 @@ async function enviarPedido(_stockVerificado) {
   // "permiso de click" y el navegador lo bloquea — el modal con <a> funciona siempre).
   // La notificación Twilio al admin ahora la manda EL SERVIDOR al registrar (infalible).
   mostrarConfirmacionWA(msg, msgMiri);
+  if (_armadoInfo) { _armadoInfo.confirmado = true; const ab = document.getElementById('armado-banner'); if (ab) ab.remove(); }   // 🔗 ya salió
   showToast('¡Pedido enviado! ✓');
 }
 
@@ -5750,9 +5825,10 @@ function enviarVentaASheet(nombre, items, tipo, formaPago, totalARS, totalUSD, a
     arsJONY: Math.round(arsJONY || 0), arsMyri: Math.round(arsMyri || 0),
     usdMyri: (usdMyri || 0).toFixed(2), usdJONY: (usdJONY || 0).toFixed(2),
     comiARS: Math.round(comiARS || 0), comiUSD: (comiUSD || 0).toFixed(2),
-    notas: (_estadoTienda === 'cotizacion' ? '🟡 COTIZACIÓN · ' : '') + (notaPedido || ''),
+    notas: (_estadoTienda === 'cotizacion' ? '🟡 COTIZACIÓN · ' : '') + (_armadoInfo && !_armadoInfo.confirmado ? '🔗 Pedido armado por link · ' : '') + (notaPedido || ''),
     vid: _vid(),
-    vip: _vipToken || ''   // 💰 v4.99: el motor recalcula el total y necesita saber si hubo descuento de link VIP
+    vip: _vipToken || '',   // 💰 v4.99: el motor recalcula el total y necesita saber si hubo descuento de link VIP
+    armado: (_armadoInfo && !_armadoInfo.confirmado) ? _armadoToken : ''   // 🔗 v5.00: el link queda marcado como confirmado
   });
   if (_estadoTienda === 'cotizacion') params.set('cotizacion', '1');   // no descuenta stock hasta aceptar
   // Se ESPERA la respuesta del servidor (antes iba a ciegas con no-cors): así el cliente se entera
@@ -8670,18 +8746,125 @@ function _precioMoneda(p, modo) {
 }
 
 // Levanta un carrito abandonado como pedido manual: va a Ventas, precarga cliente + cantidades.
+// ═══ 🔗 PEDIDO ARMADO (v5.00) — lado panel ═══════════════════════════════════
+// El total del mensaje se calcula COMO LA TIENDA en ese canal (ofertas, packs, moneda): es exactamente el
+// que va a ver el cliente al abrir el link. `_conModo` presta el modo un instante y lo devuelve.
+function _conModo(m, fn) { const antes = modo; modo = m; try { return fn(); } finally { modo = antes; } }
+function _totalArmado(lista, canal) {
+  return _conModo(canal === 'mayorista' ? 'mayorista' : 'minorista', () => {
+    let ars = 0, usd = 0;
+    lista.forEach(({ p, q }) => { const u = precioEfectivo(p, q); if (esPesos(p)) ars += Math.round(u) * q; else usd += u * q; });
+    return { ars, usd: Math.round(usd * 100) / 100 };
+  });
+}
+const _plataArmado = t => (t.ars > 0 || !t.usd ? '$ ' + Math.round(t.ars).toLocaleString('es-AR') : '') + (t.usd > 0 ? (t.ars > 0 ? ' + ' : '') + 'U$S ' + t.usd.toFixed(2) : '');
+// Un renglón de un carrito registrado → el producto. Los carritos nuevos traen el id (exacto); los viejos
+// solo el nombre recortado a 40 letras (por eso "Cargar como pedido" no encontraba los de nombre largo).
+// Si hay gemelos con el mismo nombre, gana el que tiene stock.
+function _productoDeRenglon(it) {
+  if (it && it.i) { const p = productos.find(x => String(x.id) === String(it.i)); if (p) return p; }
+  const n = String((it && it.n) || '').trim().toLowerCase();
+  if (!n) return null;
+  const cand = productos.filter(p => (p.nombre || '').trim().toLowerCase() === n || (p.nombre || '').substring(0, 40).trim().toLowerCase() === n);
+  return cand.find(p => (parseInt(p.stock) || 0) > 0) || cand[0] || null;
+}
+async function crearLinkArmado({ nombre, canal, items, nota, telefono, origen, intro }) {
+  const lista = (items || []).filter(x => x.p && x.q > 0);
+  if (!lista.length) { showToast('No hay productos para armar el link'); return null; }
+  const r = await apiWrite(new URLSearchParams({ accion: 'crearPedidoArmado', nombre: nombre || 'cliente', canal, items: lista.map(x => x.p.id + ':' + x.q).join(','), nota: nota || '', origen: origen || '' }), '');
+  if (!r || !r.ok || !r.token) { showToast('⚠️ No se pudo crear el link' + (r && r.error ? ': ' + r.error : '')); return null; }
+  const url = SITIO + (canal === 'mayorista' ? '/mayorista' : '/') + '?pedido=' + r.token;
+  _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro });
+  return r.token;
+}
+function _mostrarLinkArmado({ url, nombre, canal, lista, telefono, intro }) {
+  const tot = _totalArmado(lista, canal);
+  const primer = String(nombre || '').trim().split(' ')[0];
+  const renglones = lista.slice(0, 15).map(x => `• ${x.q}× ${x.p.nombre}`).join('\n') + (lista.length > 15 ? `\n• …y ${lista.length - 15} más` : '');
+  const msg = `¡Hola${primer && primer !== 'cliente' ? ' ' + primer : ''}! 🍬 ${intro || 'Te armé tu pedido:'}\n${renglones}\n\nTotal: *${_plataArmado(tot)}* (al precio de hoy)\n\n👉 Revisalo y confirmalo con un toque acá:\n${url}\n\nSi querés cambiar algo, lo podés tocar ahí mismo 😊`;
+  const norm = typeof normCliente === 'function' ? normCliente : (x => (x || '').toLowerCase().trim());
+  const tel = String(telefono || (window._telDeCliente || {})[norm(nombre || '')] || '').replace(/\D/g, '');
+  const wa = tel.length >= 10 ? `https://wa.me/549${tel.slice(-10)}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window._armadoMsg = msg;
+  let ov = document.getElementById('armado-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'armado-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:460px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🔗 Pedido armado, listo para mandar</div>
+    <div style="font-size:0.8rem;color:var(--texto-suave);margin-top:4px">Para <b>${esc(nombre || 'cliente')}</b> · ${lista.length} producto${lista.length !== 1 ? 's' : ''} · precios ${esc(canal)} · <b>${esc(_plataArmado(tot))}</b></div>
+    <div style="white-space:pre-wrap;font-size:0.78rem;background:#f4faf6;border:1px solid #cfe6d8;border-radius:10px;padding:0.6rem 0.75rem;margin-top:0.7rem;color:#2d1a0a;line-height:1.45">${esc(msg)}</div>
+    <div style="font-size:0.7rem;color:var(--texto-suave);margin-top:6px">${tel.length >= 10 ? '💬 Va directo a su WhatsApp (' + esc(tel.slice(-10)) + ').' : '💬 No tengo su teléfono: WhatsApp te va a dejar elegir el contacto.'} Cuando lo abra o lo confirme, lo vas a ver en 🗂 Enviados.</div>
+    <div style="display:flex;gap:6px;margin-top:0.8rem;flex-wrap:wrap">
+      <button onclick="window.open('${jsAttr(wa)}','_blank')" style="flex:2;padding:0.65rem;background:#25d366;color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">💬 Mandar por WhatsApp</button>
+      <button onclick="navigator.clipboard.writeText(window._armadoMsg).then(()=>showToast('Mensaje copiado ✓'))" style="flex:1;padding:0.65rem;background:var(--azul);color:#fff;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">📋 Copiar</button>
+      <button onclick="document.getElementById('armado-overlay').remove()" style="padding:0.65rem 0.9rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+    </div>
+  </div>`;
+}
+async function mandarPedidoManualComoLink() {
+  const cliente = document.getElementById('manual-cliente').value.trim();
+  if (!cliente) { showToast('Poné el nombre del cliente (el link lo saluda por su nombre)'); return; }
+  const canal = document.getElementById('manual-tipo').value === 'Mayorista' ? 'mayorista' : 'minorista';
+  const lista = _manualElegibles().filter(p => (_manualQtys[p.id] || 0) > 0).map(p => ({ p, q: _manualQtys[p.id] }));
+  if (!lista.length) { showToast('Elegí al menos un producto'); return; }
+  const hayDesc = lista.some(x => _descManual(x.p) > 0 || _manualPrecios[x.p.id] !== undefined) || (parseFloat(document.getElementById('manual-descuento')?.value) || 0) > 0;
+  if (hayDesc && !confirm('⚠️ El link usa los precios de la TIENDA: los descuentos o precios cambiados en esta pantalla no viajan.\n\nSi querés un precio especial, usá el 🔗 Link privado del armador de catálogo.\n\n¿Mando el link igual?')) return;
+  const nota = prompt('¿Le sumás un mensajito que va a ver arriba del carrito? (opcional)\nEj: "Te armé lo de siempre y te sumé el Elite nuevo 😉"', '');
+  if (nota === null) return;
+  await crearLinkArmado({ nombre: cliente, canal, items: lista, nota: nota.trim(), origen: 'manual' });
+}
+async function armadoDesdeCarrito(i) {
+  const a = (window._abData || [])[i];
+  if (!a || !a.items || !a.items.length) { showToast('Este carrito no tiene cantidades'); return; }
+  const lista = [], noMatch = [];
+  a.items.forEach(it => {
+    const p = _productoDeRenglon(it), q = parseInt(it.q) || 0;
+    if (!p || q <= 0) { noMatch.push(it.n); return; }
+    const ya = lista.find(x => x.p.id === p.id);
+    if (ya) ya.q += q; else lista.push({ p, q });
+  });
+  if (!lista.length) { showToast('No encontré esos productos en el catálogo'); return; }
+  if (noMatch.length) showToast('Va sin: ' + noMatch.join(', ') + ' (ya no está en el catálogo)');
+  await crearLinkArmado({ nombre: a.nombre || '', canal: a.mayorista ? 'mayorista' : 'minorista', items: lista, telefono: a.telefono || '', origen: 'carrito', intro: 'Vi que te quedó este pedido sin terminar, te lo dejé listo:' });
+}
+async function verLinksArmados() {
+  const r = await fetchConSesion(APPS_SCRIPT_URL + '?accion=listarPedidosArmados').catch(() => []);
+  const links = Array.isArray(r) ? r : [];
+  let ov = document.getElementById('armado-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'armado-overlay'; ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem'; ov.onclick = e => { if (e.target === ov) ov.remove(); }; document.body.appendChild(ov); }
+  const chip = l => l.estado === 'confirmado' ? `<span style="background:#e8f6ec;color:#1e7a3c;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:6px">✅ Confirmó${l.nVenta ? ' · pedido #' + esc(String(l.nVenta)) : ''}</span>`
+    : l.estado === 'abierto' ? `<span style="background:#fdf3e6;color:#e08a2a;font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:6px">👀 Lo abrió ${esc(l.abierto)} · no confirmó</span>`
+    : `<span style="background:var(--gris-claro);color:var(--texto-suave);font-size:0.66rem;font-weight:800;padding:1px 7px;border-radius:6px">📤 Todavía no lo abrió</span>`;
+  const url = l => SITIO + (l.canal === 'mayorista' ? '/mayorista' : '/') + '?pedido=' + l.token;
+  const conf = links.filter(l => l.estado === 'confirmado').length;
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:480px;width:100%;max-height:80vh;overflow-y:auto">
+    <div style="font-weight:800;font-size:1.05rem;color:#c9954a">🗂 Pedidos armados que mandaste</div>
+    ${links.length ? `<div style="font-size:0.75rem;color:var(--texto-suave);margin-top:3px">${links.length} enviado${links.length !== 1 ? 's' : ''} · <b>${conf}</b> confirmado${conf !== 1 ? 's' : ''}</div>` : ''}
+    ${links.length ? links.map(l => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-bottom:1px solid var(--gris-medio)">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem">${esc(l.nombre)} <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">· ${l.unidades} u. en ${l.n} producto${l.n !== 1 ? 's' : ''} · ${esc(l.canal)}</span></div>
+        <div style="margin-top:2px">${chip(l)}</div>
+        <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:2px">Mandado ${esc(l.creado)}${l.origen === 'carrito' ? ' · desde un carrito abandonado' : (l.origen === 'tetoca' ? ' · desde Te toca' : '')}</div></div>
+      <button onclick="navigator.clipboard.writeText('${jsAttr(url(l))}').then(()=>showToast('Link copiado ✓'))" style="background:#eef4fb;color:var(--azul);border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">📋</button>
+      <button onclick="borrarLinkArmado('${jsAttr(l.token)}')" title="Anular: el link deja de funcionar" style="background:#fde8e8;color:#c0392b;border:none;border-radius:8px;padding:4px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+    </div>`).join('') : '<div style="font-size:0.82rem;color:var(--texto-suave);padding:0.6rem 0">Todavía no mandaste ningún pedido armado.</div>'}
+    <button onclick="document.getElementById('armado-overlay').remove()" style="width:100%;margin-top:0.8rem;padding:0.6rem;background:var(--gris);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar</button>
+  </div>`;
+}
+async function borrarLinkArmado(t) {
+  if (!confirm('¿Anular este link? El cliente ya no va a poder abrirlo.')) return;
+  const r = await apiWrite(new URLSearchParams({ accion: 'borrarPedidoArmado', t }), '🗑 Link anulado');
+  if (r && r.ok) verLinksArmados();
+}
 function cargarComoPedido(i) {
   const a = (window._abData || [])[i];
   if (!a || !a.items || !a.items.length) { showToast('Este carrito no tiene cantidades para cargar'); return; }
   setAdminTab('panel'); setPanelSeccion('ventas');
-  const tipoSel = document.getElementById('manual-tipo'); if (tipoSel) tipoSel.value = 'Minorista';
+  const tipoSel = document.getElementById('manual-tipo'); if (tipoSel) tipoSel.value = a.mayorista ? 'Mayorista' : 'Minorista';
   const cli = document.getElementById('manual-cliente'); if (cli) cli.value = a.nombre || '';
   _manualQtys = {}; _manualPrecios = {}; _manualDescs = {};
   ['manual-descuento', 'manual-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const noMatch = [];
   a.items.forEach(it => {
-    const n = (it.n || '').trim().toLowerCase();
-    const prod = productos.find(p => (p.nombre || '').trim().toLowerCase() === n);
+    const prod = _productoDeRenglon(it);
     if (prod) _manualQtys[prod.id] = (_manualQtys[prod.id] || 0) + (parseInt(it.q) || 0);
     else noMatch.push(it.n);
   });
@@ -15091,6 +15274,7 @@ async function cargarClientesDatalist() {
       ...(Array.isArray(ventas) ? ventas.map(v => v.cliente) : [])
     ].filter(Boolean);
     const norm = typeof normCliente === 'function' ? normCliente : (s => (s || '').toLowerCase().trim());
+    try { window._telDeCliente = {}; (Array.isArray(clientes) ? clientes : []).forEach(c => { const k = norm(c.nombre); if (k && c.telefono) window._telDeCliente[k] = String(c.telefono); }); } catch {}
     const mejor = {};
     fuentes.forEach(n => {
       const k = norm(n);
@@ -16122,6 +16306,7 @@ function _anaSecCarritos(d) {
     const caliente = a.horas <= 48;
     const btnCargar = tieneItems ? `<button onclick="cargarComoPedido(${i})" style="background:#e8f0ff;color:#2c6fad;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">📋 Cargar como pedido</button>` : '';
     const btnWA = a.telefono ? `<button onclick="waCarrito(${i})" style="background:#e8f5ee;color:var(--verde);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">💬 Escribirle con el pedido</button>` : '';
+    const btnLink = tieneItems ? `<button onclick="armadoDesdeCarrito(${i})" title="Le mandás un link con este mismo carrito cargado: lo abre y confirma" style="background:#fdf3dc;color:#8a5a1e;border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">🔗 Mandarle el link con su carrito</button>` : '';
     const btnFicha = `<button onclick="abrirFichaVisitante('${jsAttr(a.vid)}')" style="background:var(--gris-claro);color:var(--texto-suave);border:none;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer">👤 Su historia</button>`;
     const comoSup = a.comoSeSupo && !a.nombre ? '' : (a.comoSeSupo ? ` <span style="font-size:0.6rem;color:var(--texto-suave)">(${esc(a.comoSeSupo)})</span>` : '');
     return `<div style="border:1.5px solid ${caliente ? '#f0c9c9' : 'var(--gris-medio)'};border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.45rem;background:${caliente ? '#fffafa' : 'transparent'}">
@@ -16135,7 +16320,7 @@ function _anaSecCarritos(d) {
       </div>
       <div style="font-size:0.74rem;color:#444;margin-top:3px;line-height:1.5">${detalle}${totalStr}</div>
       <div style="font-size:0.66rem;color:var(--texto-suave);margin-top:1px">${esc(a.cuando)}${a.ciudad ? (' · 📍 ' + esc(a.ciudad)) : ''}${a.dispositivo ? (' · ' + (a.dispositivo === 'celular' ? '📱' : '💻')) : ''}${a.visitas ? ` · ${a.visitas} visita${a.visitas !== 1 ? 's' : ''}` : ''}${a.origen ? ' · ' + esc(_anaIconoOrigen[a.origen] || a.origen) : ''}</div>
-      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">${btnWA}${btnCargar}${btnFicha}</div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">${btnWA}${btnLink}${btnCargar}${btnFicha}</div>
     </div>`;
   }).join('') : '<div class="sinpedidos">Sin carritos abandonados en el período ✓</div>';
   const conTel = ab.filter(a => a.telefono).length;
@@ -18772,7 +18957,9 @@ function _cartParaTrack() {
       ? (parseFloat(String(it.precioMay || '0').replace(',', '.')) || 0)
       : Math.round(it.precioMin || 0);
     if (enPesos) total += precio * (it.qty || 0); else totalUSD += precio * (it.qty || 0);
-    return { n: (it.nombre || '').substring(0, 40), q: it.qty || 0, p: precio, m: enPesos ? '$' : 'U$S' };
+    // `i` = el id (v5.00): el nombre viaja recortado a 40 letras y dos productos pueden llamarse igual;
+    // con el id, "Cargar como pedido" y "Mandarle el link" encuentran EL producto, no uno parecido.
+    return { i: String(it.id), n: (it.nombre || '').substring(0, 40), q: it.qty || 0, p: precio, m: enPesos ? '$' : 'U$S' };
   });
   // `total` sigue siendo el de PESOS (lo que esperaba el panel de siempre); los dólares van aparte.
   return { carrito: JSON.stringify(arr), total: String(Math.round(total)), totalUSD: String(Math.round(totalUSD * 100) / 100) };

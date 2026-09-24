@@ -3304,7 +3304,7 @@ Deno.serve(async (req) => {
   }
   // ── ZONA PÚBLICA: las acciones de la TIENDA (clientes, sin login) — espejo exacto
   //    de lo que queda FUERA de PROTECTED_ACTIONS/PROTECTED_HIJOS en motor-v2.js.
-  const PUBLICAS = ['miHabitual', 'getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
+  const PUBLICAS = ['miHabitual', 'getPedidoArmado', 'getEstadoTienda', 'venta', 'track', 'visitas', 'notificacion', 'registrarClienteMayorista', 'getCatalogoHijos', 'getConfigCandy', 'registrarPedidoHijo', 'avisarmeCandy', 'getCatalogoVip', 'geoGate'];
   // ── Acciones que también acepta el bot/worker/cron con el secreto compartido (espejo del motor viejo).
   const CON_SECRET = ['botMsg', 'botVoz', 'pedidoVoz', 'tts', 'transcribirIdea', 'borrarVentas', 'preguntarIA', 'movimientosStock', 'auditoriaStock', 'leerStockRaw', 'backupAhora', 'cronHorario', 'cierreDiario'];
   const conSecreto = !!BOT_SECRET && Q('secret') === BOT_SECRET && CON_SECRET.indexOf(accion) !== -1;
@@ -3313,7 +3313,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary', 'crearPedidoArmado', 'listarPedidosArmados', 'borrarPedidoArmado'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -3428,6 +3428,20 @@ Deno.serve(async (req) => {
       const ins = await insertarVentaAtomica(fila);
       if ('error' in ins) return json({ error: ins.error });
       const nVenta = ins.nVenta;
+      // 🔗 v5.00: el pedido vino de un link armado → queda anotado como confirmado (y el aviso a Jony lo dice).
+      const armadoT = Q('armado').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+      let deArmado = false;
+      if (armadoT) {
+        try {
+          const rawAV = await getConfig('ARMADO_' + armadoT, '');
+          if (rawAV) {
+            const dAV = JSON.parse(rawAV);
+            dAV.estado = 'confirmado'; dAV.nVenta = nVenta; dAV.confirmado = fechaAhora();
+            await setConfig('ARMADO_' + armadoT, JSON.stringify(dAV));
+            deArmado = true;
+          }
+        } catch { /* marcar el link jamás frena una venta */ }
+      }
       // En cotización NO se descuenta stock (se descuenta recién al aceptarla desde el panel).
       if (stockUpdates && !esCotizacion) {
         // En PARALELO (feedback del usuario 13/07: el "Enviando pedido…" tardaba 15-20s con
@@ -3451,6 +3465,7 @@ Deno.serve(async (req) => {
           if (fila.total_ars > 0) totNP.push('$ ' + Math.round(fila.total_ars).toLocaleString('es-AR'));
           if (fila.total_usd > 0) totNP.push('U$S ' + Number(fila.total_usd).toFixed(2));
           let cuerpoV = '🛍️ *Nuevo pedido #' + nVenta + ' - Shuk Mamtakim*\n\n👤 *' + cliente + '* (' + fila.tipo + ')\n\n' + resu + (totNP.length ? '\n\n*Total:* ' + totNP.join(' + ') : '');
+          if (deArmado) cuerpoV = '🔗 *Confirmó el pedido que le armaste por link*\n' + cuerpoV;
           if (correccion) cuerpoV = '⚠️ *REVISALO ANTES DE COBRAR*\n' + correccion.split(' · ').filter(Boolean).join('\n') + '\n\n' + cuerpoV;
           if (cuerpoV.length > 1500) cuerpoV = cuerpoV.slice(0, 1450) + '\n…\n📋 *Pedido largo: el detalle completo está en el panel.*';
           await sendTwilioWA('+5491131754540', cuerpoV);
@@ -4504,6 +4519,58 @@ Deno.serve(async (req) => {
     if (accion === 'borrarCatalogoVip') {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       await sbDelete('config', 'clave=eq.' + encodeURIComponent('VIP_' + P(body, 't').replace(/[^a-z0-9]/gi, '')));
+      return json({ ok: true });
+    }
+    // ── 🔗 PEDIDO ARMADO (v5.00): Jony arma el pedido, el cliente lo abre con el carrito cargado y solo confirma ──
+    // Se guarda QUÉ y CUÁNTO (ids y cantidades), NUNCA precios: al abrirlo, la tienda lo rearma con el catálogo y
+    // los precios de HOY, y al confirmarlo el motor recalcula el total como en cualquier pedido de la tienda.
+    // El token del link ES el secreto. Una vez confirmado, reabrir el link no vuelve a cargar nada (no se duplica).
+    if (accion === 'crearPedidoArmado') {
+      const itemsA = P(body, 'items').trim();
+      if (!/^\d{1,9}:\d{1,6}(,\d{1,9}:\d{1,6})*$/.test(itemsA)) return json({ error: 'el pedido no tiene productos válidos' });
+      const porId: any = {};
+      itemsA.split(',').forEach((u: string) => { const pp = u.split(':'); const q = parseInt(pp[1]) || 0; if (q > 0) porId[String(parseInt(pp[0]))] = q; });
+      const listaA = Object.keys(porId).map((id) => ({ id, q: porId[id] }));
+      if (!listaA.length || listaA.length > 80) return json({ error: 'el pedido tiene que tener entre 1 y 80 productos' });
+      const abc = 'abcdefghijkmnpqrstuvwxyz23456789', rnd = new Uint8Array(10);
+      crypto.getRandomValues(rnd);
+      const tokA = Array.from(rnd, (b) => abc[b % 32]).join('');
+      await setConfig('ARMADO_' + tokA, JSON.stringify({
+        nombre: _libre(P(body, 'nombre'), 60) || 'cliente', canal: P(body, 'canal') === 'mayorista' ? 'mayorista' : 'minorista',
+        items: listaA, nota: _libre(P(body, 'nota'), 300), origen: _ident(P(body, 'origen'), 20), creado: fechaAhora(), estado: 'enviado',
+      }));
+      return json({ ok: true, token: tokA });
+    }
+    if (accion === 'getPedidoArmado') {
+      const tA = Q('t').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+      if (!tA) return json({ error: 'link inválido' });
+      const rawA = await getConfig('ARMADO_' + tA, '');
+      if (!rawA) return json({ error: 'este pedido ya no está disponible' });
+      let dA: any; try { dA = JSON.parse(rawA); } catch { return json({ error: 'link inválido' }); }
+      // La primera vez que el CLIENTE lo abre queda anotado (así Jony sabe si lo vio). Si lo abre alguien del
+      // equipo para probarlo, no cuenta.
+      if (!dA.abierto && Q('equipo') !== '1') {
+        dA.abierto = fechaAhora();
+        if (dA.estado === 'enviado') dA.estado = 'abierto';
+        await setConfig('ARMADO_' + tA, JSON.stringify(dA));
+      }
+      return json({ nombre: dA.nombre || '', canal: dA.canal || 'minorista', items: dA.items || [], nota: dA.nota || '', confirmado: dA.estado === 'confirmado', nVenta: dA.nVenta || null });
+    }
+    if (accion === 'listarPedidosArmados') {
+      const rowsA = await sbGet('config', 'select=clave,valor&clave=like.ARMADO_*');
+      const listaL = rowsA.map((r: any) => {
+        try {
+          const d = JSON.parse(r.valor || '{}');
+          return { token: String(r.clave || '').slice(7), nombre: d.nombre || '', canal: d.canal || 'minorista', n: (d.items || []).length,
+            unidades: (d.items || []).reduce((t: number, x: any) => t + (parseInt(x.q) || 0), 0), creado: d.creado || '',
+            estado: d.estado || 'enviado', abierto: d.abierto || '', confirmado: d.confirmado || '', nVenta: d.nVenta || null, origen: d.origen || '' };
+        } catch { return null; }
+      }).filter(Boolean);
+      listaL.sort((a: any, b: any) => (tsDeFecha(b.creado) || 0) - (tsDeFecha(a.creado) || 0));
+      return json(listaL.slice(0, 60));
+    }
+    if (accion === 'borrarPedidoArmado') {
+      await sbDelete('config', 'clave=eq.' + encodeURIComponent('ARMADO_' + P(body, 't').replace(/[^a-z0-9]/gi, '').slice(0, 40)));
       return json({ ok: true });
     }
     if (accion === 'notificacion') {

@@ -47,6 +47,7 @@ const vipIni = HTML.indexOf('const descG = Number(d.desc) || 0'), vipFin = HTML.
 if (vipIni === -1 || vipFin === -1) throw new Error('no encontré el descuento del link VIP en _vipCargar');
 const TIENDA = new Function(
   'let modo = "minorista", HOY = "2026-09-23", _vipToken = "", _estadoTienda = "abierta", _url = "";\n' +
+  'let _armadoToken = "", _armadoInfo = null;   // 🔗 v5.00: sin pedido armado, el envío es el de siempre\n' +
   'const APPS_SCRIPT_URL = "https://motor/api";\n' +
   'const _hoyAR = () => HOY;\n' +
   'const _vid = () => "v_prueba123";\n' +
