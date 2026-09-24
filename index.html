@@ -1948,6 +1948,7 @@
       </div>
       <div class="nombre-campo" style="margin:0.6rem 0 0"><label>Fotos y video (arrastrá para ordenar · ⭐ = portada · ✕ = quitar)</label></div>
       <div id="ep-fotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:0.3rem"></div>
+      <div id="ep-fotos-aviso" style="display:none;margin-top:0.4rem;background:#f6effa;border:1.5px solid #e4d2f1;border-radius:8px;padding:0.4rem 0.6rem;font-size:0.74rem;line-height:1.4"></div>
       <input type="file" id="ep-nuevas" accept="image/*,video/*" multiple onchange="agregarFotosEditor(this)" style="margin-top:0.5rem;padding:0.5rem;border:1.5px solid #e8e6e0;border-radius:8px;width:100%;box-sizing:border-box" />
       <button type="button" onclick="abrirCopiarFotoDe('editor')" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#eef4fb;color:var(--azul);border:1.5px solid #cfe0f3;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar foto de otro producto</button>
       <button type="button" onclick="abrirArmarPackShuk()" style="margin-top:0.4rem;width:100%;padding:0.5rem;background:#fdf3e3;color:#8a5a1e;border:1.5px solid #e8d5b5;border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer;font-family:'DM Sans',sans-serif">🎁 Armar foto de pack (combiná productos)</button>
@@ -10321,6 +10322,7 @@ function renderFraccionar() {
           <span style="display:inline-flex;align-items:center;gap:0.3rem;background:#f6effa;border:1px solid #e4d2f1;border-radius:8px;padding:2px 4px 2px 8px;font-size:0.74rem">
             ✂️ <b>${esc(_fracEtq(f))}</b> · $ ${Math.round(f.precioMin || 0).toLocaleString('es-AR')} · ${Number(f.stock) || 0} disp.
             <button type="button" onclick="irAEditarProducto(${Number(f.id)})" title="Editar (nombre, precio, foto…)" style="border:none;background:none;cursor:pointer;font-size:0.8rem;padding:0 2px">✏️</button>
+            ${_porPeso(f) ? '' : `<button type="button" onclick="rearmarFotoFraccion(${Number(f.id)})" title="Armar su foto con la foto de la unidad (foto 2 de la bolsa)" style="border:none;background:none;cursor:pointer;font-size:0.8rem;padding:0 2px">🖼️</button>`}
             <button type="button" onclick="borrarFraccion(${Number(f.id)})" title="Borrar la fracción (el stock de la bolsa no cambia)" style="border:none;background:none;cursor:pointer;font-size:0.8rem;padding:0 2px">🗑️</button>
           </span>`).join('')}</div>` : '';
       const filas = sel ? `<div style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.45rem">${sel.map((r, i) => `
@@ -10335,6 +10337,7 @@ function renderFraccionar() {
               <input type="text" id="frac-nom-${esc(String(b.id))}-${i}" maxlength="120" value="${esc(r.nombre || '')}" oninput="fracTexto('${jsAttr(String(b.id))}',${i},'nombre',this.value)" placeholder="Nombre en la tienda (se escribe solo)" style="width:100%;box-sizing:border-box;padding:0.35rem 0.5rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700">
               <input type="text" id="frac-desc-${esc(String(b.id))}-${i}" maxlength="400" value="${esc(r.desc || '')}" oninput="fracTexto('${jsAttr(String(b.id))}',${i},'desc',this.value)" placeholder="Descripción (se escribe sola)" style="width:100%;box-sizing:border-box;padding:0.35rem 0.5rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.76rem">
               <div id="frac-ia-${esc(String(b.id))}-${i}" style="font-size:0.66rem;color:#8e44ad;min-height:0.8rem">${_fracIaTxt(r)}</div>
+              ${g ? '' : `<div id="frac-foto-${esc(String(b.id))}-${i}" style="font-size:0.72rem"></div>`}
             </div>
           </div>`).join('')}
           <button type="button" onclick="fracAgregarFila('${jsAttr(String(b.id))}')" style="align-self:flex-start;padding:0.3rem 0.7rem;border:1.5px dashed var(--gris-medio);border-radius:8px;background:#fff;cursor:pointer;font-size:0.76rem;font-family:inherit">+ otra fracción</button>
@@ -10351,6 +10354,7 @@ function renderFraccionar() {
         ${yaHtml}${filas}
       </div>`;
     }).join('');
+    Object.keys(_fracSel).forEach(id => (_fracSel[id] || []).forEach((r, i) => { if (parseInt(r.cant) > 0) _fracPreview(id, i); }));
   }
   _fracPie();
 }
@@ -10359,7 +10363,7 @@ function _fracValidas() {
   Object.keys(_fracSel).forEach(id => {
     const b = productos.find(x => String(x.id) === String(id)); if (!b) return;
     const un = _porPeso(b) ? 'g' : 'u';
-    const items = (_fracSel[id] || []).filter(r => _fracCuenta(b, r.cant, r.precio).ok).map(r => ({ cant: parseInt(r.cant), precio: Math.round(parseFloat(String(r.precio).replace(',', '.'))), nombre: String(r.nombre || '').trim() || _fracNombre(b.nombre, parseInt(r.cant), un), desc: String(r.desc == null ? _fracDesc(b.desc, parseInt(r.cant), un) : r.desc).trim() }));
+    const items = (_fracSel[id] || []).filter(r => _fracCuenta(b, r.cant, r.precio).ok).map(r => ({ _foto: !r.sinFoto && !_porPeso(b) && !!_fotoUnidadDe(b), cant: parseInt(r.cant), precio: Math.round(parseFloat(String(r.precio).replace(',', '.'))), nombre: String(r.nombre || '').trim() || _fracNombre(b.nombre, parseInt(r.cant), un), desc: String(r.desc == null ? _fracDesc(b.desc, parseInt(r.cant), un) : r.desc).trim() }));
     if (items.length) out.push({ b, items });
   });
   return out;
@@ -10439,6 +10443,7 @@ function fracCampo(id, i, campo, v) {
       if (!r.descTocado) r.desc = _fracDesc(b.desc, k, _porPeso(b) ? 'g' : 'u');
       r.ia = '';
       _fracPedirIA(id);
+      _fracPreview(id, i);
     } else { if (!r.nomTocado) r.nombre = ''; if (!r.descTocado) r.desc = ''; r.ia = ''; }
     _fracPintarTextos(id, i);
   }
@@ -10452,17 +10457,145 @@ async function publicarFracciones(btn) {
   const resumen = lotes.map(x => x.items.map(it => '• ' + it.nombre + ' — $ ' + it.precio.toLocaleString('es-AR')).join('\n')).join('\n');
   if (!confirm('¿Publicar ' + n + ' fracci' + (n === 1 ? 'ón' : 'ones') + ' en la tienda minorista?\n\n' + resumen)) return;
   btn.disabled = true; const txt = btn.textContent; btn.textContent = 'Publicando…';
-  let ok = 0; const errores = [];
+  let ok = 0, fotos = 0; const errores = [];
   for (const x of lotes) {
-    const r = await apiWritePost({ accion: 'crearFracciones', padre: String(x.b.id), items: JSON.stringify(x.items) }, '');
-    if (r && r.ok) { ok += x.items.length; delete _fracSel[x.b.id]; }
+    const r = await apiWritePost({ accion: 'crearFracciones', padre: String(x.b.id), items: JSON.stringify(x.items.map(({ _foto, ...it }) => it)) }, '');
+    if (r && r.ok) {
+      ok += x.items.length; delete _fracSel[x.b.id];
+      // 📸 la foto de cada fracción, armada con la foto de la unidad (si falla, queda la de la bolsa y está el 🖼️)
+      const uni = _fotoUnidadDe(x.b);
+      for (const it of x.items.filter(it => it._foto)) {
+        const cr = (r.creadas || []).find(c => (parseInt(c.fraccionCant) || 0) === it.cant);
+        if (!cr) continue;
+        btn.textContent = '📸 Armando la foto de ' + it.nombre + '…';
+        try { await _ponerFotoArmada(cr.id, uni, it.cant); fotos++; } catch (e) { errores.push(it.nombre + ': la foto no se pudo armar (' + (e.message || e) + ') — quedó la de la bolsa; probá con 🖼️'); }
+      }
+    }
     else errores.push(x.b.nombre + ': ' + ((r && r.error) || 'no se pudo'));
   }
   btn.disabled = false; btn.textContent = txt;
-  if (ok) showToast('✂️ ' + ok + ' fracci' + (ok === 1 ? 'ón publicada' : 'ones publicadas') + ' ✓');
+  if (ok) showToast('✂️ ' + ok + ' fracci' + (ok === 1 ? 'ón publicada' : 'ones publicadas') + (fotos ? ' · 📸 ' + fotos + ' con foto armada' : '') + ' ✓');
   if (errores.length) setTimeout(() => alert('⚠️ No se publicó:\n\n' + errores.join('\n')), 300);
   await cargarProductos();
   renderFraccionar();
+}
+// ═══ 📸 v5.06 — LA FOTO DE LA FRACCIÓN, ARMADA CON LA FOTO REAL DE LA UNIDAD (idea del usuario 24/09) ═══════════
+// La foto de la x5 son 5 copias de la foto 2 de la bolsa (la unidad suelta), acomodadas, con un cartel "x 5". Nada lo
+// genera una IA: son los mismos píxeles de la foto (así el envoltorio y el hebreo no se inventan). Con fondo blanco, las
+// copias se enciman y el blanco desaparece (modo "multiplicar").
+function _fotoUnidadDe(b) {
+  const ims = String((b && b.imagen) || '').split(',').map(x => x.trim()).filter(Boolean);
+  return ims[1] && !esVideo(ims[1]) ? ims[1] : '';
+}
+function _urlFotoCanvas(id) {   // grande, recortada a lo que hay (e_trim) y en PNG
+  if (/^https?:\/\//i.test(id)) return id.indexOf('res.cloudinary.com') !== -1 ? id.replace('/upload/', '/upload/e_trim:10/w_700,f_png/') : id;
+  return `${CLOUDINARY_BASE}/e_trim:10/w_700,f_png/${id}`;
+}
+const _fotoCanvasCache = {};
+async function _cargarFotoCanvas(id) {
+  if (_fotoCanvasCache[id]) return _fotoCanvasCache[id];
+  const r = await fetch(_urlFotoCanvas(id), { mode: 'cors', cache: 'no-store' });
+  if (!r.ok) throw new Error('no pude bajar la foto (' + r.status + ')');
+  const bm = await createImageBitmap(await r.blob());
+  _fotoCanvasCache[id] = bm;
+  return bm;
+}
+// Dónde va cada copia: en grilla (el último renglón centrado), cada una un poco girada y encimada, como sueltas.
+// Las columnas se eligen según la FORMA de la unidad (ancho ÷ alto): una barrita alargada va apilada, un chupetín va en
+// fila — la que deja cada unidad más grande.
+function _layoutFotoFraccion(n, W, H, aspecto = 1) {
+  const m = Math.min(Math.max(1, n), 12);
+  const mx = W * 0.07, myTop = H * 0.13, myBot = H * 0.05, aw = W - 2 * mx, ah = H - myTop - myBot;
+  let cols = 1, mejor = 0;
+  for (let c = 1; c <= m; c++) { const rr = Math.ceil(m / c), alto = Math.min((aw / c) / aspecto, ah / rr); if (alto > mejor * 1.001) { mejor = alto; cols = c; } }
+  const rows = Math.ceil(m / cols);
+  const cw = aw / cols, ch = ah / rows;
+  const giros = [-5, 4, -3, 6, -2, 3, -6, 2, -4, 5, -1, 1];
+  const pos = [];
+  for (let i = 0; i < m; i++) {
+    const r = Math.floor(i / cols), enFila = r === rows - 1 ? m - r * cols : cols;
+    const c = i - r * cols, x0 = mx + (W - 2 * mx - enFila * cw) / 2;
+    pos.push({ cx: x0 + c * cw + cw / 2, cy: myTop + r * ch + ch / 2, w: cw * 1.12, h: ch * 1.12, giro: giros[i] * Math.PI / 180 });
+  }
+  return pos;
+}
+async function armarFotoFraccion(unidadId, n) {
+  const img = await _cargarFotoCanvas(unidadId);
+  const W = 1000, H = 1000, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'multiply';
+  for (const p of _layoutFotoFraccion(n, W, H, img.width / img.height)) {
+    const esc_ = Math.min(p.w / img.width, p.h / img.height), w = img.width * esc_, h = img.height * esc_;
+    ctx.save(); ctx.translate(p.cx, p.cy); ctx.rotate(p.giro); ctx.drawImage(img, -w / 2, -h / 2, w, h); ctx.restore();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // el cartel "x 5" (letra de verdad, no dibujada por una IA)
+  ctx.fillStyle = '#b85c38'; ctx.beginPath(); ctx.arc(W - 125, 125, 100, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const t = 'x' + n; ctx.font = '800 ' + (t.length > 3 ? 70 : 88) + 'px "DM Sans", system-ui, sans-serif'; ctx.fillText(t, W - 125, 130);
+  return cv;
+}
+async function _subirFotoArmada(cv) {
+  const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+  const fd = new FormData(); fd.append('file', blob, 'fraccion.jpg'); fd.append('upload_preset', CLOUDINARY_PRESET); fd.append('folder', 'shuk-mamtakim');
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+  const d = await res.json().catch(() => ({}));
+  if (!d.public_id) throw new Error((d.error && d.error.message) || 'no se pudo subir la foto');
+  return d.public_id;
+}
+// Arma, sube y deja la foto en la fracción: primero la armada, después la unidad sola.
+async function _ponerFotoArmada(fraccionId, unidadId, n) {
+  const pid = await _subirFotoArmada(await armarFotoFraccion(unidadId, n));
+  const r = await apiWrite(new URLSearchParams({ accion: 'editarProducto', id: String(fraccionId), imagen: pid + ',' + unidadId }), '');
+  if (r && r.error) throw new Error(r.error);
+  return pid;
+}
+// Vista previa en la fila del publicador (para ver cómo queda ANTES de publicar y poder no usarla).
+let _fracFotoTimer = {};
+function _fracPreview(id, i) {
+  const k = id + '-' + i;
+  clearTimeout(_fracFotoTimer[k]);
+  _fracFotoTimer[k] = setTimeout(async () => {
+    const r = (_fracSel[id] || [])[i], el = document.getElementById('frac-foto-' + id + '-' + i);
+    const b = productos.find(x => String(x.id) === String(id));
+    if (!r || !el || !b || _porPeso(b)) return;
+    const n = parseInt(r.cant) || 0, uni = _fotoUnidadDe(b);
+    if (!uni) { el.innerHTML = '<span style="color:var(--texto-suave)">📷 La bolsa no tiene foto de la unidad (foto 2): la fracción sale con la foto de la bolsa. Cargala en la ficha y después tocá 🖼️.</span>'; return; }
+    const cq = _fracCuenta(b, n, 1);
+    if (!(n > 0) || (!cq.ok && cq.costo === undefined)) { el.innerHTML = ''; return; }   // cantidad inválida: sin vista previa
+    el.innerHTML = '<span style="color:var(--texto-suave)">📸 armando la foto…</span>';
+    try {
+      const cv = await armarFotoFraccion(uni, n);
+      if (parseInt(((_fracSel[id] || [])[i] || {}).cant) !== n) return;   // cambió mientras armaba
+      el.innerHTML = `<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><img src="${cv.toDataURL('image/jpeg', 0.75)}" alt="" style="width:74px;height:74px;border-radius:8px;border:1px solid var(--gris-medio);object-fit:cover"><span><input type="checkbox" ${r.sinFoto ? '' : 'checked'} onchange="fracUsarFoto('${jsAttr(String(id))}',${i},this.checked)"> usar esta foto <span style="color:var(--texto-suave)">(${n} copias de la foto de la unidad)</span></span></label>`;
+    } catch (e) { el.innerHTML = '<span style="color:var(--dorado)">📸 No pude armar la foto (' + esc(e.message || 'error') + '): sale con la de la bolsa.</span>'; }
+  }, 450);
+}
+function fracUsarFoto(id, i, on) { const r = (_fracSel[id] || [])[i]; if (r) r.sinFoto = !on; }
+// 🖼️ en una fracción ya publicada: arma su foto con la unidad de la bolsa (ej. cuando recién cargaste la foto 2).
+async function rearmarFotoFraccion(fid) {
+  const f = productos.find(x => String(x.id) === String(fid)), b = f && bolsaDe(f);
+  if (!f || !b) return;
+  const uni = _fotoUnidadDe(b);
+  if (!uni) { alert('📷 La bolsa «' + b.nombre + '» no tiene la foto de la unidad (foto 2). Cargala en su ficha y volvé a tocar 🖼️.'); return; }
+  let cv;
+  try { cv = await armarFotoFraccion(uni, f.fraccionCant); } catch (e) { alert('No pude armar la foto: ' + (e.message || e)); return; }
+  const ov = document.createElement('div'); ov.id = 'frac-foto-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:1rem;text-align:center">
+      <div style="font-weight:800;margin-bottom:0.5rem">${esc(f.nombre)}</div>
+      <img src="${cv.toDataURL('image/jpeg', 0.8)}" alt="" style="width:100%;border-radius:10px;border:1px solid var(--gris-medio)">
+      <div style="font-size:0.74rem;color:var(--texto-suave);margin:0.4rem 0 0.7rem">${f.fraccionCant} copias de la foto real de la unidad — nada inventado.</div>
+      <div style="display:flex;gap:0.5rem"><button type="button" id="frac-foto-no" style="flex:1;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:10px;background:#fff;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button type="button" id="frac-foto-si" class="guardar-stock-btn" style="flex:1;margin:0">🖼️ Usar esta foto</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#frac-foto-no').onclick = () => ov.remove();
+  ov.querySelector('#frac-foto-si').onclick = async (ev) => {
+    ev.target.disabled = true; ev.target.textContent = 'Subiendo…';
+    try { await _ponerFotoArmada(f.id, uni, f.fraccionCant); showToast('🖼️ Foto puesta ✓'); ov.remove(); await cargarProductos(); renderFraccionar(); }
+    catch (e) { ev.target.disabled = false; ev.target.textContent = '🖼️ Usar esta foto'; alert('No se pudo poner la foto: ' + (e.message || e)); }
+  };
 }
 async function borrarFraccion(id) {
   const f = productos.find(x => String(x.id) === String(id)); if (!f) return;
@@ -10480,6 +10613,7 @@ function epFracPorChange() {
   if (eu) eu.style.display = g ? 'none' : '';
   if (eg) { eg.style.display = g ? '' : 'none'; if (g && !eg.value && pe) eg.value = pe.value; if (g && pe) pe.value = eg.value; }
   if (pb) pb.style.display = g ? 'none' : '';
+  try { renderFotosEditor(); } catch (e) {}   // las etiquetas "1 · paquete / 2 · unidad" dependen de cómo viene
 }
 function _epFraccionUI(p) {
   const box = document.getElementById('ep-frac'); if (!box) return;
@@ -10587,9 +10721,25 @@ function _historialComprasHtml(r) {
   </div>`;
 }
 
+// 📸 v5.06 (regla del usuario): en una BOLSA que viene por unidades, la foto 1 es el PAQUETE y la foto 2 la UNIDAD
+// suelta (con ella se arman solas las fotos de las fracciones). De la 3 en adelante, lo que sea.
+function _epEsBolsaUnidades() {
+  const p = productos.find(x => String(x.id) === String(_epId));
+  if (p && esFraccion(p)) return false;
+  return document.getElementById('ep-fracpor')?.value !== 'g' && (parseInt(document.getElementById('ep-upp')?.value) || 1) > 1;
+}
 function renderFotosEditor() {
   const cont = document.getElementById('ep-fotos');
   if (!cont) return;
+  const bolsaU = _epEsBolsaUnidades();
+  const aviso = document.getElementById('ep-fotos-aviso');
+  if (aviso) {
+    const fotos = _epMedia.filter(m => !(m.k === 'old' ? esVideo(m.v) : m.v.type.startsWith('video/'))).length;
+    aviso.style.display = bolsaU ? '' : 'none';
+    aviso.innerHTML = !bolsaU ? '' : fotos >= 2
+      ? '📸 <b>Foto 1 = el paquete · foto 2 = la unidad suelta.</b> Con la 2 se arman solas las fotos de las fracciones (x3, x5…). Arrastrá para cambiar el orden.'
+      : '📷 <b>Falta la foto 2: la UNIDAD suelta</b>, sacada sobre una hoja blanca. Con ella se arman solas las fotos de las fracciones (x3, x5…). La foto 1 es el paquete.';
+  }
   cont.innerHTML = _epMedia.map((m, i) => {
     const esVid = m.k === 'old' ? esVideo(m.v) : m.v.type.startsWith('video/');
     const src = m.k === 'old' ? imgUrl(m.v)[0] : URL.createObjectURL(m.v);
@@ -10598,7 +10748,8 @@ function renderFotosEditor() {
       : `<img src="${esc(src)}" style="width:100%;height:80px;object-fit:contain;background:var(--gris);border-radius:8px;pointer-events:none" ${m.k === 'new' ? 'onload="URL.revokeObjectURL(this.src)"' : 'onerror="this.style.opacity=0.3"'}>`;
     const esPortada = i === 0;
     const label = esPortada
-      ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:var(--dorado);color:#fff;font-weight:700;border-radius:0 0 8px 8px;pointer-events:none">★ portada</div>`
+      ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:var(--dorado);color:#fff;font-weight:700;border-radius:0 0 8px 8px;pointer-events:none">${bolsaU ? '★ 1 · paquete' : '★ portada'}</div>`
+      : (bolsaU && i === 1) ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:#8e44ad;color:#fff;font-weight:700;border-radius:0 0 8px 8px;pointer-events:none">2 · unidad</div>`
       : (m.k === 'new' ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:0.55rem;background:rgba(26,122,60,0.75);color:#fff;border-radius:0 0 8px 8px;pointer-events:none">nueva</div>` : '');
     const btnPortada = esPortada ? '' : `<button type="button" onclick="portadaFotoEditor(${i})" title="Hacer portada" style="position:absolute;top:-6px;left:-6px;width:24px;height:24px;border-radius:50%;border:none;background:#c9954a;color:#fff;font-size:0.7rem;cursor:pointer;line-height:1;z-index:2">⭐</button>`;
     return `<div class="ep-foto-item" data-idx="${i}" style="position:relative;cursor:grab;touch-action:none;border-radius:8px">

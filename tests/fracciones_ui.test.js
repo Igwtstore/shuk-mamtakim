@@ -10,12 +10,14 @@ const RAIZ = path.resolve(__dirname, '..');
 const SITIO = 'http://127.0.0.1:3199';
 const P = (id, nombre, stock, precio, extra = {}) => ({ id, nombre, descripcion: 'desc', precio_may: '5', precio_min: precio, stock, imagen: '', activo: true, categoria: 'Marshmelow', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: '$', unidades_por_paquete: 1, peso: 0, fraccion_de: null, fraccion_cant: null, sueltas: 0, fraccionar_por: 'u', ...extra });
 const PRODS = [
-  P(245, 'Marshmallow Twists Carmel', 2, 38999, { precio_may: '21.9', moneda: 'U$S', unidades_por_paquete: 18 }),
+  P(245, 'Marshmallow Twists Carmel', 2, 38999, { precio_may: '21.9', moneda: 'U$S', unidades_por_paquete: 18, imagen: 'shuk-mamtakim/bolsa245,shuk-mamtakim/unidad245' }),
   P(400, 'Marshmallow Twists Carmel · x4', 9, 9500, { precio_may: null, moneda: 'U$S', unidades_por_paquete: 4, fraccion_de: '245', fraccion_cant: 4, visible_cat: 'Minorista' }),
-  P(208, 'Kinder Chocolate x 16', 0, 24000, { precio_may: '13.6', moneda: 'U$S', unidades_por_paquete: 16, categoria: 'Chocolate' }),
+  P(208, 'Kinder Chocolate x 16', 0, 24000, { precio_may: '13.6', moneda: 'U$S', unidades_por_paquete: 16, categoria: 'Chocolate', imagen: 'shuk-mamtakim/kinder1' }),
   P(2, 'Klik cornflakes 65 g', 9, 7999, { categoria: 'Chocolate' }),
   P(500, 'Pitzujim-Mani Sabor Grill', 10, 9999, { categoria: 'Pitzujim', precio_may: '8300', peso: 100, fraccionar_por: 'g', descripcion: 'Manies Sabor Grill (100g) (Mezonot!!)' }),
 ];
+// 📸 una "foto de la unidad" de mentira (una barrita roja sobre blanco) para armar las fotos de las fracciones
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAPAAAAA8CAIAAADXHaAKAAAA2UlEQVR4nO3UsQ2DABAEQbDogzLcf+gyqOSpAMsBMtJqJv3kgtWvM7NAxevpAXAnQZMiaFIETYqgSRE0KYImRdCkCJqU7fv5s+//WgK/eh/H1cmHJkXQpAiaFEGTImhSBE2KoEkRNCmCJkXQpAiaFEGTImhSBE2KoEkRNCmCJkXQpAiaFEGTImhSBE2KoEkRNCmCJkXQpAiaFEGTImhSBE2KoEkRNCmCJkXQpAiaFEGTImhSBE2KoEkRNCnrzDy9AW7jQ5MiaFIETYqgSRE0KYImRdCkCJql5AQnZglzMozzTwAAAABJRU5ErkJggg==', 'base64');
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
 
@@ -25,15 +27,17 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   process.on('exit', () => { try { srv.kill(); mock.kill(); } catch { /**/ } });
   await esperar(1500);
   const b = await chromium.launch();
-  const checks = [], errs = [], motor = [], dialogos = [], iaPedidos = [];
+  const checks = [], errs = [], motor = [], dialogos = [], iaPedidos = [], subidas = [];
   const ok = (n, c) => checks.push({ n, ok: !!c });
-  const ctx = await b.newContext({ viewport: { width: +(process.env.ANCHO || 1100), height: 900 } });
+  const ctx = await b.newContext({ viewport: { width: +(process.env.ANCHO || 1100), height: 900 }, serviceWorkers: 'block' });   // el SW pediría las fotos a Cloudinary de verdad
   const pg = await ctx.newPage();
   await pg.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); window.supabase = { createClient: () => ({ auth: { getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) } }) }; });
   pg.on('pageerror', e => errs.push(e.message));
   pg.on('dialog', d => { dialogos.push(d.type() + ':' + d.message()); d.accept(); });
   await pg.route('**/*', route => {
     const rq = route.request(), u = rq.url();
+    if (u.startsWith('https://res.cloudinary.com/')) return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: PNG });
+    if (u.startsWith('https://api.cloudinary.com/')) { subidas.push(u); return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ public_id: 'shuk-mamtakim/armada-' + subidas.length }) }); }
     if (u.includes('/functions/v1/api')) {
       const q = Object.fromEntries(new URL(u).searchParams.entries());
       let body = {}; try { body = rq.postData() ? JSON.parse(rq.postData()) : {}; } catch { body = {}; }
@@ -43,7 +47,11 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
         const fr = String(q.cants || '').split(',').map(Number).map(c => q.padre === '500' ? { cant: c, nombre: 'Pitzujim Maní Grill x ' + c + ' g ✨', desc: 'Maníes IA x ' + c + ' g', ia: true } : { cant: c, nombre: 'Marshmallow Twists Carmel x ' + c + ' unidades ✨', desc: 'Bastones IA x ' + c + ' unid', ia: true });
         return new Promise(r => setTimeout(r, 400)).then(() => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, ia: true, fracciones: fr }) }));
       }
-      if (['crearFracciones', 'editarProducto', 'eliminarProducto'].includes(acc)) { motor.push({ acc, ...q, ...body }); return route.fulfill({ contentType: 'application/json', body: '{"ok":true,"creadas":[]}' }); }
+      if (['crearFracciones', 'editarProducto', 'eliminarProducto'].includes(acc)) {
+        motor.push({ acc, ...q, ...body });
+        let creadas = []; if (acc === 'crearFracciones') { try { creadas = JSON.parse(body.items).map((it, k) => ({ id: String(900 + k), fraccionCant: it.cant })); } catch { /**/ } }
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, creadas }) });
+      }
       if (acc === 'getEstadoTienda') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ estado: 'abierta' }) });
       return route.fulfill({ contentType: 'application/json', body: '[]' });
     }
@@ -90,6 +98,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   const n0 = await nom0();
   ok('al instante: "Marshmallow Twists Carmel x 3 unidades" (la regla fija, sin esperar a la IA)', n0.n === 'Marshmallow Twists Carmel x 3 unidades' && n0.d === 'desc x 3 unid');
   ok('y después la IA lo mejora (una sola consulta por bolsa)', await hasta(async () => (await nom0()).n === 'Marshmallow Twists Carmel x 3 unidades ✨') && iaPedidos.length >= 1 && iaPedidos[0].padre === '245' && iaPedidos[0].cants === '3');
+  ok('📸 la fila muestra cómo queda la foto (armada con la foto de la unidad) y "usar esta foto"', await hasta(async () => pg.evaluate(() => { const el = document.getElementById('frac-foto-245-0'); return !!el && !!el.querySelector('img') && el.innerText.includes('usar esta foto') && el.innerText.includes('3 copias de la foto de la unidad'); })));
   ok('…avisando "✨ escrito por la IA — corregilo si querés"', (await nom0()).ia.includes('escrito por la IA') && (await nom0()).d === 'Bastones IA x 3 unid');
   const precio = pg.locator('#frac-lista input[placeholder="6500"]').first();
   await precio.click(); await precio.pressSequentially('6500');
@@ -119,6 +128,8 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.locator('#frac-nom-245-1').fill('Mi nombre a mano');   // lo escribís vos antes de que conteste la IA
   await p4.click(); await p4.pressSequentially('10000');
   ok('lo que escribiste vos NO lo pisa la IA (la descripción sí la completa)', await hasta(async () => pg.evaluate(() => document.getElementById('frac-desc-245-1').value === 'Bastones IA x 5 unid')) && await pg.evaluate(() => document.getElementById('frac-nom-245-1').value === 'Mi nombre a mano'));
+  await hasta(async () => pg.evaluate(() => !!document.querySelector('#frac-foto-245-1 input[type=checkbox]')));
+  await pg.evaluate(() => document.querySelector('#frac-foto-245-1 input[type=checkbox]').click());   // la x5 sin foto armada
   if (process.env.CAPTURA) await pg.locator('#frac-card').screenshot({ path: process.env.CAPTURA });
   ok('una x5 a $ 10.000 → "Publicar 2 fracciones"', (await pg.evaluate(() => document.getElementById('frac-publicar').textContent)).includes('Publicar 2 fracciones'));
 
@@ -129,6 +140,8 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   ok('…exactamente: padre 245, x3 y x5 con su precio, su nombre y su descripción', mf.padre === '245' && mf.items === JSON.stringify([{ cant: 3, precio: 6500, nombre: 'Marshmallow Twists Carmel x 3 unidades ✨', desc: 'Bastones IA x 3 unid' }, { cant: 5, precio: 10000, nombre: 'Mi nombre a mano', desc: 'Bastones IA x 5 unid' }]));
   ok('nunca manda costo ni stock (los pone la base)', !/costo|stock/.test(mf.items || ''));
   ok('después de publicar, la bolsa queda destildada', await hasta(async () => pg.evaluate(() => !Object.keys(_fracSel).length)));
+  ok('📸 al publicar se sube UNA foto armada (la x3; la x5 la destildaste)', subidas.length === 1);
+  ok('📸 …y queda en la fracción: primero la armada, después la unidad sola', await hasta(async () => motor.some(m => m.acc === 'editarProducto' && m.id === '900' && m.imagen === 'shuk-mamtakim/armada-1,shuk-mamtakim/unidad245')) && !motor.some(m => m.acc === 'editarProducto' && m.id === '901' && m.imagen));
 
   // ⚖️ Pitzujim por PESO: 10 bolsitas de 100 g = 1 kg
   await prep();
@@ -224,6 +237,29 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => cerrarEditorProducto());
   await pg.evaluate(() => irAEditarProducto(2));
   ok('un producto que viene suelto no muestra la caja de fracciones', await pg.evaluate(() => document.getElementById('ep-frac').style.display === 'none'));
+
+  // 📸 🖼️ en una fracción ya publicada: muestra la foto armada y la pone al aceptar
+  await prep();
+  await pg.evaluate(() => rearmarFotoFraccion(400));
+  ok('📸 🖼️ muestra la foto armada antes de ponerla ("4 copias de la foto real de la unidad")', await hasta(async () => pg.evaluate(() => { const o = document.getElementById('frac-foto-ov'); return !!o && !!o.querySelector('img') && o.innerText.includes('4 copias de la foto real de la unidad'); })));
+  await pg.evaluate(() => document.getElementById('frac-foto-si').click());
+  ok('📸 …y al aceptar la sube y la deja en la fracción', await hasta(async () => subidas.length === 2 && motor.some(m => m.acc === 'editarProducto' && m.id === '400' && m.imagen === 'shuk-mamtakim/armada-2,shuk-mamtakim/unidad245')));
+  // 📸 La ficha de la bolsa: "1 · paquete" / "2 · unidad", y el aviso si falta la unidad
+  await prep();
+  await pg.evaluate(() => irAEditarProducto(245));
+  const fo = await pg.evaluate(() => ({ t: document.getElementById('ep-fotos').innerText, a: document.getElementById('ep-fotos-aviso').innerText, vis: getComputedStyle(document.getElementById('ep-fotos-aviso')).display !== 'none' }));
+  ok('📸 ficha de la bolsa: las fotos dicen "1 · paquete" y "2 · unidad"', fo.t.includes('1 · paquete') && fo.t.includes('2 · unidad') && fo.vis && fo.a.includes('Foto 1 = el paquete · foto 2 = la unidad suelta'));
+  await pg.evaluate(() => cerrarEditorProducto());
+  await pg.evaluate(() => irAEditarProducto(208));
+  ok('📸 bolsa con una sola foto: "Falta la foto 2: la UNIDAD suelta, sacada sobre una hoja blanca"', await pg.evaluate(() => document.getElementById('ep-fotos-aviso').innerText.includes('Falta la foto 2: la UNIDAD suelta')));
+  await pg.evaluate(() => cerrarEditorProducto());
+  await pg.evaluate(() => irAEditarProducto(2));
+  ok('📸 un producto que viene suelto no muestra nada de esto', await pg.evaluate(() => getComputedStyle(document.getElementById('ep-fotos-aviso')).display === 'none' && !document.getElementById('ep-fotos').innerText.includes('paquete')));
+  await pg.evaluate(() => cerrarEditorProducto());
+  // Guardar una ficha por unidades no toca lo que ya estaba cargado (pedido del usuario: "que se conserve")
+  await pg.evaluate(() => irAEditarProducto(208));
+  await pg.evaluate(() => guardarEdicionProducto());
+  ok('guardar una bolsa por unidades manda sus 16 unidades tal cual y "por unidades"', await hasta(async () => motor.filter(m => m.acc === 'editarProducto' && m.id === '208').some(m => m.unidadesPorPaquete === '16' && m.fraccionarPor === 'u')));
 
   ok('sin errores de JavaScript en la página', errs.length === 0);
   if (errs.length) console.log('Errores:', errs.slice(0, 5));

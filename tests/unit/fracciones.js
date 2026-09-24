@@ -93,6 +93,14 @@ function run() {
   const reales = [['Elite Etzbaot Mix x 34 unid', 5, 'u'], ['Pack mini Pesek Zman (19-20 unid)', 3, 'u'], ['Caramelos Mentos Discovery Pack x 4', 2, 'u'], ['Golosina WOW tira sabor (Azul) x 10 paq.', 5, 'u'], ['Googles Toy · Pastillitas con forma de Pizza!', 6, 'u'], ['Pitzujim-Pecán Oreo.', 500, 'g'], ['Caramelos liofilizados (freeze dried) sabor mora x12 bolsitas (120g / 12 x 10g)', 4, 'u'], ['Semillas de Girasol Israelies, saladas, gigantes!! x 100 grs.', 250, 'g']];
   t.ok('el panel y el motor escriben EXACTAMENTE lo mismo (' + reales.length + ' nombres y descripciones reales)', reales.every(([x, c, u]) => W._fracNombre(x, c, u) === M.nombreFraccion(x, c, u) && W._fracDesc(x, c, u) === M.descFraccion(x, c, u)));
   t.ok('crearFracciones usa la regla (ya no "· x5")', /nombreFraccion\(padre\.nombre, cant, porPeso \? 'g' : 'u'\)/.test(TS) && !/padre\.nombre \+ ' · x' \+ cant/.test(TS));
+  // 📸 v5.06: la foto armada acomoda las copias según la forma de la unidad
+  const L = new Function(fnH('_layoutFotoFraccion') + '\nreturn _layoutFotoFraccion;')();
+  const cols = (pos) => new Set(pos.map((p) => Math.round(p.cx))).size;
+  t.eq('📸 barrita alargada (4:1) x5 → apiladas en 1 columna', cols(L(5, 1000, 1000, 4)), 1);
+  t.eq('📸 chupetín alto (1:2) x3 → en fila (3 columnas)', cols(L(3, 1000, 1000, 0.5)), 3);
+  t.eq('📸 bolsita cuadrada x4 → 2 × 2', cols(L(4, 1000, 1000, 1)), 2);
+  t.eq('📸 x20 dibuja 12 como mucho (el cartel dice el número real)', L(20, 1000, 1000, 1).length, 12);
+  t.ok('📸 ninguna copia se sale de la foto', [[5, 4], [3, 0.5], [7, 1], [12, 2]].every(([n, a]) => L(n, 1000, 1000, a).every((p) => p.cx > 0 && p.cx < 1000 && p.cy > 0 && p.cy < 1000)));
   t.ok('sugerirFraccion es solo de Jony', /SOLO_JONY = \[[^\]]*'sugerirFraccion'/.test(TS));
   return t.result();
 }
