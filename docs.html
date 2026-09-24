@@ -147,7 +147,7 @@
   </div>
   <div>
     <div class="cover-title">Documentación del Sistema</div>
-    <div class="cover-meta">Versión 3.30 · Julio 2026 · Uso interno</div>
+    <div class="cover-meta" id="cover-meta">Versión 5.02 · Septiembre 2026 · Uso interno</div>
   </div>
   <div class="cover-bar"></div>
 </div>
@@ -946,5 +946,22 @@
 </div>
 
 </div>
+<script>
+// La portada toma sola la versión y la fecha de la PRIMERA fila del historial: así nunca más queda vieja
+// (estuvo en "3.30 · Julio" mientras el sistema iba por la 5.x).
+(function () {
+  try {
+    const td = document.querySelectorAll('table tr td');
+    for (let i = 0; i < td.length; i++) {
+      const m = /^v(\d+\.\d+)$/.exec((td[i].textContent || '').trim());
+      if (!m) continue;
+      const meses = { Ene: 'Enero', Feb: 'Febrero', Mar: 'Marzo', Abr: 'Abril', May: 'Mayo', Jun: 'Junio', Jul: 'Julio', Ago: 'Agosto', Sep: 'Septiembre', Oct: 'Octubre', Nov: 'Noviembre', Dic: 'Diciembre' };
+      const f = ((td[i + 1] && td[i + 1].textContent) || '').trim().replace(/^(\w{3})/, x => meses[x] || x);
+      document.getElementById('cover-meta').textContent = 'Versión ' + m[1] + (f ? ' · ' + f : '') + ' · Uso interno';
+      break;
+    }
+  } catch (e) { /* si algo falla, queda el texto escrito */ }
+})();
+</script>
 </body>
 </html>
