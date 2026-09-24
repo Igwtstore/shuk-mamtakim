@@ -20307,7 +20307,7 @@ function _identificarLineasPedido(lineas, v, prods) {
   // 🆔 v5.07 — PRIMERO, LOS PRODUCTOS QUE ESTA VENTA DESCONTÓ (caso #157, 24/09/2026): el chocolate #344
   // (de Jony) se renombró después del pedido. El renglón guarda el nombre VIEJO, que ya no es de ninguna
   // ficha, y el emparejamiento caía en "Chocolate Elite" = una ficha VIEJA de Miri (#1, stock 0): abrir
-  // el pedido y guardarlo sin tocar nada le pasaba la plata a ella (13 pedidos estaban así). Ahora cada
+  // el pedido y guardarlo sin tocar nada le pasaba la plata a ella (10 pedidos estaban así). Ahora cada
   // renglón se busca primero entre los IDs de stock_updates, por nombre actual O anterior (nombres_prev);
   // el catálogo entero queda solo para lo que no encaja (productos borrados, ventas viejas sin registro).
   const _deLaVenta = _suIds.size ? cat.filter(p => _suIds.has(String(p.id))) : [];
