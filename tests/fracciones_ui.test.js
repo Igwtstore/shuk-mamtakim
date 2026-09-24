@@ -8,12 +8,13 @@ const { spawn } = require('child_process');
 const path = require('path');
 const RAIZ = path.resolve(__dirname, '..');
 const SITIO = 'http://127.0.0.1:3199';
-const P = (id, nombre, stock, precio, extra = {}) => ({ id, nombre, descripcion: 'desc', precio_may: '5', precio_min: precio, stock, imagen: '', activo: true, categoria: 'Marshmelow', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: '$', unidades_por_paquete: 1, fraccion_de: null, fraccion_cant: null, sueltas: 0, ...extra });
+const P = (id, nombre, stock, precio, extra = {}) => ({ id, nombre, descripcion: 'desc', precio_may: '5', precio_min: precio, stock, imagen: '', activo: true, categoria: 'Marshmelow', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: '$', unidades_por_paquete: 1, peso: 0, fraccion_de: null, fraccion_cant: null, sueltas: 0, fraccionar_por: 'u', ...extra });
 const PRODS = [
   P(245, 'Marshmallow Twists Carmel', 2, 38999, { precio_may: '21.9', moneda: 'U$S', unidades_por_paquete: 18 }),
   P(400, 'Marshmallow Twists Carmel · x4', 9, 9500, { precio_may: null, moneda: 'U$S', unidades_por_paquete: 4, fraccion_de: '245', fraccion_cant: 4, visible_cat: 'Minorista' }),
   P(208, 'Kinder Chocolate x 16', 0, 24000, { precio_may: '13.6', moneda: 'U$S', unidades_por_paquete: 16, categoria: 'Chocolate' }),
   P(2, 'Klik cornflakes 65 g', 9, 7999, { categoria: 'Chocolate' }),
+  P(500, 'Pitzujim-Mani Sabor Grill', 10, 9999, { categoria: 'Pitzujim', precio_may: '8300', peso: 100, fraccionar_por: 'g', descripcion: 'Manies Sabor Grill (100g) (Mezonot!!)' }),
 ];
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
@@ -39,7 +40,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
       const acc = q.accion || body.accion || '';
       if (acc === 'sugerirFraccion') {   // la IA (simulada): contesta con un "✨" para distinguirla de la regla fija
         iaPedidos.push(q);
-        const fr = String(q.cants || '').split(',').map(Number).map(c => ({ cant: c, nombre: 'Marshmallow Twists Carmel x ' + c + ' unidades ✨', desc: 'Bastones IA x ' + c + ' unid', ia: true }));
+        const fr = String(q.cants || '').split(',').map(Number).map(c => q.padre === '500' ? { cant: c, nombre: 'Pitzujim Maní Grill x ' + c + ' g ✨', desc: 'Maníes IA x ' + c + ' g', ia: true } : { cant: c, nombre: 'Marshmallow Twists Carmel x ' + c + ' unidades ✨', desc: 'Bastones IA x ' + c + ' unid', ia: true });
         return new Promise(r => setTimeout(r, 400)).then(() => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, ia: true, fracciones: fr }) }));
       }
       if (['crearFracciones', 'editarProducto', 'eliminarProducto'].includes(acc)) { motor.push({ acc, ...q, ...body }); return route.fulfill({ contentType: 'application/json', body: '{"ok":true,"creadas":[]}' }); }
@@ -54,7 +55,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.goto(SITIO + '/tienda', { waitUntil: 'domcontentloaded' });
   await hasta(async () => pg.evaluate(() => typeof productos !== 'undefined' && productos.length > 3));
   // Jony en el panel; los costos llegan del endpoint privado (acá se ponen a mano) y el dólar a $ 1.500.
-  const prep = () => pg.evaluate(() => { adminAuth = true; socioActual = 'jony'; _tc = 1500; productos.forEach(p => { if (p.id === 245) p.costo = 18; if (p.id === 400) p.costo = 4; if (p.id === 208) p.costo = 9.01; }); });
+  const prep = () => pg.evaluate(() => { adminAuth = true; socioActual = 'jony'; _tc = 1500; productos.forEach(p => { if (p.id === 245) p.costo = 18; if (p.id === 400) p.costo = 4; if (p.id === 208) p.costo = 9.01; if (p.id === 500) p.costo = 5316.55; }); });
   await prep();
 
   const cat = await pg.evaluate(() => productos.map(p => ({ id: p.id, fr: p.fraccionDe, k: p.fraccionCant, su: p.sueltas })));
@@ -129,6 +130,32 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   ok('nunca manda costo ni stock (los pone la base)', !/costo|stock/.test(mf.items || ''));
   ok('después de publicar, la bolsa queda destildada', await hasta(async () => pg.evaluate(() => !Object.keys(_fracSel).length)));
 
+  // ⚖️ Pitzujim por PESO: 10 bolsitas de 100 g = 1 kg
+  await prep();
+  await pg.evaluate(() => renderFraccionar());
+  const tp = (await card()).replace(/\s+/g, ' ');
+  ok('⚖️ el Pitzujim aparece "pesa 100 g · 10 cerradas · 100 g cuestan $ 5.317 · bolsita a $ 9.999"', tp.includes('Pitzujim-Mani Sabor Grill') && tp.includes('⚖️ pesa 100 g · 10 cerradas · 100 g cuestan $ 5.317 · bolsita a $ 9.999'));
+  await pg.evaluate(() => fracTildar('500', true));
+  const cg = pg.locator('#frac-lista input[placeholder="250"]').first();
+  await cg.click(); await cg.pressSequentially('250');
+  ok('⚖️ al instante: "Pitzujim-Mani Sabor Grill x 250 g" y la descripción sin el "(100g)"', await pg.evaluate(() => document.getElementById('frac-nom-500-0').value === 'Pitzujim-Mani Sabor Grill x 250 g' && document.getElementById('frac-desc-500-0').value === 'Manies Sabor Grill (Mezonot!!) x 250 g'));
+  const pgp = pg.locator('#frac-lista input[placeholder="6500"]').first();
+  await pgp.click(); await pgp.pressSequentially('24000');
+  const ig = await pg.evaluate(() => document.getElementById('frac-info-500-0').innerText);
+  ok('⚖️ 250 g: costo $ 13.291 (× 2,5) · +45% · alcanza 4 · a precio de bolsita $ 24.998', ig.includes('costo $ 13.291') && ig.includes('+45%') && ig.includes('alcanza 4') && ig.includes('a precio de bolsa: $ 24.998'));
+  ok('⚖️ la IA recibe que es por peso', await hasta(async () => iaPedidos.some(q => q.padre === '500' && q.unidad === 'g' && q.cants === '250')));
+  await pg.evaluate(() => fracAgregarFila('500'));
+  const cg2 = pg.locator('#frac-lista input[placeholder="250"]').nth(1);
+  await cg2.click(); await cg2.pressSequentially('1000');
+  const i2 = await pg.evaluate(() => ({ info: document.getElementById('frac-info-500-1').innerText, nom: document.getElementById('frac-nom-500-1').value }));
+  ok('⚖️ 1 kg (más que la bolsita) vale: "x 1 kg", alcanza 1, costo $ 53.166', i2.nom.startsWith('Pitzujim') && /x 1 kg/.test(i2.nom) && i2.info.includes('alcanza 1') && i2.info.includes('costo $ 53.166'));
+  await pg.evaluate(() => fracAgregarFila('500'));
+  const cg3 = pg.locator('#frac-lista input[placeholder="250"]').nth(2);
+  await cg3.click(); await cg3.pressSequentially('100');
+  if (process.env.CAPTURA2) await pg.locator('#frac-card').screenshot({ path: process.env.CAPTURA2 });
+  ok('⚖️ 100 g (la bolsita entera) no: "eso es la bolsita entera (100 g)"', (await pg.evaluate(() => document.getElementById('frac-info-500-2').innerText)).includes('eso es la bolsita entera (100 g)'));
+  await pg.evaluate(() => { delete _fracSel['500']; renderFraccionar(); });
+
   // Borrar una fracción
   await prep();
   await pg.evaluate(() => borrarFraccion(400));
@@ -183,6 +210,18 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   ok('otra bolsa: sus sueltas en 0 y la opción "Ambos" vuelve a estar (no quedó bloqueada)', k.su === '0' && !k.visAmbos);
   await pg.evaluate(() => { guardarEdicionProducto(); });
   ok('si no tocás las sueltas, no se mandan', await hasta(async () => motor.some(m => m.acc === 'editarProducto' && m.id === '208')) && !motor.some(m => m.acc === 'editarProducto' && m.id === '208' && 'sueltas' in m));
+  // ⚖️ La ficha: "Viene por: Peso (g)" con los gramos, y el "Peso x bolsa" no se carga dos veces
+  await prep();
+  await pg.evaluate(() => irAEditarProducto(500));
+  const fz = await pg.evaluate(() => ({ por: document.getElementById('ep-fracpor').value, gr: document.getElementById('ep-gramos').value, grVis: getComputedStyle(document.getElementById('ep-gramos')).display !== 'none', uppVis: getComputedStyle(document.getElementById('ep-upp')).display !== 'none', pesoVis: getComputedStyle(document.getElementById('ep-peso-box')).display !== 'none', aviso: document.getElementById('ep-frac').innerText }));
+  ok('⚖️ ficha del Pitzujim: "Viene por ⚖️ Peso (g)" = 100, sin el casillero de unidades ni el "Peso x bolsa" repetido', fz.por === 'g' && fz.gr === '100' && fz.grVis && !fz.uppVis && !fz.pesoVis);
+  ok('⚖️ y la caja dice "Gramos sueltos de bolsitas ya abiertas"', fz.aviso.includes('Gramos sueltos') && fz.aviso.includes('por peso'));
+  await pg.evaluate(() => { const g = document.getElementById('ep-gramos'); g.value = '120'; g.dispatchEvent(new Event('input')); });
+  await pg.evaluate(() => guardarEdicionProducto());
+  ok('⚖️ guardar manda "por peso" y los gramos como peso de la bolsa (120)', await hasta(async () => motor.some(m => m.acc === 'editarProducto' && m.id === '500' && m.fraccionarPor === 'g' && m.peso === '120')));
+  await pg.evaluate(() => irAEditarProducto(245));
+  ok('una bolsa por unidades muestra "📦 Unidades" y su casillero de siempre', await pg.evaluate(() => document.getElementById('ep-fracpor').value === 'u' && getComputedStyle(document.getElementById('ep-upp')).display !== 'none' && getComputedStyle(document.getElementById('ep-peso-box')).display !== 'none'));
+  await pg.evaluate(() => cerrarEditorProducto());
   await pg.evaluate(() => irAEditarProducto(2));
   ok('un producto que viene suelto no muestra la caja de fracciones', await pg.evaluate(() => document.getElementById('ep-frac').style.display === 'none'));
 

@@ -42,7 +42,7 @@ const tienda = new Function(
   'const esc = s => String(s == null ? "" : s);\n' +
   'const _monedaMay = p => (p.moneda === "U$S" ? "U$S" : "$");\n' +
   ['_precioDelModo', '_precioCorto'].map(n => constDe(HTML, n)).join('') +
-  ['esPesos', 'ofertaActiva', 'packActivo', 'ofertaVigente', 'precioEfectivo', '_fechaOfertaISO', '_usaLista', '_lrFila', '_listaRapidaHtml', 'lrPoner', 'lrCambiar', 'esFraccion', 'stockDisponible'].map(n => fnDe(HTML, n)).join('\n') +
+  ['esPesos', 'ofertaActiva', 'packActivo', 'ofertaVigente', 'precioEfectivo', '_fechaOfertaISO', '_usaLista', '_lrFila', '_listaRapidaHtml', 'lrPoner', 'lrCambiar', 'esFraccion', 'stockDisponible', '_porPeso', '_contenidoBolsa'].map(n => fnDe(HTML, n)).join('\n') +
   '\nconst _hoyAR = () => "2026-09-23";\n' +
   '\nreturn { _lrFila, _listaRapidaHtml, lrPoner, lrCambiar, _usaLista, toasts, eventos, carrito: () => carrito,' +
   ' set: (o) => { if ("productos" in o) productos = o.productos; if ("carrito" in o) carrito = o.carrito; if ("modo" in o) modo = o.modo; if ("estado" in o) _estadoTienda = o.estado; if ("admin" in o) adminAuth = o.admin; if ("lista" in o) _vistaLista = o.lista; } };')();

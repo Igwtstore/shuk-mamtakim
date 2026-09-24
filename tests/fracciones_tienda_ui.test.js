@@ -8,13 +8,17 @@ const { spawn } = require('child_process');
 const path = require('path');
 const RAIZ = path.resolve(__dirname, '..');
 const SITIO = 'http://127.0.0.1:3199';
-const P = (id, nombre, stock, precio, extra = {}) => ({ id, nombre, descripcion: 'desc', precio_may: '21.9', precio_min: precio, stock, imagen: '', activo: true, categoria: 'Marshmelow', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: 'U$S', unidades_por_paquete: 1, fraccion_de: null, fraccion_cant: null, sueltas: 0, ...extra });
+const P = (id, nombre, stock, precio, extra = {}) => ({ id, nombre, descripcion: 'desc', precio_may: '21.9', precio_min: precio, stock, imagen: '', activo: true, categoria: 'Marshmelow', visible_cat: 'Ambos', precio_oferta: 0, fecha_oferta: '', cant_pack: 0, precio_pack: 0, dueno: 'Jony', moneda: 'U$S', unidades_por_paquete: 1, peso: 0, fraccion_de: null, fraccion_cant: null, sueltas: 0, fraccionar_por: 'u', ...extra });
 // 2 bolsas de 18 = 36 unidades = 12 x3 = 9 x4 (lo que calcula la base)
 const PRODS = [
   P(245, 'Marshmallow Twists Carmel', 2, 38999, { unidades_por_paquete: 18 }),
   P(401, 'Marshmallow Twists Carmel · x3', 12, 6500, { precio_may: null, unidades_por_paquete: 3, fraccion_de: '245', fraccion_cant: 3, visible_cat: 'Minorista' }),
   P(400, 'Marshmallow Twists Carmel · x4', 9, 8000, { precio_may: null, unidades_por_paquete: 4, fraccion_de: '245', fraccion_cant: 4, visible_cat: 'Minorista' }),
   P(2, 'Klik cornflakes 65 g', 5, 7999, { moneda: '$', precio_may: '5' }),
+  // ⚖️ 10 bolsitas de 100 g = 1 kg → 4 de 250 g / 1 de 1 kg (lo que calcula la base)
+  P(500, 'Pitzujim-Mani Sabor Grill', 10, 9999, { moneda: '$', precio_may: '8300', categoria: 'Pitzujim', peso: 100, fraccionar_por: 'g' }),
+  P(501, 'Pitzujim-Mani Sabor Grill x 250 g', 4, 24000, { moneda: '$', precio_may: null, categoria: 'Pitzujim', fraccion_de: '500', fraccion_cant: 250, fraccionar_por: 'g', visible_cat: 'Minorista' }),
+  P(502, 'Pitzujim-Mani Sabor Grill x 1 kg', 1, 90000, { moneda: '$', precio_may: null, categoria: 'Pitzujim', fraccion_de: '500', fraccion_cant: 1000, fraccionar_por: 'g', visible_cat: 'Minorista' }),
 ];
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await esperar(150); } return false; }
@@ -79,10 +83,21 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => lrPoner(400, 1));   // 4 u. más → hay que abrir la cerrada
   ok('una x4 más obliga a abrir la cerrada: ya no queda bolsa entera', (await disp())[245] === 0);
 
+  // ⚖️ por peso
+  await pg.evaluate(() => { carrito = {}; renderCatalogo(); });
+  const cardG = await pg.evaluate(() => ((document.getElementById('card-501') || {}).innerText || '').replace(/\s+/g, ' '));
+  ok('⚖️ la fracción por peso dice "⚖️ 250 g · $ 9.600 los 100 g" (no "trae")', cardG.includes('⚖️ 250 g $ 9.600 los 100 g') && !cardG.includes('trae'));
+  const dg = () => pg.evaluate(() => [500, 501, 502].map(id => stockDisponible(productos.find(p => p.id === id))));
+  ok('⚖️ carrito vacío: 10 bolsitas · 4 de 250 g · 1 de 1 kg', JSON.stringify(await dg()) === '[10,4,1]');
+  await pg.evaluate(() => lrPoner(502, 1));
+  ok('⚖️ con 1 kg en el carrito: ya no hay 250 g ni bolsitas enteras (era todo el kilo)', JSON.stringify(await dg()) === '[0,0,1]');
+  await pg.evaluate(() => { carrito = {}; lrPoner(500, 3); });
+  ok('⚖️ con 3 bolsitas enteras: quedan 700 g → 2 de 250 g y ningún kilo', JSON.stringify(await dg()) === '[10,2,0]');
+
   // Mayorista: la promo no aparece
   await pg.evaluate(() => { carrito = {}; try { setModo('mayorista'); } catch (e) {} renderCatalogo(); });
-  const may = await pg.evaluate(() => ({ x3: !!document.getElementById('card-401'), x4: !!document.getElementById('card-400'), bolsa: !!document.getElementById('card-245') }));
-  ok('en la tienda mayorista la promo NO aparece (la bolsa sí)', !may.x3 && !may.x4 && may.bolsa);
+  const may = await pg.evaluate(() => ({ x3: !!document.getElementById('card-401'), x4: !!document.getElementById('card-400'), bolsa: !!document.getElementById('card-245'), g: !!document.getElementById('card-501') }));
+  ok('en la tienda mayorista la promo NO aparece (la bolsa sí) — tampoco la de 250 g', !may.x3 && !may.x4 && may.bolsa && !may.g);
 
   ok('sin errores de JavaScript en la página', errs.length === 0);
   if (errs.length) console.log('Errores:', errs.slice(0, 5));

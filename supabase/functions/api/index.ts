@@ -450,7 +450,7 @@ const ventaFront = (v: any) => ({
 const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString(), totalMano: parseFloat(p.total_mano) || 0, reparto: (p.reparto || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
 const gastoFront = (g: any) => ({ fecha: g.fecha, desc: g.descripcion, monto: g.monto, moneda: g.moneda, categoria: g.categoria, columna: g.columna || '', comprobante: (g.comprobante || '').toString() });
-const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), fraccionDe: (p.fraccion_de || '').toString(), fraccionCant: parseInt(p.fraccion_cant) || 0, sueltas: parseInt(p.sueltas) || 0, peso: parseFloat(p.peso) || 0, ean: (p.ean || '').toString(), etiqueta: (p.etiqueta || '').toString(), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
+const prodAdmin = (p: any) => ({ id: p.id, nombre: p.nombre || '', stock: parseInt(p.stock) || 0, activo: p.activo !== false, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || '').toString(), moneda: p.moneda === 'U$S' ? 'U$S' : '$', precioMay: p.precio_may, precioMin: parseFloat(p.precio_min) || 0, desc: (p.descripcion || '').toString(), visible: (p.visible_cat || 'Ambos').toString(), imagen: (p.imagen || '').toString(), descBot: (p.desc_bot || '').toString(), costo: parseFloat(p.costo) || 0, nombresPrev: (p.nombres_prev || '').toString(), candyCod: (p.candy_cod || '').toString(), unidadesPorPaquete: Math.max(1, parseInt(p.unidades_por_paquete) || 1), fraccionDe: (p.fraccion_de || '').toString(), fraccionCant: parseInt(p.fraccion_cant) || 0, sueltas: parseInt(p.sueltas) || 0, fraccionarPor: p.fraccionar_por === 'g' ? 'g' : 'u', peso: parseFloat(p.peso) || 0, ean: (p.ean || '').toString(), etiqueta: (p.etiqueta || '').toString(), vinculo: (p.vinculo || '').toString(), hashgaja: (p.hashgaja || '').toString(), kosherTipo: (p.kosher_tipo || '').toString(), jalav: (p.jalav || '').toString(), creado: (p.creado || '').toString() });
 const rendFront = (r: any) => ({ fecha: r.fecha, desc: r.descripcion, monto: r.monto, moneda: r.moneda, columna: r.columna || '', comprobante: (r.comprobante || '').toString() });
 
 // _enviosData: saldo y deuda derivada de la caja de envíos (idempotente).
@@ -2023,7 +2023,9 @@ function _fechaOfertaISO(f: string) {
 // reservan las bolsas cerradas pedidas; lo que queda (cerradas × N + sueltas) se reparte entre las fracciones en orden.
 // `filas` = los productos del pedido Y las bolsas madre de sus fracciones. Devuelve los renglones que no alcanzan,
 // con cuánto hay de verdad para ese renglón (la tienda recorta el carrito con eso).
-const COLS_STOCK = 'id,nombre,stock,fraccion_de,fraccion_cant,unidades_por_paquete,sueltas';
+const COLS_STOCK = 'id,nombre,stock,fraccion_de,fraccion_cant,unidades_por_paquete,sueltas,fraccionar_por,peso';
+// Lo que trae UNA bolsa para sus fracciones: unidades, o gramos si se fracciona por peso (⚖️ v5.05, los Pitzujim).
+function contenidoBolsa(b: any) { return b && b.fraccionar_por === 'g' ? Math.max(1, Math.round(parseFloat(b.peso) || 0)) : Math.max(1, parseInt(b && b.unidades_por_paquete) || 1); }
 function faltantesStock(pares: any[], filas: any[]) {
   const F: any = {}; filas.forEach((r: any) => { F[String(r.id)] = r; });
   const pozos: any = {};
@@ -2044,7 +2046,7 @@ function faltantesStock(pares: any[], filas: any[]) {
       cerradas -= hay;
     }
     if (!P.fr.length) continue;
-    const upp = M ? Math.max(1, parseInt(M.unidades_por_paquete) || 1) : 1;
+    const upp = M ? contenidoBolsa(M) : 1;
     let unidades = M ? cerradas * upp + Math.max(0, parseInt(M.sueltas) || 0) : 0;
     for (const f of P.fr) {
       const r = F[f.id], k = Math.max(1, parseInt(r.fraccion_cant) || 1);
@@ -2378,7 +2380,7 @@ async function moverStockShuk(pid: string, delta: number, motivo: string) {
     await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: pid, producto: nombre, cambio: delta, antes, despues, origen: motivo });
     return { antes, despues, compartido: false, nombre };
   }
-  const quedan = ' · la bolsa queda en ' + r.cerradas + ' cerrada' + (r.cerradas === 1 ? '' : 's') + ' + ' + r.sueltas + ' suelta' + (r.sueltas === 1 ? '' : 's');
+  const quedan = ' · la bolsa queda en ' + r.cerradas + ' cerrada' + (r.cerradas === 1 ? '' : 's') + ' + ' + (r.por === 'g' ? r.sueltas + ' g suelto' + (r.sueltas === 1 ? '' : 's') : r.sueltas + ' suelta' + (r.sueltas === 1 ? '' : 's'));
   await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: pid, producto: nombre, cambio: delta, antes, despues, origen: motivo + ' ✂️ (sale de «' + (r.padreNombre || '') + '»' + quedan + ')' });
   const abiertas = parseInt(r.abiertas) || 0;
   if (abiertas > 0) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: String(r.padre), producto: r.padreNombre || '', cambio: -abiertas, antes: (parseFloat(r.cerradas) || 0) + abiertas, despues: parseFloat(r.cerradas) || 0, origen: '✂️ Se abri' + (abiertas === 1 ? 'ó 1 bolsa' : 'eron ' + abiertas + ' bolsas') + ' para «' + nombre + '» · ' + motivo + quedan });
@@ -2670,9 +2672,9 @@ function limpiarFraccionIA(t: any, bolsa: any, cants: number[], unidad: string) 
 async function sugerirFraccion(idBolsa: string, cantsTxt: string, unidad: string) {
   const cants = [...new Set(String(cantsTxt || '').split(',').map((x) => parseInt(x) || 0).filter((x) => x > 0 && x <= 100000))].slice(0, 12);
   if (!cants.length) return { error: 'sin cantidades' };
-  const pr = await sbGet('productos', 'select=id,nombre,descripcion,categoria,unidades_por_paquete,peso&id=eq.' + encodeURIComponent(idBolsa));
+  const pr = await sbGet('productos', 'select=id,nombre,descripcion,categoria,unidades_por_paquete,peso,fraccionar_por&id=eq.' + encodeURIComponent(idBolsa));
   if (!pr.length) return { error: 'no encontré la bolsa' };
-  const bolsa = pr[0], u = unidad === 'g' ? 'g' : 'u';
+  const bolsa = pr[0], u = (bolsa.fraccionar_por === 'g' || unidad === 'g') ? 'g' : 'u';   // ⚖️ v5.05: manda la bolsa
   const regla = () => ({ ok: true, fracciones: limpiarFraccionIA(null, bolsa, cants, u), ia: false });
   const apiKey = await claveIA();
   if (!apiKey) return regla();
@@ -3921,6 +3923,16 @@ Deno.serve(async (req) => {
       if (has('activo')) patch.activo = P(body, 'activo').toUpperCase() !== 'NO';
       if (has('visible')) { patch.visible_cat = P(body, 'visible'); patch.visible = P(body, 'visible') !== 'No'; }   // Ambos/Min/May + boolean
       if (has('unidadesPorPaquete')) patch.unidades_por_paquete = Math.max(1, parseInt(P(body, 'unidadesPorPaquete')) || 1);   // Circuito Candy↔Shuk: cuántas unidades trae el paquete/bolsa
+      // ⚖️ v5.05: ¿la bolsa se fracciona por unidades o por peso? No se cambia si ya tiene fracciones o sueltas (cambiaría qué cuentan).
+      if (has('fraccionarPor') && !esFraccionEP) {
+        const nuevoPor = P(body, 'fraccionarPor') === 'g' ? 'g' : 'u';
+        const actPor = await sbGet('productos', 'select=fraccionar_por&id=eq.' + encodeURIComponent(id));
+        if (actPor.length && (actPor[0].fraccionar_por || 'u') !== nuevoPor) {
+          const hijasP = await sbGet('productos', 'select=id&fraccion_de=eq.' + encodeURIComponent(id));
+          if (hijasP.length || (parseInt(pr[0].sueltas) || 0) > 0) return json({ error: 'No se puede cambiar de unidades a peso (o al revés) en una bolsa que ya tiene fracciones o sueltas: borrá primero sus fracciones.' });
+          patch.fraccionar_por = nuevoPor;
+        }
+      }
       if (body.etiqueta !== undefined) patch.etiqueta = P(body, 'etiqueta').trim().slice(0, 40);   // cinta de la tarjeta (texto corto)
       if (has('peso')) patch.peso = parseFloat(String(P(body, 'peso')).replace(',', '.')) || 0;   // peso por bolsa (g), interno — para orden de compra
       if (body.ean !== undefined) patch.ean = normEAN(P(body, 'ean'));   // código de barras: SUGIERE el producto al recibir, nunca decide solo (regla de gemelos)
@@ -4039,8 +4051,10 @@ Deno.serve(async (req) => {
       if (!prF.length) return json({ error: 'no encontré la bolsa' });
       const padre = prF[0];
       if ((padre.fraccion_de || '').toString().trim()) return json({ error: 'eso ya es una fracción: se fracciona la bolsa entera' });
-      const uppF = Math.max(1, parseInt(padre.unidades_por_paquete) || 1);
-      if (uppF < 2) return json({ error: 'a «' + padre.nombre + '» le falta cargar cuántas unidades trae la bolsa (U/paq)' });
+      const porPeso = padre.fraccionar_por === 'g';   // ⚖️ v5.05: por peso la fracción va en gramos y puede ser más grande que la bolsa
+      const uppF = contenidoBolsa(padre);
+      if (porPeso && !((parseFloat(padre.peso) || 0) > 0)) return json({ error: 'a «' + padre.nombre + '» le falta cargar cuánto pesa la bolsa (g)' });
+      if (!porPeso && uppF < 2) return json({ error: 'a «' + padre.nombre + '» le falta cargar cuántas unidades trae la bolsa (U/paq)' });
       const todosF = await sbGet('productos', 'select=id,nombre,fraccion_de,fraccion_cant');
       const nombresUsados = new Set(todosF.map((x: any) => (x.nombre || '').toString().trim().toLowerCase()));
       const cantsYa = new Set(todosF.filter((x: any) => String(x.fraccion_de || '') === String(padre.id)).map((x: any) => parseInt(x.fraccion_cant) || 0));
@@ -4048,17 +4062,17 @@ Deno.serve(async (req) => {
       const filasF: any[] = [];
       for (const it of itemsF) {
         const cant = parseInt(it.cant) || 0, precio = Math.round(parseFloat(String(it.precio || '').replace(',', '.')) || 0);
-        if (cant < 1 || cant >= uppF) return json({ error: 'la fracción tiene que ser de 1 a ' + (uppF - 1) + ' unidades (la bolsa trae ' + uppF + ')' });
-        if (precio <= 0) return json({ error: 'falta el precio de la fracción x' + cant });
-        if (cantsYa.has(cant)) return json({ error: 'ya hay una fracción x' + cant + ' de esta bolsa' });
-        const nombreF = (_libre(String(it.nombre || ''), 120).trim() || nombreFraccion(padre.nombre, cant));   // ✂️ v5.04: "… x 5 unidades", no "… x 34 · x5"
-        const descF = it.desc !== undefined ? _libre(String(it.desc || ''), 400).trim() : descFraccion(padre.descripcion || '', cant);
+        if (porPeso ? (cant < 10 || cant > 20000 || cant === uppF) : (cant < 1 || cant >= uppF)) return json({ error: porPeso ? 'por peso: de 10 g a 20 kg, y distinto de lo que pesa la bolsa (' + uppF + ' g)' : 'la fracción tiene que ser de 1 a ' + (uppF - 1) + ' unidades (la bolsa trae ' + uppF + ')' });
+        if (precio <= 0) return json({ error: 'falta el precio de la fracción ' + cantFraccionTxt(cant, porPeso ? 'g' : 'u') });
+        if (cantsYa.has(cant)) return json({ error: 'ya hay una fracción de ' + cantFraccionTxt(cant, porPeso ? 'g' : 'u') + ' de esta bolsa' });
+        const nombreF = (_libre(String(it.nombre || ''), 120).trim() || nombreFraccion(padre.nombre, cant, porPeso ? 'g' : 'u'));   // ✂️ v5.04: "… x 5 unidades", no "… x 34 · x5"
+        const descF = it.desc !== undefined ? _libre(String(it.desc || ''), 400).trim() : descFraccion(padre.descripcion || '', cant, porPeso ? 'g' : 'u');
         if (nombresUsados.has(nombreF.toLowerCase())) return json({ error: 'ya existe un producto llamado «' + nombreF + '» (el nombre tiene que ser único: con él se calcula la ganancia)' });
         nombresUsados.add(nombreF.toLowerCase()); cantsYa.add(cant);
         filasF.push({ id: String(++maxIdF), nombre: nombreF, descripcion: descF, precio_min: precio, precio_may: null, stock: 0, imagen: padre.imagen || '', activo: true, categoria: padre.categoria || 'Varios', visible: true, visible_cat: 'Minorista', dueno: padre.dueno, desc_bot: padre.desc_bot || '', moneda: padre.moneda, costo: null, unidades_por_paquete: cant, peso: 0, ean: '', etiqueta: '', hashgaja: padre.hashgaja || '', kosher_tipo: padre.kosher_tipo || '', jalav: padre.jalav || '', fraccion_de: String(padre.id), fraccion_cant: cant });
       }
       await sbInsert('productos', filasF);
-      for (const f of filasF) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: f.id, producto: f.nombre, cambio: 0, antes: 0, despues: 0, origen: '✂️ Fracción publicada: x' + f.fraccion_cant + ' de «' + padre.nombre + '» (el stock sale de la bolsa)' });
+      for (const f of filasF) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: f.id, producto: f.nombre, cambio: 0, antes: 0, despues: 0, origen: '✂️ Fracción publicada: ' + cantFraccionTxt(f.fraccion_cant, porPeso ? 'g' : 'u') + ' de «' + padre.nombre + '» (el stock sale de la bolsa)' });
       const creadas = await sbGet('productos', 'select=*&id=in.(' + filasF.map((f) => f.id).join(',') + ')');
       return json({ ok: true, creadas: creadas.map(prodAdmin) });
     }

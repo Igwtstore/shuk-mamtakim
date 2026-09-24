@@ -1794,8 +1794,8 @@
     </div>
   </div>
   <div class="admin-card" data-seccion="stock" id="frac-card">
-    <div class="admin-titulo">✂️ Fraccionar paquetes <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· la bolsa abierta, en promos de 3, 4, 5… (solo tienda minorista)</span></div>
-    <div style="font-size:0.76rem;color:var(--texto-suave);line-height:1.45;margin-bottom:0.5rem">Tildá la bolsa y escribí <b>por cuántas</b> y el <b>precio</b>. El costo sale solo de la bolsa y el stock se reparte solo: cada venta gasta primero las sueltas y, si no alcanzan, abre otra bolsa.</div>
+    <div class="admin-titulo">✂️ Fraccionar paquetes <span style="font-weight:400;font-size:0.72rem;color:var(--texto-suave)">· la bolsa abierta en promos de 3, 4, 5… o por peso: 250 g, 1 kg (solo tienda minorista)</span></div>
+    <div style="font-size:0.76rem;color:var(--texto-suave);line-height:1.45;margin-bottom:0.5rem">Tildá la bolsa y escribí <b>por cuántas</b> (o cuántos gramos) y el <b>precio</b>. El costo sale solo de la bolsa y el stock se reparte solo: cada venta gasta primero las sueltas y, si no alcanzan, abre otra bolsa.</div>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.5rem">
       <input type="text" id="frac-buscar" placeholder="🔍 Buscá la bolsa…" oninput="renderFraccionar()" autocomplete="off"
         style="flex:1 1 200px;min-width:0;padding:0.55rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;box-sizing:border-box" />
@@ -1910,10 +1910,14 @@
         <div class="nombre-campo" style="margin:0;flex:1;min-width:160px"><label>Visible para</label>
           <select id="ep-visible" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff"><option>Ambos</option><option>Mayorista</option><option>Minorista</option><option value="Oculto">🙈 Oculto (solo ventas internas)</option></select>
         </div>
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Cuántas unidades sueltas trae el paquete/bolsa cerrada (lo usa Candy para vender por unidad)">📦 U. por paquete</label>
-          <input type="number" id="ep-upp" min="1" step="1" value="1" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+        <div class="nombre-campo" style="margin:0;flex:1.4;min-width:190px"><label title="Cómo viene la bolsa cerrada: cuántas unidades trae, o cuánto pesa (así se fracciona: en promos de 3 unidades, o en 250 g)">✂️ Viene por</label>
+          <div style="display:flex;gap:0.4rem">
+            <select id="ep-fracpor" onchange="epFracPorChange()" style="padding:0.6rem 0.3rem;border:1.5px solid var(--gris-medio);border-radius:8px;background:#fff;font-family:inherit;font-size:0.82rem"><option value="u">📦 Unidades</option><option value="g">⚖️ Peso (g)</option></select>
+            <input type="number" id="ep-upp" min="1" step="1" value="1" title="Cuántas unidades trae" style="width:100%;min-width:0;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+            <input type="number" id="ep-gramos" min="1" step="1" placeholder="100" title="Cuántos gramos pesa" oninput="const pe = document.getElementById('ep-peso'); if (pe) pe.value = this.value" style="display:none;width:100%;min-width:0;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
+          </div>
         </div>
-        <div class="nombre-campo" style="margin:0;flex:1;min-width:130px"><label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
+        <div class="nombre-campo" id="ep-peso-box" style="margin:0;flex:1;min-width:130px"><label title="Peso de la bolsa/paquete cerrado, para la orden de compra. Interno, no lo ve el cliente.">⚖️ Peso x bolsa (g)</label>
           <input type="number" id="ep-peso" min="0" step="1" placeholder="0" style="width:100%;padding:0.6rem;border:1.5px solid var(--gris-medio);border-radius:8px;box-sizing:border-box">
         </div>
         <div class="nombre-campo" style="margin:0;flex:1.2;min-width:180px"><label title="Código de barras del envase. Reconoce el producto al recibir mercadería de Israel y sirve para escanear en el depósito. Interno.">🔢 Código de barras</label>
@@ -3214,9 +3218,15 @@ function esVistaMiri() { return vistaSocio === 'miri'; }
 function esFraccion(p) { return !!(p && p.fraccionDe); }
 function bolsaDe(p) { return esFraccion(p) ? productos.find(x => String(x.id) === String(p.fraccionDe)) : null; }
 function fraccionesDe(id) { return productos.filter(x => String(x.fraccionDe || '') === String(id)).sort((a, b) => (a.fraccionCant || 0) - (b.fraccionCant || 0)); }
+// ⚖️ v5.05: una bolsa se fracciona por UNIDADES (trae N) o por PESO (pesa N g: los Pitzujim de 100 g). Por peso, el
+// pozo, las sueltas y la cantidad de cada fracción van en gramos, y la fracción puede ser más grande que la bolsa (1 kg).
+function _porPeso(b) { return !!(b && b.fraccionarPor === 'g'); }
+function _contenidoBolsa(b) { return _porPeso(b) ? Math.max(1, Math.round(parseFloat(b.peso) || 0)) : Math.max(1, parseInt(b && b.unidadesPorPaquete) || 1); }
+function _sueltasTxt(b, su) { return _porPeso(b) ? su + ' g suelto' + (su === 1 ? '' : 's') : su + ' suelta' + (su === 1 ? '' : 's'); }
+function _fracEtq(f) { return _porPeso(f) ? _fracCantTxt(f.fraccionCant, 'g') : 'x' + f.fraccionCant; }
 function _bolsaEstadoTxt(b) {
   const c = parseInt(b && b.stock) || 0, su = parseInt(b && b.sueltas) || 0;
-  return c + ' cerrada' + (c === 1 ? '' : 's') + (su > 0 ? ' + ' + su + ' suelta' + (su === 1 ? '' : 's') : '');
+  return c + ' cerrada' + (c === 1 ? '' : 's') + (su > 0 ? ' + ' + _sueltasTxt(b, su) : '');
 }
 // ✂️ Cuánto se puede llevar de `p` como MÁXIMO en el carrito, contando lo que ya hay de la MISMA bolsa (la bolsa entera y
 // sus fracciones comparten las unidades). Es la misma cuenta que hace el motor al recibir el pedido (faltantesStock):
@@ -3229,7 +3239,7 @@ function stockDisponible(p) {
   if (!esFraccion(p) && !hermanas.length) return p.stock;
   const b = productos.find(x => String(x.id) === bid);
   if (!b) return p.stock;   // la bolsa no está a la venta (oculta): el stock calculado por la base alcanza
-  const upp = Math.max(1, parseInt(b.unidadesPorPaquete) || 1), su = Math.max(0, parseInt(b.sueltas) || 0), cerr = Math.max(0, parseInt(b.stock) || 0);
+  const upp = _contenidoBolsa(b), su = Math.max(0, parseInt(b.sueltas) || 0), cerr = Math.max(0, parseInt(b.stock) || 0);
   const q = id => (typeof carrito !== 'undefined' && carrito[id]) ? (parseInt(carrito[id].qty) || 0) : 0;
   const otrasU = hermanas.filter(f => String(f.id) !== String(p.id)).reduce((t, f) => t + q(f.id) * Math.max(1, parseInt(f.fraccionCant) || 1), 0);
   if (!esFraccion(p)) return Math.max(0, cerr - Math.max(0, Math.ceil((otrasU - su) / upp)));
@@ -3693,7 +3703,7 @@ async function cargarProductos() {
   catalogo.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando productos...</div>';
   try {
     // Catálogo desde Supabase (columnas públicas; costo/candyCod son privados)
-    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,peso,etiqueta,vinculo,hashgaja,kosher_tipo,jalav,fraccion_de,fraccion_cant,sueltas&order=id', { headers: SB_ANON_H });
+    const r = await fetch(SB_REST + '/productos?select=id,nombre,descripcion,precio_may,precio_min,stock,imagen,activo,categoria,visible_cat,precio_oferta,fecha_oferta,cant_pack,precio_pack,dueno,moneda,unidades_por_paquete,peso,etiqueta,vinculo,hashgaja,kosher_tipo,jalav,fraccion_de,fraccion_cant,sueltas,fraccionar_por&order=id', { headers: SB_ANON_H });
     const data = await r.json();
     productos = data.map(p => ({
       id: parseInt(p.id),
@@ -3715,7 +3725,8 @@ async function cargarProductos() {
       jalav: (p.jalav || '').trim(),
       fraccionDe: (p.fraccion_de || '').toString().trim(),   // ✂️ v5.03: id de la bolsa de la que sale ('' = producto normal)
       fraccionCant: parseInt(p.fraccion_cant) || 0,
-      sueltas: parseInt(p.sueltas) || 0,                     // en la bolsa: unidades de bolsas ya abiertas
+      sueltas: parseInt(p.sueltas) || 0,                     // en la bolsa: unidades (o gramos) de bolsas ya abiertas
+      fraccionarPor: p.fraccionar_por === 'g' ? 'g' : 'u',   // ⚖️ v5.05: la bolsa se fracciona por unidades o por peso (Pitzujim)
       precioOferta: parseFloat(p.precio_oferta) || 0,
       fechaOferta: (p.fecha_oferta || '').trim(),
       cantPack: parseInt(p.cant_pack) || 0,
@@ -3880,6 +3891,13 @@ function precioEfectivo(p, qty) {
 // divide el precio EFECTIVO (oferta / VIP / normal) por las unidades. Pedido del usuario 2026-07-29:
 // "si un paquete de bombones viene por 20 y vale 20.000, costo por unidad 1.000".
 function precioUnidadHtml(p) {
+  // ⚖️ v5.05: la fracción por peso dice cuánto sale cada 100 g (para comparar con la bolsita)
+  if (esFraccion(p) && _porPeso(p) && (parseInt(p.fraccionCant) || 0) > 0) {
+    const vg = ofertaVigente(p) ? (parseFloat(p.precioOferta) || 0) : (parseFloat(p.precioMin) || 0);
+    if (!(vg > 0) || modo === 'mayorista') return '';
+    return `<div style="display:flex;align-items:center;justify-content:center;gap:5px;background:#eef4fb;border:1px solid #d8e6f5;border-radius:6px;padding:3px 8px;font-size:0.72rem;color:#1a5c8a;font-weight:600;margin-top:4px">
+    <span style="opacity:0.8">⚖️ ${esc(_fracCantTxt(p.fraccionCant, 'g'))}</span><span style="font-weight:800">$ ${Math.round(vg / p.fraccionCant * 100).toLocaleString('es-AR')} los 100 g</span></div>`;
+  }
   const upp = parseInt(p.unidadesPorPaquete) || 1;
   if (upp <= 1) return '';
   let val;
@@ -8682,7 +8700,7 @@ function renderStockDrawer(lista) {
       <div class="stock-drawer-nombre">
         <div style="font-weight:600">${_duenoBadge(p)}${esc(p.nombre)}</div>
         ${p.desc ? `<div style="font-size:0.72rem;color:var(--texto-suave)">${esc(p.desc.substring(0,40))}</div>` : ''}
-        ${(p.sueltas||0) > 0 ? `<div style="font-size:0.68rem;color:#8e44ad">✂️ + ${p.sueltas} sueltas de una bolsa abierta (se corrigen en la ficha)</div>` : ''}
+        ${(p.sueltas||0) > 0 ? `<div style="font-size:0.68rem;color:#8e44ad">✂️ + ${_sueltasTxt(p, p.sueltas)} de una bolsa abierta (se corrigen en la ficha)</div>` : ''}
       </div>
       <span class="stock-drawer-actual" title="Stock actual">${p.stock}</span>
       <input type="number" class="stock-drawer-input" id="sinput-${p.id}" value="${p.stock}" min="0">
@@ -10205,6 +10223,7 @@ function cargarProductoEditor(id) {
   epMonedaChange();
   document.getElementById('ep-visible').value = p.visible || 'Ambos';
   { const eu = document.getElementById('ep-upp'); if (eu) eu.value = p.unidadesPorPaquete || 1; }
+  { const fp = document.getElementById('ep-fracpor'); if (fp) fp.value = p.fraccionarPor === 'g' ? 'g' : 'u'; const eg = document.getElementById('ep-gramos'); if (eg) eg.value = p.peso || ''; }
   { const epe = document.getElementById('ep-peso'); if (epe) epe.value = p.peso || ''; }
   { const epn = document.getElementById('ep-ean'); if (epn) epn.value = p.ean || ''; }
   { const epa = document.getElementById('ep-ean-aviso'); if (epa) epa.innerHTML = ''; }
@@ -10214,6 +10233,7 @@ function cargarProductoEditor(id) {
   { const ej = document.getElementById('ep-jalav'); if (ej) ej.value = p.jalav || ''; kosherChange('ep'); }
   _epVinculo = p.vinculo || '';
   _epVinculoRender();
+  epFracPorChange();
   _epFraccionUI(p);
   document.getElementById('ep-nuevas').value = '';
   document.getElementById('ep-status').textContent = '';
@@ -10246,14 +10266,15 @@ function _fracCantTxt(cant, unidad, corto) {
 }
 function _fracNombre(nombreBolsa, cant, unidad = 'u') { return (_sinCantidadPaquete(nombreBolsa) || String(nombreBolsa || '').trim()) + ' x ' + _fracCantTxt(cant, unidad); }
 function _fracDesc(descBolsa, cant, unidad = 'u') { const d = _sinCantidadPaquete(descBolsa, false); return d ? d + ' x ' + _fracCantTxt(cant, unidad, true) : ''; }
-function _fracCostoU(b) { const upp = Math.max(1, parseInt(b.unidadesPorPaquete) || 1); return (parseFloat(b.costo) || 0) / upp; }
+function _fracCostoU(b) { return (parseFloat(b.costo) || 0) / _contenidoBolsa(b); }   // lo que cuesta 1 unidad (o 1 g)
 function _fracPlata(b, v) { return b.moneda === 'U$S' ? 'U$S ' + v.toFixed(2).replace('.', ',') : '$ ' + Math.round(v).toLocaleString('es-AR'); }
 // Lo que muestra cada fila mientras escribís: costo, margen contra el precio, cuántas alcanzan y el precio "de bolsa".
 function _fracCuenta(b, cant, precio) {
-  const upp = Math.max(1, parseInt(b.unidadesPorPaquete) || 1), k = parseInt(cant) || 0, pr = parseFloat(String(precio || '').replace(',', '.')) || 0;
-  if (k < 1 || k >= upp) return { ok: false, msg: k ? `tiene que ser de 1 a ${upp - 1}` : '' };
+  const upp = _contenidoBolsa(b), g = _porPeso(b), k = parseInt(cant) || 0, pr = parseFloat(String(precio || '').replace(',', '.')) || 0;
+  // ⚖️ por peso: de 10 g a 20 kg (puede ser más que la bolsita: 1 kg = 10 de 100 g); por unidades, menos que la bolsa
+  if (g ? (k < 10 || k > 20000 || k === upp) : (k < 1 || k >= upp)) return { ok: false, msg: k ? (g ? (k === upp ? `eso es la bolsita entera (${upp} g)` : 'de 10 g a 20 kg') : `tiene que ser de 1 a ${upp - 1}`) : '' };
   const ya = fraccionesDe(b.id).some(f => f.fraccionCant === k) || (_fracSel[b.id] || []).filter(r => (parseInt(r.cant) || 0) === k).length > 1;
-  if (ya) return { ok: false, msg: `ya hay una x${k}` };
+  if (ya) return { ok: false, msg: g ? `ya hay una de ${_fracCantTxt(k, 'g')}` : `ya hay una x${k}` };
   const costo = _fracCostoU(b) * k;
   const costoArs = b.moneda === 'U$S' ? (_tc > 0 ? costo * _tc : 0) : costo;
   const alcanza = Math.floor(Math.max(0, (parseInt(b.stock) || 0) * upp + (parseInt(b.sueltas) || 0)) / k);
@@ -10281,7 +10302,7 @@ function renderFraccionar() {
   if (!productos.length) { cont.innerHTML = '<div class="sinpedidos" style="padding:0.5rem 0">Cargando productos…</div>'; return; }
   const q = (document.getElementById('frac-buscar')?.value || '').trim().toLowerCase();
   const soloStock = document.getElementById('frac-solo-stock')?.checked !== false;
-  const bolsas = productosVisibles().filter(p => !esFraccion(p) && (parseInt(p.unidadesPorPaquete) || 1) > 1)
+  const bolsas = productosVisibles().filter(p => !esFraccion(p) && (_porPeso(p) ? (parseFloat(p.peso) || 0) > 0 : (parseInt(p.unidadesPorPaquete) || 1) > 1))
     .filter(p => !q || (p.nombre || '').toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q))
     .filter(p => !soloStock || (p.stock || 0) > 0 || (p.sueltas || 0) > 0 || fraccionesDe(p.id).length || _fracSel[p.id])
     .sort((a, b) => (_fracSel[b.id] ? 1 : 0) - (_fracSel[a.id] ? 1 : 0) || (fraccionesDe(b.id).length ? 1 : 0) - (fraccionesDe(a.id).length ? 1 : 0) || getCatIdx(a) - getCatIdx(b) || a.nombre.localeCompare(b.nombre));
@@ -10289,23 +10310,23 @@ function renderFraccionar() {
     cont.innerHTML = `<div style="font-size:0.8rem;color:var(--texto-suave);padding:0.4rem 0">${q ? 'Ninguna bolsa coincide.' : 'No hay bolsas con stock.'} ¿Falta la tuya? En su ficha cargale <b>📦 U. por paquete</b> (cuántas trae).</div>`;
   } else {
     cont.innerHTML = bolsas.map(b => {
-      const upp = parseInt(b.unidadesPorPaquete) || 1, sel = _fracSel[b.id], frs = fraccionesDe(b.id);
+      const upp = _contenidoBolsa(b), g = _porPeso(b), sel = _fracSel[b.id], frs = fraccionesDe(b.id);
       const img = (b.imagen || '').split(',').map(x => x.trim()).filter(Boolean)[0];
       const thumb = img ? `<img src="${esc(imgUrl(img)[0])}" onerror="this.style.visibility='hidden'" loading="lazy" style="width:38px;height:38px;object-fit:cover;border-radius:7px;flex-shrink:0">` : '<div style="width:38px;height:38px;border-radius:7px;background:var(--gris);display:flex;align-items:center;justify-content:center;flex-shrink:0">🍬</div>';
       const cu = _fracCostoU(b);
-      const datos = [`trae <b>${upp}</b>`, esc(_bolsaEstadoTxt(b)),
-        cu > 0 ? `la unidad cuesta ${_fracPlata(b, cu)}` : '<span style="color:var(--dorado)">sin costo cargado</span>',
-        (b.precioMin || 0) > 0 ? `bolsa a $ ${Math.round(b.precioMin).toLocaleString('es-AR')}` : ''].filter(Boolean).join(' · ');
+      const datos = [g ? `⚖️ pesa <b>${upp} g</b>` : `trae <b>${upp}</b>`, esc(_bolsaEstadoTxt(b)),
+        cu > 0 ? (g ? `100 g cuestan ${_fracPlata(b, cu * 100)}` : `la unidad cuesta ${_fracPlata(b, cu)}`) : '<span style="color:var(--dorado)">sin costo cargado</span>',
+        (b.precioMin || 0) > 0 ? `${g ? 'bolsita' : 'bolsa'} a $ ${Math.round(b.precioMin).toLocaleString('es-AR')}` : ''].filter(Boolean).join(' · ');
       const yaHtml = frs.length ? `<div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:0.35rem">${frs.map(f => `
           <span style="display:inline-flex;align-items:center;gap:0.3rem;background:#f6effa;border:1px solid #e4d2f1;border-radius:8px;padding:2px 4px 2px 8px;font-size:0.74rem">
-            ✂️ <b>x${Number(f.fraccionCant) || 0}</b> · $ ${Math.round(f.precioMin || 0).toLocaleString('es-AR')} · ${Number(f.stock) || 0} disp.
+            ✂️ <b>${esc(_fracEtq(f))}</b> · $ ${Math.round(f.precioMin || 0).toLocaleString('es-AR')} · ${Number(f.stock) || 0} disp.
             <button type="button" onclick="irAEditarProducto(${Number(f.id)})" title="Editar (nombre, precio, foto…)" style="border:none;background:none;cursor:pointer;font-size:0.8rem;padding:0 2px">✏️</button>
             <button type="button" onclick="borrarFraccion(${Number(f.id)})" title="Borrar la fracción (el stock de la bolsa no cambia)" style="border:none;background:none;cursor:pointer;font-size:0.8rem;padding:0 2px">🗑️</button>
           </span>`).join('')}</div>` : '';
       const filas = sel ? `<div style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.45rem">${sel.map((r, i) => `
           <div style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap;background:var(--gris);border-radius:8px;padding:0.4rem 0.5rem">
             <label style="font-size:0.74rem;font-weight:700;color:var(--texto-suave)">Por</label>
-            <input type="number" min="1" max="${upp - 1}" step="1" inputmode="numeric" value="${esc(String(r.cant || ''))}" oninput="fracCampo('${jsAttr(String(b.id))}',${i},'cant',this.value)" placeholder="3" style="width:58px;padding:0.35rem 0.4rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.88rem">
+            <input type="number" min="${g ? 10 : 1}" ${g ? '' : `max="${upp - 1}"`} step="${g ? 50 : 1}" inputmode="numeric" value="${esc(String(r.cant || ''))}" oninput="fracCampo('${jsAttr(String(b.id))}',${i},'cant',this.value)" placeholder="${g ? '250' : '3'}" style="width:${g ? 72 : 58}px;padding:0.35rem 0.4rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.88rem">${g ? '<span style="font-size:0.78rem;font-weight:700;color:var(--texto-suave)">g</span>' : ''}
             <label style="font-size:0.74rem;font-weight:700;color:var(--texto-suave)">Precio $</label>
             <input type="number" min="1" step="1" inputmode="numeric" value="${esc(String(r.precio || ''))}" oninput="fracCampo('${jsAttr(String(b.id))}',${i},'precio',this.value)" placeholder="6500" style="width:92px;padding:0.35rem 0.4rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.88rem">
             <button type="button" onclick="fracQuitarFila('${jsAttr(String(b.id))}',${i})" title="Quitar" style="border:none;background:none;cursor:pointer;color:var(--texto-suave);font-size:0.9rem">✕</button>
@@ -10337,7 +10358,8 @@ function _fracValidas() {
   const out = [];
   Object.keys(_fracSel).forEach(id => {
     const b = productos.find(x => String(x.id) === String(id)); if (!b) return;
-    const items = (_fracSel[id] || []).filter(r => _fracCuenta(b, r.cant, r.precio).ok).map(r => ({ cant: parseInt(r.cant), precio: Math.round(parseFloat(String(r.precio).replace(',', '.'))), nombre: String(r.nombre || '').trim() || _fracNombre(b.nombre, parseInt(r.cant)), desc: String(r.desc == null ? _fracDesc(b.desc, parseInt(r.cant)) : r.desc).trim() }));
+    const un = _porPeso(b) ? 'g' : 'u';
+    const items = (_fracSel[id] || []).filter(r => _fracCuenta(b, r.cant, r.precio).ok).map(r => ({ cant: parseInt(r.cant), precio: Math.round(parseFloat(String(r.precio).replace(',', '.'))), nombre: String(r.nombre || '').trim() || _fracNombre(b.nombre, parseInt(r.cant), un), desc: String(r.desc == null ? _fracDesc(b.desc, parseInt(r.cant), un) : r.desc).trim() }));
     if (items.length) out.push({ b, items });
   });
   return out;
@@ -10394,7 +10416,8 @@ function _fracPedirIA(id) {
     filas.forEach(r => { r.ia = 'pensando'; });
     (_fracSel[id] || []).forEach((r, j) => _fracPintarTextos(id, j));
     let res = null;
-    try { res = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'sugerirFraccion', padre: String(id), cants: cants.join(','), unidad: 'u' })); } catch (e) { res = null; }
+    const bIA = productos.find(x => String(x.id) === String(id));
+    try { res = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'sugerirFraccion', padre: String(id), cants: cants.join(','), unidad: _porPeso(bIA) ? 'g' : 'u' })); } catch (e) { res = null; }
     const porCant = {}; ((res && res.fracciones) || []).forEach(f => { porCant[parseInt(f.cant)] = f; });
     (_fracSel[id] || []).forEach((r, j) => {
       const f = porCant[parseInt(r.cant)];
@@ -10412,8 +10435,8 @@ function fracCampo(id, i, campo, v) {
   if (campo === 'cant') {
     const k = parseInt(v) || 0;
     if (k > 0) {
-      if (!r.nomTocado) r.nombre = _fracNombre(b.nombre, k);
-      if (!r.descTocado) r.desc = _fracDesc(b.desc, k);
+      if (!r.nomTocado) r.nombre = _fracNombre(b.nombre, k, _porPeso(b) ? 'g' : 'u');
+      if (!r.descTocado) r.desc = _fracDesc(b.desc, k, _porPeso(b) ? 'g' : 'u');
       r.ia = '';
       _fracPedirIA(id);
     } else { if (!r.nomTocado) r.nombre = ''; if (!r.descTocado) r.desc = ''; r.ia = ''; }
@@ -10449,29 +10472,38 @@ async function borrarFraccion(id) {
 }
 // ✂️ v5.03: en una FRACCIÓN, stock/costo/dueño/moneda/U-paq/precio mayorista salen de la bolsa (se ven, no se tocan) y
 // solo se vende minorista. En una BOLSA de N unidades se ven sus fracciones y se corrigen las sueltas a mano.
+// ⚖️ v5.05: "Viene por: Unidades / Peso". Por peso, el casillero son los gramos de la bolsa (es el mismo dato que
+// "Peso x bolsa", por eso ese se esconde para no cargarlo dos veces).
+function epFracPorChange() {
+  const g = document.getElementById('ep-fracpor')?.value === 'g';
+  const eu = document.getElementById('ep-upp'), eg = document.getElementById('ep-gramos'), pb = document.getElementById('ep-peso-box'), pe = document.getElementById('ep-peso');
+  if (eu) eu.style.display = g ? 'none' : '';
+  if (eg) { eg.style.display = g ? '' : 'none'; if (g && !eg.value && pe) eg.value = pe.value; if (g && pe) pe.value = eg.value; }
+  if (pb) pb.style.display = g ? 'none' : '';
+}
 function _epFraccionUI(p) {
   const box = document.getElementById('ep-frac'); if (!box) return;
   const fr = esFraccion(p);
-  ['ep-stock', 'ep-costo', 'ep-dueno', 'ep-moneda', 'ep-upp', 'ep-pmay'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = fr; el.style.opacity = fr ? '0.55' : ''; } });
+  ['ep-stock', 'ep-costo', 'ep-dueno', 'ep-moneda', 'ep-upp', 'ep-pmay', 'ep-fracpor', 'ep-gramos'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = fr; el.style.opacity = fr ? '0.55' : ''; } });
   const vis = document.getElementById('ep-visible');
   if (vis) [...vis.options].forEach(o => { o.disabled = fr && (o.value === 'Ambos' || o.value === 'Mayorista'); });
   if (fr) {
     const b = bolsaDe(p);
     box.style.display = '';
-    box.innerHTML = `✂️ <b>Fracción x${Number(p.fraccionCant) || 0}</b> de «${esc(b ? b.nombre : 'bolsa #' + p.fraccionDe)}». El stock (<b>${Number(p.stock) || 0}</b>), el costo, el dueño y la moneda salen de la bolsa${b ? ' (' + esc(_bolsaEstadoTxt(b)) + ')' : ''}. Se vende solo en la tienda minorista.`;
+    box.innerHTML = `✂️ <b>Fracción ${esc(_porPeso(p) ? 'de ' + _fracCantTxt(p.fraccionCant, 'g') : 'x' + (Number(p.fraccionCant) || 0))}</b> de «${esc(b ? b.nombre : 'bolsa #' + p.fraccionDe)}». El stock (<b>${Number(p.stock) || 0}</b>), el costo, el dueño y la moneda salen de la bolsa${b ? ' (' + esc(_bolsaEstadoTxt(b)) + ')' : ''}. Se vende solo en la tienda minorista.`;
     return;
   }
-  const upp = parseInt(p.unidadesPorPaquete) || 1;
-  if (upp < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const upp = _contenidoBolsa(p), g = _porPeso(p);
+  if (g ? !((parseFloat(p.peso) || 0) > 0) : upp < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
   const frs = fraccionesDe(p.id), su = parseInt(p.sueltas) || 0;
   box.style.display = '';
   box.innerHTML = `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-      <span>🔓 <b>Sueltas</b> de una bolsa ya abierta:</span>
+      <span>🔓 <b>${g ? 'Gramos sueltos' : 'Sueltas'}</b> de ${g ? 'bolsitas ya abiertas' : 'una bolsa ya abierta'}:</span>
       <input type="number" id="ep-sueltas" min="0" step="1" value="${su}" data-orig="${su}" style="width:80px;padding:0.35rem 0.5rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:inherit">
-      <span style="font-size:0.72rem;color:var(--texto-suave)">(el Stock de abajo son las bolsas cerradas de ${upp})</span>
+      <span style="font-size:0.72rem;color:var(--texto-suave)">(el Stock de abajo son las bolsas cerradas de ${upp}${g ? ' g' : ''})</span>
     </div>` + (frs.length
-      ? `<div style="margin-top:0.35rem">✂️ Fracciones publicadas: ${frs.map(f => `<b>x${Number(f.fraccionCant) || 0}</b> ($ ${Math.round(f.precioMin || 0).toLocaleString('es-AR')} · ${Number(f.stock) || 0} disp.)`).join(' · ')}</div>`
-      : `<div style="margin-top:0.35rem;color:var(--texto-suave)">✂️ La podés vender en promos de 3, 4, 5… desde Stock → <b>Fraccionar paquetes</b>.</div>`);
+      ? `<div style="margin-top:0.35rem">✂️ Fracciones publicadas: ${frs.map(f => `<b>${esc(_fracEtq(f))}</b> ($ ${Math.round(f.precioMin || 0).toLocaleString('es-AR')} · ${Number(f.stock) || 0} disp.)`).join(' · ')}</div>`
+      : `<div style="margin-top:0.35rem;color:var(--texto-suave)">✂️ La podés vender ${g ? 'por peso (250 g, 500 g, 1 kg…)' : 'en promos de 3, 4, 5…'} desde Stock → <b>Fraccionar paquetes</b>.</div>`);
 }
 function _epSueltasParam() {
   const el = document.getElementById('ep-sueltas');
@@ -10733,6 +10765,7 @@ async function guardarEdicionProducto() {
     visible: document.getElementById('ep-visible').value,
     unidadesPorPaquete: document.getElementById('ep-upp')?.value || '1',
     peso: document.getElementById('ep-peso')?.value || '0',
+    fraccionarPor: document.getElementById('ep-fracpor')?.value === 'g' ? 'g' : 'u',   // ⚖️ v5.05
     ean: normEANFront(document.getElementById('ep-ean')?.value || ''),
     etiqueta: (document.getElementById('ep-etiqueta')?.value || '').trim(),
     vinculo: _epVinculo || '__VACIO__',
@@ -10754,7 +10787,8 @@ async function _renombrarFraccionesDe(id, antesNom, antesDesc, nuevoNom, nuevoDe
   const frs = fraccionesDe(id);
   const cambioNom = nuevoNom && nuevoNom !== antesNom, cambioDesc = nuevoDesc !== antesDesc;
   if (!frs.length || (!cambioNom && !cambioDesc)) return;
-  const nuevos = frs.map(f => ({ f, nombre: cambioNom ? _fracNombre(nuevoNom, f.fraccionCant) : f.nombre, desc: cambioDesc ? _fracDesc(nuevoDesc, f.fraccionCant) : null }));
+  const un = _porPeso(productos.find(x => String(x.id) === String(id))) ? 'g' : 'u';
+  const nuevos = frs.map(f => ({ f, nombre: cambioNom ? _fracNombre(nuevoNom, f.fraccionCant, un) : f.nombre, desc: cambioDesc ? _fracDesc(nuevoDesc, f.fraccionCant, un) : null }));
   const lista = nuevos.map(x => '• ' + x.f.nombre + (x.nombre !== x.f.nombre ? '  →  ' + x.nombre : '')).join('\n');
   if (!confirm('Esta bolsa tiene ' + frs.length + ' fracci' + (frs.length === 1 ? 'ón' : 'ones') + '. ¿Actualizar también su ' + (cambioNom ? 'nombre' : '') + (cambioNom && cambioDesc ? ' y ' : '') + (cambioDesc ? 'descripción' : '') + '?\n\n' + lista)) return;
   for (const x of nuevos) {
@@ -14513,9 +14547,9 @@ function _stockCard(p, recientes) {
   const _su = parseInt(p.sueltas) || 0;
   const _frs = fraccionesDe(p.id);
   const stockTxt = ((p.stock||0) > 0 || _su > 0)
-    ? `<div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.${_su > 0 ? `<span style="font-size:0.66rem;font-weight:700;color:var(--texto-suave)"> + ${_su} sueltas</span>` : ''}</div>`
+    ? `<div style="font-size:0.95rem;font-weight:800;color:${(p.stock<=3)?'var(--dorado)':'var(--verde)'};margin-top:0.25rem">${p.stock} u.${_su > 0 ? `<span style="font-size:0.66rem;font-weight:700;color:var(--texto-suave)"> + ${_sueltasTxt(p, _su)}</span>` : ''}</div>`
     : `<div style="font-size:0.72rem;font-weight:700;color:var(--texto-suave);margin-top:0.25rem">sin stock — dar de alta</div>`;
-  const chipFrac = _frs.length ? `<div style="font-size:0.62rem;font-weight:700;color:#8e44ad;margin-top:1px" title="Fracciones publicadas: salen de esta bolsa">✂️ ${_frs.map(f => 'x' + f.fraccionCant).join(' · ')}</div>` : '';
+  const chipFrac = _frs.length ? `<div style="font-size:0.62rem;font-weight:700;color:#8e44ad;margin-top:1px" title="Fracciones publicadas: salen de esta bolsa">✂️ ${_frs.map(f => esc(_fracEtq(f))).join(' · ')}</div>` : '';
   return `<div style="border:1.5px solid var(--gris-medio);border-radius:10px;padding:0.5rem;text-align:center;position:relative">
     ${chipFecha}
     <button onclick="irAEditarProducto(${Number(p.id)})" title="Editar" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.9);border:1px solid var(--gris-medio);border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">✏️</button>
@@ -14566,7 +14600,7 @@ function _stockValorizar(lista, tc) {
   const cats = {};
   (lista || []).forEach(p => {
     // ✂️ v5.03: las sueltas de una bolsa abierta valen su parte de bolsa (15 sueltas de 18 = 0,83 bolsa)
-    const u = Math.round(((parseFloat(p.stock) || 0) + (parseInt(p.sueltas) || 0) / Math.max(1, parseInt(p.unidadesPorPaquete) || 1)) * 100) / 100;
+    const u = Math.round(((parseFloat(p.stock) || 0) + (parseInt(p.sueltas) || 0) / (p.fraccionarPor === 'g' ? Math.max(1, Math.round(parseFloat(p.peso) || 0)) : Math.max(1, parseInt(p.unidadesPorPaquete) || 1))) * 100) / 100;
     if (!(u > 0)) return;
     const esUSD = p.moneda === 'U$S';
     const costoU = num(p.costo), pMay = num(p.precioMay), pMin = num(p.precioMin);

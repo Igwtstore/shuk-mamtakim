@@ -16,7 +16,7 @@ function bloque(nombre) {
     .replace(/const (\w+)\s*:\s*any(\[\])?\s*=/g, 'const $1 =')
     .replace(/\(([a-z]\w*)\s*:\s*any\)/g, '($1)');
 }
-const { faltantesStock } = new Function(bloque('faltantesStock') + '\nreturn { faltantesStock };')();
+const { faltantesStock } = new Function(bloque('contenidoBolsa') + '\n' + bloque('faltantesStock') + '\nreturn { faltantesStock };')();
 
 function run() {
   const t = suite();
@@ -42,6 +42,16 @@ function run() {
   t.eq('la bolsa entera NO usa las sueltas: 0 cerradas + 17 sueltas → no hay bolsa', F([['10', 1]], [bolsa(0, 17)]).map((f) => f.hay), [0]);
   t.eq('pero las sueltas sí sirven para las fracciones (17 → 5 x3)', F([['11', 6]], [bolsa(0, 17), x3]).map((f) => f.hay), [5]);
   t.eq('la misma fracción en dos renglones se suma', F([['11', 7], ['11', 6]], [bolsa(2), x3]).map((f) => [f.id, f.hay]), [['11', 5]]);
+
+  // ⚖️ v5.05: por PESO (Pitzujim): 10 bolsitas de 100 g = 1 kg
+  const pz = (stock, sueltas = 0) => ({ id: '20', nombre: 'Pitzujim Maní', stock, sueltas, unidades_por_paquete: 1, peso: 100, fraccionar_por: 'g', fraccion_de: null });
+  const g250 = { id: '21', nombre: 'Pitzujim Maní x 250 g', stock: 0, fraccion_de: '20', fraccion_cant: 250, unidades_por_paquete: 1, fraccionar_por: 'g' };
+  const g1k = { id: '22', nombre: 'Pitzujim Maní x 1 kg', stock: 0, fraccion_de: '20', fraccion_cant: 1000, unidades_por_paquete: 1, fraccionar_por: 'g' };
+  t.eq('⚖️ 10 bolsitas de 100 g: alcanzan 4 de 250 g (el ejemplo del usuario)', F([['21', 4]], [pz(10), g250]), []);
+  t.eq('⚖️ …pero no 5 (hay 4)', F([['21', 5]], [pz(10), g250]).map((f) => f.hay), [4]);
+  t.eq('⚖️ 1 kg + 250 g con 1 kg en total: el de 250 no entra', F([['22', 1], ['21', 1]], [pz(10), g1k, g250]).map((f) => [f.id, f.hay]), [['21', 0]]);
+  t.eq('⚖️ con 7 cerradas + 50 g sueltos (750 g): 3 de 250 g', F([['21', 3]], [pz(7, 50), g250]), []);
+  t.eq('⚖️ la bolsita entera por peso sigue usando solo las cerradas', F([['20', 8], ['21', 1]], [pz(8, 300), g250]), []);
 
   // Casos borde
   t.eq('bolsa con stock negativo cuenta como 0', F([['11', 1]], [bolsa(-2, 0), x3]).map((f) => f.hay), [0]);
@@ -82,7 +92,7 @@ function run() {
   t.eq('sin descripción en la bolsa → vacía (no inventa)', M.descFraccion('', 5), '');
   const reales = [['Elite Etzbaot Mix x 34 unid', 5, 'u'], ['Pack mini Pesek Zman (19-20 unid)', 3, 'u'], ['Caramelos Mentos Discovery Pack x 4', 2, 'u'], ['Golosina WOW tira sabor (Azul) x 10 paq.', 5, 'u'], ['Googles Toy · Pastillitas con forma de Pizza!', 6, 'u'], ['Pitzujim-Pecán Oreo.', 500, 'g'], ['Caramelos liofilizados (freeze dried) sabor mora x12 bolsitas (120g / 12 x 10g)', 4, 'u'], ['Semillas de Girasol Israelies, saladas, gigantes!! x 100 grs.', 250, 'g']];
   t.ok('el panel y el motor escriben EXACTAMENTE lo mismo (' + reales.length + ' nombres y descripciones reales)', reales.every(([x, c, u]) => W._fracNombre(x, c, u) === M.nombreFraccion(x, c, u) && W._fracDesc(x, c, u) === M.descFraccion(x, c, u)));
-  t.ok('crearFracciones usa la regla (ya no "· x5")', /nombreFraccion\(padre\.nombre, cant\)/.test(TS) && !/padre\.nombre \+ ' · x' \+ cant/.test(TS));
+  t.ok('crearFracciones usa la regla (ya no "· x5")', /nombreFraccion\(padre\.nombre, cant, porPeso \? 'g' : 'u'\)/.test(TS) && !/padre\.nombre \+ ' · x' \+ cant/.test(TS));
   t.ok('sugerirFraccion es solo de Jony', /SOLO_JONY = \[[^\]]*'sugerirFraccion'/.test(TS));
   return t.result();
 }
