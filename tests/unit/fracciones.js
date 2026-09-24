@@ -65,6 +65,25 @@ function run() {
   t.ok('SQL: costo = costo de la bolsa ÷ N × cant', /round\(m\.costo \/ upp \* k, 4\)/.test(SQL));
   t.ok('SQL: la tienda NO puede ejecutar mover_stock', /revoke all on function mover_stock\(text, numeric\) from public, anon, authenticated/.test(SQL));
   t.ok('SQL: se bloquea primero la bolsa (sin cruces entre una fracción y la bolsa entera)', /where id = f\.fraccion_de for update/.test(SQL));
+
+  // ✂️ v5.04 — nombre y descripción de la fracción: "Elite Etzbaot Mix x 34 unid" → "Elite Etzbaot Mix x 5 unidades"
+  const M = new Function(['sinCantidadPaquete', 'cantFraccionTxt', 'nombreFraccion', 'descFraccion'].map(bloque).join('\n') + '\nreturn { nombreFraccion, descFraccion };')();
+  const HTML = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+  const fnH = (n) => { const m = HTML.match(new RegExp('function\\s+' + n + '\\s*\\(')); let i = HTML.indexOf('{', m.index), d = 0; for (; i < HTML.length; i++) { if (HTML[i] === '{') d++; else if (HTML[i] === '}') { d--; if (!d) { i++; break; } } } return HTML.slice(m.index, i); };
+  const W = new Function(['_sinCantidadPaquete', '_fracCantTxt', '_fracNombre', '_fracDesc'].map(fnH).join('\n') + '\nreturn { _fracNombre, _fracDesc };')();
+  t.eq('el ejemplo del usuario: nombre', M.nombreFraccion('Elite Etzbaot Mix x 34 unid', 5), 'Elite Etzbaot Mix x 5 unidades');
+  t.eq('el ejemplo del usuario: descripción (en minúscula, como estaba)', M.descFraccion('barra de chocolate tipo KINDER surtidos: Cream Jalav y con chispas que explotan en la boca x34 unid (408g) (familiar)', 5), 'barra de chocolate tipo KINDER surtidos: Cream Jalav y con chispas que explotan en la boca x 5 unid');
+  t.eq('"Pack mini Pesek Zman (19-20 unid)" → "Mini Pesek Zman x 3 unidades"', M.nombreFraccion('Pack mini Pesek Zman (19-20 unid)', 3), 'Mini Pesek Zman x 3 unidades');
+  t.eq('respeta el "·" entre marca y producto', M.nombreFraccion('Kinder Chocolate · Barritas de chocolate con leche x 16', 4), 'Kinder Chocolate · Barritas de chocolate con leche x 4 unidades');
+  t.eq('"x 20 paq individuales" y "Pack x 6 paquetes x 2" se van', [M.nombreFraccion('Caramelos tipo Skittles-Yogueta X 20 paq individuales', 5), M.nombreFraccion('Oreo Bañadas en chocolate BLANCO. Pack x 6 paquetes x 2', 2)], ['Caramelos tipo Skittles-Yogueta x 5 unidades', 'Oreo Bañadas en chocolate BLANCO x 2 unidades']);
+  t.eq('una sola: "x 1 unidad"', M.nombreFraccion('Marshmallow Twists Carmel', 1), 'Marshmallow Twists Carmel x 1 unidad');
+  t.eq('por peso: "x 250 g" y "x 1 kg"', [M.nombreFraccion('Pitzujim-Mani Sabor Grill', 250, 'g'), M.nombreFraccion('Pitzujim-Mani Sabor Grill', 1000, 'g')], ['Pitzujim-Mani Sabor Grill x 250 g', 'Pitzujim-Mani Sabor Grill x 1 kg']);
+  t.eq('por peso, la descripción pierde el "(100g)" de la bolsita', M.descFraccion('Manies Sabor Grill (100g) (Mezonot!!)', 250, 'g'), 'Manies Sabor Grill (Mezonot!!) x 250 g');
+  t.eq('sin descripción en la bolsa → vacía (no inventa)', M.descFraccion('', 5), '');
+  const reales = [['Elite Etzbaot Mix x 34 unid', 5, 'u'], ['Pack mini Pesek Zman (19-20 unid)', 3, 'u'], ['Caramelos Mentos Discovery Pack x 4', 2, 'u'], ['Golosina WOW tira sabor (Azul) x 10 paq.', 5, 'u'], ['Googles Toy · Pastillitas con forma de Pizza!', 6, 'u'], ['Pitzujim-Pecán Oreo.', 500, 'g'], ['Caramelos liofilizados (freeze dried) sabor mora x12 bolsitas (120g / 12 x 10g)', 4, 'u'], ['Semillas de Girasol Israelies, saladas, gigantes!! x 100 grs.', 250, 'g']];
+  t.ok('el panel y el motor escriben EXACTAMENTE lo mismo (' + reales.length + ' nombres y descripciones reales)', reales.every(([x, c, u]) => W._fracNombre(x, c, u) === M.nombreFraccion(x, c, u) && W._fracDesc(x, c, u) === M.descFraccion(x, c, u)));
+  t.ok('crearFracciones usa la regla (ya no "· x5")', /nombreFraccion\(padre\.nombre, cant\)/.test(TS) && !/padre\.nombre \+ ' · x' \+ cant/.test(TS));
+  t.ok('sugerirFraccion es solo de Jony', /SOLO_JONY = \[[^\]]*'sugerirFraccion'/.test(TS));
   return t.result();
 }
 module.exports = { run };

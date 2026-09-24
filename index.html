@@ -10226,7 +10226,26 @@ function cargarProductoEditor(id) {
 // "Tildo el artículo y voy completando casilleros: por cuánto y el valor del combo." Una bolsa de N unidades
 // (U/paq) se publica en fracciones "· x3", "· x4"… SOLO minorista, cada una con su precio en pesos. El costo,
 // el stock, el dueño y la moneda los pone la base desde la bolsa — acá solo se MUESTRAN para decidir el precio.
-let _fracSel = {};   // id de la bolsa → [{ cant, precio }] (lo que estás por publicar; sobrevive a los repintados)
+let _fracSel = {};   // id de la bolsa → [{ cant, precio, nombre, desc, nomTocado, descTocado, ia }] (sobrevive a los repintados)
+// ✂️ v5.04: el nombre de la fracción es el del producto SIN la cantidad del paquete + lo que trae ella
+// ("Elite Etzbaot Mix x 34 unid" → "Elite Etzbaot Mix x 5 unidades"). Misma regla que el motor (sinCantidadPaquete);
+// se ve al instante y después la IA (sugerirFraccion) la mejora — salvo que ya lo hayas escrito vos.
+function _sinCantidadPaquete(t, mayuscula = true) {
+  const r = String(t || '')
+    .replace(/\(\s*\d+\s*(?:-\s*\d+\s*)?(?:unid(?:ades)?|u|paq(?:uetes)?)\.?\s*\)/gi, ' ')
+    .replace(/\(\s*\d+(?:[.,]\d+)?\s*(?:g|gr|grs|gramos|kg|kilo)\.?\s*\)/gi, ' ')
+    .replace(/\(\s*familiar\s*\)/gi, ' ')
+    .replace(/(?:\bpack\s*)?[x×]\s*\d+(?:[.,]\d+)?\s*(?:unid(?:ades)?\.?|u\.|paq(?:uetes)?\.?(?:\s+individuales)?|g(?:r|rs)?\.?|gramos|kg)?(?=[\s.,;·)]|$)/gi, ' ')
+    .replace(/\bpack\b/gi, ' ')
+    .replace(/\s{2,}/g, ' ').replace(/\s+([.,;)])/g, '$1').replace(/\(\s*\)/g, '').replace(/[\s·,;:.-]+$/, '').trim();
+  return r && mayuscula ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+}
+function _fracCantTxt(cant, unidad, corto) {
+  if (unidad === 'g') return cant >= 1000 && cant % 1000 === 0 ? (cant / 1000) + ' kg' : cant + ' g';
+  return cant + (corto ? ' unid' : (cant === 1 ? ' unidad' : ' unidades'));
+}
+function _fracNombre(nombreBolsa, cant, unidad = 'u') { return (_sinCantidadPaquete(nombreBolsa) || String(nombreBolsa || '').trim()) + ' x ' + _fracCantTxt(cant, unidad); }
+function _fracDesc(descBolsa, cant, unidad = 'u') { const d = _sinCantidadPaquete(descBolsa, false); return d ? d + ' x ' + _fracCantTxt(cant, unidad, true) : ''; }
 function _fracCostoU(b) { const upp = Math.max(1, parseInt(b.unidadesPorPaquete) || 1); return (parseFloat(b.costo) || 0) / upp; }
 function _fracPlata(b, v) { return b.moneda === 'U$S' ? 'U$S ' + v.toFixed(2).replace('.', ',') : '$ ' + Math.round(v).toLocaleString('es-AR'); }
 // Lo que muestra cada fila mientras escribís: costo, margen contra el precio, cuántas alcanzan y el precio "de bolsa".
@@ -10291,6 +10310,11 @@ function renderFraccionar() {
             <input type="number" min="1" step="1" inputmode="numeric" value="${esc(String(r.precio || ''))}" oninput="fracCampo('${jsAttr(String(b.id))}',${i},'precio',this.value)" placeholder="6500" style="width:92px;padding:0.35rem 0.4rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.88rem">
             <button type="button" onclick="fracQuitarFila('${jsAttr(String(b.id))}',${i})" title="Quitar" style="border:none;background:none;cursor:pointer;color:var(--texto-suave);font-size:0.9rem">✕</button>
             <div id="frac-info-${esc(String(b.id))}-${i}" style="flex:1 1 100%;font-size:0.72rem;line-height:1.4">${_fracFilaInfo(b, r)}</div>
+            <div style="flex:1 1 100%;display:flex;flex-direction:column;gap:0.3rem">
+              <input type="text" id="frac-nom-${esc(String(b.id))}-${i}" maxlength="120" value="${esc(r.nombre || '')}" oninput="fracTexto('${jsAttr(String(b.id))}',${i},'nombre',this.value)" placeholder="Nombre en la tienda (se escribe solo)" style="width:100%;box-sizing:border-box;padding:0.35rem 0.5rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700">
+              <input type="text" id="frac-desc-${esc(String(b.id))}-${i}" maxlength="400" value="${esc(r.desc || '')}" oninput="fracTexto('${jsAttr(String(b.id))}',${i},'desc',this.value)" placeholder="Descripción (se escribe sola)" style="width:100%;box-sizing:border-box;padding:0.35rem 0.5rem;border:1.5px solid var(--gris-medio);border-radius:7px;font-family:inherit;font-size:0.76rem">
+              <div id="frac-ia-${esc(String(b.id))}-${i}" style="font-size:0.66rem;color:#8e44ad;min-height:0.8rem">${_fracIaTxt(r)}</div>
+            </div>
           </div>`).join('')}
           <button type="button" onclick="fracAgregarFila('${jsAttr(String(b.id))}')" style="align-self:flex-start;padding:0.3rem 0.7rem;border:1.5px dashed var(--gris-medio);border-radius:8px;background:#fff;cursor:pointer;font-size:0.76rem;font-family:inherit">+ otra fracción</button>
         </div>` : '';
@@ -10313,7 +10337,7 @@ function _fracValidas() {
   const out = [];
   Object.keys(_fracSel).forEach(id => {
     const b = productos.find(x => String(x.id) === String(id)); if (!b) return;
-    const items = (_fracSel[id] || []).filter(r => _fracCuenta(b, r.cant, r.precio).ok).map(r => ({ cant: parseInt(r.cant), precio: Math.round(parseFloat(String(r.precio).replace(',', '.'))) }));
+    const items = (_fracSel[id] || []).filter(r => _fracCuenta(b, r.cant, r.precio).ok).map(r => ({ cant: parseInt(r.cant), precio: Math.round(parseFloat(String(r.precio).replace(',', '.'))), nombre: String(r.nombre || '').trim() || _fracNombre(b.nombre, parseInt(r.cant)), desc: String(r.desc == null ? _fracDesc(b.desc, parseInt(r.cant)) : r.desc).trim() }));
     if (items.length) out.push({ b, items });
   });
   return out;
@@ -10339,10 +10363,62 @@ function fracQuitarFila(id, i) {
   renderFraccionar();
 }
 // Escribir no repinta la lista (no se pierde el foco): solo se actualizan las cuentas de esa bolsa y el botón.
+function _fracIaTxt(r) {
+  if (!(parseInt(r.cant) > 0)) return '';
+  if (r.ia === 'pensando') return '✨ la IA lo está escribiendo…';
+  if (r.ia === 'ia') return '✨ escrito por la IA — corregilo si querés';
+  return '';
+}
+function _fracPintarTextos(id, i) {
+  const r = (_fracSel[id] || [])[i]; if (!r) return;
+  const n = document.getElementById('frac-nom-' + id + '-' + i), d = document.getElementById('frac-desc-' + id + '-' + i), ia = document.getElementById('frac-ia-' + id + '-' + i);
+  if (n && document.activeElement !== n) n.value = r.nombre || '';
+  if (d && document.activeElement !== d) d.value = r.desc || '';
+  if (ia) ia.textContent = _fracIaTxt(r);
+}
+function fracTexto(id, i, campo, v) {
+  const r = (_fracSel[id] || [])[i]; if (!r) return;
+  r[campo] = v;
+  if (campo === 'nombre') r.nomTocado = true; else r.descTocado = true;
+  _fracPie();
+}
+let _fracIaTimer = {};
+// Una sola consulta por bolsa con todas sus cantidades, cuando dejás de escribir (0,9 s). Si la IA no contesta,
+// queda lo de la regla fija. Lo que ya escribiste vos no se pisa.
+function _fracPedirIA(id) {
+  clearTimeout(_fracIaTimer[id]);
+  _fracIaTimer[id] = setTimeout(async () => {
+    const filas = (_fracSel[id] || []).filter(r => parseInt(r.cant) > 0 && !(r.nomTocado && r.descTocado));
+    const cants = [...new Set(filas.map(r => parseInt(r.cant)))];
+    if (!cants.length) return;
+    filas.forEach(r => { r.ia = 'pensando'; });
+    (_fracSel[id] || []).forEach((r, j) => _fracPintarTextos(id, j));
+    let res = null;
+    try { res = await fetchConSesion(APPS_SCRIPT_URL + '?' + new URLSearchParams({ accion: 'sugerirFraccion', padre: String(id), cants: cants.join(','), unidad: 'u' })); } catch (e) { res = null; }
+    const porCant = {}; ((res && res.fracciones) || []).forEach(f => { porCant[parseInt(f.cant)] = f; });
+    (_fracSel[id] || []).forEach((r, j) => {
+      const f = porCant[parseInt(r.cant)];
+      if (f && f.ia) { if (!r.nomTocado) r.nombre = f.nombre; if (!r.descTocado) r.desc = f.desc; r.ia = 'ia'; }
+      else if (r.ia === 'pensando') r.ia = '';
+      _fracPintarTextos(id, j);
+    });
+    _fracPie();
+  }, 900);
+}
 function fracCampo(id, i, campo, v) {
   const r = (_fracSel[id] || [])[i]; if (!r) return;
   r[campo] = v;
   const b = productos.find(x => String(x.id) === String(id)); if (!b) return;
+  if (campo === 'cant') {
+    const k = parseInt(v) || 0;
+    if (k > 0) {
+      if (!r.nomTocado) r.nombre = _fracNombre(b.nombre, k);
+      if (!r.descTocado) r.desc = _fracDesc(b.desc, k);
+      r.ia = '';
+      _fracPedirIA(id);
+    } else { if (!r.nomTocado) r.nombre = ''; if (!r.descTocado) r.desc = ''; r.ia = ''; }
+    _fracPintarTextos(id, i);
+  }
   (_fracSel[id] || []).forEach((rr, j) => { const el = document.getElementById('frac-info-' + id + '-' + j); if (el) el.innerHTML = _fracFilaInfo(b, rr); });
   _fracPie();
 }
@@ -10350,7 +10426,7 @@ async function publicarFracciones(btn) {
   const lotes = _fracValidas();
   if (!lotes.length) return;
   const n = lotes.reduce((s, x) => s + x.items.length, 0);
-  const resumen = lotes.map(x => '• ' + x.b.nombre + ': ' + x.items.map(it => 'x' + it.cant + ' a $ ' + it.precio.toLocaleString('es-AR')).join(', ')).join('\n');
+  const resumen = lotes.map(x => x.items.map(it => '• ' + it.nombre + ' — $ ' + it.precio.toLocaleString('es-AR')).join('\n')).join('\n');
   if (!confirm('¿Publicar ' + n + ' fracci' + (n === 1 ? 'ón' : 'ones') + ' en la tienda minorista?\n\n' + resumen)) return;
   btn.disabled = true; const txt = btn.textContent; btn.textContent = 'Publicando…';
   let ok = 0; const errores = [];
@@ -10640,6 +10716,8 @@ async function guardarEdicionProducto() {
     document.getElementById('ep-pmay').value, document.getElementById('ep-pmin').value);
   if (_errF) { showToast(_errF); status.textContent = ''; return; }
   status.textContent = 'Guardando...';
+  const _antesEP = productos.find(x => String(x.id) === String(_epId));
+  const _antesNom = _antesEP ? _antesEP.nombre : '', _antesDesc = _antesEP ? (_antesEP.desc || '') : '';
   const r = await apiWrite(new URLSearchParams({
     accion: 'editarProducto', id: _epId,
     nombre: document.getElementById('ep-nombre').value.trim(),
@@ -10665,7 +10743,27 @@ async function guardarEdicionProducto() {
     ..._epSueltasParam()   // ✂️ v5.03: sueltas de la bolsa abierta (solo si las cambiaste)
   }), '💾 Producto actualizado ✓');
   status.textContent = '';
-  if (!r.error) { await cargarProductos(); cerrarEditorProducto(); }   // cerrar tras guardar (el toast confirma)
+  if (!r.error) {
+    await _renombrarFraccionesDe(_epId, _antesNom, _antesDesc, document.getElementById('ep-nombre').value.trim(), document.getElementById('ep-desc').value.trim());
+    await cargarProductos(); cerrarEditorProducto();   // cerrar tras guardar (el toast confirma)
+  }
+}
+// ✂️ v5.04: si le cambiaste el nombre (o la descripción) a una BOLSA con fracciones, te pregunta si las actualiza,
+// mostrándote cómo quedarían. Si alguna fracción tenía un nombre a mano, lo ves antes de aceptar.
+async function _renombrarFraccionesDe(id, antesNom, antesDesc, nuevoNom, nuevoDesc) {
+  const frs = fraccionesDe(id);
+  const cambioNom = nuevoNom && nuevoNom !== antesNom, cambioDesc = nuevoDesc !== antesDesc;
+  if (!frs.length || (!cambioNom && !cambioDesc)) return;
+  const nuevos = frs.map(f => ({ f, nombre: cambioNom ? _fracNombre(nuevoNom, f.fraccionCant) : f.nombre, desc: cambioDesc ? _fracDesc(nuevoDesc, f.fraccionCant) : null }));
+  const lista = nuevos.map(x => '• ' + x.f.nombre + (x.nombre !== x.f.nombre ? '  →  ' + x.nombre : '')).join('\n');
+  if (!confirm('Esta bolsa tiene ' + frs.length + ' fracci' + (frs.length === 1 ? 'ón' : 'ones') + '. ¿Actualizar también su ' + (cambioNom ? 'nombre' : '') + (cambioNom && cambioDesc ? ' y ' : '') + (cambioDesc ? 'descripción' : '') + '?\n\n' + lista)) return;
+  for (const x of nuevos) {
+    const pr = { accion: 'editarProducto', id: String(x.f.id) };
+    if (cambioNom) pr.nombre = x.nombre;
+    if (cambioDesc) pr.desc = x.desc || '__VACIO__';
+    await apiWrite(new URLSearchParams(pr), '');
+  }
+  showToast('✂️ Fracciones actualizadas ✓');
 }
 
 async function eliminarProductoEditor() {

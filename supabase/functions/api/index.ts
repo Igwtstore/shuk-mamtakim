@@ -2607,6 +2607,82 @@ async function sugerirFicha(id: string, motivo: string, personas: number) {
   } catch (err) { return { error: 'IA: ' + err }; }
 }
 
+// ✂️ v5.04 — NOMBRE Y DESCRIPCIÓN DE UNA FRACCIÓN (pedido del usuario 24/09: "no puede decir Mix x 34 · x5, se entiende
+// que son 5 bolsas de 34"). La fracción lleva el nombre del producto SIN la cantidad/peso del paquete + lo que trae ella:
+// "Elite Etzbaot Mix x 34 unid" → "Elite Etzbaot Mix x 5 unidades". La IA lo escribe (sugerirFraccion) y esta regla fija
+// es el respaldo (y lo que usa el panel al instante mientras la IA contesta).
+function sinCantidadPaquete(t: string, mayuscula = true) {
+  const r = String(t || '')
+    .replace(/\(\s*\d+\s*(?:-\s*\d+\s*)?(?:unid(?:ades)?|u|paq(?:uetes)?)\.?\s*\)/gi, ' ')                 // (19-20 unid)
+    .replace(/\(\s*\d+(?:[.,]\d+)?\s*(?:g|gr|grs|gramos|kg|kilo)\.?\s*\)/gi, ' ')                               // (408g)
+    .replace(/\(\s*familiar\s*\)/gi, ' ')                                                                        // (familiar)
+    .replace(/(?:\bpack\s*)?[x×]\s*\d+(?:[.,]\d+)?\s*(?:unid(?:ades)?\.?|u\.|paq(?:uetes)?\.?(?:\s+individuales)?|g(?:r|rs)?\.?|gramos|kg)?(?=[\s.,;·)]|$)/gi, ' ')   // x 34 unid · x16 · x 100 grs. · Pack x 4
+    .replace(/\bpack\b/gi, ' ')
+    .replace(/\s{2,}/g, ' ').replace(/\s+([.,;)])/g, '$1').replace(/\(\s*\)/g, '').replace(/[\s·,;:.-]+$/, '').trim();
+  return r && mayuscula ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+}
+function cantFraccionTxt(cant: number, unidad: string, corto = false) {
+  if (unidad === 'g') return cant >= 1000 && cant % 1000 === 0 ? (cant / 1000) + ' kg' : cant + ' g';
+  return cant + (corto ? ' unid' : (cant === 1 ? ' unidad' : ' unidades'));
+}
+function nombreFraccion(nombreBolsa: string, cant: number, unidad = 'u') { return (sinCantidadPaquete(nombreBolsa) || String(nombreBolsa || '').trim()) + ' x ' + cantFraccionTxt(cant, unidad); }
+function descFraccion(descBolsa: string, cant: number, unidad = 'u') { const d = sinCantidadPaquete(descBolsa, false); return d ? d + ' x ' + cantFraccionTxt(cant, unidad, true) : ''; }
+const FRACCION_IA_SCHEMA = {
+  type: 'object',
+  properties: {
+    fracciones: { type: 'array', items: { type: 'object', properties: {
+      cant: { type: 'integer', description: 'La cantidad de la fracción, igual a la que se pidió' },
+      nombre: { type: 'string', description: 'Nombre de la fracción para la tienda' },
+      desc: { type: 'string', description: 'Descripción de la fracción para la tienda' },
+    }, required: ['cant', 'nombre', 'desc'], additionalProperties: false } },
+  },
+  required: ['fracciones'], additionalProperties: false,
+};
+function pedidoFraccionIA(bolsa: any, cants: number[], unidad: string) {
+  const trae = unidad === 'g' ? 'una bolsita de ' + cantFraccionTxt(Math.max(1, parseFloat(bolsa.peso) || 100), 'g') : 'una bolsa de ' + Math.max(1, parseInt(bolsa.unidades_por_paquete) || 1) + ' unidades';
+  const system = 'Escribís fichas para la tienda minorista de «Shuk Mamtakim», un almacén de Buenos Aires de golosinas y productos kosher importados de Israel. ' +
+    'Una bolsa se vende también FRACCIONADA: de ' + trae + ' se arman bolsitas más chicas (o más grandes si es por peso). Para cada cantidad pedida, escribí el nombre y la descripción de esa fracción.\n\n' +
+    'Reglas:\n' +
+    '- Nombre: el nombre del producto SIN la cantidad, el peso ni el tamaño del paquete original (x 34 unid, (19-20 unid), Pack x 4, 408g, familiar, pack), y al final « x N unidades» (una sola: « x 1 unidad»)' + (unidad === 'g' ? ' — acá es POR PESO: al final « x 250 g» (1000 g = « x 1 kg»)' : '') + '.\n' +
+    '- Conservá tal cual la marca, la línea, el sabor y las palabras en hebreo transliterado (no las traduzcas). Si es un surtido («Mix», «varios sabores») eso se queda.\n' +
+    '- Descripción: la misma del paquete, en el mismo tono, sacando lo que para la fracción ya no es cierto (la cantidad total, el peso total, «familiar», «pack», «ideal para compartir en familia»), y terminá con « x N unid»' + (unidad === 'g' ? ' (por peso: « x 250 g»)' : '') + '. Si la bolsa no tiene descripción, dejala vacía.\n' +
+    '- No inventes nada: ni sabores, ni ingredientes, ni pesos por unidad.\n\n' +
+    'Ejemplo (bolsa de 34, fracción de 5): nombre «Elite Etzbaot Mix x 34 unid» → «Elite Etzbaot Mix x 5 unidades»; descripción «barra de chocolate tipo KINDER surtidos: Cream Jalav y con chispas que explotan en la boca x34 unid (408g) (familiar)» → «barra de chocolate tipo KINDER surtidos: Cream Jalav y con chispas que explotan en la boca x 5 unid».';
+  const texto = 'Producto: ' + String(bolsa.nombre || '') + '\nDescripción: ' + String(bolsa.descripcion || '') + '\nCategoría: ' + String(bolsa.categoria || '') +
+    '\nFracciones a escribir: ' + cants.map((c) => cantFraccionTxt(c, unidad)).join(', ');
+  return {
+    model: 'claude-opus-5', max_tokens: 2000, fallbacks: 'default',
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: FRACCION_IA_SCHEMA } },
+    system, messages: [{ role: 'user', content: [{ type: 'text', text: texto }] }],
+  };
+}
+// Lo que devuelve la IA se usa solo si viene completo y para las cantidades pedidas; si no, va la regla fija.
+function limpiarFraccionIA(t: any, bolsa: any, cants: number[], unidad: string) {
+  const porCant: any = {};
+  (Array.isArray(t && t.fracciones) ? t.fracciones : []).forEach((f: any) => { const c = parseInt(f && f.cant) || 0; if (c && String(f.nombre || '').trim()) porCant[c] = f; });
+  return cants.map((c) => {
+    const f = porCant[c];
+    const nombre = f ? String(f.nombre).replace(/[<>]/g, '').trim().slice(0, 120) : '';
+    const desc = f ? String(f.desc || '').replace(/[<>]/g, '').trim().slice(0, 400) : '';
+    return { cant: c, nombre: nombre || nombreFraccion(bolsa.nombre, c, unidad), desc: f ? desc : descFraccion(bolsa.descripcion, c, unidad), ia: !!nombre };
+  });
+}
+async function sugerirFraccion(idBolsa: string, cantsTxt: string, unidad: string) {
+  const cants = [...new Set(String(cantsTxt || '').split(',').map((x) => parseInt(x) || 0).filter((x) => x > 0 && x <= 100000))].slice(0, 12);
+  if (!cants.length) return { error: 'sin cantidades' };
+  const pr = await sbGet('productos', 'select=id,nombre,descripcion,categoria,unidades_por_paquete,peso&id=eq.' + encodeURIComponent(idBolsa));
+  if (!pr.length) return { error: 'no encontré la bolsa' };
+  const bolsa = pr[0], u = unidad === 'g' ? 'g' : 'u';
+  const regla = () => ({ ok: true, fracciones: limpiarFraccionIA(null, bolsa, cants, u), ia: false });
+  const apiKey = await claveIA();
+  if (!apiKey) return regla();
+  try {
+    const r = await anthropicMsg(apiKey, pedidoFraccionIA(bolsa, cants, u), ['server-side-fallback-2026-07-01']);
+    if (r.code !== 200 || r.body.stop_reason === 'refusal') return regla();
+    return { ok: true, fracciones: limpiarFraccionIA(JSON.parse(r.texto), bolsa, cants, u), ia: true };
+  } catch { return regla(); }
+}
+
 // ✨ PEDIDO POR MENSAJE, CON IA (v4.89). Jony pega el mensaje del cliente (o sube la foto de su lista)
 // y la IA lo convierte en productos del catálogo con su cantidad. No se registra nada solo: el pedido
 // cae en "Cargar pedido manual" para revisarlo y confirmarlo.
@@ -3524,7 +3600,7 @@ Deno.serve(async (req) => {
   //    pedirlo. Toda acción nueva que toque costos, proveedores o compras NACE acá adentro.
   // 'setAvisoTienda' entra acá en v4.53: cambia la VIDRIERA que ve todo cliente, y hasta
   // ahora la podía tocar cualquier usuario logueado (el token de Miri incluido).
-  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary', 'crearPedidoArmado', 'listarPedidosArmados', 'borrarPedidoArmado', 'teToca', 'teTocaMarcar', 'crearFracciones'];
+  const SOLO_JONY = ['historialCompras', 'ultimasCompras', 'accesoMiri', 'setAccesoMiri', 'setAvisoTienda', 'getAlertasPush', 'setAlertasPush', 'probarPushJony', 'sugerirFicha', 'setFiestasTienda', 'armarPedidoIA', 'setEnvioTienda', 'guardarClaveIA', 'guardarClaveGemini', 'estadoClavesIA', 'guardarClaveCloudinary', 'crearPedidoArmado', 'listarPedidosArmados', 'borrarPedidoArmado', 'teToca', 'teTocaMarcar', 'crearFracciones', 'sugerirFraccion'];
   // OJO: el texto debe ser EXACTAMENTE 'no autorizado' — candyshop.html compara con === para
   //  auto-renovar el token vencido (index.html usa indexOf, le sirve igual). Bug #15 del playón.
   const esPublica = PUBLICAS.indexOf(accion) !== -1;
@@ -3975,10 +4051,11 @@ Deno.serve(async (req) => {
         if (cant < 1 || cant >= uppF) return json({ error: 'la fracción tiene que ser de 1 a ' + (uppF - 1) + ' unidades (la bolsa trae ' + uppF + ')' });
         if (precio <= 0) return json({ error: 'falta el precio de la fracción x' + cant });
         if (cantsYa.has(cant)) return json({ error: 'ya hay una fracción x' + cant + ' de esta bolsa' });
-        const nombreF = (_libre(String(it.nombre || ''), 120).trim() || (padre.nombre + ' · x' + cant));
+        const nombreF = (_libre(String(it.nombre || ''), 120).trim() || nombreFraccion(padre.nombre, cant));   // ✂️ v5.04: "… x 5 unidades", no "… x 34 · x5"
+        const descF = it.desc !== undefined ? _libre(String(it.desc || ''), 400).trim() : descFraccion(padre.descripcion || '', cant);
         if (nombresUsados.has(nombreF.toLowerCase())) return json({ error: 'ya existe un producto llamado «' + nombreF + '» (el nombre tiene que ser único: con él se calcula la ganancia)' });
         nombresUsados.add(nombreF.toLowerCase()); cantsYa.add(cant);
-        filasF.push({ id: String(++maxIdF), nombre: nombreF, descripcion: padre.descripcion || '', precio_min: precio, precio_may: null, stock: 0, imagen: padre.imagen || '', activo: true, categoria: padre.categoria || 'Varios', visible: true, visible_cat: 'Minorista', dueno: padre.dueno, desc_bot: padre.desc_bot || '', moneda: padre.moneda, costo: null, unidades_por_paquete: cant, peso: 0, ean: '', etiqueta: '', hashgaja: padre.hashgaja || '', kosher_tipo: padre.kosher_tipo || '', jalav: padre.jalav || '', fraccion_de: String(padre.id), fraccion_cant: cant });
+        filasF.push({ id: String(++maxIdF), nombre: nombreF, descripcion: descF, precio_min: precio, precio_may: null, stock: 0, imagen: padre.imagen || '', activo: true, categoria: padre.categoria || 'Varios', visible: true, visible_cat: 'Minorista', dueno: padre.dueno, desc_bot: padre.desc_bot || '', moneda: padre.moneda, costo: null, unidades_por_paquete: cant, peso: 0, ean: '', etiqueta: '', hashgaja: padre.hashgaja || '', kosher_tipo: padre.kosher_tipo || '', jalav: padre.jalav || '', fraccion_de: String(padre.id), fraccion_cant: cant });
       }
       await sbInsert('productos', filasF);
       for (const f of filasF) await sbInsert('movimientos_stock', { fecha: fechaAhora(), id_prod: f.id, producto: f.nombre, cambio: 0, antes: 0, despues: 0, origen: '✂️ Fracción publicada: x' + f.fraccion_cant + ' de «' + padre.nombre + '» (el stock sale de la bolsa)' });
@@ -5365,6 +5442,8 @@ Deno.serve(async (req) => {
     if (accion === 'analizarFotoProducto') return json(await analizarFotoProducto(Q('url')));
     // ✨ v4.87: la IA propone una ficha mejor para un producto (Jony la aplica o la descarta en el panel).
     if (accion === 'sugerirFicha') return json(await sugerirFicha(Q('id'), Q('motivo'), parseInt(Q('personas')) || 0));
+    // ✂️ v5.04: nombre y descripción de las fracciones de una bolsa (la IA, con la regla fija de respaldo).
+    if (accion === 'sugerirFraccion') return json(await sugerirFraccion(Q('padre'), Q('cants'), Q('unidad')));
     // ✨ v4.89: el pedido armado por la IA desde el mensaje o la foto del cliente (llega por POST).
     if (accion === 'armarPedidoIA') return json(await armarPedidoIA(P(body, 'texto'), body.imagen));
     if (accion === 'bandejaSubir') {

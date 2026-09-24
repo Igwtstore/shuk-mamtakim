@@ -24,7 +24,7 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   process.on('exit', () => { try { srv.kill(); mock.kill(); } catch { /**/ } });
   await esperar(1500);
   const b = await chromium.launch();
-  const checks = [], errs = [], motor = [], dialogos = [];
+  const checks = [], errs = [], motor = [], dialogos = [], iaPedidos = [];
   const ok = (n, c) => checks.push({ n, ok: !!c });
   const ctx = await b.newContext({ viewport: { width: +(process.env.ANCHO || 1100), height: 900 } });
   const pg = await ctx.newPage();
@@ -37,6 +37,11 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
       const q = Object.fromEntries(new URL(u).searchParams.entries());
       let body = {}; try { body = rq.postData() ? JSON.parse(rq.postData()) : {}; } catch { body = {}; }
       const acc = q.accion || body.accion || '';
+      if (acc === 'sugerirFraccion') {   // la IA (simulada): contesta con un "✨" para distinguirla de la regla fija
+        iaPedidos.push(q);
+        const fr = String(q.cants || '').split(',').map(Number).map(c => ({ cant: c, nombre: 'Marshmallow Twists Carmel x ' + c + ' unidades ✨', desc: 'Bastones IA x ' + c + ' unid', ia: true }));
+        return new Promise(r => setTimeout(r, 400)).then(() => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, ia: true, fracciones: fr }) }));
+      }
       if (['crearFracciones', 'editarProducto', 'eliminarProducto'].includes(acc)) { motor.push({ acc, ...q, ...body }); return route.fulfill({ contentType: 'application/json', body: '{"ok":true,"creadas":[]}' }); }
       if (acc === 'getEstadoTienda') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ estado: 'abierta' }) });
       return route.fulfill({ contentType: 'application/json', body: '[]' });
@@ -80,6 +85,11 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   const cant = pg.locator('#frac-lista input[placeholder="3"]').first();
   await cant.click(); await cant.pressSequentially('3');
   ok('escribir no repinta la lista (el cursor sigue en el casillero)', await pg.evaluate(() => document.activeElement && document.activeElement.placeholder === '3'));
+  const nom0 = () => pg.evaluate(() => ({ n: document.getElementById('frac-nom-245-0').value, d: document.getElementById('frac-desc-245-0').value, ia: document.getElementById('frac-ia-245-0').textContent }));
+  const n0 = await nom0();
+  ok('al instante: "Marshmallow Twists Carmel x 3 unidades" (la regla fija, sin esperar a la IA)', n0.n === 'Marshmallow Twists Carmel x 3 unidades' && n0.d === 'desc x 3 unid');
+  ok('y después la IA lo mejora (una sola consulta por bolsa)', await hasta(async () => (await nom0()).n === 'Marshmallow Twists Carmel x 3 unidades ✨') && iaPedidos.length >= 1 && iaPedidos[0].padre === '245' && iaPedidos[0].cants === '3');
+  ok('…avisando "✨ escrito por la IA — corregilo si querés"', (await nom0()).ia.includes('escrito por la IA') && (await nom0()).d === 'Bastones IA x 3 unid');
   const precio = pg.locator('#frac-lista input[placeholder="6500"]').first();
   await precio.click(); await precio.pressSequentially('6500');
   const info = await pg.evaluate(() => document.getElementById('frac-info-245-0').innerText);
@@ -104,15 +114,18 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   ok('quitar filas no borra lo ya escrito', (await c5.inputValue()) === '3');
   await pg.evaluate(() => fracAgregarFila('245'));
   const c4 = pg.locator('#frac-lista input[placeholder="3"]').nth(1), p4 = pg.locator('#frac-lista input[placeholder="6500"]').nth(1);
-  await c4.click(); await c4.pressSequentially('5'); await p4.click(); await p4.pressSequentially('10000');
+  await c4.click(); await c4.pressSequentially('5');
+  await pg.locator('#frac-nom-245-1').fill('Mi nombre a mano');   // lo escribís vos antes de que conteste la IA
+  await p4.click(); await p4.pressSequentially('10000');
+  ok('lo que escribiste vos NO lo pisa la IA (la descripción sí la completa)', await hasta(async () => pg.evaluate(() => document.getElementById('frac-desc-245-1').value === 'Bastones IA x 5 unid')) && await pg.evaluate(() => document.getElementById('frac-nom-245-1').value === 'Mi nombre a mano'));
   if (process.env.CAPTURA) await pg.locator('#frac-card').screenshot({ path: process.env.CAPTURA });
   ok('una x5 a $ 10.000 → "Publicar 2 fracciones"', (await pg.evaluate(() => document.getElementById('frac-publicar').textContent)).includes('Publicar 2 fracciones'));
 
   await pg.evaluate(() => publicarFracciones(document.getElementById('frac-publicar')));
-  ok('pide confirmación con el resumen', await hasta(async () => dialogos.some(d => d.startsWith('confirm:') && d.includes('Marshmallow Twists Carmel: x3 a $ 6.500, x5 a $ 10.000'))));
+  ok('pide confirmación con el resumen (con los nombres que van a la tienda)', await hasta(async () => dialogos.some(d => d.startsWith('confirm:') && d.includes('• Marshmallow Twists Carmel x 3 unidades ✨ — $ 6.500') && d.includes('• Mi nombre a mano — $ 10.000'))));
   ok('le manda al motor la bolsa y las 2 fracciones (por POST, solo cantidad y precio)', await hasta(async () => motor.some(m => m.acc === 'crearFracciones')));
   const mf = motor.find(m => m.acc === 'crearFracciones') || {};
-  ok('…exactamente: padre 245, [{x3, $6500}, {x5, $10000}]', mf.padre === '245' && mf.items === JSON.stringify([{ cant: 3, precio: 6500 }, { cant: 5, precio: 10000 }]));
+  ok('…exactamente: padre 245, x3 y x5 con su precio, su nombre y su descripción', mf.padre === '245' && mf.items === JSON.stringify([{ cant: 3, precio: 6500, nombre: 'Marshmallow Twists Carmel x 3 unidades ✨', desc: 'Bastones IA x 3 unid' }, { cant: 5, precio: 10000, nombre: 'Mi nombre a mano', desc: 'Bastones IA x 5 unid' }]));
   ok('nunca manda costo ni stock (los pone la base)', !/costo|stock/.test(mf.items || ''));
   ok('después de publicar, la bolsa queda destildada', await hasta(async () => pg.evaluate(() => !Object.keys(_fracSel).length)));
 
@@ -158,6 +171,13 @@ async function hasta(fn, ms = 6000) { const t0 = Date.now(); while (Date.now() -
   await pg.evaluate(() => { document.getElementById('ep-sueltas').value = '12'; });
   await pg.evaluate(() => guardarEdicionProducto());
   ok('guardar la bolsa manda las sueltas corregidas (12)', await hasta(async () => motor.some(m => m.acc === 'editarProducto' && m.id === '245' && m.sueltas === '12')));
+  // Renombrar la bolsa → te pregunta si renombra sus fracciones, mostrando cómo quedan
+  await prep();
+  await pg.evaluate(() => irAEditarProducto(245));
+  await pg.evaluate(() => { document.getElementById('ep-nombre').value = 'Marshmallow Twists Frutilla x 18 unid'; });
+  await pg.evaluate(() => guardarEdicionProducto());
+  ok('renombrar la bolsa: pregunta si actualiza sus fracciones y muestra cómo quedan', await hasta(async () => dialogos.some(d => d.startsWith('confirm:') && d.includes('¿Actualizar también su nombre?') && d.includes('Marshmallow Twists Carmel · x4  →  Marshmallow Twists Frutilla x 4 unidades'))));
+  ok('…y al aceptar renombra la fracción (sin el "x 18" de la bolsa)', await hasta(async () => motor.some(m => m.acc === 'editarProducto' && m.id === '400' && m.nombre === 'Marshmallow Twists Frutilla x 4 unidades')));
   await pg.evaluate(() => irAEditarProducto(208));
   const k = await pg.evaluate(() => ({ su: document.getElementById('ep-sueltas') && document.getElementById('ep-sueltas').value, visAmbos: [...document.getElementById('ep-visible').options].find(o => o.value === 'Ambos').disabled }));
   ok('otra bolsa: sus sueltas en 0 y la opción "Ambos" vuelve a estar (no quedó bloqueada)', k.su === '0' && !k.visAmbos);
