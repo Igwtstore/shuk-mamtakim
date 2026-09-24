@@ -63,7 +63,7 @@ const TIENDA = new Function(
 // ── EL MOTOR (index.ts) ──
 const MOTOR = new Function(
   'let AHORA = "23/09/2026 14:05";\nconst fechaAhora = () => AHORA;\n' +
-  sinTipos(constDe(TS, '_libre') + constDe(TS, '_hoyISO_AR') + fnDe(TS, '_fechaOfertaISO') + '\n' + fnDe(TS, '_conDescVip') + '\n' + fnDe(TS, 'calcularPedidoTienda') + '\n' +
+  sinTipos(constDe(TS, '_libre') + constDe(TS, '_hoyISO_AR') + fnDe(TS, '_fechaOfertaISO') + '\n' + fnDe(TS, '_conDescVip') + '\n' + fnDe(TS, 'precioMinoristaHoy') + '\n' + fnDe(TS, 'calcularPedidoTienda') + '\n' +
     constDe(TS, '_plataTxt') + constDe(TS, 'PARTES_PEDIDO') + fnDe(TS, 'totalNoCierra')) +
   '\nreturn { _libre, _hoyISO_AR, calcularPedidoTienda, totalNoCierra, PARTES_PEDIDO, _plataTxt, setAhora: a => { AHORA = a; } };')();
 

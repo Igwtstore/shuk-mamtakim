@@ -2012,6 +2012,18 @@ function _fechaOfertaISO(f: string) {
   m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
 }
+// 🏷️ EL precio minorista de HOY para `qty` unidades: la oferta vigente (si de verdad baja el precio) y el pack por
+// umbral ("llevando N o más, cada una a $ X"). v5.02: la usan la tienda (calcularPedidoTienda) Y el bot de WhatsApp/SMS/voz
+// — una sola cuenta, así el bot nunca cobra distinto que la tienda. `base` = el precio de partida si ya viene rebajado
+// (el link VIP); si no, el de lista.
+function precioMinoristaHoy(p: any, qty: number, hoyISO: string, base = -1) {
+  let v = base >= 0 ? base : (parseFloat(p.precio_min) || 0);
+  const of = parseFloat(p.precio_oferta) || 0, vence = _fechaOfertaISO(String(p.fecha_oferta || '').trim());
+  if (of > 0 && !(vence && hoyISO > vence) && of < v) v = of;
+  const cp = parseInt(p.cant_pack) || 0, pp = parseFloat(p.precio_pack) || 0;
+  if (cp > 0 && pp > 0 && qty >= cp && pp < v) v = pp;
+  return Math.round(v);
+}
 function _conDescVip(v: number, pct: number, esDolar: boolean) { if (!pct || pct <= 0) return v; const r = v * (1 - pct / 100); return esDolar ? Math.ceil(r * 100) / 100 : Math.ceil(r); }
 function calcularPedidoTienda(pares: any[], filas: any[], mayorista: boolean, vip: any, hoyISO: string) {
   const porId: any = {};
@@ -2040,12 +2052,7 @@ function calcularPedidoTienda(pares: any[], filas: any[], mayorista: boolean, vi
       if (mon === 'U$S') { unit = may; if (esJonyP) usdJONY += unit * qty; else usdMyri += unit * qty; }
       else { unit = Math.round(may); if (esJonyP) arsJONY += unit * qty; else arsMyri += unit * qty; }
     } else {
-      let v = min;
-      const of = parseFloat(p.precio_oferta) || 0, vence = _fechaOfertaISO(String(p.fecha_oferta || '').trim());
-      if (of > 0 && !(vence && hoyISO > vence) && of < v) v = of;
-      const cp = parseInt(p.cant_pack) || 0, pp = parseFloat(p.precio_pack) || 0;
-      if (cp > 0 && pp > 0 && qty >= cp && pp < v) v = pp;
-      unit = Math.round(v); mon = '$';
+      unit = precioMinoristaHoy(p, qty, hoyISO, min); mon = '$';
       if (esJonyP) arsJONY += unit * qty; else arsMyri += unit * qty;
     }
     if (!(unit > 0)) sinPrecio.push(String(p.nombre || '#' + id));   // la tienda no deja pedir algo sin precio: si llega, alguien lo armó a mano
@@ -2752,13 +2759,37 @@ async function botLeerProductos() {
     const stk = parseInt(p.stock) || 0;
     if (p.activo === false || vis === 'Oculto' || stk <= 0) return false;
     return vis === 'Ambos' || vis === 'Minorista';
-  }).map((p: any) => ({ id: p.id.toString(), nombre: (p.nombre || '').toString(), desc: (p.descripcion || '').toString(), precioMin: parseFloat(p.precio_min) || 0, stock: parseInt(p.stock) || 0, categoria: (p.categoria || 'Varios').toString(), dueno: (p.dueno || 'Miri').toString(), moneda: ((p.moneda || '$').toString() === 'U$S') ? 'U$S' : '$', descBot: (p.desc_bot || '').toString() }));
+  }).map((p: any) => ({ id: p.id.toString(), nombre: (p.nombre || '').toString(), desc: (p.descripcion || '').toString(), precioMin: parseFloat(p.precio_min) || 0, stock: parseInt(p.stock) || 0, categoria: (p.categoria || 'Varios').toString(),
+    precio_min: p.precio_min, precio_oferta: p.precio_oferta, fecha_oferta: p.fecha_oferta, cant_pack: p.cant_pack, precio_pack: p.precio_pack,   // 🏷️ v5.02: el bot cobra ofertas y packs
+    dueno: (p.dueno || 'Miri').toString(), moneda: ((p.moneda || '$').toString() === 'U$S') ? 'U$S' : '$', descBot: (p.desc_bot || '').toString() }));
+}
+// ══════════════════════════════════════════════════════════════════════════════
+//  🤖🏷️ EL BOT CON OFERTAS (v5.02). Hasta acá el bot cobraba SIEMPRE el precio de lista: la oferta que se veía
+//  en la tienda no existía por WhatsApp/SMS/teléfono. Ahora el bot usa la MISMA cuenta que la tienda
+//  (precioMinoristaHoy) para todo: la lista del menú, el carrito, el total y el pedido que entra al panel. Y las
+//  muestra: precio rebajado con 🔥 y el de antes, el pack, y una categoría "🔥 Ofertas" arriba de todo.
+// ══════════════════════════════════════════════════════════════════════════════
+const CAT_OFERTAS = '🔥 Ofertas';
+const precioBot = (p: any, qty: number) => precioMinoristaHoy(p, qty, _hoyISO_AR());
+function botPackActivo(p: any) {
+  const cp = parseInt(p.cant_pack) || 0, pp = parseFloat(p.precio_pack) || 0;
+  return cp > 1 && pp > 0 && Math.round(pp) < precioBot(p, 1) ? { cant: cp, precio: Math.round(pp) } : null;
+}
+const botEnOferta = (p: any) => precioBot(p, 1) < Math.round(p.precioMin || 0) || !!botPackActivo(p);
+function botEtiquetaPrecio(p: any) {
+  const u1 = precioBot(p, 1), lista = Math.round(p.precioMin || 0);
+  let t = botMoney(u1);
+  if (u1 < lista) t += ' 🔥 (antes ' + botMoney(lista) + ')';
+  const pk = botPackActivo(p);
+  if (pk) t += ' · llevando ' + pk.cant + ' o más: ' + botMoney(pk.precio) + ' c/u';
+  return t;
 }
 function botCategorias(prods: any[]) {
   const orden = ['Pitzujim', 'Chocolate', 'Caramelo', 'Chupetín', 'Pastilla', 'Yumi', 'Varios'];
   const cats: string[] = [];
   prods.forEach((p) => { if (cats.indexOf(p.categoria) === -1) cats.push(p.categoria); });
   cats.sort((a, b) => { const ia = orden.indexOf(a), ib = orden.indexOf(b); return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib); });
+  if (prods.some(botEnOferta)) cats.unshift(CAT_OFERTAS);   // lo primero que ve: lo que está más barato hoy
   return cats;
 }
 // Estado de la conversación por teléfono (carrito + nombre + historial), tabla bot_sesiones.
@@ -2789,10 +2820,10 @@ function botMenuCategorias(prods: any[]) {
   return s;
 }
 function botListarCategoria(prods: any[], cat: string) {
-  const items = prods.filter((p) => p.categoria === cat);
+  const items = cat === CAT_OFERTAS ? prods.filter(botEnOferta) : prods.filter((p) => p.categoria === cat);
   if (!items.length) return 'No hay productos en esa categoria ahora. Mandá LISTA.';
   let s = cat.toUpperCase() + ':\n\n';
-  items.forEach((p) => { s += p.id + '- ' + p.nombre + (p.desc ? ' ' + botCorto(p.desc, 20) : '') + '  ' + botMoney(p.precioMin) + '\n'; });
+  items.forEach((p) => { s += p.id + '- ' + p.nombre + (p.desc ? ' ' + botCorto(p.desc, 20) : '') + '  ' + botEtiquetaPrecio(p) + '\n'; });
   const ej2 = items[1] ? ', ' + items[1].id + 'x1' : '';
   s += '\nMandá: codigo x cantidad (ej: ' + items[0].id + 'x2' + ej2 + ')\nPodés pedir varios separados por coma.\nVER tu pedido · LISTO para cerrar';
   return s;
@@ -2806,7 +2837,9 @@ async function botAgregar(s: any, prods: any[], codigo: string, qty: number) {
   if (ya + qty > p.stock) return 'De ' + botNombreItem(p) + ' quedan ' + p.stock + '. Probá una cantidad menor.';
   s.carrito[codigo] = ya + qty;
   await botGuardarSesion(s);
-  return '✓ ' + s.carrito[codigo] + 'x ' + botNombreItem(p) + ' = ' + botMoney(p.precioMin * s.carrito[codigo]) + '\n\nSegui pidiendo, VER tu pedido, o LISTO para cerrar.';
+  const qt = s.carrito[codigo], pk = botPackActivo(p);
+  const extra = pk && qt >= pk.cant ? ' 🔥 (precio de pack)' : (pk ? '\n💡 Llevando ' + pk.cant + ' o más, cada uno sale ' + botMoney(pk.precio) + '.' : '');
+  return '✓ ' + qt + 'x ' + botNombreItem(p) + ' = ' + botMoney(precioBot(p, qt) * qt) + extra + '\n\nSegui pidiendo, VER tu pedido, o LISTO para cerrar.';
 }
 function botParsearItems(raw: string) {
   const partes = (raw || '').split(/\s*[,;\n]\s*|\s+y\s+/i).map((t) => t.trim()).filter(Boolean);
@@ -2845,8 +2878,8 @@ function botVerCarrito(prods: any[], carrito: any) {
   ids.forEach((id) => {
     const p = prods.find((x) => x.id === id);
     if (!p) return;
-    const sub = p.precioMin * carrito[id]; total += sub;
-    s += carrito[id] + 'x ' + botNombreItem(p) + ' = ' + botMoney(sub) + '\n';
+    const sub = precioBot(p, carrito[id]) * carrito[id]; total += sub;
+    s += carrito[id] + 'x ' + botNombreItem(p) + ' = ' + botMoney(sub) + (precioBot(p, carrito[id]) < Math.round(p.precioMin || 0) ? ' 🔥' : '') + '\n';
   });
   s += '\nTOTAL: ' + botMoney(total) + '\n\nLISTO para confirmar · BORRAR para vaciar';
   return s;
@@ -2868,11 +2901,11 @@ async function botConfirmar(s: any, prods: any[], tel: string, sim: boolean) {
   ids.forEach((id) => {
     const p = prods.find((x) => x.id === id);
     if (!p) return;
-    const qty = carrito[id], sub = p.precioMin * qty;
+    const qty = carrito[id], unit = precioBot(p, qty), sub = unit * qty;
     total += sub;
-    lineas.push('• ' + qty + 'x ' + p.nombre + (p.desc ? ' · ' + p.desc : '') + ' — $ ' + botMiles(p.precioMin) + ' c/u = $ ' + botMiles(sub));
+    lineas.push('• ' + qty + 'x ' + p.nombre + (p.desc ? ' · ' + p.desc : '') + ' — $ ' + botMiles(unit) + ' c/u = $ ' + botMiles(sub));
     suArr.push(id + ':' + qty);
-    if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + p.precioMin);
+    if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + unit);   // la ganancia se mide con lo que se cobra
   });
   if (!lineas.length) return 'Hubo un problema con tu pedido. Mandá LISTA y probá de nuevo.';
   if (sim) {
@@ -2948,7 +2981,11 @@ async function procesarVozIA(tel: string, texto: string, sim: boolean, canal: st
   if ((texto || '').trim() === '__reset__') { s.carrito = {}; s.historial = []; s.nombre = ''; await botGuardarSesion(s); return { reply: 'ok' }; }
   const prods = await botLeerProductos();
   if (!prods.length) return { reply: 'Perdoná, ahora mismo no tengo productos disponibles. Llamá más tarde así te atiendo.' };
-  const cat = prods.map((p) => p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | ' + Math.round(p.precioMin) + ' pesos | stock ' + p.stock + (p.descBot ? ' | DESC: ' + p.descBot : '')).join('\n');
+  const cat = prods.map((p) => {
+    const u1 = precioBot(p, 1), lista = Math.round(p.precioMin || 0), pk = botPackActivo(p);
+    const precioTxt = u1 + ' pesos' + (u1 < lista ? ' (OFERTA, antes ' + lista + ')' : '') + (pk ? ' | PACK: llevando ' + pk.cant + ' o más, ' + pk.precio + ' pesos c/u' : '');
+    return p.id + ' | ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' | ' + precioTxt + ' | stock ' + p.stock + (p.descBot ? ' | DESC: ' + p.descBot : '');
+  }).join('\n');
   const previos = await botPedidosPrevios(tel);
   let perfil = '';
   if (s.nombre) perfil += 'El cliente se llama ' + s.nombre + '. ';
@@ -2961,7 +2998,7 @@ async function procesarVozIA(tel: string, texto: string, sim: boolean, canal: st
     const ls: string[] = [];
     ids.forEach((id) => {
       const p = prods.find((x) => x.id === id); if (!p) return;
-      const sub = p.precioMin * s.carrito[id]; total += sub;
+      const sub = precioBot(p, s.carrito[id]) * s.carrito[id]; total += sub;
       ls.push(s.carrito[id] + 'x ' + p.nombre + (p.desc ? ' ' + p.desc : '') + ' = ' + Math.round(sub) + ' pesos');
     });
     carritoTxt = ls.join('\n') + '\nTOTAL: ' + Math.round(total) + ' pesos';
@@ -2992,6 +3029,7 @@ async function procesarVozIA(tel: string, texto: string, sim: boolean, canal: st
     'persona ("no soy X, soy Y"), creele y usá SIEMPRE el último nombre que te dio. Nunca vuelvas a un nombre viejo.\n' +
     '- Cuando el cliente diga que terminó, repetí el pedido y el total y pedí confirmación. Si confirma, cerrá.\n' +
     '- No inventes productos ni precios: usá SOLO el catálogo.\n' +
+    '- Los precios del catálogo YA son los de hoy. Si dice OFERTA, ése es el precio que se cobra (podés contar que está en oferta y cuánto salía antes). Si dice PACK, llevando esa cantidad o más cada unidad sale a ese precio: mencionalo cuando le sirva al cliente (ej. si pide 2 y llevando 3 le conviene). Nunca inventes una oferta que no está.\n' +
     (esVoz
       ? '- CANAL: estás en una LLAMADA telefónica. Hablá en prosa fluida y natural, frases cortas, SIN listas, SIN números de ítem, SIN viñetas (no se pueden "escuchar"). Si enumerás productos, decilos en una oración corrida y breve.\n'
       : '- CANAL: estás por MENSAJE de texto (SMS/WhatsApp). Cuando listes varios productos, ponelos en LISTA VERTICAL, uno por línea con guión "- ", cortita y fácil de leer (nombre y precio). Para charlar usá frases normales. Sé breve.\n') +
@@ -3080,11 +3118,11 @@ async function registrarPedidoVoz(itemsStr: any, cliente: string, direccion: str
   ids.forEach((id) => {
     const p = prods.find((x) => x.id === id);
     const qty = Math.min(carrito[id], p.stock || carrito[id]);
-    const sub = p.precioMin * qty;
+    const unit = precioBot(p, qty), sub = unit * qty;
     total += sub;
-    lineas.push('• ' + qty + 'x ' + p.nombre + (p.desc ? ' · ' + p.desc : '') + ' — $ ' + botMiles(p.precioMin) + ' c/u = $ ' + botMiles(sub));
+    lineas.push('• ' + qty + 'x ' + p.nombre + (p.desc ? ' · ' + p.desc : '') + ' — $ ' + botMiles(unit) + ' c/u = $ ' + botMiles(sub));
     suArr.push(id + ':' + qty);
-    if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + p.precioMin);
+    if (p.dueno === 'Jony') jonyArr.push(id + ':' + qty + ':' + unit);
   });
   if (dry) return { ok: true, dry: true, total, lineas, noEncontrados };
   const cli = cliente ? cliente : ('Tel ' + (tel || 's/d'));
