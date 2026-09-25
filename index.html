@@ -21711,6 +21711,155 @@ pnBotonProbar();
 pnSync();
 </script>
 
+<!-- 🧭 PANEL NUEVO · tanda 2 (v5.12): Pedidos en una línea. La tarjeta de siempre (con TODOS sus botones y
+     cuentas) queda como el detalle del pedido: se abre al tocar la línea. Solo se reacomoda lo que se ve. -->
+<style id="pn-css-t2">
+  body.pn .pedido-item.pn-pc { display: none; }
+  body.pn .pedido-item.pn-pc.pn-abierto { display: block; margin: 0 0 0.6rem; border-radius: 0 0 12px 12px; border: 1.5px solid var(--gris-medio); border-top: 0; background: var(--gris); padding: 0.9rem 1rem 1rem; }
+  body.pn .pedido-item.pn-pc > .pedido-item-header { display: none; }
+  .pn-prow { display: grid; grid-template-columns: 58px minmax(0, 1fr) 250px 150px 16px; gap: 12px; align-items: center; width: 100%; padding: 0.75rem 1rem; margin: 0 0 0.45rem; border: 1.5px solid var(--gris-medio); border-left: 4px solid var(--dorado); border-radius: 12px; background: var(--blanco); color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+  .pn-prow:hover { background: var(--gris); }
+  .pn-prow.pn-abierto { border-radius: 12px 12px 0 0; margin-bottom: 0; background: var(--gris); }
+  .pn-prow.e-preparando { border-left-color: #2c6fad; } .pn-prow.e-entregado { border-left-color: var(--verde); } .pn-prow.e-cancelado { border-left-color: var(--rojo); opacity: .75; } .pn-prow.e-cotizacion { border-left-color: #e6c34a; }
+  .pn-pnum { font-weight: 800; color: var(--dorado); font-variant-numeric: tabular-nums; }
+  .pn-pmain { min-width: 0; }
+  .pn-pmain b { font-size: 0.95rem; }
+  .pn-pmain small { display: block; color: var(--texto-suave); font-size: 0.78rem; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pn-ppills { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-start; }
+  .pn-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; background: var(--gris); color: var(--texto-suave); box-shadow: inset 0 0 0 1px var(--gris-medio); white-space: nowrap; }
+  .pn-pill.pend { background: var(--dorado-claro); color: #9a6b00; } .pn-pill.prep { background: #e8eeff; color: #2c6fad; } .pn-pill.ok { background: var(--verde-claro); color: var(--verde); } .pn-pill.bad { background: var(--rojo-claro); color: var(--rojo); } .pn-pill.cot { background: #fff6d6; color: #8a6d00; }
+  .pn-ptot { text-align: right; font-weight: 800; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .pn-chev { color: var(--texto-suave); transition: transform .15s; }
+  .pn-prow.pn-abierto .pn-chev { transform: rotate(90deg); }
+  .pn-pd { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; margin-bottom: 0.7rem; }
+  .pn-pd-main { min-width: 0; }
+  .pn-lines { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--blanco); border: 1.5px solid var(--gris-medio); border-radius: 12px; overflow: hidden; font-size: 0.85rem; }
+  .pn-lines col.q { width: 54px; } .pn-lines col.ph { width: 52px; } .pn-lines col.pu { width: 118px; } .pn-lines col.st { width: 120px; }
+  .pn-lines th { padding: 6px 10px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-suave); background: var(--gris); text-align: left; border-bottom: 1px solid var(--gris-medio); }
+  .pn-lines th.r, .pn-lines td.r { text-align: right; }
+  .pn-lines td { padding: 7px 10px; border-bottom: 1px solid var(--gris-medio); height: 52px; vertical-align: middle; }
+  .pn-lines tr:last-child td { border-bottom: 0; }
+  .pn-lines td.q { font-weight: 800; color: var(--texto-suave); text-align: right; }
+  .pn-lines td.ph img, .pn-lines td.ph span { width: 36px; height: 36px; border-radius: 8px; object-fit: contain; background: var(--gris); display: grid; place-items: center; }
+  .pn-lines .l1, .pn-lines .l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pn-lines .l2 { font-size: 0.75rem; color: var(--texto-suave); margin-top: 2px; }
+  .pn-lines tr.cero td { background: var(--rojo-claro); color: var(--rojo); }
+  .pn-lines tr.otra td { height: auto; color: var(--texto-suave); }
+  .pn-lines tfoot td { background: var(--gris); font-weight: 800; height: auto; }
+  .pn-side { background: var(--blanco); border: 1.5px solid var(--gris-medio); border-radius: 12px; padding: 0.8rem 0.9rem; font-size: 0.82rem; }
+  .pn-side h4 { margin: 0 0 0.6rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-suave); }
+  .pn-side dl { display: grid; grid-template-columns: 106px minmax(0, 1fr); gap: 6px 10px; margin: 0; }
+  .pn-side dt { color: var(--texto-suave); } .pn-side dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+  .pn-pcerrar { margin-left: auto; }
+  .pn-lines .pum { display: none; }
+  @media (max-width: 1050px) { .pn-prow { grid-template-columns: 52px minmax(0, 1fr) 190px 120px 14px; } .pn-pd { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .pn-prow { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "n m t" ". p p"; row-gap: 6px; padding: 0.65rem 0.75rem; }
+    .pn-pnum { grid-area: n; } .pn-pmain { grid-area: m; } .pn-ptot { grid-area: t; font-size: 0.88rem; } .pn-ppills { grid-area: p; } .pn-chev { display: none; }
+    .pn-lines col.q { width: 36px; } .pn-lines col.ph { width: 0; } .pn-lines col.pu { width: 0; } .pn-lines col.st { width: 84px; }
+    .pn-lines td.ph, .pn-lines td:nth-child(4), .pn-lines th:nth-child(4) { padding: 0 !important; overflow: hidden; font-size: 0; }
+    .pn-lines td.ph > * { display: none !important; }
+    .pn-lines .l1 > span { display: none !important; }
+    .pn-lines .l1 { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .pn-lines .pum { display: inline; font-weight: 700; color: var(--texto); }
+    .pn-lines td { height: 58px; }
+    .pn-lines td, .pn-lines th { padding-left: 5px; padding-right: 5px; }
+    body.pn .pedido-item.pn-pc.pn-abierto { padding: 0.7rem 0.6rem 0.8rem; }
+  }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO · tanda 2: Pedidos en una línea ───────────────────────────────────────────────
+let _pnPedAbierto = null;
+const _pnMoney = (a, u) => [a > 0 ? '$ ' + Math.round(a).toLocaleString('es-AR') : '', u > 0 ? 'U$S ' + (+u).toFixed(2) : ''].filter(Boolean).join(' + ') || '$ 0';
+function _pnPartirNombre(txt) {
+  // «Nombre · descripción»: el nombre puede traer «·» → se prueba del más largo al más corto contra el catálogo
+  const parts = txt.split(' · ');
+  for (let i = parts.length; i >= 1; i--) { const n = parts.slice(0, i).join(' · ').trim(); const p = (typeof productos !== 'undefined' ? productos : []).find(x => (x.nombre || '').trim() === n); if (p) return { n, d: parts.slice(i).join(' · '), p }; }
+  return { n: parts[0], d: parts.slice(1).join(' · '), p: null };
+}
+function _pnLineasTabla(card) {
+  // El bloque de renglones de la tarjeta de siempre: cada renglón «• 5x Nombre · desc — $ 7.900 c/u = $ 39.500»
+  const bloque = [...card.children].find(el => el.tagName === 'DIV' && el.children.length && [...el.children].every(c => /\d+(?:[.,]\d+)?x\s+.+—/.test(c.textContent)));
+  if (!bloque || bloque.dataset.pn) return;
+  const filas = [...bloque.children].map(div => {
+    const chip = div.querySelector('span'); const chipHtml = chip && /JONY|MIRI/.test(chip.textContent) ? chip.outerHTML + ' ' : '';
+    const txt = div.textContent.replace(/^\s*(JONY|MIRI)\s*/, '').trim();
+    const m = txt.match(/^•?\s*(\d+(?:[.,]\d+)?)\s*x\s+(.+?)\s+—\s+(.+?)\s*c\/u\s*=\s*(.+?)\s*(⚠️)?$/);
+    if (!m) return `<tr class="otra"><td></td><td></td><td colspan="3">${div.innerHTML}</td></tr>`;
+    const nd = _pnPartirNombre(m[2]); const foto = nd.p && typeof _ocFotoUrl === 'function' ? _ocFotoUrl(nd.p.imagen) : '';
+    return `<tr class="${m[5] ? 'cero' : ''}"><td class="q">${pnEsc(m[1])}×</td><td class="ph">${foto ? `<img src="${pnEsc(foto)}" alt="" loading="lazy">` : '<span>🍬</span>'}</td><td><div class="l1" title="${pnEsc(nd.n)}">${chipHtml}<b>${pnEsc(nd.n)}</b>${m[5] ? ' ⚠️' : ''}</div><div class="l2" title="${pnEsc(nd.d)}"><span class="pum">${pnEsc(m[3])} c/u · </span>${nd.d ? pnEsc(nd.d) : '&nbsp;'}</div></td><td class="r">${pnEsc(m[3])}<span class="cu"> c/u</span></td><td class="r"><b>${pnEsc(m[4])}</b></td></tr>`;
+  });
+  const t = document.createElement('table'); t.className = 'pn-lines';
+  t.innerHTML = `<colgroup><col class="q"><col class="ph"><col><col class="pu"><col class="st"></colgroup><thead><tr><th class="r">Cant.</th><th></th><th>Producto</th><th class="r">Precio</th><th class="r">Subtotal</th></tr></thead><tbody>${filas.join('')}</tbody>`;
+  bloque.dataset.pn = '1'; bloque.style.display = 'none';
+  bloque.parentNode.insertBefore(t, bloque);
+  return t;
+}
+function _pnDatosPedido(v, card) {
+  const est = v.estado || 'pendiente';
+  const cobro = [...card.querySelectorAll('.pedido-item-header span')].map(s => s.textContent.trim()).find(x => /cobrado|debe|pend\. cobro|pagado/.test(x)) || '';
+  const tel = (typeof _telPorCliente !== 'undefined') && (_telPorCliente[v.cliente] || (typeof normCliente === 'function' && _telPorCliente[normCliente(v.cliente || '')])) || '';
+  const notas = (v.notas || '').toString();
+  const origen = /^🟡 COTIZACIÓN/.test(notas) || est === 'cotizacion' ? '🟡 Cotización desde la web' : v.web ? '🌐 Por la tienda (web)' : notas === 'Manual' ? '✍️ Cargado a mano en el panel' : '—';
+  let reserva = '';
+  if ((est === 'pendiente' || est === 'preparando') && typeof diasDesdePedido === 'function') { const d = diasDesdePedido(_fechaReserva(v)), q = 7 - d; reserva = q > 0 ? `quedan ${q} día${q > 1 ? 's' : ''} (de 7)` : '⛔ vencida'; }
+  const lev = (notas.match(/^🔁 Levantado el (\d{2}\/\d{2}\/\d{4})/) || [])[1];
+  const d = `<dt>📅 Entró</dt><dd>${pnEsc(v.fecha || '')}</dd><dt>🧭 Origen</dt><dd>${origen}</dd><dt>💳 Forma de pago</dt><dd>${pnEsc(v.formaPago || '')}</dd><dt>🏷️ Tipo</dt><dd>${pnEsc(v.tipo || '')}</dd>`
+    + `<dt>📌 Estado</dt><dd>${pnEsc(est)}${cobro ? ' · ' + pnEsc(cobro) : ''}</dd>` + (reserva ? `<dt>⏳ Reserva</dt><dd>${reserva}</dd>` : '') + (lev ? `<dt>🔁 Levantado</dt><dd>el ${pnEsc(lev)}</dd>` : '')
+    + (v.fechaCobro ? `<dt>💰 Cobrado</dt><dd>${pnEsc(v.fechaCobro)}</dd>` : '') + `<dt>📞 Teléfono</dt><dd>${tel ? pnEsc(tel) : '<span style="color:var(--texto-suave);font-weight:400">sin teléfono en la ficha</span>'}</dd>`;
+  const a = document.createElement('aside'); a.className = 'pn-side'; a.innerHTML = `<h4>Datos del pedido</h4><dl>${d}</dl>`;
+  return a;
+}
+function pnPedidosCompactar() {
+  if (!_pnActivo) return;
+  const lista = document.getElementById('pedidos-lista'); if (!lista) return;
+  const porId = {}; (typeof _todosLosPedidos !== 'undefined' ? _todosLosPedidos : []).forEach(v => { porId[String(v.id)] = v; });
+  lista.querySelectorAll('.pedido-item').forEach(card => {
+    if (card.classList.contains('pn-pc')) return;
+    const id = card.id.replace(/^pedido-/, ''), v = porId[id]; if (!v) return;
+    const est = v.estado || 'pendiente';
+    const cobro = [...card.querySelectorAll('.pedido-item-header span')].map(s => s.textContent.trim()).find(x => /cobrado|debe|pend\. cobro|pagado/.test(x)) || '';
+    const lineas = (v.productos || '').split(' || ').filter(Boolean);
+    const unidades = lineas.reduce((s, l) => s + (parseFloat((l.match(/(\d+(?:[.,]\d+)?)\s*x\s/) || [])[1]) || 0), 0);
+    const origen = est === 'cotizacion' ? '🟡 cotización web' : v.web ? '🌐 web' : (v.notas === 'Manual' ? '✍️ a mano' : '');
+    const nComp = (v.comprobante || '').split(',').filter(x => x.trim()).length;
+    const pillEst = { pendiente: ['pend', '⏳ Pendiente'], preparando: ['prep', '🔧 Preparando'], entregado: ['ok', '✓ Entregado'], cancelado: ['bad', '✕ Cancelado'], cotizacion: ['cot', '🟡 Cotización'] }[est] || ['', est];
+    const pillCobro = !cobro ? '' : /✓/.test(cobro) ? `<span class="pn-pill ok">${pnEsc(cobro)}</span>` : /debe|parcial/.test(cobro) ? `<span class="pn-pill bad">${pnEsc(cobro)}</span>` : `<span class="pn-pill">${pnEsc(cobro)}</span>`;
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'pn-prow e-' + est; row.dataset.pnPed = id;
+    row.innerHTML = `<span class="pn-pnum">#${pnEsc(v.nVenta || '')}</span><span class="pn-pmain"><b>${pnEsc(v.cliente || '')}</b> <span style="color:var(--texto-suave);font-size:0.8rem">(${pnEsc(v.tipo || '')})</span><small>${pnEsc(v.fecha || '')} · ${pnEsc(v.formaPago || '')}${origen ? ' · ' + origen : ''} · ${lineas.length} producto${lineas.length === 1 ? '' : 's'} (${Math.round(unidades)} u)${_notaCliente && _notaCliente(v) ? ' · 📝' : ''}</small></span>`
+      + `<span class="pn-ppills"><span class="pn-pill ${pillEst[0]}">${pillEst[1]}</span>${pillCobro}${nComp ? `<span class="pn-pill">🧾 ${nComp}</span>` : ''}</span><span class="pn-ptot">${_pnMoney(v.totalARS, v.totalUSD)}</span><span class="pn-chev">›</span>`;
+    card.parentNode.insertBefore(row, card);
+    card.classList.add('pn-pc');
+    // el detalle: renglones parejos + «Datos del pedido» al costado; debajo, lo de siempre (cobro, notas, botones)
+    const tabla = _pnLineasTabla(card);
+    const grid = document.createElement('div'); grid.className = 'pn-pd';
+    const main = document.createElement('div'); main.className = 'pn-pd-main';
+    grid.appendChild(main); grid.appendChild(_pnDatosPedido(v, card));
+    const primeraAccion = card.querySelector('.pedido-acciones');
+    [...card.children].forEach(el => { if (el !== primeraAccion && !el.classList.contains('pedido-acciones') && !el.classList.contains('pedido-item-header')) main.appendChild(el); });
+    card.insertBefore(grid, primeraAccion || null);
+    const acc = card.querySelectorAll('.pedido-acciones'); const ult = acc[acc.length - 1];
+    if (ult) { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn-accion pn-pcerrar'; x.dataset.pnPed = id; x.textContent = '✕ Cerrar'; ult.appendChild(x); }
+    if (_pnPedAbierto === id) { card.classList.add('pn-abierto'); row.classList.add('pn-abierto'); }
+  });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pn-ped]'); if (!b || !_pnActivo) return;
+  const id = b.dataset.pnPed; const abrir = _pnPedAbierto !== id;
+  document.querySelectorAll('#pedidos-lista .pn-abierto').forEach(x => x.classList.remove('pn-abierto'));
+  _pnPedAbierto = abrir ? id : null;
+  if (abrir) { const card = document.getElementById('pedido-' + id), row = document.querySelector(`#pedidos-lista .pn-prow[data-pn-ped="${id}"]`); if (card) card.classList.add('pn-abierto'); if (row) { row.classList.add('pn-abierto'); if (b.classList.contains('pn-prow')) { const r = row.getBoundingClientRect(); if (r.top < 70) row.scrollIntoView({ block: 'start' }); } } }
+  else { const row = document.querySelector(`#pedidos-lista .pn-prow[data-pn-ped="${id}"]`); if (row && !b.classList.contains('pn-prow')) { const r = row.getBoundingClientRect(); if (r.top < 0) row.scrollIntoView({ block: 'center' }); } }
+});
+if (typeof renderPedidos === 'function') {
+  const _pnRenderPedidosOrig = renderPedidos;
+  renderPedidos = async function () { const r = await _pnRenderPedidosOrig.apply(this, arguments); try { pnPedidosCompactar(); } catch (e) { console.warn('pnPedidosCompactar', e); } return r; };
+}
+// al prender el panel nuevo con la lista ya dibujada, compactarla; al apagarlo, volver a dibujarla como siempre
+const _pnSyncT1 = pnSync;
+pnSync = function () { _pnSyncT1(); if (document.body.classList.contains('pn')) pnPedidosCompactar(); else if (document.querySelector('#pedidos-lista .pn-prow') && typeof renderPedidos === 'function') renderPedidos(); };
+</script>
+
 </body>
 </html>
 

@@ -463,6 +463,7 @@ const ventaFront = (v: any) => ({
   // "🧾 Ver comprobante" y el chip "⚖️ Ajuste de cobro" en el panel (regresión desde 2026-07-02)
   comprobante: (v.comprobante || '').toString(), ajuste: parseFloat(v.ajuste) || 0, fechaCobro: (v.fecha_cobro || '').toString(),
   corte: (v.corte || '').toString(), sinComision: (v.sin_comi || '').toString(), usdJONY: v.usd_jony || 0, tramos: (v.tramos || '').toString(),
+  web: !!v.vid,   // 🧭 v5.12: el pedido entró por la tienda (tiene visitante) — el panel nuevo lo muestra en «Datos del pedido»
 });
 const pagoFront = (p: any) => ({ id: p.id, fecha: p.fecha, cliente: (p.cliente || '').toString(), pedidoId: (p.pedido_id || '').toString(), montoARS: parseFloat(p.monto_ars) || 0, montoUSD: parseFloat(p.monto_usd) || 0, caja: (p.caja || '').toString(), nota: (p.nota || '').toString(), montoPitz: parseFloat(p.monto_pitz) || 0, montoPitzUsd: parseFloat(p.monto_pitz_usd) || 0, tc: parseFloat(p.tc) || 0, comprobante: (p.comprobante || '').toString(), totalMano: parseFloat(p.total_mano) || 0, reparto: (p.reparto || '').toString() });
 const clienteFront = (c: any) => ({ fecha: c.fecha, nombre: (c.nombre || '').toString(), telefono: (c.telefono || '').toString(), tipo: (c.tipo || '').toString(), nota: (c.nota || '').toString(), ultimoAcceso: (c.ultimo_acceso || '').toString() });
