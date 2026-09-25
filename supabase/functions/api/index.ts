@@ -239,6 +239,10 @@ function calcularGanancias(ventas: any[], productos: any[], pagos: any[], msCort
 // criterio (v4.01): 'auto' = orden histórico (Pitzujim $ primero, golosinas U$S primero) ·
 // 'jony' = Pitzujim (Jony) primero en las DOS monedas · 'prorrata' = proporcional a lo que cada
 // uno tiene de deuda. Si el front manda montoPitzExplicito>0, se respeta (solo modo 'auto').
+// 🚫 v5.10: el reparto de un pago nuevo — todo de Jony, en las dos monedas (a Miri nada).
+function soloJony(montoARS: number, montoUSD: number) {
+  return { pitzARS: Math.max(0, montoARS || 0), pitzUSD: Math.max(0, montoUSD || 0) };   // exacto: nada queda del lado de Miri
+}
 async function calcularRepartoPitz(cliente: string, pedidoId: string, montoARS: number, montoUSD: number, montoPitzExplicito: number, excludePagoId?: string, criterio?: string, montoPitzUsdExplicito?: number): Promise<{ pitzARS: number; pitzUSD: number }> {
   const modo = (criterio === 'jony' || criterio === 'prorrata' || criterio === 'forzado') ? criterio : 'auto';
   // 🔒 Parte en U$S forzada desde el front. Hace falta cuando el reparto NO se puede deducir de la
@@ -4104,11 +4108,19 @@ Deno.serve(async (req) => {
       // Miri leen todos lo mismo. Si el front mandó montoPitz explícito (>0), se respeta.
       const _rep = P(body, 'reparto');
       const critPago = (_rep === 'jony' || _rep === 'prorrata' || _rep === 'forzado') ? _rep : '';
-      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'), undefined, critPago, N(body, 'montoPitzUsd'));
+      // 🚫 v5.10 (pedido del usuario 24/09: «a Myri nada… si sobra, sobra, queda en JONY»): un pago NUEVO es
+      // TODO de Jony — lo que cubre su deuda y lo que sobra (adelanto / a favor). Antes el sobrante se anotaba
+      // como golosinas (de Miri). Se guarda con reparto 'solojony' para que la cobertura y el panel respeten
+      // las partes y para que EDITARLO nunca le pase nada a Miri. Única excepción: la devolución 'forzado'
+      // (lleva las partes del pedido original, que es historial). Los pagos VIEJOS no se tocan.
+      const _forz = critPago === 'forzado';
+      const { pitzARS, pitzUSD } = _forz
+        ? await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), N(body, 'montoARS'), N(body, 'montoUSD'), N(body, 'montoPitz'), undefined, critPago, N(body, 'montoPitzUsd'))
+        : soloJony(N(body, 'montoARS'), N(body, 'montoUSD'));
       // 📅 v3.95: si el modal manda la fecha real del pago, ESA va (si no, "ahora")
       const fechaPagoElegida = P(body, 'fecha').trim();
       const fechaPago = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(fechaPagoElegida) ? fechaPagoElegida : fechaAhora();
-      await sbInsert('pagos', { fecha: fechaPago, cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante'), total_mano: N(body, 'totalMano') || null, reparto: critPago || null });
+      await sbInsert('pagos', { fecha: fechaPago, cliente: P(body, 'cliente'), pedido_id: P(body, 'pedidoId'), monto_ars: N(body, 'montoARS'), monto_usd: N(body, 'montoUSD'), monto_pitz: pitzARS, monto_pitz_usd: pitzUSD, caja: P(body, 'caja'), tc: N(body, 'tipoCambio'), nota: P(body, 'nota') || 'Pago a cuenta', comprobante: P(body, 'comprobante'), total_mano: N(body, 'totalMano') || null, reparto: _forz ? 'forzado' : 'solojony' });
       // Circuito F3: pago del cliente "Candy" con TC → convertir compras del circuito a pesos.
       // Atado a un pedido → solo la compra de esa venta; general → todas las pendientes en U\$S.
       if ((P(body, 'cliente') || '').trim() === 'Candy' && N(body, 'tipoCambio') > 0) {
@@ -4133,8 +4145,8 @@ Deno.serve(async (req) => {
       if (!(await sesionValida(token))) return json({ error: 'sin permiso' });
       const mA = N(body, 'montoARS'), mU = N(body, 'montoUSD'), tc = N(body, 'tipoCambio');
       if (mA === 0 && mU === 0) return json({ error: 'monto vacío' });
-      const critF = (P(body, 'reparto') === 'jony' || P(body, 'reparto') === 'prorrata') ? P(body, 'reparto') : '';
-      const { pitzARS, pitzUSD } = await calcularRepartoPitz(P(body, 'cliente'), P(body, 'pedidoId'), mA, mU, N(body, 'montoPitz'), undefined, critF);
+      // 🚫 v5.10: a Miri nada — todo el pago va a la caja de Jony (la fila de golosinas ya no se crea)
+      const { pitzARS, pitzUSD } = soloJony(mA, mU);
       const golARS = Math.max(0, mA - pitzARS), golUSD = Math.max(0, Math.round((mU - pitzUSD) * 100) / 100);
       const cajaMiri = P(body, 'cajaMiri'), cajaJony = P(body, 'cajaJony');
       if ((pitzARS > 0 || pitzUSD > 0) && !cajaJony) return json({ error: 'falta la caja de Jony (Pitzujim)' });
@@ -4171,7 +4183,8 @@ Deno.serve(async (req) => {
       // Un pago 'forzado' (devolución) conserva sus partes al editarse: el auto-reparto no las sabe deducir.
       const _pzA = critEd === 'forzado' ? (body.montoPitz !== undefined ? N(body, 'montoPitz') : (parseFloat(pgE.monto_pitz) || 0)) : 0;
       const _pzU = critEd === 'forzado' ? (body.montoPitzUsd !== undefined ? N(body, 'montoPitzUsd') : (parseFloat(pgE.monto_pitz_usd) || 0)) : 0;
-      const rep = await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, _pzA, pidE, critEd, _pzU);
+      const _soloJ = (pgE.reparto || '').toString() === 'solojony';   // 🚫 v5.10: pago nacido «todo de Jony»
+      const rep = _soloJ ? soloJony(mA, mU) : await calcularRepartoPitz((pgE.cliente || '').toString(), (pgE.pedido_id || '').toString(), mA, mU, _pzA, pidE, critEd, _pzU);
       // 🛡️ Si los MONTOS no cambiaron (se editó solo la nota, la fecha, la caja o el TC), se
       // conserva el reparto que ya tenía. Recalcularlo puede DESTRUIRLO: el auto-reparto lo deduce
       // de la deuda viva del cliente, y si esa deuda ya se cubrió (o el reparto se había forzado a
@@ -4182,7 +4195,7 @@ Deno.serve(async (req) => {
                        && Math.abs(mU - (parseFloat(pgE.monto_usd) || 0)) < 0.005;
       const _pitzARSFinal = _mismoMonto ? (parseFloat(pgE.monto_pitz) || 0) : rep.pitzARS;
       const _pitzUSDFinal = _mismoMonto ? (parseFloat(pgE.monto_pitz_usd) || 0) : rep.pitzUSD;
-      const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: _pitzARSFinal, monto_pitz_usd: _pitzUSDFinal, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio'), reparto: critEd || null };
+      const patchPago: any = { monto_ars: mA, monto_usd: mU, monto_pitz: _soloJ ? mA : _pitzARSFinal, monto_pitz_usd: _soloJ ? mU : _pitzUSDFinal, caja: P(body, 'caja'), fecha: fFinal, tc: N(body, 'tipoCambio'), reparto: _soloJ ? 'solojony' : (critEd || null) };
       if (body.totalMano !== undefined) patchPago.total_mano = N(body, 'totalMano') || null;   // total en mano (si el front lo recalculó)
       // 📝 Nota libre editable. Con '!== undefined' (no has()) para poder BORRARLA mandando vacío;
       // si no viene el campo, la nota queda intacta (PATCH parcial) → las llamadas viejas no la pisan.

@@ -2073,8 +2073,6 @@
           <option value="MP_JONY">MP JONY</option>
           <option value="EFT_JONY">EFT $ JONY</option>
           <option value="ETF_USD_JONY">ETF U$S JONY</option>
-          <option value="COMI_ARS_JONY">Comi $ JONY</option>
-          <option value="COMI_USD_JONY">Comi U$S JONY</option>
           <option value="CTA_CTE_ARS">Cta Cte $</option>
           <option value="CTA_CTE_USD">Cta Cte U$S</option>
         </select>
@@ -2102,8 +2100,6 @@
                 <option value="MP_JONY">MP JONY</option>
                 <option value="EFT_JONY">EFT $ JONY</option>
                 <option value="ETF_USD_JONY">ETF U$S JONY</option>
-                <option value="COMI_ARS_JONY">Comi $ JONY</option>
-                <option value="COMI_USD_JONY">Comi U$S JONY</option>
                 <option value="CTA_CTE_ARS">Cta Cte $</option>
                 <option value="CTA_CTE_USD">Cta Cte U$S</option>
               </select>
@@ -2163,7 +2159,6 @@
           <select id="transf-de" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="EFT_JONY">EFT $ JONY</option>
             <option value="MP_JONY">MP JONY</option>
-            <option value="COMI_ARS_JONY">Comi $ JONY</option>
             <option value="CTA_CTE_ARS">Cta Cte $</option>
           </select>
         </div>
@@ -2172,7 +2167,6 @@
           <select id="transf-a" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="EFT_JONY">EFT $ JONY</option>
             <option value="MP_JONY">MP JONY</option>
-            <option value="COMI_ARS_JONY">Comi $ JONY</option>
             <option value="CTA_CTE_ARS">Cta Cte $</option>
           </select>
         </div>
@@ -2205,8 +2199,6 @@
         <select id="rend-columna" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
           <option value="MP_JONY">MP JONY</option>
           <option value="EFT_JONY">EFT $ JONY</option>
-          <option value="COMI_ARS_JONY">Comi $ JONY</option>
-          <option value="COMI_USD_JONY">Comi U$S JONY</option>
           <option value="CTA_CTE_ARS">Cta Cte $</option>
           <option value="CTA_CTE_USD">Cta Cte U$S</option>
         </select>
@@ -12575,7 +12567,8 @@ async function renderCaja() {
         ⏳ <b>Myri te está pagando</b> (pendiente de cobrarle): <span style="color:var(--azul)">${_fmtARS(comiPendMyriARS)}${comiPendMyriUSD > 0 ? ' + U$S ' + comiPendMyriUSD.toFixed(2) : ''}</span><br>
         💰 <b>Ya entró a tus cajas</b> (golosinas que cobraste vos): <span style="color:var(--verde)">${_fmtARS(comiYaEnJonyARS)}${comiYaEnJonyUSD > 0 ? ' + U$S ' + comiYaEnJonyUSD.toFixed(2) : ''}</span>
       </div>` : '';
-    const controlJony = `
+    // 🚫 v5.10: la comisión era por lo de Myri — «no hace falta que se vea». La cuenta queda (historial) pero la tarjeta no se dibuja.
+    const _controlJonyViejo = `
     <div style="margin-top:1.5rem;padding:1rem 1.25rem;background:#f0f0f8;border-radius:12px;border:1.5px solid #d0d0e8">
       <div style="font-size:0.72rem;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem">🔒 Control personal JONY</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.75rem">
@@ -12593,6 +12586,7 @@ async function renderCaja() {
       ${desgloseComi}
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-bottom:0.5rem">Para registrar un retiro usá el formulario <strong>Rendición / retiro</strong> seleccionando la caja correspondiente.</div>
     </div>`;
+    const controlJony = '';   // v5.10 (ver arriba)
     // Desglose de la Cuenta Corriente $ (solo vista Jony): cuánto del pendiente es Pitzujim (tuyo)
     // y cuánto golosinas (Myri). Pitzujim = movimientos marcados dueno:'J'; golosinas = el resto.
     // Así la suma SIEMPRE cierra con el total de la columna Cta Cte $.
@@ -18816,10 +18810,9 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   const pfe = document.getElementById('pago-fecha'); if (pfe) pfe.value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
   const prep = document.getElementById('pago-reparto'); if (prep) prep.value = 'jony';   // ⚖️ default: Jony primero
   const pfr = document.getElementById('pago-fraccionar'); if (pfr) pfr.checked = false; pagoFraccionarToggle();   // ✂️ arranca sin fraccionar
-  // 🗄️ v5.09: Miri ya no existe — su parte (golosinas, fraccionar, reparto) solo aparece si ESTE pedido todavía
-  // le debe algo a ella (historial / conciliación). Solo se oculta: los valores quedan en sus defaults de siempre.
-  const _hayMiri = esPedido && ((Math.round(remGolARS || 0)) > 0 || parseFloat(remGolUSD || 0) > 0.009);
-  ['pago-gol-wrap', 'pago-fraccionar-wrap', 'pago-reparto-wrap'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = _hayMiri ? '' : 'none'; });
+  // 🚫 v5.10: a Miri nada — un pago nuevo es TODO de Jony (el motor lo guarda así, sobrante incluido), así que
+  // «A golosinas (Myri)», «Fraccionar en cajas» y «¿Cómo repartir?» no se muestran nunca (lo viejo es historial).
+  ['pago-gol-wrap', 'pago-fraccionar-wrap', 'pago-reparto-wrap'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   if (esPedido) {
     // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
     // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
