@@ -22377,6 +22377,159 @@ document.addEventListener('change', e => { if (_pnActivo && _pnSec === 'mitienda
 if (_pnActivo && document.body.classList.contains('pn-admin')) { if (_pnSec === 'hoy') pnHoyUrgente(); if (_pnSec === 'mitienda') pnMiTiendaResumen(); }
 </script>
 
+<!-- 🧭 PANEL NUEVO · tanda 8 (v5.18): la planilla (editor masivo) ADENTRO de Productos › Planilla. Antes se abría como
+     una ventana blanca que tapaba todo (con el diseño viejo). Ahora: misma planilla y mismas columnas y vistas, pero
+     metida en su pestaña, con guardado automático al salir de cada casilla, «➕ Nueva categoría…», Pitzujim por
+     peso y ⛶ pantalla completa. El guardado usa la MISMA acción de siempre (editarProductosLote). -->
+<style id="pn-css-t8">
+  #masivo-overlay.pn-inline { position: relative !important; inset: auto !important; z-index: 1 !important; height: 72vh; min-height: 420px; border: 1.5px solid var(--gris-medio); border-radius: 12px; overflow: hidden; background: var(--blanco) !important; margin-top: 0.4rem; }
+  #masivo-overlay.pn-inline.pn-full { position: fixed !important; inset: 64px 0 0 64px !important; height: auto; z-index: 350 !important; border-radius: 0; margin: 0; }
+  #masivo-overlay.pn-inline > div:first-child button[onclick="cerrarMasivo()"] { display: none; }
+  #masivo-overlay.pn-inline #masivo-body table { font-size: 0.82rem; min-width: 1380px; }
+  #masivo-overlay.pn-inline #masivo-body td input[type="text"], #masivo-overlay.pn-inline #masivo-body td input[type="number"] { min-width: 76px; }
+  #masivo-overlay.pn-inline #masivo-body tbody td:first-child input { min-width: 210px; }
+  #masivo-overlay.pn-inline #masivo-body tbody td:first-child, #masivo-overlay.pn-inline #masivo-body thead th:first-child { position: sticky; left: 0; background: var(--blanco); z-index: 1; box-shadow: 2px 0 0 var(--gris-medio); }
+  #masivo-overlay.pn-inline #masivo-body thead th:first-child { z-index: 3; background: var(--gris); }
+  #masivo-overlay.pn-inline > div:first-child > span:first-child { display: none; }
+  #masivo-overlay.pn-inline #masivo-body thead tr { background: var(--gris) !important; }
+  #masivo-overlay.pn-inline #masivo-body thead th { padding: 8px 8px !important; color: var(--texto-suave); border-bottom: 2px solid var(--gris-medio) !important; }
+  #masivo-overlay.pn-inline #masivo-body tbody tr:hover { background: var(--gris); }
+  #masivo-overlay.pn-inline #masivo-body tbody td { padding: 5px 8px !important; }
+  #masivo-overlay.pn-inline #masivo-body input:focus, #masivo-overlay.pn-inline #masivo-body select:focus { outline: 2px solid var(--dorado); outline-offset: -1px; }
+  #masivo-overlay.pn-inline tr.pn-guardado { animation: pnGuardado 1.4s ease; }
+  @keyframes pnGuardado { 0% { background: #c8efd6; } 100% { background: transparent; } }
+  body.pn .admin-card.pn-planilla > div:not(.admin-titulo):not(#masivo-overlay), body.pn .admin-card.pn-planilla > button { display: none; }
+  #pn-mestado { font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0.6rem; border-radius: 8px; background: var(--gris); color: var(--texto-suave); white-space: nowrap; }
+  #pn-mestado.ok { background: var(--verde-claro); color: var(--verde); } #pn-mestado.pend { background: var(--dorado-claro); color: #9a6b00; } #pn-mestado.err { background: var(--rojo-claro); color: var(--rojo); }
+  .pn-mfull { padding: 0.45rem 0.7rem; border: 1.5px solid var(--gris-medio); background: var(--blanco); color: var(--texto); border-radius: 8px; font: 700 0.8rem 'DM Sans', sans-serif; cursor: pointer; }
+  .pn-porpeso { font-size: 0.72rem; color: #8a5a00; white-space: nowrap; }
+  @media (max-width: 760px) { #masivo-overlay.pn-inline { height: 78vh; } #masivo-overlay.pn-inline.pn-full { inset: 0 !important; } }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO · tanda 8: la planilla adentro de su pestaña ────────────────────────────────────
+let _pnMasPH = null, _pnMasCargada = false, _pnMasTimer = null, _pnMasGuardando = false;
+const _pnMasOv = () => document.getElementById('masivo-overlay');
+function _pnMasCard() { return [...document.querySelectorAll('#admin-tab-panel > .admin-card')].find(c => /editor masivo/i.test((c.querySelector('.admin-titulo') || {}).textContent || '')); }
+function pnMasEstado(txt, k) { const e = document.getElementById('pn-mestado'); if (e) { e.textContent = txt; e.className = k || ''; } }
+function pnMasPendientes() { return (typeof _masivoCambios !== 'undefined') ? Object.keys(_masivoCambios).filter(id => Object.keys(_masivoCambios[id] || {}).length) : []; }
+// Mete la planilla en su tarjeta (y la carga la primera vez). Al apagar el panel nuevo, vuelve a ser la ventana de siempre.
+function pnMasInline() {
+  const ov = _pnMasOv(), card = _pnMasCard(); if (!ov || !card) return;
+  if (ov.parentElement !== card) { _pnMasPH = document.createComment('pn-masivo'); ov.parentNode.insertBefore(_pnMasPH, ov); card.appendChild(ov); }
+  card.classList.add('pn-planilla'); ov.classList.add('pn-inline');
+  const bar = ov.firstElementChild;
+  if (bar && !document.getElementById('pn-mestado')) {
+    const est = document.createElement('span'); est.id = 'pn-mestado'; est.textContent = '✓ Se guarda solo al salir de cada casilla';
+    const full = document.createElement('button'); full.type = 'button'; full.className = 'pn-mfull'; full.dataset.pnMfull = ''; full.textContent = '⛶ Pantalla completa';
+    const g = document.getElementById('masivo-guardar'); bar.insertBefore(est, g); bar.insertBefore(full, g);
+  }
+  const g = document.getElementById('masivo-guardar'); if (g && !g.dataset.pnTxt) { g.dataset.pnTxt = '1'; g.title = 'Se guarda solo; esto lo guarda ya'; }
+  if (!_pnMasCargada) { _pnMasCargada = true; _pnAbrirMasivoOrig(); }
+  else if (!pnMasPendientes().length && typeof renderMasivo === 'function') renderMasivo();
+}
+function pnMasSacar() {
+  const ov = _pnMasOv(); if (!ov) return;
+  ov.classList.remove('pn-inline', 'pn-full');
+  const card = _pnMasCard(); if (card) card.classList.remove('pn-planilla');
+  if (_pnMasPH && _pnMasPH.parentNode) { _pnMasPH.parentNode.insertBefore(ov, _pnMasPH); _pnMasPH.remove(); _pnMasPH = null; }
+  ov.style.display = 'none';
+  ['pn-mestado'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); const f = document.querySelector('[data-pn-mfull]'); if (f) f.remove();
+  _pnMasCargada = false;
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-pn-mfull]'); if (!b) return; const ov = _pnMasOv(); ov.classList.toggle('pn-full'); b.textContent = ov.classList.contains('pn-full') ? '✕ Salir de pantalla completa' : '⛶ Pantalla completa'; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { const ov = _pnMasOv(); if (ov && ov.classList.contains('pn-full')) { ov.classList.remove('pn-full'); const f = document.querySelector('[data-pn-mfull]'); if (f) f.textContent = '⛶ Pantalla completa'; } } });
+// Guardado automático: un ratito después de salir de una casilla, se manda lo cambiado (la misma acción de siempre)
+async function pnMasAutoGuardar() {
+  clearTimeout(_pnMasTimer);
+  if (_pnMasGuardando) { _pnMasTimer = setTimeout(pnMasAutoGuardar, 700); return; }
+  const ids = pnMasPendientes(); if (!ids.length) { pnMasEstado('✓ Todo guardado', 'ok'); return; }
+  const enviados = {}; ids.forEach(id => { enviados[id] = Object.assign({}, _masivoCambios[id]); });
+  const cambios = ids.map(id => Object.assign({ id }, enviados[id]));
+  _pnMasGuardando = true; pnMasEstado('⏳ Guardando…', 'pend');
+  let r; try { r = await _postSesion({ accion: 'editarProductosLote', cambios: JSON.stringify(cambios) }); } catch (x) { r = { error: 'network' }; }
+  _pnMasGuardando = false;
+  if (r && r.ok) {
+    ids.forEach(id => {
+      const env = enviados[id], ahora = _masivoCambios[id] || {};
+      Object.keys(env).forEach(k => { if (_masivoOrig[id]) _masivoOrig[id][k] = env[k]; const p = (_masivoData || []).find(x => String(x.id) === String(id)); if (p) p[k] = env[k]; if (String(ahora[k]) === String(env[k])) delete ahora[k]; });
+      if (!Object.keys(ahora).length) delete _masivoCambios[id];
+      const row = document.querySelector(`tr[data-mrow="${id}"]`); if (row) { row.classList.remove('pn-guardado'); void row.offsetWidth; row.classList.add('pn-guardado'); row.querySelectorAll('input,select').forEach(i => { if (i.style) i.style.borderColor = 'var(--gris-medio)'; }); }
+      if (typeof masivoMarkRow === 'function') masivoMarkRow(id);
+    });
+    if (typeof masivoUpdateCounter === 'function') masivoUpdateCounter();
+    pnMasEstado(pnMasPendientes().length ? '● Hay cambios nuevos…' : `✓ Guardado (${ids.length} producto${ids.length === 1 ? '' : 's'})`, pnMasPendientes().length ? 'pend' : 'ok');
+    if (pnMasPendientes().length) _pnMasTimer = setTimeout(pnMasAutoGuardar, 900);
+    try { if (typeof cargarProductos === 'function') cargarProductos(); } catch (x) {}   // la tienda y el resto del panel, al día
+  } else {
+    pnMasEstado(r && r.__transitorio ? '⚠️ El servidor tardó — revisá antes de reintentar' : '⚠️ No se guardó: ' + ((r && r.error) || 'sin conexión') + ' — tocá «Guardar»', 'err');
+  }
+}
+if (typeof masivoRecord === 'function') {
+  const _pnMasRecordOrig = masivoRecord;
+  masivoRecord = function (id, campo, valor, el) {
+    // ➕ Nueva categoría desde la misma lista
+    if (campo === 'categoria' && valor === '__pn_nueva__') {
+      const n = (prompt('Nombre de la categoría nueva:') || '').trim();
+      if (!n) { if (typeof renderMasivo === 'function') renderMasivo(); return; }
+      if (!_masivoCats.includes(n)) _masivoCats.push(n);
+      valor = n;
+      const r = _pnMasRecordOrig.call(this, id, campo, valor, el); if (typeof renderMasivo === 'function') renderMasivo();
+      if (_pnActivo) { pnMasEstado('● Cambios sin guardar…', 'pend'); clearTimeout(_pnMasTimer); _pnMasTimer = setTimeout(pnMasAutoGuardar, 900); }
+      return r;
+    }
+    const r = _pnMasRecordOrig.apply(this, arguments);
+    if (_pnActivo && _pnMasOv() && _pnMasOv().classList.contains('pn-inline')) { pnMasEstado('● Cambios sin guardar…', 'pend'); clearTimeout(_pnMasTimer); _pnMasTimer = setTimeout(pnMasAutoGuardar, 900); }
+    return r;
+  };
+}
+// «➕ Nueva categoría…» al final de cada lista de categorías (panel nuevo)
+if (typeof _mCatSelect === 'function') {
+  const _pnCatSelOrig = _mCatSelect;
+  _mCatSelect = function (id) { const h = _pnCatSelOrig.apply(this, arguments); return _pnActivo ? h.replace('</select>', '<option value="__pn_nueva__">➕ Nueva categoría…</option></select>') : h; };
+}
+// ⚖️ Pitzujim: van por peso — en vez de «U/paq» se indica que se miden en gramos (el valor no se toca)
+if (typeof renderMasivo === 'function') {
+  const _pnRenderMasivoOrig = renderMasivo;
+  renderMasivo = function () {
+    const r = _pnRenderMasivoOrig.apply(this, arguments);
+    if (_pnActivo && typeof _masivoVista !== 'undefined' && _masivoVista === 'datos') {
+      const ths = [...document.querySelectorAll('#masivo-body thead th')]; const iU = ths.findIndex(th => /U\s*\/\s*paq/i.test(th.textContent)), iP = ths.findIndex(th => /Peso/i.test(th.textContent));
+      if (iU > -1) document.querySelectorAll('#masivo-body tbody tr[data-mrow]').forEach(tr => {
+        const id = tr.dataset.mrow; if (((_mVal(id, 'categoria') || '') + '').trim().toLowerCase() !== 'pitzujim') return;
+        const td = tr.children[iU]; const inpU = td && td.querySelector('input'); if (!inpU) return;
+        if (String(_mVal(id, 'unidadesPorPaquete') || '1') !== '1') return;   // si alguien cargó unidades, se respeta
+        inpU.style.display = 'none'; const s = document.createElement('span'); s.className = 'pn-porpeso'; s.textContent = '⚖️ por peso →'; s.title = 'Los Pitzujim se miden en gramos: poné el peso de la bolsa en «Peso g»'; td.appendChild(s);
+        const tp = iP > -1 ? tr.children[iP] : null; const ip = tp && tp.querySelector('input'); if (ip) { ip.style.background = 'var(--dorado-claro)'; ip.placeholder = 'g'; }
+      });
+    }
+    return r;
+  };
+}
+// Abrir la planilla desde cualquier lado, con el panel nuevo, te lleva a su pestaña (no a la ventana que tapa todo)
+const _pnAbrirMasivoOrig = abrirMasivo;
+abrirMasivo = function () {
+  if (_pnActivo && document.body.classList.contains('pn-admin')) {
+    const ov = _pnMasOv();
+    if (ov && ov.classList.contains('pn-inline') && _pnMasCargada && _pnSec === 'productos' && (_pnTab.productos || 'stock') === 'planilla') return _pnAbrirMasivoOrig.apply(this, arguments);   // ya está a la vista: recargar adentro (lo usa «Guardar»)
+    _pnTab.productos = 'planilla'; try { localStorage.setItem('shuk_pn_tabs', JSON.stringify(_pnTab)); } catch (x) {}
+    pnIr('productos'); return;
+  }
+  return _pnAbrirMasivoOrig.apply(this, arguments);
+};
+// Arreglo (también en el panel de siempre): «Guardar» pisaba su propio contador y quedaba en «⏳ Guardando...»
+if (typeof guardarMasivo === 'function') {
+  const _pnGuardarMasivoOrig = guardarMasivo;
+  guardarMasivo = async function () { const r = await _pnGuardarMasivoOrig.apply(this, arguments); const b = document.getElementById('masivo-guardar'); if (b && !document.getElementById('masivo-ncambios')) { b.innerHTML = '💾 Guardar (<span id="masivo-ncambios">0</span>)'; if (typeof masivoUpdateCounter === 'function') masivoUpdateCounter(); } if (_pnActivo) pnMasEstado(pnMasPendientes().length ? '● Cambios sin guardar…' : '✓ Todo guardado', pnMasPendientes().length ? 'pend' : 'ok'); return r; };
+}
+// En su pestaña se mete sola; al apagar el panel nuevo vuelve a ser la de siempre
+const _pnAplicarTabT6 = pnAplicarTab;
+pnAplicarTab = function (sec) { const r = _pnAplicarTabT6(sec); if (_pnActivo && sec === 'productos' && (_pnTab.productos || 'stock') === 'planilla') { try { pnMasInline(); } catch (e) { console.warn('pnMasInline', e); } } return r; };
+const _pnSyncT2 = pnSync;
+pnSync = function () { const r = _pnSyncT2(); if (!document.body.classList.contains('pn')) pnMasSacar(); return r; };
+window.addEventListener('beforeunload', e => { if (_pnActivo && pnMasPendientes().length && _pnMasOv() && _pnMasOv().classList.contains('pn-inline')) { e.preventDefault(); e.returnValue = ''; } });
+if (_pnActivo && document.body.classList.contains('pn-admin') && _pnSec === 'productos' && (_pnTab.productos || 'stock') === 'planilla') pnMasInline();
+</script>
+
 </body>
 </html>
 
