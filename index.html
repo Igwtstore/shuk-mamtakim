@@ -21419,6 +21419,298 @@ function cerrarEditPedido() {
     </div>
   </div>
 </div>
+<!-- ═══════════════════════════════════════════════════════════════════════════════════════════════
+     🧭 PANEL NUEVO (v5.11 · tanda 1: el esqueleto). Menú al costado que se abre al pasar el mouse (en el
+     celu, barra abajo), «➕ Venta nueva» siempre a mano (se abre en un cajón) y las tarjetas de siempre
+     repartidas en 12 lugares. NO reescribe nada: usa las MISMAS tarjetas y funciones del panel de hoy —
+     solo decide cuáles se ven. Convive con el panel clásico: interruptor «✨ Probar el panel nuevo» /
+     «↩️ Volver al panel de siempre» (localStorage shuk_panel_nuevo). Apagado = el panel de siempre, intacto.
+     ═══════════════════════════════════════════════════════════════════════════════════════════════ -->
+<style id="pn-css">
+  body.pn { --pn-rail: 64px; --pn-open: 250px; }
+  body.pn .admin-subtabs, body.pn #panel-secnav { display: none !important; }
+  body.pn #socio-bar { display: none !important; }
+  body.pn[data-pn-sec="sistema"] #socio-bar { display: flex !important; }
+  body.pn .admin-section.visible { max-width: none; margin: 1rem 0 6rem; padding: 0 1.25rem 0 calc(var(--pn-rail) + 1.5rem); }
+  body.pn .admin-section.visible > * { max-width: 1100px; }
+  body.pn #admin-tab-panel { display: flex; flex-direction: column; }
+  body.pn #admin-tab-panel[style*="display: none"] { display: none !important; }
+  body.pn #card-israel { width: 100%; left: auto; transform: none; }
+  #pn-side, #pn-bar, #pn-head, #pn-drawer, #pn-scrim, #pn-probar-wrap { display: none; }
+  body.pn #admin-section canvas { max-width: 100%; }
+  body.pn #admin-tab-dashboard > div[style*="1fr 1fr"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+  body.pn #admin-tab-dashboard .admin-card:has(#dash-miri) { display: none; }
+  body.pn #admin-tab-dashboard > div:has(#dash-miri) { grid-template-columns: minmax(0, 1fr) !important; }
+  body.pn.pn-admin #pn-side { display: flex; }
+  body.pn.pn-admin #pn-head { display: flex; }
+  #pn-side { position: fixed; top: 64px; bottom: 0; left: 0; z-index: 300; width: var(--pn-rail); flex-direction: column; gap: 2px; padding: 10px 8px; background: var(--azul); color: #fff; overflow: hidden auto; transition: width .16s ease; box-shadow: 2px 0 14px rgba(0,0,0,.12); }
+  #pn-side.abierto { width: var(--pn-open); }
+  #pn-side button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 42px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: rgba(255,255,255,.82); font: 600 0.9rem 'DM Sans', sans-serif; cursor: pointer; text-align: left; white-space: nowrap; flex-shrink: 0; }
+  #pn-side button .ic { width: 24px; text-align: center; font-size: 1.1rem; flex-shrink: 0; }
+  #pn-side button .lbl { opacity: 0; transition: opacity .12s; }
+  #pn-side.abierto button .lbl { opacity: 1; }
+  #pn-side button:hover { background: rgba(255,255,255,.08); color: #fff; }
+  #pn-side button.on { background: rgba(201,149,74,.22); color: #fff; box-shadow: inset 3px 0 0 var(--dorado); }
+  #pn-side button.venta { background: var(--dorado); color: #1a1a2e; margin-bottom: 8px; font-weight: 800; }
+  #pn-side button.venta:hover { filter: brightness(1.05); }
+  #pn-side .g { font: 700 0.62rem 'DM Sans', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.4); padding: 10px 14px 2px; white-space: nowrap; min-height: 22px; flex-shrink: 0; }
+  #pn-side:not(.abierto) .g { color: transparent; border-top: 1px solid rgba(255,255,255,.1); margin: 6px 6px 0; padding: 4px 0 0; min-height: 0; }
+  #pn-side .sp { flex: 1; min-height: 12px; }
+  #pn-side .chico { min-height: 36px; font-size: 0.8rem; color: rgba(255,255,255,.6); }
+  #pn-head { align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0.4rem 0 1.1rem; }
+  #pn-head h1 { font-family: 'Fraunces', serif; font-size: 1.9rem; line-height: 1.1; margin: 0; color: var(--texto); }
+  #pn-head p { margin: 0.25rem 0 0; color: var(--texto-suave); font-size: 0.9rem; }
+  #pn-head .venta { padding: 0.65rem 1.2rem; border: 0; border-radius: 12px; background: var(--dorado); color: #1a1a2e; font: 800 0.92rem 'DM Sans', sans-serif; cursor: pointer; box-shadow: 0 4px 12px rgba(201,149,74,.35); }
+  #pn-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 410; width: min(760px, 100vw); flex-direction: column; background: var(--gris); box-shadow: -8px 0 30px rgba(0,0,0,.25); }
+  #pn-drawer.on { display: flex; }
+  #pn-drawer .pn-dh { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--gris-medio); background: var(--blanco); }
+  #pn-drawer .pn-dh b { font-family: 'Fraunces', serif; font-size: 1.3rem; color: var(--texto); }
+  #pn-drawer .pn-dh button { width: 38px; height: 38px; border-radius: 10px; border: 1.5px solid var(--gris-medio); background: var(--blanco); color: var(--texto); font-size: 1.1rem; cursor: pointer; }
+  #pn-drawer .pn-db { flex: 1; overflow: auto; padding: 1rem 1.2rem 2rem; overscroll-behavior: contain; }
+  #pn-scrim { position: fixed; inset: 0; z-index: 405; background: rgba(0,0,0,.4); }
+  #pn-scrim.on { display: block; }
+  #pn-probar-wrap { align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.8rem; padding: 0.55rem 0.8rem; border-radius: 10px; background: var(--dorado-claro); color: var(--texto); font-size: 0.82rem; }
+  #pn-probar { padding: 0.4rem 0.9rem; border: 0; border-radius: 20px; background: var(--dorado); color: #1a1a2e; font: 700 0.8rem 'DM Sans', sans-serif; cursor: pointer; }
+  body:not(.pn) .admin-section.visible #pn-probar-wrap { display: flex; }
+  #pn-mapa table { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--blanco); color: var(--texto); border-radius: 10px; overflow: hidden; }
+  #pn-mapa td, #pn-mapa th { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--gris-medio); text-align: left; }
+  #pn-mapa th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-suave); background: var(--gris); }
+  @media (max-width: 760px) {
+    body.pn .admin-section.visible { padding: 0 0.9rem 5.5rem; }
+    body.pn.pn-admin #pn-side { display: none; }
+    body.pn.pn-admin #pn-side.movil { display: flex; top: 0; width: min(290px, 86vw); z-index: 420; }
+    body.pn.pn-admin #pn-side.movil .lbl { opacity: 1; }
+    body.pn.pn-admin #pn-side.movil .g { color: rgba(255,255,255,.4); border: 0; margin: 0; padding: 10px 14px 2px; min-height: 22px; }
+    body.pn.pn-admin #pn-bar { display: flex; }
+    #pn-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 300; background: var(--blanco); border-top: 1px solid var(--gris-medio); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); justify-content: space-around; box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
+    #pn-bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: transparent; font: 600 0.68rem 'DM Sans', sans-serif; color: var(--texto-suave); cursor: pointer; padding: 2px 0; }
+    #pn-bar button .e { font-size: 1.25rem; line-height: 1.2; }
+    #pn-bar button.on { color: var(--texto); }
+    #pn-bar button.venta .e { width: 48px; height: 48px; border-radius: 16px; background: var(--dorado); color: #1a1a2e; display: grid; place-items: center; margin-top: -20px; box-shadow: 0 6px 14px rgba(201,149,74,.4); font-weight: 800; }
+    #pn-head h1 { font-size: 1.5rem; }
+    #pn-head .venta { display: none; }
+    body.pn #admin-tab-dashboard > div[style*="1fr 1fr"] { grid-template-columns: minmax(0, 1fr) !important; }
+  }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO (tanda 1) ───────────────────────────────────────────────────────────────────
+const PN_SECS = [
+  { id: 'hoy', ic: '🏠', t: 'Hoy', p: 'Lo del día y cómo viene el negocio.', tabs: ['dashboard'] },
+  { g: 'Vender' },
+  { id: 'pedidos', ic: '🧾', t: 'Pedidos', p: 'Todos los pedidos y a quién le vendiste cada producto.', tabs: ['panel'], old: ['ventas'] },
+  { id: 'medeben', ic: '💳', t: 'Me deben', p: 'La cuenta corriente: quién te debe, pagos a cuenta y saldos viejos.', tabs: ['panel'], old: ['ventas'] },
+  { id: 'clientes', ic: '👥', t: 'Clientes', p: 'Tus clientes y a quién le toca volver a pedir.', tabs: ['clientes'] },
+  { g: 'Mercadería' },
+  { id: 'productos', ic: '📦', t: 'Productos', p: 'El stock y el catálogo en un solo lugar.', tabs: ['panel'], old: ['stock', 'catalogo'] },
+  { id: 'compras', ic: '📥', t: 'Compras', p: 'Lo que entra: recibir mercadería (Pitzujim incluido) y los tickets de Israel.', tabs: ['panel'], old: ['stock', 'israel'] },
+  { g: 'Tienda' },
+  { id: 'promos', ic: '📣', t: 'Promociones', p: 'Ofertas, flyers, dormidos y avisos a los clientes.', tabs: ['panel'], old: ['catalogo'] },
+  { id: 'mitienda', ic: '🏪', t: 'Mi tienda', p: 'Los interruptores de la vidriera.', tabs: ['panel'], old: ['inicio'] },
+  { g: 'Plata' },
+  { id: 'caja', ic: '💰', t: 'Caja', p: 'Cuánta plata hay y dónde: movimientos, gastos, transferencias y retiros.', tabs: ['panel'], old: ['dinero'] },
+  { id: 'ganancia', ic: '🕎', t: 'Ganancia y Maaser', p: 'Lo ya cobrado del período actual.', tabs: ['ganancias'] },
+  { id: 'numeros', ic: '📊', t: 'Números', p: 'Visitas, lo más vendido, lo que vale el stock y preguntale a tu negocio.', tabs: ['analitica', 'panel'], old: ['inicio', 'stock'] },
+  { g: '' },
+  { id: 'sistema', ic: '⚙️', t: 'Sistema', p: 'Lo que se usa poco: el probador del bot, las herramientas de arreglo, todo lo de Miri y los Docs.', tabs: ['panel', 'docs'], old: ['bot', 'dinero', 'inicio'] }
+];
+// A qué lugar va cada tarjeta. Primero por id, después por el título. El orden de la lista es el orden en pantalla.
+const PN_CARDS = [
+  ['pedidos', ['📦 pedidos'], []], ['pedidos', ['trazar producto'], []],
+  ['medeben', ['cuenta corriente'], ['cc-card']], ['medeben', ['cargar saldo a cuenta corriente'], []],
+  ['productos', ['stock bajo'], ['stock-alerta-card']], ['productos', ['stock disponible'], []], ['productos', ['actualizar stock'], []],
+  ['productos', ['agregar nuevo producto'], ['card-nuevo-producto']], ['productos', ['editar producto'], []], ['productos', ['editor masivo'], []],
+  ['productos', ['mostrar / ocultar'], []], ['productos', ['fraccionar'], ['frac-card']], ['productos', ['lista de espera'], []], ['productos', ['bandeja de fotos'], ['card-bandeja']],
+  ['compras', ['recibir mercadería'], []], ['compras', ['compras en israel'], ['card-israel']],
+  ['promos', ['ofertas y packs'], []], ['promos', ['productos dormidos'], []], ['promos', ['flyers'], []], ['promos', ['avisar a los clientes'], ['card-avisar']],
+  ['mitienda', ['estado de la tienda'], []], ['mitienda', ['aviso en la tienda'], ['card-aviso']], ['mitienda', ['fiestas y shabat'], ['card-fiestas']], ['mitienda', ['envío gratis'], ['card-envio']], ['mitienda', ['vidriera geográfica'], ['card-geo']], ['mitienda', ['qr del catálogo'], []],
+  ['caja', ['caja — movimientos'], []], ['caja', ['registrar gasto'], []], ['caja', ['transferir entre cajas'], []], ['caja', ['rendición'], []], ['caja', ['caja envíos'], ['caja-envios-card']],
+  ['numeros', ['visitas al catálogo'], ['visitas-card']], ['numeros', ['lo más vendido'], []], ['numeros', ['cuánto vale mi stock'], []], ['numeros', ['preguntale a tu negocio'], ['card-ia']],
+  ['sistema', ['probador del bot'], []], ['sistema', ['control / auditoría'], []], ['sistema', ['renumerar pedidos'], []], ['sistema', ['registro de borrados'], []], ['sistema', ['acceso de miri'], ['card-acceso-miri']], ['sistema', ['cuenta entre socios'], ['cuenta-socios-card']],
+  ['venta', ['cargar pedido manual'], []]
+];
+const PN_DE_TAB = { dashboard: 'hoy', clientes: 'clientes', analitica: 'numeros', ganancias: 'ganancia', docs: 'sistema' };
+const PN_DE_SECCION = { ventas: 'pedidos', dinero: 'caja', stock: 'productos', catalogo: 'productos', bot: 'sistema', israel: 'compras', inicio: 'mitienda' };
+let _pnActivo = false, _pnSec = 'hoy', _pnDentro = false, _pnVentaPh = null;
+try { _pnActivo = localStorage.getItem('shuk_panel_nuevo') === '1'; _pnSec = localStorage.getItem('shuk_pn_sec') || 'hoy'; } catch (e) {}
+try { const q = new URLSearchParams(location.search).get('panel'); if (q === 'nuevo') _pnActivo = true; if (q === 'clasico') _pnActivo = false; } catch (e) {}
+const pnSecDe = id => PN_SECS.find(s => s.id === id);
+const pnEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+// Marca cada tarjeta con su lugar nuevo (data-pn) y su orden. La que no se reconoce va a Sistema › «Otras» — nunca se pierde.
+function pnMarcarTarjetas() {
+  document.querySelectorAll('#admin-tab-panel > .admin-card').forEach(card => {
+    if (card.dataset.pn) return;
+    const tEl = card.querySelector('.admin-titulo, summary');
+    const t = ((tEl ? tEl.textContent : card.textContent) || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    let i = PN_CARDS.findIndex(r => r[2].includes(card.id));
+    if (i === -1) i = PN_CARDS.findIndex(r => r[1].some(x => t.includes(x)));
+    if (i === -1) { card.dataset.pn = 'sistema'; card.dataset.pnOtra = '1'; card.style.order = 900; return; }
+    card.dataset.pn = PN_CARDS[i][0]; card.style.order = i;
+  });
+}
+function pnArmar() {
+  if (document.getElementById('pn-side')) return;
+  const side = document.createElement('nav'); side.id = 'pn-side'; side.setAttribute('aria-label', 'Menú del panel');
+  side.innerHTML = `<button type="button" class="venta" data-pn-venta title="Venta nueva (tecla N)"><span class="ic">➕</span><span class="lbl">Venta nueva</span></button>`
+    + PN_SECS.map(s => s.g != null ? `<div class="g">${pnEsc(s.g)}</div>` : `<button type="button" data-pn-ir="${s.id}" title="${pnEsc(s.t)}"><span class="ic">${s.ic}</span><span class="lbl">${pnEsc(s.t)}</span></button>`).join('')
+    + `<div class="sp"></div><button type="button" class="chico" data-pn-ir="mapa" title="Dónde quedó cada cosa"><span class="ic">🗺️</span><span class="lbl">Dónde quedó cada cosa</span></button>`
+    + `<button type="button" class="chico" data-pn-clasico title="Volver al panel de siempre"><span class="ic">↩️</span><span class="lbl">Volver al panel de siempre</span></button>`
+    + `<button type="button" class="chico" data-pn-salir title="Salir"><span class="ic">🚪</span><span class="lbl">Salir</span></button>`;
+  document.body.appendChild(side);
+  const bar = document.createElement('div'); bar.id = 'pn-bar';
+  bar.innerHTML = [['hoy', '🏠', 'Hoy'], ['pedidos', '🧾', 'Pedidos'], ['venta', '+', 'Venta'], ['productos', '📦', 'Productos'], ['menu', '☰', 'Menú']].map(([k, e, t]) =>
+    `<button type="button" class="${k === 'venta' ? 'venta' : ''}" ${k === 'venta' ? 'data-pn-venta' : k === 'menu' ? 'data-pn-menu' : `data-pn-ir="${k}"`}><span class="e">${e}</span>${t}</button>`).join('');
+  document.body.appendChild(bar);
+  const head = document.createElement('div'); head.id = 'pn-head';
+  head.innerHTML = `<div><h1 id="pn-h1"></h1><p id="pn-p"></p></div><button type="button" class="venta" data-pn-venta>➕ Venta nueva</button>`;
+  const adm = document.getElementById('admin-section'); adm.insertBefore(head, adm.firstChild);
+  const mapa = document.createElement('div'); mapa.id = 'pn-mapa'; mapa.style.display = 'none'; adm.appendChild(mapa);
+  const dr = document.createElement('div'); dr.id = 'pn-drawer'; dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-label', 'Venta nueva');
+  dr.innerHTML = `<div class="pn-dh"><b>➕ Venta nueva</b><button type="button" data-pn-cerrar aria-label="Cerrar">✕</button></div><div class="pn-db" id="pn-db"></div>`;
+  document.body.appendChild(dr);
+  const sc = document.createElement('div'); sc.id = 'pn-scrim'; document.body.appendChild(sc);
+  // El menú se abre al pasar el mouse y se pliega al elegir (hasta que el mouse salga y vuelva).
+  let tc = null, dormido = false;
+  side.addEventListener('mouseenter', () => { if (dormido || window.innerWidth <= 760) return; clearTimeout(tc); side.classList.add('abierto'); });
+  side.addEventListener('mouseleave', () => { dormido = false; clearTimeout(tc); tc = setTimeout(() => side.classList.remove('abierto'), 180); });
+  side.addEventListener('click', e => { if (e.target.closest('button')) { dormido = window.innerWidth > 760; side.classList.remove('abierto'); side.classList.remove('movil'); sc.classList.remove('on'); } });
+  sc.addEventListener('click', () => { pnCerrarVenta(); side.classList.remove('movil'); sc.classList.remove('on'); });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pn-ir],[data-pn-venta],[data-pn-cerrar],[data-pn-clasico],[data-pn-salir],[data-pn-menu],[data-pn-probar]');
+  if (!b) return;
+  if (b.hasAttribute('data-pn-probar')) { pnSet(true); return; }
+  if (!_pnActivo) return;
+  if (b.dataset.pnIr) pnIr(b.dataset.pnIr);
+  else if (b.hasAttribute('data-pn-venta')) pnAbrirVenta();
+  else if (b.hasAttribute('data-pn-cerrar')) pnCerrarVenta();
+  else if (b.hasAttribute('data-pn-clasico')) pnSet(false);
+  else if (b.hasAttribute('data-pn-salir')) { if (typeof cerrarSesionAdmin === 'function') cerrarSesionAdmin(); }
+  else if (b.hasAttribute('data-pn-menu')) { document.getElementById('pn-side').classList.add('movil'); document.getElementById('pn-scrim').classList.add('on'); }
+});
+document.addEventListener('keydown', e => {
+  if (!_pnActivo || !document.body.classList.contains('pn-admin')) return;
+  if (e.key === 'Escape' && document.getElementById('pn-drawer').classList.contains('on')) { pnCerrarVenta(); return; }
+  const tag = (e.target.tagName || '').toLowerCase();
+  if ((e.key === 'n' || e.key === 'N') && !['input', 'textarea', 'select'].includes(tag) && !e.target.isContentEditable && !e.metaKey && !e.ctrlKey && !e.altKey && !document.getElementById('pn-drawer').classList.contains('on')) { e.preventDefault(); pnAbrirVenta(); }
+});
+
+// Ir a un lugar: usa las mismas funciones de siempre (setAdminTab / setPanelSeccion, con todo lo que cargan)
+// y después muestra solo las tarjetas de ese lugar.
+function pnIr(id) {
+  if (!_pnActivo) return;
+  pnArmar(); pnMarcarTarjetas();
+  const mapa = document.getElementById('pn-mapa');
+  if (id === 'mapa') { pnMapa(); mapa.style.display = ''; ['panel', 'dashboard', 'clientes', 'analitica', 'ganancias', 'docs'].forEach(t => { const el = document.getElementById('admin-tab-' + t); if (el) el.style.display = 'none'; }); pnPintarNav('mapa', { t: 'Dónde quedó cada cosa', p: 'Cada tarjeta del panel de siempre y el lugar donde quedó. No se borró ninguna.' }); window.scrollTo(0, 0); return; }
+  mapa.style.display = 'none';
+  const S = pnSecDe(id) || pnSecDe('hoy');
+  if (typeof esVistaMiri === 'function' && esVistaMiri() && S.id === 'ganancia') return pnIr('hoy');
+  _pnSec = S.id; try { localStorage.setItem('shuk_pn_sec', S.id); } catch (e) {}
+  _pnDentro = true;
+  try {
+    _pnSetAdminTabOrig(S.tabs[0]);
+    if (S.tabs.includes('panel')) (S.old || []).forEach(o => { try { _pnSetPanelSeccionOrig(o); } catch (e) {} });
+  } finally { _pnDentro = false; }
+  ['panel', 'dashboard', 'clientes', 'analitica', 'ganancias', 'docs'].forEach(t => { const el = document.getElementById('admin-tab-' + t); if (el) el.style.display = S.tabs.includes(t) ? '' : 'none'; });
+  document.querySelectorAll('#admin-tab-panel > .admin-card').forEach(card => { card.style.display = card.dataset.pn === S.id ? '' : 'none'; });
+  if (typeof aplicarPrivacidadPanel === 'function') aplicarPrivacidadPanel();
+  pnPintarNav(S.id, S);
+  window.scrollTo(0, 0);
+}
+function pnPintarNav(id, S) {
+  document.body.dataset.pnSec = id;
+  document.querySelectorAll('#pn-side [data-pn-ir], #pn-bar [data-pn-ir]').forEach(b => b.classList.toggle('on', b.dataset.pnIr === id));
+  const h = document.getElementById('pn-h1'), p = document.getElementById('pn-p');
+  if (h) h.textContent = (S.ic ? S.ic + ' ' : '') + S.t; if (p) p.textContent = S.p || '';
+}
+// ➕ Venta nueva: la tarjeta «Cargar pedido manual» de siempre, llevada a un cajón (y devuelta a su lugar al cerrar).
+function pnTarjetaVenta() { pnMarcarTarjetas(); return document.querySelector('#admin-tab-panel > .admin-card[data-pn="venta"]') || document.querySelector('#pn-db > .admin-card'); }
+function pnAbrirVenta() {
+  if (!_pnActivo) return;
+  pnArmar();
+  const card = pnTarjetaVenta(); if (!card) return;
+  if (card.parentElement.id !== 'pn-db') { _pnVentaPh = document.createComment('pn-venta'); card.parentElement.insertBefore(_pnVentaPh, card); document.getElementById('pn-db').appendChild(card); }
+  card.style.display = '';
+  document.getElementById('pn-drawer').classList.add('on'); document.getElementById('pn-scrim').classList.add('on');
+  if (typeof renderManualProductos === 'function') { try { renderManualProductos(); } catch (e) {} }
+  setTimeout(() => { if (window.innerWidth > 760) { const i = card.querySelector('input:not([type=hidden]):not([type=file]), textarea'); if (i) i.focus(); } }, 80);
+}
+function pnCerrarVenta() {
+  const dr = document.getElementById('pn-drawer'); if (!dr) return;
+  dr.classList.remove('on'); const sc = document.getElementById('pn-scrim'); if (sc && !document.getElementById('pn-side').classList.contains('movil')) sc.classList.remove('on');
+  const card = document.querySelector('#pn-db > .admin-card');
+  if (card && _pnVentaPh && _pnVentaPh.parentNode) { _pnVentaPh.parentNode.insertBefore(card, _pnVentaPh); _pnVentaPh.remove(); _pnVentaPh = null; card.style.display = 'none'; }
+}
+// 🗺️ Dónde quedó cada cosa: la tabla sale sola de las tarjetas (así nunca queda vieja).
+function pnMapa() {
+  pnMarcarTarjetas();
+  const viejo = { ventas: '🧾 Ventas', dinero: '💰 Dinero', stock: '📦 Stock', catalogo: '🛍️ Catálogo', bot: '📱 Bot', israel: '🇮🇱 Compras Israel', inicio: '🏠 Inicio' };
+  const filas = [...document.querySelectorAll('#admin-tab-panel > .admin-card, #pn-db > .admin-card')].map(c => {
+    const tEl = c.querySelector('.admin-titulo, summary'); const t = ((tEl ? tEl.textContent : '') || '').replace(/\s+/g, ' ').trim().split(' · ')[0].slice(0, 60);
+    const S = c.dataset.pn === 'venta' ? { ic: '➕', t: 'Venta nueva (arriba de todo, tecla N)' } : pnSecDe(c.dataset.pn) || { ic: '⚙️', t: 'Sistema' };
+    return [viejo[c.dataset.seccion] || 'Panel', t, S.ic + ' ' + S.t + (c.dataset.pnOtra ? ' › Otras' : ''), +(c.style.order || 0)];
+  });
+  const tabs = [['📊 Dashboard', '🏠 Hoy'], ['👥 Clientes (+ Te toca)', '👥 Clientes'], ['📈 Analítica', '📊 Números'], ['💰 Ganancias', '🕎 Ganancia y Maaser'], ['📖 Docs', '⚙️ Sistema'], ['Barra «Viendo: Todo / Solo Miri» y Salir', '⚙️ Sistema (y 🚪 Salir abajo del menú)']];
+  document.getElementById('pn-mapa').innerHTML = `<table><thead><tr><th>Estaba en</th><th>Qué es</th><th>Ahora va en</th></tr></thead><tbody>`
+    + tabs.map(r => `<tr><td>Pestañas de arriba</td><td><b>${pnEsc(r[0])}</b></td><td>${pnEsc(r[1])}</td></tr>`).join('')
+    + filas.map(r => `<tr><td>Panel › ${pnEsc(r[0])}</td><td><b>${pnEsc(r[1])}</b></td><td>${pnEsc(r[2])}</td></tr>`).join('') + `</tbody></table>`;
+}
+// Prender / apagar el panel nuevo (y el botón para probarlo desde el panel de siempre)
+function pnSet(on) {
+  _pnActivo = !!on; try { localStorage.setItem('shuk_panel_nuevo', on ? '1' : '0'); } catch (e) {}
+  pnSync();
+  if (!on) { if (typeof showToast === 'function') showToast('↩️ Volviste al panel de siempre — el nuevo sigue a un toque («✨ Probar el panel nuevo»)'); }
+  else if (typeof showToast === 'function') showToast('✨ Panel nuevo · el menú está a la izquierda (se abre al pasar el mouse)');
+}
+function pnSync() {
+  const admin = document.getElementById('admin-section') && document.getElementById('admin-section').classList.contains('visible');
+  document.body.classList.toggle('pn', _pnActivo);
+  document.body.classList.toggle('pn-admin', _pnActivo && admin);
+  pnBotonProbar();
+  if (_pnActivo && admin) { pnArmar(); pnIr(_pnSec); }
+  if (!_pnActivo) {
+    pnCerrarVenta();
+    const mapa = document.getElementById('pn-mapa'); if (mapa) mapa.style.display = 'none';
+    document.querySelectorAll('#admin-tab-panel > .admin-card').forEach(c => { c.style.order = ''; });
+    if (admin) { _pnDentro = true; try { _pnSetAdminTabOrig(typeof _adminTabActual !== 'undefined' ? _adminTabActual : 'panel'); } finally { _pnDentro = false; } }
+  }
+}
+function pnBotonProbar() {
+  const bar = document.querySelector('.admin-subtabs'); if (!bar || document.getElementById('pn-probar-wrap')) return;
+  const w = document.createElement('div'); w.id = 'pn-probar-wrap';
+  w.innerHTML = `<span>✨ Hay un <b>panel nuevo</b> para probar: menú al costado, «Venta nueva» arriba de todo y todo ordenado. Volvés a este cuando quieras.</span><button type="button" id="pn-probar" data-pn-probar>Probar el panel nuevo</button>`;
+  bar.parentElement.insertBefore(w, bar);
+}
+// Las funciones de siempre siguen mandando: si alguna salta de pestaña o de sección, el panel nuevo la sigue.
+const _pnSetAdminTabOrig = setAdminTab, _pnSetPanelSeccionOrig = setPanelSeccion, _pnSetModoOrig = setModo;
+setAdminTab = function (tab) {
+  if (_pnActivo && !_pnDentro && document.body.classList.contains('pn-admin')) { if (tab === 'panel') return pnIr(_pnSec); return pnIr(PN_DE_TAB[tab] || _pnSec); }
+  return _pnSetAdminTabOrig(tab);
+};
+setPanelSeccion = function (s, btn) {
+  if (_pnActivo && !_pnDentro && document.body.classList.contains('pn-admin')) {
+    const S = pnSecDe(_pnSec);
+    if (S && S.tabs.includes('panel') && (S.old || []).includes(s)) return pnIr(_pnSec);   // ya está en un lugar que la muestra
+    return pnIr(PN_DE_SECCION[s] || _pnSec);
+  }
+  return _pnSetPanelSeccionOrig(s, btn);
+};
+setModo = function (m) { const r = _pnSetModoOrig(m); pnSync(); return r; };
+if (typeof irARecibirMercaderia === 'function') {
+  const _pnIrRecibirOrig = irARecibirMercaderia;
+  irARecibirMercaderia = function () {
+    if (!_pnActivo) return _pnIrRecibirOrig();
+    pnIr('compras'); const i = document.getElementById('recep-buscar'); if (i) { i.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => i.focus(), 350); }
+  };
+}
+if (typeof cargarComoPedido === 'function') {
+  const _pnCargarComoPedidoOrig = cargarComoPedido;
+  cargarComoPedido = function (i) { const r = _pnCargarComoPedidoOrig(i); if (_pnActivo) pnAbrirVenta(); return r; };
+}
+pnBotonProbar();
+pnSync();
+</script>
+
 </body>
 </html>
 
