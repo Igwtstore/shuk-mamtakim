@@ -1305,21 +1305,10 @@
       <div style="font-size:0.72rem;color:var(--texto-suave);margin-top:0.5rem">La ganancia es <b>en vivo</b>: solo cuenta comisión y Pitzujim ya <b>cobrados</b> del período actual. Al hacer el corte, esas ventas quedan liquidadas y vuelve a cero.</div>
       <div id="cortes-historial" style="margin-top:0.6rem"></div>
     </div>
-    <!-- Registrar compra -->
-    <div class="admin-card" style="margin-bottom:0.75rem">
-      <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">📦 Registrar compra de Pitzujim</div>
-      <div style="display:flex;flex-direction:column;gap:0.5rem">
-        <select id="compra-producto" style="padding:0.5rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white">
-          <option value="">Seleccioná producto...</option>
-        </select>
-        <div style="display:flex;gap:0.5rem">
-          <input type="number" id="compra-cantidad" placeholder="Cantidad" min="1" oninput="calcularCostoUnitario()" style="flex:1;padding:0.5rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
-          <input type="number" id="compra-costo" placeholder="Costo total $" min="0" oninput="calcularCostoUnitario()" style="flex:2;padding:0.5rem 0.8rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none">
-        </div>
-        <div id="compra-unitario" style="font-size:0.78rem;color:var(--texto-suave);min-height:1rem"></div>
-        <button onclick="guardarCompra()" style="padding:0.5rem 1.2rem;background:var(--azul);color:white;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer">Guardar compra</button>
-      </div>
-    </div>
+    <!-- 📦 v5.09: «Registrar compra de Pitzujim» se fue — hacía lo mismo que Recibir mercadería pero sin sumar
+         el stock, y cargar las dos duplicaba la compra en el costo. Toda compra va por Stock › Recibir mercadería. -->
+    <div class="admin-card" style="margin-bottom:0.75rem;font-size:0.85rem;color:var(--texto-suave)">📦 <b style="color:var(--azul)">¿Compraste mercadería (también Pitzujim)?</b> Cargala en <b>Stock › 📥 Recibir mercadería</b>: anota el costo para la ganancia y suma el stock, en un solo paso.
+      <button onclick="irARecibirMercaderia()" style="margin-left:0.4rem;padding:0.3rem 0.8rem;background:var(--azul);color:white;border:none;border-radius:20px;font-size:0.78rem;font-weight:600;cursor:pointer">Ir a Recibir mercadería ›</button></div>
     <!-- Historial de movimientos -->
     <div class="admin-card">
       <div style="font-weight:700;color:var(--azul);margin-bottom:0.75rem">📋 Movimientos</div>
@@ -2084,9 +2073,6 @@
           <option value="MP_JONY">MP JONY</option>
           <option value="EFT_JONY">EFT $ JONY</option>
           <option value="ETF_USD_JONY">ETF U$S JONY</option>
-          <option value="MP_GABY">MP GABY</option>
-          <option value="EFT_MYRI">EFT $ MYRI</option>
-          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
           <option value="COMI_ARS_JONY">Comi $ JONY</option>
           <option value="COMI_USD_JONY">Comi U$S JONY</option>
           <option value="CTA_CTE_ARS">Cta Cte $</option>
@@ -2116,9 +2102,6 @@
                 <option value="MP_JONY">MP JONY</option>
                 <option value="EFT_JONY">EFT $ JONY</option>
                 <option value="ETF_USD_JONY">ETF U$S JONY</option>
-                <option value="MP_GABY">MP GABY</option>
-                <option value="EFT_MYRI">EFT $ MYRI</option>
-                <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
                 <option value="COMI_ARS_JONY">Comi $ JONY</option>
                 <option value="COMI_USD_JONY">Comi U$S JONY</option>
                 <option value="CTA_CTE_ARS">Cta Cte $</option>
@@ -2180,9 +2163,6 @@
           <select id="transf-de" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
             <option value="EFT_JONY">EFT $ JONY</option>
             <option value="MP_JONY">MP JONY</option>
-            <option value="MP_GABY">MP GABY</option>
-            <option value="EFT_MYRI">EFT $ MYRI</option>
-            <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
             <option value="COMI_ARS_JONY">Comi $ JONY</option>
             <option value="CTA_CTE_ARS">Cta Cte $</option>
           </select>
@@ -2190,10 +2170,8 @@
         <div class="nombre-campo" style="margin:0;flex:1">
           <label>A (destino)</label>
           <select id="transf-a" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
-            <option value="EFT_MYRI">EFT $ MYRI</option>
-            <option value="MP_GABY">MP GABY</option>
             <option value="EFT_JONY">EFT $ JONY</option>
-            <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
+            <option value="MP_JONY">MP JONY</option>
             <option value="COMI_ARS_JONY">Comi $ JONY</option>
             <option value="CTA_CTE_ARS">Cta Cte $</option>
           </select>
@@ -2227,9 +2205,6 @@
         <select id="rend-columna" style="padding:0.65rem 0.9rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;width:100%;outline:none;background:white;">
           <option value="MP_JONY">MP JONY</option>
           <option value="EFT_JONY">EFT $ JONY</option>
-          <option value="MP_GABY">MP GABY</option>
-          <option value="EFT_MYRI">EFT $ MYRI</option>
-          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
           <option value="COMI_ARS_JONY">Comi $ JONY</option>
           <option value="COMI_USD_JONY">Comi U$S JONY</option>
           <option value="CTA_CTE_ARS">Cta Cte $</option>
@@ -2546,7 +2521,7 @@
         <label style="font-size:0.82rem;font-weight:600;color:var(--verde);display:block;margin-bottom:0.3rem">A JONY $</label>
         <input type="number" id="pago-pitz" placeholder="0" min="0" oninput="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
-      <div style="margin-bottom:0.75rem">
+      <div id="pago-gol-wrap" style="margin-bottom:0.75rem">
         <label style="font-size:0.82rem;font-weight:600;color:#c050a0;display:block;margin-bottom:0.3rem">A golosinas (Myri) $</label>
         <input type="number" id="pago-gol" placeholder="0" min="0" oninput="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none;box-sizing:border-box" />
       </div>
@@ -2572,21 +2547,16 @@
       <input type="date" id="pago-fecha" style="width:100%;padding:0.5rem 0.7rem;border:1.5px solid var(--gris-medio);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;box-sizing:border-box" />
     </div>
     <!-- ✂️ Fraccionar en cajas por dueño (v4.05): cada parte a su caja, sin deuda entre socios -->
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:0.6rem;font-size:0.82rem;font-weight:600;color:#1e7a3c;cursor:pointer;background:#eef7ee;border:1.5px solid #bfe3c8;border-radius:10px;padding:0.5rem 0.7rem">
+    <label id="pago-fraccionar-wrap" style="display:flex;align-items:center;gap:8px;margin-bottom:0.6rem;font-size:0.82rem;font-weight:600;color:#1e7a3c;cursor:pointer;background:#eef7ee;border:1.5px solid #bfe3c8;border-radius:10px;padding:0.5rem 0.7rem">
       <input type="checkbox" id="pago-fraccionar" onchange="pagoFraccionarToggle()" style="width:16px;height:16px;cursor:pointer">
       ✂️ Fraccionar en cajas <span style="font-weight:400;color:var(--texto-suave);font-size:0.72rem">— la parte de cada uno a su caja</span>
     </label>
     <div id="pago-caja-unica" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">¿A qué caja entró?</label>
       <select id="pago-caja" onchange="pago_evalTC()" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
-        <optgroup label="Cajas MYRI">
-          <option value="MP_GABY">MP GABY</option>
-          <option value="EFT_MYRI">EFT $ MYRI</option>
-          <option value="ETF_USD_MYRI">ETF U$S MYRI</option>
-        </optgroup>
         <optgroup label="Cajas JONY">
-          <option value="EFT_JONY">EFT $ JONY</option>
           <option value="MP_JONY">MP JONY</option>
+          <option value="EFT_JONY">EFT $ JONY</option>
           <option value="ETF_USD_JONY">ETF U$S JONY</option>
         </optgroup>
         <optgroup label="Otro">
@@ -2610,7 +2580,7 @@
       </select>
     </div>
     <!-- ⚖️ Criterio de reparto Jony/Miri para ESTE pago (v4.01). Default: Jony primero. -->
-    <div style="margin-bottom:0.75rem">
+    <div id="pago-reparto-wrap" style="margin-bottom:0.75rem">
       <label style="font-size:0.82rem;font-weight:600;color:var(--azul);display:block;margin-bottom:0.3rem">⚖️ ¿Cómo repartir entre vos y Miri? <span style="font-weight:400;color:var(--texto-suave);font-size:0.7rem">(cuando el pago no cubre todo)</span></label>
       <select id="pago-reparto" style="width:100%;padding:0.6rem 0.8rem;border:1.5px solid #e8e6e0;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;background:white;">
         <option value="jony">💰 Jony (Pitzujim) primero</option>
@@ -11795,8 +11765,9 @@ function verDetalleDeudor(i) {
 // Solo en vista completa (no Miri). Todo se recalcula solo desde la tabla pagos.
 function _cajasOptionsHTML(sel) {
   const grupos = [
-    ['Cajas MYRI', [['MP_GABY', 'MP GABY'], ['EFT_MYRI', 'EFT $ MYRI'], ['ETF_USD_MYRI', 'ETF U$S MYRI']]],
-    ['Cajas JONY', [['EFT_JONY', 'EFT $ JONY'], ['MP_JONY', 'MP JONY'], ['ETF_USD_JONY', 'ETF U$S JONY']]],
+    ['Cajas JONY', [['MP_JONY', 'MP JONY'], ['EFT_JONY', 'EFT $ JONY'], ['ETF_USD_JONY', 'ETF U$S JONY']]],
+    // 🗄️ v5.09: las de Myri solo si ESE pago viejo ya estaba en una de ellas (historial)
+    ...(['MP_GABY', 'EFT_MYRI', 'ETF_USD_MYRI'].includes(sel) ? [['Cajas MYRI (historial)', [['MP_GABY', 'MP GABY'], ['EFT_MYRI', 'EFT $ MYRI'], ['ETF_USD_MYRI', 'ETF U$S MYRI']]]] : []),
     ['Otro', [['PERDON', '🎁 Perdón / Redondeo (no entra a caja)']]],
   ];
   return grupos.map(g => `<optgroup label="${g[0]}">${g[1].map(c => `<option value="${c[0]}"${c[0] === sel ? ' selected' : ''}>${c[1]}</option>`).join('')}</optgroup>`).join('');
@@ -13792,7 +13763,13 @@ function renderFiltros() {
   if (!wrap || !productos.length) return;
   const baseF = _vipIds ? productos.filter(p => _vipIds.has(String(p.id))) : productos;
   const cats = ['Todos', ...CATEGORIA_ORDEN.filter(c => baseF.some(p => getCatIdx(p) === CATEGORIA_ORDEN.indexOf(c)))];
-  wrap.innerHTML = cats.map(c => `<button class="filtro-btn${c===_categoriaActiva?' activo':''}" onclick="setCategoria('${c}')">${c}</button>`).join('');
+  // 🏷️ v5.09: una categoría que no está en la lista fija también tiene su botón (antes sus productos
+  // solo aparecían en «Todos»). Van antes de «Varios», por orden alfabético, y solo si tienen algo a la vista.
+  const tipoAct = modo === 'mayorista' ? 'Mayorista' : 'Minorista';   // lo mismo que muestra renderCatalogo()
+  const visF = baseF.filter(p => productosVisibles().includes(p) && (_vipIds || ['Ambos', tipoAct].includes((p.visible || 'Ambos').trim())));
+  const nuevas = [...new Set(visF.map(p => (p.categoria || '').trim()).filter(c => c && !CATEGORIA_ORDEN.includes(c)))].sort((a, b) => a.localeCompare(b, 'es'));
+  if (nuevas.length) { const iv = cats.indexOf('Varios'); cats.splice(iv === -1 ? cats.length : iv, 0, ...nuevas); }
+  wrap.innerHTML = cats.map(c => `<button class="filtro-btn${c===_categoriaActiva?' activo':''}" onclick="setCategoria(${esc(JSON.stringify(c))})">${esc(c)}</button>`).join('');
   renderKosherFiltros(baseF);
 }
 
@@ -14134,6 +14111,12 @@ function aplicarPrivacidadPanel() {
   if (btnIsrael) btnIsrael.style.display = ocultar ? 'none' : '';
   // Y si estaba parada ahí cuando cambió la vista, se la saca de encima.
   if (ocultar && _panelSeccion === 'israel') setPanelSeccion('ventas');
+}
+// 📦 v5.09: desde Ganancias, un toque te lleva a Stock › Recibir mercadería (la única carga de compras)
+function irARecibirMercaderia() {
+  setAdminTab('panel'); setPanelSeccion('stock');
+  const i = document.getElementById('recep-buscar');
+  if (i) { i.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => i.focus(), 350); }
 }
 function setPanelSeccion(s, btn) {
   _panelSeccion = s;
@@ -17729,8 +17712,8 @@ async function renderGanancias() {
       </div>
       <span style="font-weight:700;font-size:0.9rem;color:${m.monto>=0?'var(--verde)':'#c0392b'};flex-shrink:0">${m.monto>=0?'+':''}$ ${Math.abs(Math.round(m.monto)).toLocaleString('es-AR')}</span>
     </div>`).join('');
-  // Calcular costo promedio por producto (de compras)
-  document.getElementById('compra-unitario').textContent = '';
+  // (v5.09: la tarjeta «Registrar compra de Pitzujim» ya no está; esto quedaba limpiándola)
+  const _cu = document.getElementById('compra-unitario'); if (_cu) _cu.textContent = '';
   renderCortesHistorial();
 }
 
@@ -18058,7 +18041,7 @@ function verificarStockBajo() {
 }
 
 // Llena el selector de cajas del extracto (excluye Cta Cte / virtuales: no son cuentas de banco).
-// Respeta la vista (en Miri vienen solo sus cajas). Default: MP GABY si está. Fechas: mes actual.
+// Respeta la vista (en Miri vienen solo sus cajas). Default: MP JONY (en la vista Miri, MP GABY). Fechas: mes actual.
 function _poblarExtractoCajas(cols) {
   const sel = document.getElementById('extracto-caja');
   if (!sel) return;
@@ -18066,7 +18049,8 @@ function _poblarExtractoCajas(cols) {
   const prev = sel.value;
   sel.innerHTML = reales.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
   if (prev && reales.some(c => c.key === prev)) sel.value = prev;
-  else if (reales.some(c => c.key === 'MP_GABY')) sel.value = 'MP_GABY';
+  else if (reales.some(c => c.key === 'MP_JONY')) sel.value = 'MP_JONY';   // v5.09: antes MP GABY (de Myri)
+  else if (reales.some(c => c.key === 'MP_GABY')) sel.value = 'MP_GABY';   // vista Miri: solo tiene las suyas
   const d = document.getElementById('extracto-desde'), h = document.getElementById('extracto-hasta');
   if (d && !d.value) { const x = new Date(); d.value = `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-01`; }
   if (h && !h.value) { const x = new Date(); h.value = `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; }
@@ -18539,7 +18523,8 @@ function _cobroInitTramos() {
 function _cajaOptsHtml(dueno, sel) {
   const grupos = dueno === 'J' ? [
     ['Cajas JONY', [['MP_JONY','MP JONY'],['EFT_JONY','EFT $ JONY'],['ETF_USD_JONY','ETF U$S JONY']]],
-    ['Cobrado por MYRI (te queda debiendo)', [['MP_GABY','MP GABY'],['EFT_MYRI','EFT $ MYRI']]],
+    // 🗄️ v5.09: las cajas de Myri solo si un cobro VIEJO ya las tenía (re-confirmar no las pierde)
+    ...(['MP_GABY','EFT_MYRI'].includes(sel) ? [['Cobrado por MYRI (historial)', [['MP_GABY','MP GABY'],['EFT_MYRI','EFT $ MYRI']]]] : []),
     ['Cuenta corriente', [['CTA_CTE_ARS','Cta Cte $'],['CTA_CTE_USD','Cta Cte U$S']]],
   ] : [
     ['Cajas MYRI', [['MP_GABY','MP GABY'],['EFT_MYRI','EFT $ MYRI'],['ETF_USD_MYRI','ETF U$S MYRI']]],
@@ -18831,6 +18816,10 @@ function abrirPagoCuenta(cliente, pedidoId, remPitz, remGolARS, remGolUSD, ccIdx
   const pfe = document.getElementById('pago-fecha'); if (pfe) pfe.value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
   const prep = document.getElementById('pago-reparto'); if (prep) prep.value = 'jony';   // ⚖️ default: Jony primero
   const pfr = document.getElementById('pago-fraccionar'); if (pfr) pfr.checked = false; pagoFraccionarToggle();   // ✂️ arranca sin fraccionar
+  // 🗄️ v5.09: Miri ya no existe — su parte (golosinas, fraccionar, reparto) solo aparece si ESTE pedido todavía
+  // le debe algo a ella (historial / conciliación). Solo se oculta: los valores quedan en sus defaults de siempre.
+  const _hayMiri = esPedido && ((Math.round(remGolARS || 0)) > 0 || parseFloat(remGolUSD || 0) > 0.009);
+  ['pago-gol-wrap', 'pago-fraccionar-wrap', 'pago-reparto-wrap'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = _hayMiri ? '' : 'none'; });
   if (esPedido) {
     // Precarga TODO lo que falta (pedido del usuario 2026-07-12: "el sistema ya sabe la deuda,
     // no me hagas tipear"): Pitzujim $, y el TOTAL de U$S adeudado (Pitzujim + golosinas — el
