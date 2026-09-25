@@ -22277,6 +22277,105 @@ if (typeof verDetalleMovimientoCaja === 'function') {
 if (_pnActivo) { try { pnCajaHistorial(); } catch (e) {} if (document.body.classList.contains('pn-admin')) pnAplicarTab(_pnSec); }
 </script>
 
+<!-- 🧭 PANEL NUEVO · tanda 6 (v5.16): 🏠 Hoy con lo urgente arriba (cada cosa te lleva a donde se resuelve) y
+     🏪 Mi tienda con el valor actual de cada ajuste a la vista. + dos arreglos del esqueleto: «Stock bajo» ya no
+     se esconde solo al refrescarse (ni aparece vacío o en otra pestaña), y el alta desde Recibir mercadería
+     devuelve la tarjeta a su lugar nuevo. -->
+<style id="pn-css-t6">
+  .pn-urg { display: none; }
+  body.pn .pn-urg { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 0 0 1.1rem; }
+  .pn-urg button { display: flex; align-items: center; gap: 10px; padding: 0.8rem 0.9rem; border-radius: 12px; border: 1.5px solid var(--gris-medio); border-left: 4px solid var(--gris-medio); background: var(--blanco); color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+  .pn-urg button:hover { background: var(--gris); }
+  .pn-urg button.alta { border-left-color: var(--rojo); } .pn-urg button.media { border-left-color: var(--dorado); } .pn-urg button.ok { border-left-color: var(--verde); }
+  .pn-urg .n { font: 800 1.35rem 'DM Sans', sans-serif; min-width: 34px; text-align: center; }
+  .pn-urg b { display: block; font-size: 0.86rem; } .pn-urg small { display: block; color: var(--texto-suave); font-size: 0.74rem; }
+  .pn-urg-t { display: none; } body.pn .pn-urg-t { display: block; margin: 0 0 0.5rem; font: 700 0.72rem 'DM Sans', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-suave); }
+  #pn-mt-res { display: none; }
+  body.pn.pn-admin[data-pn-sec="mitienda"] #pn-mt-res { display: flex; gap: 8px; flex-wrap: wrap; margin: -0.4rem 0 1rem; }
+  #pn-mt-res button { padding: 0.45rem 0.8rem; border-radius: 10px; border: 1.5px solid var(--gris-medio); background: var(--blanco); color: var(--texto); font: 600 0.8rem 'DM Sans', sans-serif; cursor: pointer; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #pn-mt-res button.on { border-color: var(--dorado); background: var(--dorado-claro); }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO · tanda 6 ─────────────────────────────────────────────────────────────────────
+// Arreglo 1: «Stock bajo» — el panel de siempre lo esconde si la sección vieja no es «Stock»: en el panel nuevo,
+// Productos corre «Stock» al final (así la tarjeta sabe que está en su lugar) y solo se ve en Productos › Stock.
+(function () { const S = pnSecDe('productos'); if (S) S.old = ['catalogo', 'stock']; })();
+if (typeof verificarStockBajo === 'function') {
+  const _pnVSBOrig = verificarStockBajo;
+  verificarStockBajo = function () {
+    const r = _pnVSBOrig.apply(this, arguments);
+    if (_pnActivo && document.body.classList.contains('pn-admin')) { const c = document.getElementById('stock-alerta-card'); if (c && !(_pnSec === 'productos' && (_pnTab.productos || 'stock') === 'stock')) c.style.display = 'none'; }
+    return r;
+  };
+}
+const _pnAplicarTabT5 = pnAplicarTab;
+pnAplicarTab = function (sec) {
+  const r = _pnAplicarTabT5(sec);
+  if (sec === 'productos' && typeof verificarStockBajo === 'function') { try { verificarStockBajo(); } catch (e) {} }   // vacío = no se muestra
+  if (sec === 'mitienda') pnMiTiendaResumen();
+  return r;
+};
+// Arreglo 2: al cerrar el alta desde Recibir mercadería, la tarjeta vuelve a su lugar nuevo (no al de la sección vieja)
+if (typeof cerrarNpDesdeRecep === 'function') { const _pnCerrarNpOrig = cerrarNpDesdeRecep; cerrarNpDesdeRecep = function () { const r = _pnCerrarNpOrig.apply(this, arguments); if (_pnActivo && document.body.classList.contains('pn-admin')) pnIr(_pnSec); return r; }; }
+
+// 🏠 Hoy: lo urgente arriba. Cada tarjeta dice cuántos y te lleva a donde se resuelve.
+function pnHoyUrgente() {
+  if (!_pnActivo) return;
+  const dash = document.getElementById('admin-tab-dashboard'); if (!dash) return;
+  let box = document.getElementById('pn-urg');
+  if (!box) { const t = document.createElement('div'); t.className = 'pn-urg-t'; t.textContent = 'Lo urgente'; box = document.createElement('div'); box.id = 'pn-urg'; box.className = 'pn-urg'; dash.insertBefore(box, dash.firstChild); dash.insertBefore(t, box); }
+  const peds = (typeof _todosLosPedidos !== 'undefined' ? _todosLosPedidos : []);
+  const cot = peds.filter(v => v.estado === 'cotizacion');
+  const pend = peds.filter(v => (v.estado || 'pendiente') === 'pendiente'), prep = peds.filter(v => v.estado === 'preparando');
+  const venc = [...pend, ...prep].filter(v => typeof diasDesdePedido === 'function' && diasDesdePedido(_fechaReserva(v)) >= 6);
+  const bajos = typeof productosVisibles === 'function' ? productosVisibles().filter(p => p.activo && !(typeof esFraccion === 'function' && esFraccion(p)) && p.stock > 0 && p.stock <= (typeof STOCK_MINIMO !== 'undefined' ? STOCK_MINIMO : 3)) : [];
+  const cc = window._ccData ? Object.values(window._ccData) : [];
+  const debA = cc.reduce((s, d) => s + (parseFloat(d.totalARS) || 0), 0), debU = cc.reduce((s, d) => s + (parseFloat(d.totalUSD) || 0), 0);
+  const it = [];
+  if (cot.length) it.push(['alta', cot.length, 'Cotizaciones esperando', 'aceptalas o rechazalas', 'pedidos:cotizacion']);
+  if (venc.length) it.push(['alta', venc.length, 'Reservas por vencer', '6 días o más: mandales el recordatorio', 'pedidos:todos']);
+  it.push([pend.length ? 'media' : 'ok', pend.length, 'Pedidos para preparar', pend.length ? 'pendientes de armar' : 'nada pendiente ✓', 'pedidos:pendiente']);
+  if (prep.length) it.push(['media', prep.length, 'Preparándose', 'para entregar', 'pedidos:preparando']);
+  it.push([bajos.length ? 'media' : 'ok', bajos.length, 'Con stock bajo', bajos.length ? 'para reponer' : 'todo con stock ✓', 'productos:stock']);
+  if (cc.length) it.push(['media', cc.length, 'Te deben', [debA > 0.5 ? '$ ' + Math.round(debA).toLocaleString('es-AR') : '', debU > 0.005 ? 'U$S ' + debU.toFixed(2) : ''].filter(Boolean).join(' + ') || '—', 'medeben:deben']);
+  box.innerHTML = it.map(([k, n, t, s, ir]) => `<button type="button" class="${k}" data-pn-urg="${ir}"><span class="n">${n}</span><span><b>${pnEsc(t)}</b><small>${pnEsc(s)}</small></span></button>`).join('');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pn-urg],[data-pn-mt]'); if (!b || !_pnActivo) return;
+  if (b.dataset.pnMt) { _pnTab.mitienda = b.dataset.pnMt; try { localStorage.setItem('shuk_pn_tabs', JSON.stringify(_pnTab)); } catch (x) {} pnAplicarTab('mitienda'); return; }
+  const [sec, sub] = b.dataset.pnUrg.split(':');
+  if (sec === 'pedidos') { _pnTab.pedidos = 'lista'; if (typeof setFiltroEstado === 'function') { const btn = [...document.querySelectorAll('.filtro-estado-btn')].find(x => (x.getAttribute('onclick') || '').includes(`'${sub}'`)); setFiltroEstado(sub, btn || null); } }
+  else _pnTab[sec] = sub;
+  pnIr(sec);
+});
+// 🏪 Mi tienda: el valor actual de cada ajuste, a la vista (tocás uno y va a su pestaña)
+function pnMiTiendaResumen() {
+  if (!_pnActivo) return;
+  let box = document.getElementById('pn-mt-res');
+  if (!box) { box = document.createElement('div'); box.id = 'pn-mt-res'; const bar = document.getElementById('pn-tabs'); if (!bar) return; bar.parentNode.insertBefore(box, bar.nextSibling); }
+  const txt = id => ((document.getElementById(id) || {}).textContent || '').replace(/\s+/g, ' ').trim();
+  const val = id => ((document.getElementById(id) || {}).value || '').trim();
+  const est = txt('estado-tienda-actual') || '…';
+  const av = val('aviso-texto');
+  const envOn = !!(document.getElementById('envio-on') || {}).checked, envMin = val('envio-min'), zona = val('envio-zona');
+  const geo = txt('geo-actual') || '…';
+  const act = _pnTab.mitienda || 'estado';
+  const it = [['estado', '🏪 ' + est], ['aviso', '📣 ' + (av ? '«' + av.slice(0, 42) + (av.length > 42 ? '…' : '') + '»' : 'Sin aviso')], ['fiestas', '🗓️ Fiestas y Shabat'], ['envio', '🚚 ' + (envOn ? `Envío gratis desde $ ${Number(envMin || 0).toLocaleString('es-AR')}${zona ? ' · ' + zona : ''}` : 'Envío gratis: apagado')], ['geo', '🌎 ' + geo], ['qr', '📱 QR del catálogo']];
+  box.innerHTML = it.map(([k, t]) => `<button type="button" class="${k === act ? 'on' : ''}" data-pn-mt="${k}" title="${pnEsc(t)}">${pnEsc(t)}</button>`).join('');
+}
+// se refrescan cuando el panel de siempre vuelve a dibujar sus datos
+const _pnIrT5 = pnIr;
+pnIr = function (id) { const r = _pnIrT5(id); if (_pnActivo && id === 'hoy') pnHoyUrgente(); if (_pnActivo && id === 'mitienda') pnMiTiendaResumen(); return r; };
+['renderPedidos', 'renderCuentaCorriente'].forEach(fn => {
+  if (typeof window[fn] !== 'function') return;
+  const orig = window[fn];
+  window[fn] = async function () { const r = await orig.apply(this, arguments); try { if (_pnActivo && _pnSec === 'hoy') pnHoyUrgente(); } catch (e) {} return r; };
+});
+document.addEventListener('input', e => { if (_pnActivo && _pnSec === 'mitienda' && ['aviso-texto', 'envio-min', 'envio-zona'].includes(e.target.id)) pnMiTiendaResumen(); });
+document.addEventListener('change', e => { if (_pnActivo && _pnSec === 'mitienda' && e.target.id === 'envio-on') pnMiTiendaResumen(); });
+if (_pnActivo && document.body.classList.contains('pn-admin')) { if (_pnSec === 'hoy') pnHoyUrgente(); if (_pnSec === 'mitienda') pnMiTiendaResumen(); }
+</script>
+
 </body>
 </html>
 
