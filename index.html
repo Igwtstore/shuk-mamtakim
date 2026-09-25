@@ -22164,6 +22164,119 @@ pnMapa = function () {
 if (_pnActivo && document.body.classList.contains('pn-admin')) pnAplicarTab(_pnSec);
 </script>
 
+<!-- 🧭 PANEL NUEVO · tanda 5 (v5.15): Me deben, Clientes, Caja y Ganancia por dentro. La Caja sin las columnas de
+     Myri (a un toque, como historial para la conciliación), «🧾 Ver el pedido completo» desde un movimiento con
+     «← Volver a Caja», pestañas en Me deben y Clientes, y el aviso del Maaser al lado de «Hacer corte». -->
+<style id="pn-css-t5">
+  body.pn:not(.pn-verhist) .caja-tabla .pn-hist, body.pn:not(.pn-verhist) .caja-tabla .pn-hist-row { display: none; }
+  body.pn .caja-tabla tbody td:first-child, body.pn .caja-tabla tfoot td:first-child { white-space: normal; min-width: 240px; max-width: 420px; line-height: 1.35; }
+  body.pn .caja-tabla td.num, body.pn .caja-tabla thead th { white-space: nowrap; }
+  .pn-hist-bar { display: none; }
+  body.pn .pn-hist-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 0.6rem; font-size: 0.78rem; color: var(--texto-suave); }
+  .pn-hist-bar button, .pn-ov-btn { padding: 0.35rem 0.8rem; border-radius: 18px; border: 1.5px solid var(--gris-medio); background: var(--blanco); color: var(--texto); font: 700 0.78rem 'DM Sans', sans-serif; cursor: pointer; }
+  .pn-ov-btn { display: block; width: 100%; margin-top: 0.6rem; padding: 0.6rem; border-radius: 10px; background: var(--azul); color: #fff; border: 0; }
+  #pn-volver { display: none; position: sticky; top: 72px; z-index: 50; align-items: center; gap: 10px; margin: 0 0 0.8rem; padding: 0.5rem 0.6rem 0.5rem 0.9rem; border-radius: 12px; background: var(--azul); color: #fff; font-size: 0.85rem; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  body.pn.pn-admin #pn-volver.on { display: flex; }
+  #pn-volver button { padding: 0.35rem 0.8rem; border: 0; border-radius: 9px; background: #fff; color: #1a1a2e; font: 800 0.8rem 'DM Sans', sans-serif; cursor: pointer; }
+  .pn-solo { display: none; }
+  body.pn .pn-solo { display: block; }
+  .pn-maaser { margin-top: 0.7rem; padding: 0.6rem 0.8rem; border-radius: 10px; background: var(--rojo-claro); color: var(--rojo); font-size: 0.8rem; font-weight: 600; line-height: 1.45; }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO · tanda 5 ─────────────────────────────────────────────────────────────────────
+// 💳 Me deben y 👥 Clientes: pestañas (Clientes vive en su pestaña vieja: se muestra/oculta por selector)
+PN_TABS.medeben = [['deben', '💳 Quién me debe', ['💳 cuenta corriente']], ['saldo', '➕ Cargar saldo viejo', ['cargar saldo']]];
+PN_TABS.clientes = [['lista', '👥 Clientes', [], [], ['#admin-tab-clientes > .admin-card']], ['tetoca', '🔔 Te toca', [], [], ['#tetoca-card']]];
+const _pnAplicarTabT4 = pnAplicarTab;
+pnAplicarTab = function (sec) {
+  const r = _pnAplicarTabT4(sec);
+  const T = PN_TABS[sec]; if (!T || !T.some(t => t[4])) return r;
+  let act = _pnTab[sec]; if (!T.some(t => t[0] === act)) act = T[0][0];
+  T.forEach(t => (t[4] || []).forEach(sel => document.querySelectorAll(sel).forEach(e => { e.style.display = t[0] === act ? '' : 'none'; })));
+  return r;
+};
+
+// 💰 Caja: las columnas de Myri y de la comisión quedan como historial (a un toque)
+function pnCajaHistorial() {
+  if (!_pnActivo) return;
+  document.querySelectorAll('.caja-tabla').forEach(t => {
+    if (t.dataset.pnHist) return; t.dataset.pnHist = '1';
+    const ths = [...t.querySelectorAll('thead th')];
+    const hist = ths.map((th, i) => i > 0 && /GABY|MYRI|Comi/i.test(th.textContent)).map((x, i) => x ? i : -1).filter(i => i > 0);
+    if (!hist.length) return;
+    hist.forEach(i => ths[i].classList.add('pn-hist'));
+    t.querySelectorAll('tbody tr, tfoot tr').forEach(tr => {
+      const tds = [...tr.children]; hist.forEach(i => { if (tds[i]) tds[i].classList.add('pn-hist'); });
+      if (/NETO MYRI/i.test((tds[0] || {}).textContent || '')) { tr.classList.add('pn-hist-row'); return; }
+      if (tr.parentElement.tagName === 'TBODY' && tds.length > 1) { const conValor = tds.slice(1).map((td, k) => td.textContent.trim() ? k + 1 : -1).filter(k => k > 0); if (conValor.length && conValor.every(k => hist.includes(k))) tr.classList.add('pn-hist-row'); }
+    });
+    const cont = t.closest('.caja-scroll') || t;
+    if (!cont.previousElementSibling || !cont.previousElementSibling.classList.contains('pn-hist-bar')) {
+      const bar = document.createElement('div'); bar.className = 'pn-hist-bar';
+      bar.innerHTML = `<span>Las cajas de Myri y la comisión no reciben plata nueva: quedan como historial para la conciliación.</span><button type="button" data-pn-verhist>${document.body.classList.contains('pn-verhist') ? 'Ocultar las cajas de Myri' : '🗄️ Ver también las cajas de Myri (historial)'}</button>`;
+      cont.parentNode.insertBefore(bar, cont);
+    }
+  });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pn-verhist]'); if (!b) return;
+  document.body.classList.toggle('pn-verhist');
+  document.querySelectorAll('[data-pn-verhist]').forEach(x => { x.textContent = document.body.classList.contains('pn-verhist') ? 'Ocultar las cajas de Myri' : '🗄️ Ver también las cajas de Myri (historial)'; });
+});
+if (typeof renderCaja === 'function') { const _pnRenderCajaOrig = renderCaja; renderCaja = async function () { const r = await _pnRenderCajaOrig.apply(this, arguments); try { pnCajaHistorial(); } catch (e) {} return r; }; }
+
+// 🧾 Desde un movimiento de la Caja: «Ver el pedido completo» en Pedidos, con «← Volver a Caja»
+let _pnVolver = null;
+function pnVolverPintar() {
+  let v = document.getElementById('pn-volver');
+  if (!v) { v = document.createElement('div'); v.id = 'pn-volver'; const h = document.getElementById('pn-head'); if (!h) return; h.parentNode.insertBefore(v, h); }
+  if (!_pnVolver) { v.classList.remove('on'); return; }
+  v.innerHTML = `<button type="button" data-pn-volver>← Volver a ${pnEsc(_pnVolver.t)}</button><span>Abriste el pedido #${pnEsc(_pnVolver.n || '')} desde ${pnEsc(_pnVolver.t)}.</span>`;
+  v.classList.add('on');
+}
+const _pnIrT4 = pnIr;
+pnIr = function (id) { if (!_pnVolverKeep) _pnVolver = null; const r = _pnIrT4(id); pnVolverPintar(); return r; };
+let _pnVolverKeep = false;
+async function pnAbrirPedido(vid, desde) {
+  const S = pnSecDe(desde) || { t: desde };
+  const volver = { sec: desde, tab: _pnTab[desde], y: window.scrollY, t: (S.ic ? S.ic + ' ' : '') + S.t, n: '' };
+  _filtroEstadoActual = 'todos'; _busquedaPedidos = ''; const bq = document.querySelector('input[oninput^="setBusquedaPedidos"]'); if (bq) bq.value = '';
+  document.querySelectorAll('.filtro-estado-btn').forEach(b => b.classList.toggle('activo', /todos/i.test(b.getAttribute('onclick') || '')));
+  _pnPedAbierto = String(vid);
+  _pnVolverKeep = true; try { _pnVolver = volver; pnIr('pedidos'); } finally { _pnVolverKeep = false; }
+  _pnTab.pedidos = 'lista'; pnAplicarTab('pedidos');
+  if (typeof renderPedidos === 'function') await renderPedidos();
+  const v = (typeof _todosLosPedidos !== 'undefined' ? _todosLosPedidos : []).find(x => String(x.id) === String(vid));
+  volver.n = v ? v.nVenta : ''; _pnVolver = volver; pnVolverPintar();
+  const row = document.querySelector(`#pedidos-lista .pn-prow[data-pn-ped="${vid}"]`);
+  if (row) { row.scrollIntoView({ block: 'start' }); window.scrollBy(0, -130); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pn-volver],[data-pn-verped]'); if (!b || !_pnActivo) return;
+  if (b.dataset.pnVerped) { const ov = document.getElementById('caja-detalle-overlay'); if (ov) ov.remove(); pnAbrirPedido(b.dataset.pnVerped, _pnSec); return; }
+  const v = _pnVolver; if (!v) return; _pnVolver = null; _pnPedAbierto = null;
+  if (v.tab) _pnTab[v.sec] = v.tab;
+  pnIr(v.sec); window.scrollTo(0, v.y || 0);
+});
+if (typeof verDetalleMovimientoCaja === 'function') {
+  const _pnVerMovOrig = verDetalleMovimientoCaja;
+  verDetalleMovimientoCaja = function (vid) {
+    const r = _pnVerMovOrig.apply(this, arguments);
+    if (_pnActivo) { const ov = document.getElementById('caja-detalle-overlay'); const box = ov && ov.firstElementChild; if (box && !box.querySelector('[data-pn-verped]')) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pn-ov-btn'; b.dataset.pnVerped = vid; b.textContent = '🧾 Ver el pedido completo en Pedidos'; box.appendChild(b); } }
+    return r;
+  };
+}
+
+// 🕎 Ganancia: el aviso del Maaser al lado de «Hacer corte» (solo en el panel nuevo)
+(function () {
+  const btn = document.querySelector('#admin-tab-ganancias button[onclick="hacerCorteFlow()"]'); if (!btn || document.getElementById('pn-maaser')) return;
+  const d = document.createElement('div'); d.id = 'pn-maaser'; d.className = 'pn-solo pn-maaser';
+  d.textContent = '🛑 Antes de «Hacer corte»: la auditoría del Maaser encontró que el panel muestra MENOS diezmo del real (cerca de un 23% menos). No hagas el corte hasta que lo arreglemos — nunca se cortó, así que no hay nada mal pagado.';
+  btn.parentNode.parentNode.insertBefore(d, btn.parentNode.nextSibling);
+})();
+if (_pnActivo) { try { pnCajaHistorial(); } catch (e) {} if (document.body.classList.contains('pn-admin')) pnAplicarTab(_pnSec); }
+</script>
+
 </body>
 </html>
 
