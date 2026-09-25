@@ -21531,7 +21531,8 @@ const PN_CARDS = [
 const PN_DE_TAB = { dashboard: 'hoy', clientes: 'clientes', analitica: 'numeros', ganancias: 'ganancia', docs: 'sistema' };
 const PN_DE_SECCION = { ventas: 'pedidos', dinero: 'caja', stock: 'productos', catalogo: 'productos', bot: 'sistema', israel: 'compras', inicio: 'mitienda' };
 let _pnActivo = false, _pnSec = 'hoy', _pnDentro = false, _pnVentaPh = null;
-try { _pnActivo = localStorage.getItem('shuk_panel_nuevo') === '1'; _pnSec = localStorage.getItem('shuk_pn_sec') || 'hoy'; } catch (e) {}
+// 🧭 v5.17: el panel nuevo es el que se abre de entrada. Solo queda el de siempre si lo elegiste («↩️ Volver al panel de siempre» guarda '0').
+try { _pnActivo = localStorage.getItem('shuk_panel_nuevo') !== '0'; _pnSec = localStorage.getItem('shuk_pn_sec') || 'hoy'; } catch (e) { _pnActivo = true; }
 try { const q = new URLSearchParams(location.search).get('panel'); if (q === 'nuevo') _pnActivo = true; if (q === 'clasico') _pnActivo = false; } catch (e) {}
 const pnSecDe = id => PN_SECS.find(s => s.id === id);
 const pnEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -21678,7 +21679,7 @@ function pnSync() {
 function pnBotonProbar() {
   const bar = document.querySelector('.admin-subtabs'); if (!bar || document.getElementById('pn-probar-wrap')) return;
   const w = document.createElement('div'); w.id = 'pn-probar-wrap';
-  w.innerHTML = `<span>✨ Hay un <b>panel nuevo</b> para probar: menú al costado, «Venta nueva» arriba de todo y todo ordenado. Volvés a este cuando quieras.</span><button type="button" id="pn-probar" data-pn-probar>Probar el panel nuevo</button>`;
+  w.innerHTML = `<span>Estás en el <b>panel de siempre</b>. El nuevo tiene el menú al costado, «Venta nueva» arriba de todo y todo ordenado.</span><button type="button" id="pn-probar" data-pn-probar>✨ Volver al panel nuevo</button>`;
   bar.parentElement.insertBefore(w, bar);
 }
 // Las funciones de siempre siguen mandando: si alguna salta de pestaña o de sección, el panel nuevo la sigue.
