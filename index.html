@@ -22083,6 +22083,87 @@ if (typeof confirmarPagoCuenta === 'function') {
 }
 </script>
 
+<!-- 🧭 PANEL NUEVO · tanda 4 (v5.14): pestañas adentro de cada lugar, para que ninguno sea un choclo largo.
+     Productos: Stock · Nuevo · Editar · Planilla · Mostrar/ocultar · Fracciones · Lista de espera; y lo mismo en
+     Pedidos, Compras, Promociones, Mi tienda, Caja, Números y Sistema. Si un botón salta a una tarjeta que está
+     en otra pestaña (o en otro lugar), el panel la abre sola antes de llegar. -->
+<style id="pn-css-t4">
+  #pn-tabs { display: none; gap: 2px; margin: -0.3rem 0 1rem; border-bottom: 2px solid var(--gris-medio); overflow-x: auto; scrollbar-width: none; }
+  #pn-tabs::-webkit-scrollbar { display: none; }
+  body.pn.pn-admin #pn-tabs.on { display: flex; }
+  #pn-tabs button { flex-shrink: 0; padding: 0.55rem 0.95rem; border: 0; border-bottom: 3px solid transparent; margin-bottom: -2px; background: none; color: var(--texto-suave); font: 700 0.85rem 'DM Sans', sans-serif; cursor: pointer; white-space: nowrap; }
+  #pn-tabs button.on { color: var(--texto); border-bottom-color: var(--dorado); }
+  #pn-tabs button:hover { color: var(--texto); }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO · tanda 4: pestañas adentro de cada lugar ──────────────────────────────────────
+// Cada pestaña dice qué tarjetas muestra (por el título, igual que PN_CARDS) y, si hace falta, qué pestaña vieja de fondo.
+const PN_TABS = {
+  pedidos: [['lista', '🧾 Pedidos', ['📦 pedidos']], ['traza', '🔍 ¿Quién compró…?', ['trazar producto']]],
+  productos: [['stock', '📋 Stock', ['stock bajo', 'stock disponible', 'actualizar stock']], ['nuevo', '➕ Nuevo producto', ['agregar nuevo producto', 'bandeja de fotos']], ['editar', '✏️ Editar', ['editar producto']], ['planilla', '📊 Planilla', ['editor masivo']], ['visible', '🙈 Mostrar / ocultar', ['mostrar / ocultar']], ['frac', '✂️ Fracciones', ['fraccionar']], ['espera', '🔔 Lista de espera', ['lista de espera']]],
+  compras: [['recibir', '📥 Recibir mercadería', ['recibir mercadería']], ['israel', '🇮🇱 Compras en Israel', ['compras en israel']]],
+  promos: [['ofertas', '🎁 Ofertas y packs', ['ofertas y packs']], ['dormidos', '💤 Dormidos', ['productos dormidos']], ['flyers', '🎨 Flyers', ['flyers']], ['avisar', '📢 Avisar a los clientes', ['avisar a los clientes']]],
+  mitienda: [['estado', '🏪 Estado', ['estado de la tienda']], ['aviso', '📣 Aviso', ['aviso en la tienda']], ['fiestas', '🗓️ Fiestas y Shabat', ['fiestas y shabat']], ['envio', '🚚 Envío gratis', ['envío gratis']], ['geo', '🌎 Vidriera', ['vidriera geográfica']], ['qr', '📱 QR', ['qr del catálogo']]],
+  caja: [['mov', '📊 Movimientos', ['caja — movimientos']], ['gasto', '💸 Gasto', ['registrar gasto']], ['transf', '🔄 Transferir', ['transferir entre cajas']], ['rend', '💳 Rendición / retiro', ['rendición']], ['envios', '📦 Caja Envíos', ['caja envíos']]],
+  numeros: [['ana', '📈 Analítica', ['visitas al catálogo'], ['analitica']], ['top', '🏆 Lo más vendido', ['lo más vendido']], ['valor', '💎 Lo que vale el stock', ['cuánto vale mi stock']], ['ia', '🤖 Preguntale a tu negocio', ['preguntale a tu negocio']]],
+  sistema: [['bot', '📱 Probador del bot', ['probador del bot']], ['arreglos', '🔧 Arreglos y control', ['control / auditoría', 'renumerar pedidos', 'registro de borrados']], ['miri', '🗄️ Todo lo de Miri', ['acceso de miri', 'cuenta entre socios']], ['docs', '📖 Docs', [], ['docs']]]
+};
+let _pnTab = {};
+try { _pnTab = JSON.parse(localStorage.getItem('shuk_pn_tabs') || '{}') || {}; } catch (e) { _pnTab = {}; }
+const _pnTituloCard = c => { const t = c.querySelector('.admin-titulo, summary'); return ((t ? t.textContent : c.textContent) || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+function pnTabDeCard(sec, card) { const T = PN_TABS[sec]; if (!T) return null; const t = _pnTituloCard(card); const x = T.find(tb => tb[2].some(m => t.includes(m))); return x ? x[0] : null; }
+function pnAplicarTab(sec) {
+  let bar = document.getElementById('pn-tabs');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'pn-tabs'; bar.setAttribute('role', 'tablist'); const h = document.getElementById('pn-head'); if (h) h.parentNode.insertBefore(bar, h.nextSibling); }
+  const T = PN_TABS[sec];
+  if (!T) { bar.classList.remove('on'); bar.innerHTML = ''; return; }
+  let act = _pnTab[sec]; if (!T.some(t => t[0] === act)) act = T[0][0];
+  bar.innerHTML = T.map(t => `<button type="button" role="tab" class="${t[0] === act ? 'on' : ''}" data-pn-tab="${t[0]}" aria-selected="${t[0] === act}">${t[1]}</button>`).join('');
+  bar.classList.add('on');
+  const tab = T.find(t => t[0] === act);
+  document.querySelectorAll('#admin-tab-panel > .admin-card').forEach(card => { if (card.dataset.pn !== sec) return; const tb = pnTabDeCard(sec, card); card.style.display = !tb || tb === act ? '' : 'none'; });
+  // pestañas viejas de fondo (Analítica, Docs): solo en la pestaña que las pide
+  const S = pnSecDe(sec), fondo = (S.tabs || []).filter(t => t !== 'panel');
+  const pide = tab[3] || [];
+  fondo.forEach(t => { if (T.some(tb => (tb[3] || []).includes(t))) { const el = document.getElementById('admin-tab-' + t); if (el) el.style.display = pide.includes(t) ? '' : 'none'; } });
+  const panel = document.getElementById('admin-tab-panel');
+  if (panel && S.tabs.includes('panel')) panel.style.display = (tab[2].length || !pide.length) ? '' : 'none';
+  if (typeof aplicarPrivacidadPanel === 'function') aplicarPrivacidadPanel();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('#pn-tabs [data-pn-tab]'); if (!b || !_pnActivo) return;
+  _pnTab[_pnSec] = b.dataset.pnTab; try { localStorage.setItem('shuk_pn_tabs', JSON.stringify(_pnTab)); } catch (x) {}
+  pnAplicarTab(_pnSec);
+  if (_pnSec === 'numeros' && b.dataset.pnTab === 'ana' && typeof renderAnalitica === 'function') { try { renderAnalitica(); } catch (x) {} }
+});
+// después de cada «ir a un lugar», las pestañas de ese lugar
+const _pnIrT3 = pnIr;
+pnIr = function (id) { const r = _pnIrT3(id); if (_pnActivo && id !== 'mapa') pnAplicarTab(_pnSec); else { const bar = document.getElementById('pn-tabs'); if (bar) bar.classList.remove('on'); } return r; };
+// Si un botón salta a una tarjeta que está en otra pestaña o en otro lugar, se abre sola antes de llegar.
+function pnRevelar(el) {
+  if (!_pnActivo || !el || !el.closest) return;
+  if (el.closest('#pn-db')) return;
+  const card = el.closest('#admin-tab-panel > .admin-card'); if (!card || !card.dataset.pn) return;
+  if (card.dataset.pn === 'venta') { pnAbrirVenta(); return; }
+  if (card.dataset.pn !== _pnSec) _pnIrT3(card.dataset.pn);
+  const tb = pnTabDeCard(card.dataset.pn, card);
+  if (tb && _pnTab[card.dataset.pn] !== tb) { _pnTab[card.dataset.pn] = tb; try { localStorage.setItem('shuk_pn_tabs', JSON.stringify(_pnTab)); } catch (x) {} }
+  pnAplicarTab(card.dataset.pn);
+}
+const _pnScrollIntoView = Element.prototype.scrollIntoView;
+Element.prototype.scrollIntoView = function () { try { if (_pnActivo && document.body.classList.contains('pn-admin')) pnRevelar(this); } catch (e) {} return _pnScrollIntoView.apply(this, arguments); };
+// 🗺️ Dónde quedó cada cosa: ahora también dice en qué pestaña
+const _pnMapaT3 = pnMapa;
+pnMapa = function () {
+  _pnMapaT3();
+  document.querySelectorAll('#pn-mapa tbody tr').forEach(tr => {
+    const td = tr.children[2], qué = (tr.children[1].textContent || '').toLowerCase();
+    Object.keys(PN_TABS).forEach(sec => { const S = pnSecDe(sec); if (!td.textContent.includes(S.t)) return; const tb = PN_TABS[sec].find(t => t[2].some(m => qué.includes(m))); if (tb) td.textContent = td.textContent + ' › ' + tb[1]; });
+  });
+};
+if (_pnActivo && document.body.classList.contains('pn-admin')) pnAplicarTab(_pnSec);
+</script>
+
 </body>
 </html>
 
