@@ -21860,6 +21860,229 @@ const _pnSyncT1 = pnSync;
 pnSync = function () { _pnSyncT1(); if (document.body.classList.contains('pn')) pnPedidosCompactar(); else if (document.querySelector('#pedidos-lista .pn-prow') && typeof renderPedidos === 'function') renderPedidos(); };
 </script>
 
+<!-- 🧭 PANEL NUEVO · tanda 3 (v5.13): el cobro y el pago a cuenta con la cuenta nueva. Arriba lo que debe; el
+     campo de dólares te dice cuánto queda; con el TC aparece el «Saldo en pesos»; y los pesos eligen
+     Transferencia (MP JONY) o Efectivo (EFT $ JONY). Por abajo le manda al motor EXACTAMENTE lo mismo que la
+     ventana de siempre: en el cobro, los mismos «tramos» por parte; en el pago, el mismo registrarPagoCuenta
+     (uno por caja si pagó una parte en pesos y otra en dólares). Solo en el panel nuevo y solo si el pedido
+     no tiene parte de Miri (lo viejo con parte de ella sigue con la ventana de siempre). -->
+<style id="pn-css-t3">
+  #cobro-modal.pnx #cobro-tramos-container, #cobro-modal.pnx #cobro-tc-wrap, #cobro-modal.pnx #cobro-ajuste-wrap,
+  #pago-modal.pnx #pago-repartir-wrap, #pago-modal.pnx #pago-split-wrap, #pago-modal.pnx #pago-single-wrap, #pago-modal.pnx div:has(> #pago-usd),
+  #pago-modal.pnx #pago-fraccionar-wrap, #pago-modal.pnx #pago-caja-unica, #pago-modal.pnx #pago-caja-fracc, #pago-modal.pnx #pago-reparto-wrap,
+  #pago-modal.pnx #pago-tc-wrap, #pago-modal.pnx #pago-total-recibido { display: none !important; }
+  #cobro-modal.pnx > div, #pago-modal.pnx > div { max-width: 560px !important; }
+  #pnx { border: 1.5px solid var(--gris-medio); border-radius: 14px; padding: 12px; margin: 0 0 0.9rem; display: flex; flex-direction: column; gap: 11px; background: var(--blanco); color: var(--texto); font-size: 0.85rem; }
+  #pnx .pnx-deuda { font-size: 0.9rem; padding-bottom: 8px; border-bottom: 1px solid var(--gris-medio); } #pnx .pnx-deuda b { font-size: 1.1rem; }
+  #pnx .pnx-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  #pnx .pnx-chips button, #pnx .pnx-seg button, #pnx .pnx-btn { padding: 0.35rem 0.75rem; border-radius: 18px; border: 1.5px solid var(--gris-medio); background: var(--blanco); color: var(--texto); font: 600 0.78rem 'DM Sans', sans-serif; cursor: pointer; }
+  #pnx .pnx-fila { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+  #pnx .pnx-fila > label { font-weight: 700; font-size: 0.82rem; }
+  #pnx .pnx-fila > :not(label) { grid-column: 2; justify-self: start; }
+  #pnx .pnx-in { display: flex; align-items: stretch; border: 1.5px solid var(--gris-medio); border-radius: 10px; overflow: hidden; width: 200px; max-width: 100%; background: var(--blanco); }
+  #pnx .pnx-in > span { padding: 0 9px; display: grid; place-items: center; background: var(--gris); color: var(--texto-suave); font-weight: 700; min-width: 40px; }
+  #pnx .pnx-in input { border: 0; outline: 0; padding: 8px 10px; font: 600 1rem 'DM Sans', sans-serif; width: 100%; min-width: 0; background: transparent; color: var(--texto); }
+  #pnx .pnx-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  #pnx .pnx-seg button.on { background: var(--azul); color: #fff; border-color: var(--azul); }
+  #pnx .pnx-seg small { opacity: .75; font-weight: 500; }
+  #pnx .pnx-saldo { border-radius: 10px; padding: 9px 11px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #pnx .pnx-saldo:empty { display: none; }
+  #pnx .pnx-saldo.falta { background: var(--dorado-claro); } #pnx .pnx-saldo.ok { background: var(--verde-claro); color: var(--verde); font-weight: 700; }
+  #pnx .pnx-big { font-size: 1rem; font-weight: 800; }
+  #pnx .pnx-verde { background: var(--verde); color: #fff; border-color: var(--verde); }
+  #pnx .pnx-res { display: flex; flex-direction: column; gap: 6px; } #pnx .pnx-res:empty { display: none; }
+  #pnx .pnx-aviso { border-radius: 10px; padding: 8px 10px; background: var(--gris); }
+  #pnx .pnx-aviso.warn { background: var(--dorado-claro); color: #8a5a00; } #pnx .pnx-aviso.info { background: #eef4fb; color: #1a5c8a; }
+  #pnx .pnx-link { border: 0; background: none; color: #2c6fad; text-decoration: underline; font: inherit; font-size: 0.78rem; cursor: pointer; padding: 0; justify-self: start; }
+  @media (max-width: 640px) { #pnx .pnx-fila { grid-template-columns: 1fr; } #pnx .pnx-fila > :not(label) { grid-column: 1; } }
+</style>
+<script>
+// ─── 🧭 PANEL NUEVO · tanda 3: la cuenta del cobro ─────────────────────────────────────────────────
+const PNX_FORMAS = { MP_JONY: ['📱 Transferencia', 'MP JONY'], EFT_JONY: ['💵 Efectivo', 'EFT $ JONY'] };
+const _pnxOtra = f => f === 'MP_JONY' ? 'EFT_JONY' : 'MP_JONY';
+let PNX = null;   // { modo:'cobro'|'pago', debA, debU, P, P2, forma, D, tc, parte }
+// «7.900» = siete mil novecientos; «3.65» o «3,65» = tres con sesenta y cinco
+const _pnxN = v => { let t = String(v == null ? '' : v).trim().replace(/\s/g, ''); if (/,/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); const n = parseFloat(t); return isFinite(n) ? n : 0; };
+const _pnxR0 = v => Math.round(v), _pnxR2 = v => Math.round(v * 100) / 100;
+const _pnxA = n => '$ ' + Math.round(n).toLocaleString('es-AR'), _pnxU = n => 'U$S ' + (+n).toFixed(2);
+const _pnxM = (a, u) => [a > 0.5 ? _pnxA(a) : '', u > 0.005 ? _pnxU(u) : ''].filter(Boolean).join(' + ') || '$ 0';
+// La cuenta: primero cada moneda cubre su parte; lo que sobra de una baja la otra al tipo de cambio.
+function pnxCuenta() {
+  const tc = _pnxN(PNX.tc);
+  const ch = [{ mon: '$', caja: PNX.forma, m: _pnxN(PNX.P) }];
+  if (PNX.parte) ch.push({ mon: '$', caja: _pnxOtra(PNX.forma), m: _pnxN(PNX.P2) });
+  ch.push({ mon: 'U$S', caja: 'ETF_USD_JONY', m: _pnxN(PNX.D) });
+  ch.forEach((c, i) => { c.i = i; c.left = c.m; c.a = 0; c.u = 0; });
+  let remA = PNX.debA, remU = PNX.debU;
+  ch.forEach(c => { if (c.mon === '$') { const x = Math.min(c.left, remA); if (x > 0) { remA -= x; c.left -= x; c.a += x; } } else { const x = Math.min(c.left, remU); if (x > 0) { remU -= x; c.left -= x; c.u += x; } } });
+  if (tc) ch.forEach(c => {
+    if (c.mon === '$' && c.left > 1 && remU > 0.009) { const x = Math.min(c.left / tc, remU); remU -= x; c.left -= x * tc; c.u += x; }
+    if (c.mon === 'U$S' && c.left > 0.009 && remA > 1) { const x = Math.min(c.left * tc, remA); remA -= x; c.left -= x / tc; c.a += x; }
+  });
+  remA = remA > 1 ? _pnxR0(remA) : 0; remU = remU > 0.009 ? _pnxR2(remU) : 0;
+  ch.forEach(c => { c.a = _pnxR0(c.a); c.u = _pnxR2(c.u); c.left = c.mon === '$' ? (c.left > 1 ? _pnxR0(c.left) : 0) : (c.left > 0.009 ? _pnxR2(c.left) : 0); });
+  const sobraA = ch.filter(c => c.mon === '$').reduce((s, c) => s + c.left, 0), sobraU = ch.filter(c => c.mon === 'U$S').reduce((s, c) => s + c.left, 0);
+  const faltaTc = !tc && ((sobraA > 0 && remU > 0) || (sobraU > 0 && remA > 0));
+  return { tc, ch, remA, remU, sobraA, sobraU, faltaTc, dio: ch.some(c => c.m > 0) };
+}
+function pnxHTML() {
+  const usdPrimero = PNX.debU > 0 && !PNX.debA;
+  const deuda = PNX.debA > 0.5 || PNX.debU > 0.005 ? `Debe <b>${_pnxM(PNX.debA, PNX.debU)}</b>` : 'No debe nada: lo que te dé queda <b>a favor</b>';
+  const formas = `<div class="pnx-seg">${Object.keys(PNX_FORMAS).map(k => `<button type="button" class="${PNX.forma === k ? 'on' : ''}" data-pnx-forma="${k}">${PNX_FORMAS[k][0]} <small>→ ${PNX_FORMAS[k][1]}</small></button>`).join('')}</div>`;
+  const pesos = `<div class="pnx-fila"><label for="pnx-p">🇦🇷 Pesos que te dio</label><div class="pnx-in"><span>$</span><input id="pnx-p" inputmode="numeric" value="${pnEsc(PNX.P)}" placeholder="0"></div>${formas}`
+    + (PNX.parte ? `<div class="pnx-in" style="width:auto"><span>$</span><input id="pnx-p2" inputmode="numeric" value="${pnEsc(PNX.P2)}" placeholder="0" style="width:120px"><span style="background:none;font-weight:500">por ${PNX_FORMAS[_pnxOtra(PNX.forma)][0]}</span></div>` : '')
+    + `<button type="button" class="pnx-link" data-pnx-parte>${PNX.parte ? '✕ Todo por una sola forma' : '✂️ Parte por transferencia y parte en efectivo'}</button></div>`;
+  const dolares = `<div class="pnx-fila"><label for="pnx-d">💵 Dólares que te dio</label><div class="pnx-in"><span>U$S</span><input id="pnx-d" inputmode="decimal" value="${pnEsc(PNX.D)}" placeholder="0"></div><small style="color:var(--texto-suave)">→ entran a ETF U$S JONY</small></div>`;
+  const tcf = `<div class="pnx-fila"><label for="pnx-tc">💱 Tipo de cambio <span style="font-weight:400;color:var(--texto-suave)">(U$S 1 = $)</span></label><div class="pnx-in"><span>$</span><input id="pnx-tc" inputmode="decimal" value="${pnEsc(PNX.tc)}" placeholder="ej: 1450"></div></div>`;
+  const pre = usdPrimero ? [['usd', '💵 Todo en dólares'], ['pesos', '💱 Todo en pesos'], ['mixto', '✂️ Parte y parte']]
+    : PNX.debU > 0.005 ? [['todo', '✓ Todo como está'], ['pesos', '💱 Todo en pesos']] : [['MP_JONY', '📱 Todo por transferencia'], ['EFT_JONY', '💵 Todo en efectivo'], ['usd', '💵 Con dólares']];
+  return `<div class="pnx-deuda">${deuda}</div>${PNX.debA > 0.5 || PNX.debU > 0.005 ? `<div class="pnx-chips">${pre.map(([k, t]) => `<button type="button" data-pnx-pre="${k}">${t}</button>`).join('')}</div>` : ''}`
+    + (usdPrimero ? dolares + tcf + '<div class="pnx-saldo" id="pnx-saldo"></div>' + pesos : pesos + dolares + tcf + '<div class="pnx-saldo" id="pnx-saldo"></div>') + '<div class="pnx-res" id="pnx-res"></div>';
+}
+function pnxPintar(host) {
+  let box = document.getElementById('pnx'); if (box && box.parentNode !== host.parentNode) { box.remove(); box = null; }
+  if (!box) { box = document.createElement('div'); box.id = 'pnx'; host.parentNode.insertBefore(box, host); }
+  box.innerHTML = pnxHTML(); pnxCalc();
+}
+function pnxLeer() { ['P', 'P2', 'D', 'tc'].forEach(k => { const el = document.getElementById({ P: 'pnx-p', P2: 'pnx-p2', D: 'pnx-d', tc: 'pnx-tc' }[k]); if (el) PNX[k] = el.value; }); }
+function pnxPoner(k, v) { PNX[k] = v; const el = document.getElementById({ P: 'pnx-p', P2: 'pnx-p2', D: 'pnx-d', tc: 'pnx-tc' }[k]); if (el) el.value = v; }
+function pnxCalc() {
+  if (!PNX || !document.getElementById('pnx-res')) return;
+  const R = pnxCuenta(), tc = R.tc, el = document.getElementById('pnx-saldo');
+  let s = '';
+  if (R.remU > 0) s = `Te queda debiendo <b>${_pnxU(R.remU)}</b>${R.remA ? ` + <b>${_pnxA(R.remA)}</b>` : ''} · ${tc ? `<span class="pnx-big">Saldo en pesos: ${_pnxA(R.remA + R.remU * tc)}</span> <button type="button" class="pnx-btn pnx-verde" data-pnx-llenar="$">✓ Me lo pagó en pesos</button>` : '<span style="color:var(--texto-suave)">poné el tipo de cambio y te digo cuánto es en pesos</span>'}`;
+  else if (R.remA > 0) s = `Te queda debiendo <b>${_pnxA(R.remA)}</b>${tc ? ` <span style="color:var(--texto-suave)">(= ${_pnxU(R.remA / tc)})</span>` : ''} <button type="button" class="pnx-btn pnx-verde" data-pnx-llenar="$">✓ Me lo pagó</button>${tc ? ` <button type="button" class="pnx-btn" data-pnx-llenar="U$S">💵 En dólares</button>` : ''}`;
+  else if (PNX.debA > 0.5 || PNX.debU > 0.005) s = R.dio ? '✓ Con esto queda saldado' : '';
+  el.innerHTML = s; el.className = 'pnx-saldo' + (R.remA || R.remU ? ' falta' : s ? ' ok' : '');
+  let h = '';
+  if (R.faltaTc) h += `<div class="pnx-aviso warn">💱 Te pagó en la otra moneda: <b>poné el tipo de cambio</b> para pasarlo.</div>`;
+  const cruces = R.ch.filter(c => (c.mon === '$' && c.u > 0) || (c.mon === 'U$S' && c.a > 0));
+  if (cruces.length && tc) h += `<div class="pnx-aviso info">💱 ${cruces.map(c => c.mon === '$' ? `${_pnxA(c.u * tc)} bajan ${_pnxU(c.u)} de la deuda en dólares` : `${_pnxU(c.a / tc)} bajan ${_pnxA(c.a)} de la deuda en pesos`).join(' · ')} (al ${_pnxA(tc)})</div>`;
+  if ((R.remA || R.remU) && R.dio && PNX.modo === 'pago') { const p = document.querySelector('input[name="pnx-f"]:checked'); h += `<label><input type="radio" name="pnx-f" value="debe" ${!p || p.value === 'debe' ? 'checked' : ''}> Lo que falta lo sigue debiendo</label><label><input type="radio" name="pnx-f" value="perdonar" ${p && p.value === 'perdonar' ? 'checked' : ''}> 🎁 Perdonar lo que falta (${_pnxM(R.remA, R.remU)})</label>`; }
+  if (R.sobraA || R.sobraU) {
+    if (PNX.modo === 'cobro') h += `<div class="pnx-aviso warn">Te dio de más: sobran <b>${_pnxM(R.sobraA, R.sobraU)}</b>. El cobro es por el monto exacto: a la caja entra lo justo (dale el vuelto). Si querés que le quede a favor, cargalo con «💵 Pago a cuenta».</div>`;
+    else { const p = document.querySelector('input[name="pnx-s"]:checked'); h += `<div class="pnx-aviso info"><b>Te dio de más: sobran ${_pnxM(R.sobraA, R.sobraU)}</b><br><label><input type="radio" name="pnx-s" value="favor" ${!p || p.value === 'favor' ? 'checked' : ''}> 💚 Que le quede <b>a favor</b></label> <label><input type="radio" name="pnx-s" value="vuelto" ${p && p.value === 'vuelto' ? 'checked' : ''}> 💵 Le di el vuelto (entra lo justo)</label></div>`; }
+  }
+  const favor = PNX.modo === 'pago' && (document.querySelector('input[name="pnx-s"]:checked') || { value: 'favor' }).value === 'favor';
+  const entra = {}; R.ch.forEach(c => { const m = favor ? c.m : c.m - c.left; if (m > 0) entra[c.caja] = (entra[c.caja] || 0) + m; });
+  const ks = Object.keys(entra);
+  if (ks.length) h += `<div class="pnx-aviso" style="background:var(--verde-claro);color:var(--verde)">💵 Entra: ${ks.map(k => `<b>${k === 'ETF_USD_JONY' ? _pnxU(entra[k]) : _pnxA(entra[k])}</b> → ${k === 'ETF_USD_JONY' ? 'ETF U$S JONY' : PNX_FORMAS[k][1]}`).join(' · ')}</div>`;
+  document.getElementById('pnx-res').innerHTML = h;
+  if (PNX.modo === 'cobro') pnxAlCobro(R);
+}
+document.addEventListener('input', e => { if (PNX && ['pnx-p', 'pnx-p2', 'pnx-d', 'pnx-tc'].includes(e.target.id)) { pnxLeer(); pnxCalc(); } });
+document.addEventListener('change', e => { if (PNX && (e.target.name === 'pnx-s' || e.target.name === 'pnx-f')) pnxCalc(); });
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pnx-forma],[data-pnx-parte],[data-pnx-llenar],[data-pnx-pre]'); if (!b || !PNX) return;
+  pnxLeer();
+  const host = document.getElementById('pnx');
+  if (b.dataset.pnxForma) { PNX.forma = b.dataset.pnxForma; host.innerHTML = pnxHTML(); pnxCalc(); return; }
+  if (b.hasAttribute('data-pnx-parte')) { PNX.parte = !PNX.parte; if (!PNX.parte) PNX.P2 = ''; host.innerHTML = pnxHTML(); pnxCalc(); const i = document.getElementById('pnx-p2'); if (i) i.focus(); return; }
+  if (b.dataset.pnxLlenar) { const R = pnxCuenta(); if (b.dataset.pnxLlenar === '$') pnxPoner('P', String(_pnxR0(_pnxN(PNX.P) + R.remA + (R.tc ? R.remU * R.tc : 0)))); else pnxPoner('D', String(_pnxR2(_pnxN(PNX.D) + R.remU + (R.tc ? R.remA / R.tc : 0)))); pnxCalc(); return; }
+  const k = b.dataset.pnxPre, tc = _pnxN(PNX.tc);
+  if (k === 'usd') { pnxPoner('P', ''); if (PNX.debA && !tc) { pnxPoner('D', ''); const i = document.getElementById('pnx-tc'); if (i) i.focus(); if (typeof showToast === 'function') showToast('Poné el tipo de cambio: te digo cuántos dólares son'); } else pnxPoner('D', String(_pnxR2(PNX.debU + (PNX.debA ? PNX.debA / tc : 0)))); }
+  else if (k === 'pesos') { pnxPoner('D', ''); if (tc) pnxPoner('P', String(_pnxR0(PNX.debA + PNX.debU * tc))); else { pnxPoner('P', PNX.debA ? String(_pnxR0(PNX.debA)) : ''); const i = document.getElementById('pnx-tc'); if (i) i.focus(); if (typeof showToast === 'function') showToast('Poné el tipo de cambio: te digo el saldo en pesos'); } }
+  else if (k === 'mixto') { pnxPoner('P', ''); pnxPoner('D', ''); const i = document.getElementById('pnx-d'); if (i) i.focus(); }
+  else if (k === 'todo') { pnxPoner('P', PNX.debA ? String(_pnxR0(PNX.debA)) : ''); pnxPoner('D', PNX.debU ? String(_pnxR2(PNX.debU)) : ''); }
+  else { PNX.forma = k; PNX.P = String(_pnxR0(PNX.debA)); PNX.D = ''; host.innerHTML = pnxHTML(); }
+  pnxCalc();
+});
+
+// ── 💰 Confirmar cobro: la cuenta nueva arma los mismos «tramos» de siempre (arsJ / usdJ) ──
+function pnxAlCobro(R) {
+  const arsJ = [], usdJ = [];
+  const meter = (l, caja, m) => { if (!(m > 0)) return; const t = l.find(x => x.caja === caja); if (t) t.monto = _pnxR2(t.monto + m); else l.push({ caja, monto: m }); };
+  R.ch.forEach(c => { meter(arsJ, c.caja, c.a); meter(usdJ, c.caja, c.u); });
+  _cobroTramos = { arsJ, usdJ, arsM: [], usdM: [] };
+  const cruza = R.ch.some(c => (c.mon === '$' && c.u > 0) || (c.mon === 'U$S' && c.a > 0));
+  const tcEl = document.getElementById('cobro-tc'); if (tcEl) tcEl.value = cruza && R.tc ? String(R.tc) : '';
+  if (typeof cobro_actualizarCubierto === 'function') cobro_actualizarCubierto();   // muestra el «Falta cubrir» de siempre (cuenta corriente / perdonar)
+}
+function pnxCerrar(modalId) { const m = document.getElementById(modalId); if (m) m.classList.remove('pnx'); const b = document.getElementById('pnx'); if (b && m && m.contains(b)) b.remove(); PNX = null; }
+if (typeof abrirConfirmarCobro === 'function') {
+  const _pnxAbrirCobroOrig = abrirConfirmarCobro;
+  abrirConfirmarCobro = function (id, arsJ, arsM, usdM, cliente, usdJ) {
+    pnxCerrar('cobro-modal');
+    const r = _pnxAbrirCobroOrig.apply(this, arguments);
+    const sinMiri = !(parseFloat(arsM) > 0) && !(parseFloat(usdM) > 0);
+    if (_pnActivo && sinMiri && !(typeof esVistaMiri === 'function' && esVistaMiri())) {
+      // lo que ya estaba cargado (re-confirmar) arranca en la cuenta nueva
+      const t = _cobroTramos || {}, sumCaja = (l, pred) => (l || []).filter(x => pred(x.caja)).reduce((s, x) => s + (parseFloat(x.monto) || 0), 0);
+      const tcPrev = _pnxN(document.getElementById('cobro-tc').value);
+      const usdCaja = c => c === 'ETF_USD_JONY';
+      let P = sumCaja(t.arsJ, c => !usdCaja(c) && !String(c).startsWith('CTA_CTE')) + (tcPrev ? sumCaja(t.usdJ, c => !usdCaja(c) && !String(c).startsWith('CTA_CTE')) * tcPrev : 0);
+      let D = sumCaja(t.usdJ, usdCaja) + (tcPrev ? sumCaja(t.arsJ, usdCaja) / tcPrev : 0);
+      const pes = (t.arsJ || []).concat(t.usdJ || []).find(x => x.caja === 'EFT_JONY' || x.caja === 'MP_JONY');
+      PNX = { modo: 'cobro', debA: parseFloat(arsJ) || 0, debU: parseFloat(usdJ) || 0, P: P > 0 ? String(_pnxR0(P)) : '', P2: '', forma: pes ? pes.caja : 'MP_JONY', D: D > 0 ? String(_pnxR2(D)) : '', tc: tcPrev ? String(tcPrev) : '', parte: false };
+      const m = document.getElementById('cobro-modal'); m.classList.add('pnx');
+      pnxPintar(document.getElementById('cobro-tramos-container'));
+    }
+    return r;
+  };
+  if (typeof abrirConfirmarCobroResidual === 'function') {
+    // (la de «Revisar» / pagos a cuenta llama a abrirConfirmarCobro por adentro → ya queda con la cuenta nueva)
+  }
+}
+if (typeof cerrarModalCobro === 'function') { const _pnxCerrarCobroOrig = cerrarModalCobro; cerrarModalCobro = function () { pnxCerrar('cobro-modal'); return _pnxCerrarCobroOrig.apply(this, arguments); }; }
+
+// ── 💵 Pago a cuenta: la cuenta nueva manda el mismo registrarPagoCuenta de siempre (uno por caja) ──
+if (typeof abrirPagoCuenta === 'function') {
+  const _pnxAbrirPagoOrig = abrirPagoCuenta;
+  abrirPagoCuenta = function () {
+    pnxCerrar('pago-modal');
+    const r = _pnxAbrirPagoOrig.apply(this, arguments);
+    if (_pnActivo && !(typeof esVistaMiri === 'function' && esVistaMiri())) {
+      const R0 = window._pagoRem || {};
+      PNX = { modo: 'pago', debA: Math.max(0, R0.arsTotal || 0), debU: Math.max(0, _pnxR2(R0.usd || 0)), P: '', P2: '', forma: 'MP_JONY', D: '', tc: '', parte: false };
+      const m = document.getElementById('pago-modal'); m.classList.add('pnx');
+      pnxPintar(document.getElementById('pago-sub').nextElementSibling);
+    }
+    return r;
+  };
+}
+if (typeof cerrarPagoModal === 'function') { const _pnxCerrarPagoOrig = cerrarPagoModal; cerrarPagoModal = function () { const r = _pnxCerrarPagoOrig.apply(this, arguments); pnxCerrar('pago-modal'); return r; }; }
+if (typeof confirmarPagoCuenta === 'function') {
+  const _pnxConfirmarPagoOrig = confirmarPagoCuenta;
+  confirmarPagoCuenta = async function () {
+    if (!PNX || PNX.modo !== 'pago' || !document.getElementById('pago-modal').classList.contains('pnx')) return _pnxConfirmarPagoOrig.apply(this, arguments);
+    pnxLeer(); const R = pnxCuenta();
+    if (!R.dio) { showToast('Ingresá un monto'); return; }
+    if (R.faltaTc) { showToast('Poné el tipo de cambio (te pagó en la otra moneda)'); const i = document.getElementById('pnx-tc'); if (i) i.focus(); return; }
+    const favor = (document.querySelector('input[name="pnx-s"]:checked') || { value: 'favor' }).value === 'favor';
+    const perdonar = (document.querySelector('input[name="pnx-f"]:checked') || { value: 'debe' }).value === 'perdonar' && (R.remA || R.remU);
+    // mismos datos que la ventana de siempre
+    let pedidoId = _pagoPedidoId; const ps = document.getElementById('pago-pedido-sel'); if (!_pagoPedidoId && ps && ps.value) pedidoId = ps.value;
+    const nota = ((document.getElementById('pago-nota') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 300) || 'Pago a cuenta';
+    let fecha = '';
+    { const pfv = (document.getElementById('pago-fecha') || {}).value || ''; const pfm = pfv.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (pfm) { const hoyISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }); const hora = pfv === hoyISO ? new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false }) : '12:00'; fecha = `${pfm[3]}/${pfm[2]}/${pfm[1]} ${hora}`; } }
+    const cliente = _pagoCliente;
+    const pagos = [];
+    R.ch.forEach(c => {
+      const extra = favor ? c.left : 0;
+      if (c.mon === '$') { const ars = c.a + extra, usd = c.u; if (ars <= 0 && usd <= 0) return; pagos.push({ caja: c.caja, ars: _pnxR0(ars), usd: _pnxR2(usd), tc: usd > 0 ? R.tc : 0, mano: usd > 0 ? _pnxR0(ars + usd * R.tc) : 0 }); }
+      else { const usd = c.u + extra, ars = c.a; if (ars <= 0 && usd <= 0) return; pagos.push({ caja: c.caja, ars: _pnxR0(ars), usd: _pnxR2(usd), tc: ars > 0 ? R.tc : 0, mano: 0 }); }
+    });
+    if (perdonar) pagos.push({ caja: 'PERDON', ars: _pnxR0(R.remA), usd: _pnxR2(R.remU), tc: 0, mano: 0, perdon: true });
+    if (!pagos.length) { showToast('Ingresá un monto'); return; }
+    const comprobante = await subirComprobantes(document.getElementById('pago-comprobante'));
+    cerrarPagoModal();
+    let bien = 0;
+    for (let i = 0; i < pagos.length; i++) {
+      const p = pagos[i];
+      const params = new URLSearchParams({ accion: 'registrarPagoCuenta', cliente, pedidoId, montoARS: p.ars, montoUSD: p.usd, montoPitz: p.ars, caja: p.caja, tipoCambio: p.tc, nota: p.perdon ? (nota === 'Pago a cuenta' ? '🎁 Perdón / redondeo' : nota + ' · 🎁 perdón') : nota, reparto: 'jony' });
+      if (p.mano > 0) params.set('totalMano', String(p.mano));
+      if (fecha) params.set('fecha', fecha);
+      if (comprobante && i === 0) params.set('comprobante', comprobante);
+      const r = await apiWrite(params, i === pagos.length - 1 ? '💵 Pago registrado ✓' : '');
+      if (r && r.ok) bien++; else break;   // si una parte falla, no sigue con las otras
+    }
+    if (bien < pagos.length) showToast(`⚠️ Se registraron ${bien} de ${pagos.length} partes del pago — revisá la cuenta del cliente`);
+    if (bien) refreshAdmin();
+  };
+}
+</script>
+
 </body>
 </html>
 
